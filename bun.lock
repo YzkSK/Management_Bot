@@ -12,6 +12,23 @@
         "typescript": "^6.0.3",
       },
     },
+    "apps/bot": {
+      "name": "@management-bot/bot",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/config": "workspace:*",
+        "@management-bot/core": "workspace:*",
+        "@management-bot/db": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "discord.js": "^14.16.0",
+      },
+      "devDependencies": {
+        "@trpc/server": "^11.0.0",
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/config": {
       "name": "@management-bot/config",
       "version": "0.0.0",
@@ -184,6 +201,8 @@
     "@humanwhocodes/retry": ["@humanwhocodes/retry@0.4.3", "", {}, "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ=="],
 
     "@ioredis/commands": ["@ioredis/commands@1.10.0", "", {}, "sha512-UmeW7z4LfctwoQ5wkhVzgq8tXkreED2xZGpX+Bg+zA+WJFZCT6c062AfCK/Dfk81xZnnwdhJCUMkitihRaoC2Q=="],
+
+    "@management-bot/bot": ["@management-bot/bot@workspace:apps/bot"],
 
     "@management-bot/config": ["@management-bot/config@workspace:packages/config"],
 
