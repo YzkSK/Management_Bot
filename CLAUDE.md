@@ -42,7 +42,7 @@ Management_Bot(マルチテナント対応Discord bot)のリポジトリ運用�
 
 - 4層構成(`discord`/`router`(入口層) → `application` → `domain` → `db`)を厳守: `router→application→domain`、`discord→application→domain`。`discord`と`router`はどちらも入口層で、機能によって一方または両方を持つ。
 - 基盤パッケージ(`core/db/shared/config/dashboard-access`)は機能パッケージに依存しない。機能パッケージ同士も相互依存しない。
-- 機能間連携は直接importではなく`packages/shared/src/domain-events.ts` + Redis Streams(consumer group、at-least-once配送)経由で疎結合にする。
+- 機能間連携は直接importではなく`packages/shared/src/domain-events.ts` + Redis Streams(consumer group、at-least-once配送、イベントID等による冪等処理)経由で疎結合にする。
 - 拡張は型で縛った静的配列への明示登録に留める。過剰な動的プラグイン機構(ファイルスキャン・dynamic import)は採用しない(依頼されていない抽象化をしない)。
 
 ## DB運用ルール
