@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: management_bot
+      POSTGRES_PASSWORD: management_bot
+      POSTGRES_DB: management_bot
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U management_bot -d management_bot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/dashboard-api/Dockerfile
+    command: ["bun", "run", "--cwd", "/repo/packages/db", "db:migrate"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  dashboard-api:
+    build:
+      context: .
+      dockerfile: apps/dashboard-api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
+      DASHBOARD_WEB_URL: http://localhost:8080
+      DISCORD_OAUTH_REDIRECT_URI: http://localhost:3000/auth/callback
+    ports:
+      - "3000:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  dashboard-web:
+    build:
+      context: .
+      dockerfile: apps/dashboard-web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - dashboard-api
+
+volumes:
+  postgres-data:
+  redis-data:
