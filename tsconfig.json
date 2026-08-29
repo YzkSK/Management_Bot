@@ -1,4 +1,8 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/config" }]
+  "references": [
+    { "path": "./packages/config" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/db" }
+  ]
 }
