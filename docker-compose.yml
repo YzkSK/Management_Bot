@@ -77,6 +77,20 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  backup:
+    build:
+      context: .
+      dockerfile: apps/backup/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+    volumes:
+      - backup-data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   dashboard-web:
     build:
       context: .
@@ -92,3 +106,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  backup-data:

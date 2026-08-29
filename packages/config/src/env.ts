@@ -28,6 +28,11 @@ export const envSchema = z.object({
 
   // セッション
   SESSION_SECRET: z.string().min(32),
+
+  // バックアップ
+  BACKUP_CRON: z.string().min(1).default("0 3 * * *"),
+  BACKUP_DIR: z.string().min(1).default("/backups"),
+  BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
 });
 
 export type Env = z.infer<typeof envSchema>;
