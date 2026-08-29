@@ -27,7 +27,7 @@ Management_Bot(マルチテナント対応Discord bot)のリポジトリ運用�
 ## 型安全性の方針
 
 - TypeScript strictモード必須。**`any`は原則禁止**(`@typescript-eslint/no-explicit-any`をCIのlintでerror検出)。
-- 外部境界(Discord APIレスポンス、tRPC入出力、DBの`jsonb`カラム、Redis Pub/Subのペイロード)は必ず`unknown`として受け、zodの`parse`/`safeParse`で検証してから推論型を使う。検証を代替する型アサーション(`as`)は禁止する。
+- 外部境界(Discord APIレスポンス、tRPC入出力、DBの`jsonb`カラム、Redis Streamsのペイロード)は必ず`unknown`として受け、zodの`parse`/`safeParse`で検証してから推論型を使う。検証を代替する型アサーション(`as`)は禁止する。
 - `jsonb`カラム(例: `moderation_thresholds.config`)は保存前後で必ずdiscriminated unionのzodスキーマを通し、アプリケーションコード上は`any`/`Record<string, unknown>`のまま扱わない。
 - `FeatureModule`・domain-eventsのペイロード・tRPC routerの入出力はすべて明示的な型/zodスキーマを定義する。
 - 型が付けにくい外部ライブラリのラッパーを書く場合も内部含め`any`は使わず、`unknown`・ジェネリクス・型ガードで表現する。`eslint-disable`での例外は原則認めず、必要な場合は理由・局所範囲・代替案をPRで説明する。
@@ -36,13 +36,13 @@ Management_Bot(マルチテナント対応Discord bot)のリポジトリ運用�
 
 - Discord Bot招待時に要求する権限は**最小権限**とする。有効化された機能ごとに必要な権限のみ要求する(例: temp-voiceが無効なギルドではチャンネル管理権限を必須にしない)。
 - Bot招待フロー(OAuth2 scope: `bot applications.commands`、初期権限`0`)とDashboard認可フロー(OAuth2 scope: `identify guilds`)は別のものとして扱う。混同しない。
-- 将来機能追加で権限が増える場合は、要求理由・影響範囲を明示してDashboardの再認可導線を用意する。
+- 将来機能追加で権限が増える場合は、要求理由・影響範囲を明示してDashboardの再認可導線を用意する。`buildInviteUrl`(`apps/bot/src/invite-url.ts`)は必要な権限ビットフィールドを引数で受け取れるため、再認可時はこれを使って必要権限のみを含むURLを生成する(初回招待時は無権限のままデフォルト呼び出し)。
 
 ## アーキテクチャ
 
-- 4層構成を厳守: `router→application→domain`、`discord→application→domain`。
+- 4層構成(`discord`/`router`(入口層) → `application` → `domain` → `db`)を厳守: `router→application→domain`、`discord→application→domain`。`discord`と`router`はどちらも入口層で、機能によって一方または両方を持つ。
 - 基盤パッケージ(`core/db/shared/config/dashboard-access`)は機能パッケージに依存しない。機能パッケージ同士も相互依存しない。
-- 機能間連携は直接importではなく`packages/shared/src/domain-events.ts` + Redis Pub/Sub経由で疎結合にする。
+- 機能間連携は直接importではなく`packages/shared/src/domain-events.ts` + Redis Streams(consumer group、at-least-once配送、イベントID等による冪等処理)経由で疎結合にする。
 - 拡張は型で縛った静的配列への明示登録に留める。過剰な動的プラグイン機構(ファイルスキャン・dynamic import)は採用しない(依頼されていない抽象化をしない)。
 
 ## DB運用ルール
