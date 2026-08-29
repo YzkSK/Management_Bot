@@ -39,6 +39,8 @@ export const dashboardAccessGrants = pgTable("dashboard_access_grants", {
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   discordUserId: text("discord_user_id").notNull(),
+  encryptedAccessToken: text("encrypted_access_token").notNull(),
+  encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

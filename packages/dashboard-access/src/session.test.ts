@@ -20,6 +20,8 @@ async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferIn
   await db.insert(sessions).values({
     id: "session-1",
     discordUserId: "user-1",
+    encryptedAccessToken: "test-access-token",
+    encryptedRefreshToken: "test-refresh-token",
     expiresAt: new Date(Date.now() + 60_000),
     ...overrides,
   });
