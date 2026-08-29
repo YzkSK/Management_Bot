@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: management_bot
+          POSTGRES_PASSWORD: management_bot
+          POSTGRES_DB: management_bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U management_bot -d management_bot"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://management_bot:management_bot@localhost:5432/management_bot
+      VITE_API_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run --cwd packages/db db:migrate
+      - run: bunx turbo run test -- --parallel=1
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [bot, dashboard-api, dashboard-web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: |
+            VITE_API_URL=http://localhost:3000

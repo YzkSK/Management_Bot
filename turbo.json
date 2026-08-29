@@ -12,7 +12,9 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL", "VITE_API_URL"],
+      "cache": false
     },
     "dev": {
       "dependsOn": ["^build"],
