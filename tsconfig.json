@@ -5,6 +5,9 @@
     { "path": "./packages/shared" },
     { "path": "./packages/db" },
     { "path": "./packages/core" },
-    { "path": "./apps/bot" }
+    { "path": "./packages/dashboard-access" },
+    { "path": "./apps/bot" },
+    { "path": "./apps/dashboard-api" },
+    { "path": "./apps/dashboard-web" }
   ]
 }
