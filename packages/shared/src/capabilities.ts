@@ -32,7 +32,7 @@ export function hasCapability(granted: number, required: number): boolean {
 }
 
 /** 未定義ビットや負数・非整数を含まない、既知のcapability集合のみを表すかを判定する。 */
-function isKnownCapabilityMask(value: number): boolean {
+export function isKnownCapabilityMask(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0 && (value & ~ALL_CAPABILITIES) === 0;
 }
 

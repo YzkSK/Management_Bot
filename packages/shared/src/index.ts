@@ -4,6 +4,7 @@ export {
   BASELINE_EVERYONE_CAPABILITIES,
   hasCapability,
   canGrantCapabilities,
+  isKnownCapabilityMask,
   type CapabilityName,
 } from "./capabilities.js";
 export {
