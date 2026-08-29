@@ -21,6 +21,10 @@ export const envSchema = z.object({
   DISCORD_TOKEN: z.string().min(1),
   DISCORD_CLIENT_ID: z.string().min(1),
   DISCORD_CLIENT_SECRET: z.string().min(1),
+  DISCORD_OAUTH_REDIRECT_URI: z.string().url(),
+
+  // Dashboard
+  DASHBOARD_WEB_URL: z.string().url(),
 
   // セッション
   SESSION_SECRET: z.string().min(32),

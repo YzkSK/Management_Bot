@@ -7,6 +7,8 @@ const validEnv = {
   DISCORD_TOKEN: "token",
   DISCORD_CLIENT_ID: "client-id",
   DISCORD_CLIENT_SECRET: "client-secret",
+  DISCORD_OAUTH_REDIRECT_URI: "https://example.com/auth/callback",
+  DASHBOARD_WEB_URL: "https://example.com",
   SESSION_SECRET: "a".repeat(32),
 };
 

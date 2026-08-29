@@ -15,6 +15,13 @@
       "when": 1787964434274,
       "tag": "0001_tan_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787970511891,
+      "tag": "0002_secret_gertrude_yorkes",
+      "breakpoints": true
     }
   ]
 }

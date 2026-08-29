@@ -1,4 +1,10 @@
-export { validateSession, type ValidatedSession } from "./session.js";
+export {
+  validateSession,
+  createSession,
+  type ValidatedSession,
+  type CreateSessionInput,
+} from "./session.js";
+export { encryptToken, decryptToken } from "./token-crypto.js";
 export {
   resolveEffectiveCapabilities,
   type ResolveEffectiveCapabilitiesInput,
