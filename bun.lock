@@ -30,10 +30,14 @@
       "name": "@management-bot/bot",
       "version": "0.0.0",
       "dependencies": {
+        "@management-bot/activity": "workspace:*",
         "@management-bot/config": "workspace:*",
         "@management-bot/core": "workspace:*",
         "@management-bot/db": "workspace:*",
+        "@management-bot/logging": "workspace:*",
+        "@management-bot/moderation": "workspace:*",
         "@management-bot/shared": "workspace:*",
+        "@management-bot/temp-voice": "workspace:*",
         "discord.js": "^14.16.0",
       },
       "devDependencies": {
@@ -48,10 +52,14 @@
       "version": "0.0.0",
       "dependencies": {
         "@hono/trpc-server": "^0.4.0",
+        "@management-bot/activity": "workspace:*",
         "@management-bot/config": "workspace:*",
         "@management-bot/dashboard-access": "workspace:*",
         "@management-bot/db": "workspace:*",
+        "@management-bot/logging": "workspace:*",
+        "@management-bot/moderation": "workspace:*",
         "@management-bot/shared": "workspace:*",
+        "@management-bot/temp-voice": "workspace:*",
         "@trpc/server": "^11.0.0",
         "hono": "^4.6.0",
         "zod": "^4.4.3",
@@ -80,6 +88,21 @@
         "@vitejs/plugin-react": "^4.3.0",
         "typescript": "^6.0.3",
         "vite": "^6.0.0",
+      },
+    },
+    "packages/activity": {
+      "name": "@management-bot/activity",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/core": "workspace:*",
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.0.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
       },
     },
     "packages/config": {
@@ -141,11 +164,56 @@
         "typescript": "^6.0.3",
       },
     },
+    "packages/logging": {
+      "name": "@management-bot/logging",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/core": "workspace:*",
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.0.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/moderation": {
+      "name": "@management-bot/moderation",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/core": "workspace:*",
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.0.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/shared": {
       "name": "@management-bot/shared",
       "version": "0.0.0",
       "dependencies": {
         "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/temp-voice": {
+      "name": "@management-bot/temp-voice",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/core": "workspace:*",
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.0.0",
       },
       "devDependencies": {
         "@types/bun": "^1.4.0",
@@ -305,6 +373,8 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
+    "@management-bot/activity": ["@management-bot/activity@workspace:packages/activity"],
+
     "@management-bot/backup": ["@management-bot/backup@workspace:apps/backup"],
 
     "@management-bot/bot": ["@management-bot/bot@workspace:apps/bot"],
@@ -321,7 +391,13 @@
 
     "@management-bot/db": ["@management-bot/db@workspace:packages/db"],
 
+    "@management-bot/logging": ["@management-bot/logging@workspace:packages/logging"],
+
+    "@management-bot/moderation": ["@management-bot/moderation@workspace:packages/moderation"],
+
     "@management-bot/shared": ["@management-bot/shared@workspace:packages/shared"],
+
+    "@management-bot/temp-voice": ["@management-bot/temp-voice@workspace:packages/temp-voice"],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
