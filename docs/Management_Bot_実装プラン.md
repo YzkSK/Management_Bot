@@ -15,9 +15,10 @@ v3の設計ドキュメント(`docs/current-state-audit.md`, `docs/rewrite-archi
 - **リポジトリ作成先**: 個人アカウント
 - **実装優先順位**: 4機能は並行開発したい → 基盤フェーズの完了条件を明確にし、以降は機能ごとに独立着手できる構成にする
 - **Git運用**: v3のCLAUDE.mdルール(issue発行必須・ブランチ運用・機能単位の細かいコミット・PRテンプレ・merge commit統一・マージ済みブランチ削除しない)を踏襲しつつ、CIでの自動テスト/lint必須化を新たに追加
-- **テスト方針**: v3同様、単体テストのみでなくユースケースを想定した複合テスト(例: 連投→エスカレーション→ログ連携までを通しで検証する等)も実施する。テストファイルは実装ファイルとコロケーション配置(`*.test.ts`)、`node --test`ベースを踏襲。Dashboard UIを変更した場合は手動での画面動作確認も行う。
+- **テスト方針**: v3同様、単体テストのみでなくユースケースを想定した複合テスト(例: 連投→エスカレーション→ログ連携までを通しで検証する等)も実施する。テストファイルは実装ファイルとコロケーション配置(`*.test.ts`)、`bun test`ベース。Dashboard UIを変更した場合は手動での画面動作確認も行う。
 
 ### 技術スタック(v3から変更した点)
+
 | 項目 | 選定 | 備考 |
 |---|---|---|
 | ランタイム | Bun | v3と同じ、ARM64対応済み |
@@ -46,7 +47,7 @@ v3の設計ドキュメント(`docs/current-state-audit.md`, `docs/rewrite-archi
 - TS7への移行は、7.1リリースでプログラマティックAPIが安定し`typescript-eslint`等のエコシステムが追いついた段階で改めて検討する(それまでは`tsc`単体をtsgoで高速化する、といった限定的な併用も見送り、構成をシンプルに保つ)。
 
 ### Bot権限方針
-- Discord Bot招待時に要求する権限は**最小権限**とする。有効化された機能ごとに必要な権限のみ要求し(例: temp-voiceが無効なギルドではチャンネル管理権限を必須にしない)、OAuth2のscopeも`bot applications.commands identify guilds`に限定する。将来機能追加で権限が増える場合はDashboardの再認可導線を用意する。
+- Discord Bot招待時に要求する権限は**最小権限**とする。有効化された機能ごとに必要な権限のみ要求する(例: temp-voiceが無効なギルドではチャンネル管理権限を必須にしない)。Bot招待フロー(OAuth2 scope: `bot applications.commands`、初期権限`0`)とDashboard認可フロー(OAuth2 scope: `identify guilds`)は別のものとして扱う。将来機能追加で権限が増える場合はDashboardの再認可導線を用意する。
 
 ### 型安全性の方針
 - TypeScript strictモード必須(v3同様)に加え、**`any`は原則禁止**。ESLintで`@typescript-eslint/no-explicit-any`をerror設定にし、CIのlintで機械的に検出する。
@@ -72,7 +73,7 @@ v3の設計ドキュメント(`docs/current-state-audit.md`, `docs/rewrite-archi
 
 ### monorepo構成
 
-```
+```text
 apps/
   bot/            - discord.jsクライアント起動、sapphire登録、機能レジストリ読み込みのみ
   dashboard-api/  - Hono, tRPCサーバー, OAuth, WebSocket
@@ -103,7 +104,12 @@ packages/
 
 ### 機能間連携: ドメインイベントバス
 
-「一時VCの滞在時間をアクティビティ集計に反映する」等の連携は、機能パッケージ同士の直接importではなく、`packages/shared/src/domain-events.ts`(zodで型付け)+ Redis Pub/Subの薄いヘルパー(`packages/core`)経由で疎結合にする。例: temp-voiceが`voice.session.ended`をpublish、activityがsubscribeして集計に加算。将来第5機能が同じイベントを使いたくなっても既存パッケージは無改修で済む。
+「一時VCの滞在時間をアクティビティ集計に反映する」等の連携は、機能パッケージ同士の直接importではなく、`packages/shared/src/domain-events.ts`(zodで型付け)+ Redis Streamsの薄いヘルパー(`packages/core`)経由で疎結合にする。例: temp-voiceが`voice.session.ended`をXADDし、activityがconsumer group経由でXREADGROUPして集計に加算、処理成功後にXACKする。将来第5機能が同じイベントを使いたくなっても既存パッケージは無改修で済む。
+
+- **配送保証**: Pub/Sub(揮発性・購読中のみ配送)ではなくStreams(永続化・XACKまでは再配送可能)を使う。configureされたRedisの永続化設定(AOF/RDB)を前提とし、handler失敗時はXACKせず、次回ポーリングで再配送させる(at-least-once)。
+- **冪等性**: `voice_activity_daily`等のロールアップ先テーブルへの加算は、同一イベントの重複配送でも結果が変わらないよう、イベントペイロードに含む一意なイベントID(例: `callSessionId`)をもとに冪等キー付きUPSERT(例: 加算対象行に処理済みイベントIDを記録し二重加算を防ぐ、または対象期間の値を都度再計算する)で実装する。
+- **consumer group運用**: consumerは機能(例: `activity`)単位で1つのconsumer group名を持つ。同一機能を複数インスタンスで動かす場合はgroup内の複数consumerとして参加させ、各イベントはgroup内のどれか1つのconsumerにのみ配送される(グループ内での重複処理を避けつつ、機能全体としては全イベントを1回ずつ処理する設計)。ログ配信用WebSocket(全クライアントへのfan-out)とは要件が異なるため区別する。
+- **障害復旧**: consumer停止中に溜まったイベントは再起動後のXREADGROUPで取得される。長期停止でストリームが肥大化しないよう、XTRIM等での保持期間設定をPhase 5で検討する。
 
 ### capabilitiesビットフラグ(初期セット案)
 

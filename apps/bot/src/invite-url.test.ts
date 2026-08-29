@@ -10,4 +10,10 @@ describe("buildInviteUrl", () => {
     expect(url.searchParams.get("scope")).toBe("bot applications.commands");
     expect(url.searchParams.get("permissions")).toBe("0");
   });
+
+  test("permissionsを指定すると再認可用の権限ビットフィールドを含むURLを生成する", () => {
+    const url = new URL(buildInviteUrl("123456", 16n));
+
+    expect(url.searchParams.get("permissions")).toBe("16");
+  });
 });
