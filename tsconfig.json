@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/config" },
     { "path": "./packages/shared" },
-    { "path": "./packages/db" }
+    { "path": "./packages/db" },
+    { "path": "./packages/core" }
   ]
 }
