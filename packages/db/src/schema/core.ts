@@ -1,4 +1,15 @@
-import { boolean, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const guilds = pgTable("guilds", {
   id: text("id").primaryKey(),
@@ -50,4 +61,26 @@ export const guildFeatureToggles = pgTable(
     enabled: boolean("enabled").notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.guildId, table.featureKey] })],
+);
+
+/**
+ * ギルド内のuser/roleに対する実効capabilities付与。
+ * targetType='role'の@everyone権限はDiscordの仕様上roleId===guildIdとなるレコードで表現する。
+ */
+export const capabilityGrants = pgTable(
+  "capability_grants",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    capabilities: integer("capabilities").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique().on(table.guildId, table.targetType, table.targetId),
+    check("target_type_check", sql`${table.targetType} IN ('user', 'role')`),
+  ],
 );

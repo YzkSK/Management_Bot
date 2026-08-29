@@ -24,6 +24,22 @@
         "typescript": "^6.0.3",
       },
     },
+    "packages/dashboard-access": {
+      "name": "@management-bot/dashboard-access",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/db": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.0.0",
+        "drizzle-orm": "^0.44.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+        "zod": "^4.4.3",
+      },
+    },
     "packages/db": {
       "name": "@management-bot/db",
       "version": "0.0.0",
@@ -141,9 +157,13 @@
 
     "@management-bot/config": ["@management-bot/config@workspace:packages/config"],
 
+    "@management-bot/dashboard-access": ["@management-bot/dashboard-access@workspace:packages/dashboard-access"],
+
     "@management-bot/db": ["@management-bot/db@workspace:packages/db"],
 
     "@management-bot/shared": ["@management-bot/shared@workspace:packages/shared"],
+
+    "@trpc/server": ["@trpc/server@11.18.0", "", { "peerDependencies": { "typescript": ">=5.7.2" }, "bin": { "intent": "bin/intent.js" } }, "sha512-JAvXOuNTxgXjIDfQaOvDq1j66LMNfDJUH1IU7Slfn8EvRv2EkH6ehu3A7zpYhjO0syHHiYg77v2lG2JFJgvw7Q=="],
 
     "@turbo/darwin-64": ["@turbo/darwin-64@2.10.12", "", { "os": "darwin", "cpu": "x64" }, "sha512-9nKgKoF6ZOUsM+or0OtNf+TTJSfGvDNP7ZFv/ZGWVwOSCkumyctQiTeHwB4UNljHTnC41AqylgbunLDHoccNrA=="],
 
