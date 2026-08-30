@@ -32,15 +32,15 @@ describe("isExpired", () => {
   });
 
   test("負値はRangeError", () => {
-    expect(() => isExpired(-1, new Date())).toThrow(RangeError);
+    expect(() => isExpired(-1, new Date(), new Date())).toThrow(RangeError);
   });
 
   test("非整数はRangeError", () => {
-    expect(() => isExpired(1.5, new Date())).toThrow(RangeError);
+    expect(() => isExpired(1.5, new Date(), new Date())).toThrow(RangeError);
   });
 
   test("不正なcreatedAt(Invalid Date)はRangeError", () => {
-    expect(() => isExpired(30, new Date("not-a-date"))).toThrow(RangeError);
+    expect(() => isExpired(30, new Date("not-a-date"), new Date())).toThrow(RangeError);
   });
 
   test("不正なnow(Invalid Date)はRangeError", () => {

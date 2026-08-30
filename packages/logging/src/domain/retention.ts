@@ -18,10 +18,10 @@ function assertValidDate(value: Date, name: string): void {
 }
 
 /**
- * createdAtが保持期間を過ぎているか(削除/アーカイブ対象か)を判定する。
- * retentionDays=0は無期限保存として常にfalseを返す。
+ * createdAtが保持期間を過ぎているか(削除/アーカイブ対象か)を判定する純粋関数。
+ * retentionDays=0は無期限保存として常にfalseを返す。nowは呼び出し側が明示的に渡すこと。
  */
-export function isExpired(retentionDays: number, createdAt: Date, now: Date = new Date()): boolean {
+export function isExpired(retentionDays: number, createdAt: Date, now: Date): boolean {
   assertValidRetentionDays(retentionDays);
   assertValidDate(createdAt, "createdAt");
   assertValidDate(now, "now");
