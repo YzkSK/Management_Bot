@@ -122,6 +122,19 @@ describe.skipIf(!(await isRedisAvailable()))("DomainEventBus", () => {
     await bus.close();
   });
 
+  test("handlerにRedisのstream entry IDが渡される(冪等キーとして利用可能)", async () => {
+    const group = randomUUID();
+    const bus = new DomainEventBus(REDIS_URL, group);
+    const received = Promise.withResolvers<string>();
+
+    await bus.subscribe("voice.session.ended", (_event, entryId) => received.resolve(entryId));
+    await bus.publish(sampleEvent());
+
+    const entryId = await received.promise;
+    expect(entryId).toMatch(/^\d+-\d+$/);
+    await bus.close();
+  });
+
   test("異なるconsumer groupは同一イベントをそれぞれ独立して受信する", async () => {
     const busA = new DomainEventBus(REDIS_URL, randomUUID());
     const busB = new DomainEventBus(REDIS_URL, randomUUID());

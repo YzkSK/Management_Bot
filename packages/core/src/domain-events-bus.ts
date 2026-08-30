@@ -7,7 +7,10 @@ const BLOCK_MS = 1000;
 const DEFAULT_MIN_IDLE_MS_FOR_CLAIM = 30_000;
 const CLAIM_COUNT = 10;
 
-type EventHandler<T extends DomainEventType> = (event: Extract<DomainEvent, { type: T }>) => void | Promise<void>;
+type EventHandler<T extends DomainEventType> = (
+  event: Extract<DomainEvent, { type: T }>,
+  entryId: string,
+) => void | Promise<void>;
 
 type StreamEntry = [id: string, fields: string[]];
 type XReadGroupResponse = [stream: string, entries: StreamEntry[]][];
@@ -31,12 +34,13 @@ function parseXReadGroupResponse(raw: unknown): XReadGroupResponse {
   return result;
 }
 
-// XAUTOCLAIMは [cursor, entries, deletedIds] を返す。
-function parseXAutoClaimResponse(raw: unknown): StreamEntry[] {
-  if (!Array.isArray(raw) || raw.length !== 3) return [];
-  const entries = (raw as unknown[])[1];
-  if (!Array.isArray(entries)) return [];
-  return (entries as unknown[]).filter(isStreamEntry);
+// XAUTOCLAIMは Redis 7.0+で[cursor, entries, deletedIds]、6.2〜6.xでは
+// [cursor, entries]の2要素を返す。どちらの形式でも受理する。
+function parseXAutoClaimResponse(raw: unknown): { cursor: string; entries: StreamEntry[] } {
+  if (!Array.isArray(raw) || raw.length < 2) return { cursor: "0-0", entries: [] };
+  const [cursor, entries] = raw as unknown[];
+  if (typeof cursor !== "string" || !Array.isArray(entries)) return { cursor: "0-0", entries: [] };
+  return { cursor, entries: (entries as unknown[]).filter(isStreamEntry) };
 }
 
 /**
@@ -63,6 +67,7 @@ export class DomainEventBus {
   private readonly consumerName: string;
   private readonly handlers = new Map<DomainEventType, Set<EventHandler<DomainEventType>>>();
   private readonly consumerLoops = new Map<DomainEventType, Promise<void>>();
+  private readonly claimCursors = new Map<DomainEventType, string>();
   private closing = false;
 
   constructor(
@@ -116,7 +121,8 @@ export class DomainEventBus {
     while (!this.closing) {
       try {
         // 起動時・定期的に他consumerが未ACKのまま放置したエントリを回収する。
-        const reclaimed = await this.reclaimPending(stream);
+        // cursorが"0-0"に戻るまでPEL全体を走査し切ってから新規分の読み取りに移る。
+        const reclaimed = await this.reclaimPending(type, stream);
         if (reclaimed.length > 0) {
           await this.processEntries(type, stream, reclaimed);
           continue;
@@ -145,17 +151,27 @@ export class DomainEventBus {
     }
   }
 
-  private async reclaimPending(stream: string): Promise<StreamEntry[]> {
-    const raw = await this.subscriber.xautoclaim(
-      stream,
-      this.consumerGroup,
-      this.consumerName,
-      this.minIdleMsForClaim,
-      "0-0",
-      "COUNT",
-      CLAIM_COUNT,
-    );
-    return parseXAutoClaimResponse(raw);
+  // cursorが"0-0"に戻る(PEL走査完了)か、エントリを回収できるまでXAUTOCLAIMを
+  // 繰り返す。idle未達のエントリだけの区間はentries=[]でもcursorが進むため、
+  // 1回の呼び出しで空判定すると残りのPEL走査をスキップしてしまう。
+  private async reclaimPending(type: DomainEventType, stream: string): Promise<StreamEntry[]> {
+    let cursor = this.claimCursors.get(type) ?? "0-0";
+    do {
+      const raw = await this.subscriber.xautoclaim(
+        stream,
+        this.consumerGroup,
+        this.consumerName,
+        this.minIdleMsForClaim,
+        cursor,
+        "COUNT",
+        CLAIM_COUNT,
+      );
+      const parsed = parseXAutoClaimResponse(raw);
+      cursor = parsed.cursor;
+      this.claimCursors.set(type, cursor);
+      if (parsed.entries.length > 0) return parsed.entries;
+    } while (cursor !== "0-0");
+    return [];
   }
 
   private async processEntries(type: DomainEventType, stream: string, entries: StreamEntry[]): Promise<void> {
@@ -186,7 +202,9 @@ export class DomainEventBus {
     }
 
     const handlers = this.handlers.get(type) ?? [];
-    const outcomes = await Promise.allSettled([...handlers].map((handler) => handler(result.data as DomainEvent)));
+    const outcomes = await Promise.allSettled(
+      [...handlers].map((handler) => handler(result.data as DomainEvent, id)),
+    );
     const failures = outcomes.filter((o): o is PromiseRejectedResult => o.status === "rejected");
     for (const failure of failures) {
       this.onError(failure.reason, { channel: stream });
