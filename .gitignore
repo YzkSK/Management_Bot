@@ -1,7 +1,0 @@
-node_modules/
-dist/
-.turbo/
-*.tsbuildinfo
-*.log
-.env*
-!.env.example
