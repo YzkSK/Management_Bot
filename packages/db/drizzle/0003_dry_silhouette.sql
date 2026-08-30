@@ -26,4 +26,5 @@ CREATE TABLE "log_retention_settings" (
 --> statement-breakpoint
 ALTER TABLE "log_channel_settings" ADD CONSTRAINT "log_channel_settings_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "log_entries" ADD CONSTRAINT "log_entries_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "log_retention_settings" ADD CONSTRAINT "log_retention_settings_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "log_retention_settings" ADD CONSTRAINT "log_retention_settings_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "log_entries_guild_category_created_at_idx" ON "log_entries" USING btree ("guild_id","category","created_at");

@@ -1,5 +1,5 @@
 {
-  "id": "05271ee9-7ccd-4c0d-a54f-225658daa2b0",
+  "id": "5579bed1-6631-45d0-a080-fd541abf12de",
   "prevId": "16b257bf-24b8-4551-a8aa-aa4faba459ed",
   "version": "7",
   "dialect": "postgresql",
@@ -470,7 +470,35 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "log_entries_guild_category_created_at_idx": {
+          "name": "log_entries_guild_category_created_at_idx",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "log_entries_guild_id_guilds_id_fk": {
           "name": "log_entries_guild_id_guilds_id_fk",

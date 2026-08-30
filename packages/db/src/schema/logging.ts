@@ -1,32 +1,11 @@
-import { check, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
+import { LOG_CATEGORIES } from "@management-bot/shared";
 import { guilds } from "./core.js";
-
-/**
- * カテゴリ一覧は@management-bot/logging domain層(LOG_ENTRY_SCHEMAS)のキーと一致させること。
- * dbパッケージは機能パッケージ(logging)に依存できないため、CHECK制約として直接列挙する。
- */
-export const LOG_CATEGORIES = [
-  "message",
-  "member",
-  "role",
-  "channel",
-  "guild",
-  "thread",
-  "invite",
-  "emoji",
-  "autoMod",
-  "integration",
-  "poll",
-  "scheduledEvent",
-  "stage",
-  "auditLogCorrelation",
-  "moderationCase",
-] as const;
 
 function categoryCheck(column: Column): SQL {
   return sql`${column} IN (${sql.join(
-    LOG_CATEGORIES.map((c) => sql.raw(`'${c}'`)),
+    LOG_CATEGORIES.map((c) => sql.raw(`'${c.replace(/'/g, "''")}'`)),
     sql.raw(", "),
   )})`;
 }
@@ -42,7 +21,14 @@ export const logEntries = pgTable(
     payload: jsonb("payload").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [check("log_entries_category_check", categoryCheck(table.category))],
+  (table) => [
+    check("log_entries_category_check", categoryCheck(table.category)),
+    index("log_entries_guild_category_created_at_idx").on(
+      table.guildId,
+      table.category,
+      table.createdAt,
+    ),
+  ],
 );
 
 export const logRetentionSettings = pgTable(

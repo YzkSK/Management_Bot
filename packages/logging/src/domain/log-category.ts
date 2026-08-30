@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LOG_CATEGORIES } from "@management-bot/shared";
 
 const nonEmptyString = z.string().min(1);
 
@@ -142,6 +143,11 @@ export const LOG_ENTRY_SCHEMAS = {
 } as const;
 
 export type LogCategory = keyof typeof LOG_ENTRY_SCHEMAS;
+
+// LOG_ENTRY_SCHEMASのキー集合とLOG_CATEGORIES(shared、DBのCHECK制約が参照する)が一致することを型レベルで強制する。
+type AssertExact<T extends readonly LogCategory[]> = LogCategory extends T[number] ? T : never;
+const _categoriesMatchShared: AssertExact<typeof LOG_CATEGORIES> = LOG_CATEGORIES;
+void _categoriesMatchShared;
 
 const logEntrySchemaOptions = Object.values(LOG_ENTRY_SCHEMAS) as [
   (typeof LOG_ENTRY_SCHEMAS)[LogCategory],

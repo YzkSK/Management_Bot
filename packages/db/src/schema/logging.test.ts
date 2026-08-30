@@ -4,13 +4,20 @@ import { eq } from "drizzle-orm";
 import { createDb, type Db } from "../client.ts";
 import { guilds, logChannelSettings, logEntries, logRetentionSettings } from "./index.ts";
 
-async function assertRejects(promise: Promise<unknown>): Promise<void> {
+interface PgErrorCause {
+  code?: string;
+  constraint_name?: string;
+}
+
+async function expectConstraintViolation(operation: Promise<unknown>, constraintName: string): Promise<void> {
   try {
-    await promise;
-  } catch {
+    await operation;
+  } catch (e) {
+    const cause = (e as { cause?: PgErrorCause }).cause;
+    expect(cause?.constraint_name).toBe(constraintName);
     return;
   }
-  throw new Error("expected promise to reject, but it resolved");
+  throw new Error(`expected constraint "${constraintName}" violation, but the operation succeeded`);
 }
 
 describe("logging schema", () => {
@@ -31,13 +38,14 @@ describe("logging schema", () => {
   });
 
   test("log_entriesは未知のcategoryをCHECK制約で拒否する", async () => {
-    await assertRejects(
+    await expectConstraintViolation(
       db.insert(logEntries).values({
         id: randomUUID(),
         guildId,
         category: "unknown-category",
         payload: {},
       }),
+      "log_entries_category_check",
     );
   });
 
@@ -54,22 +62,33 @@ describe("logging schema", () => {
     expect(row?.payload).toEqual({ action: "create", content: "hello" });
   });
 
-  test("log_retention_settingsはguild_id+categoryで一意、retention_daysは非負", async () => {
+  test("log_retention_settingsはguild_id+categoryで一意、retention_daysは非負、categoryはCHECK制約で検証される", async () => {
     await db.insert(logRetentionSettings).values({ guildId, category: "message", retentionDays: 30 });
 
-    await assertRejects(
+    await expectConstraintViolation(
       db.insert(logRetentionSettings).values({ guildId, category: "message", retentionDays: 10 }),
+      "log_retention_settings_guild_id_category_pk",
     );
-    await assertRejects(
+    await expectConstraintViolation(
       db.insert(logRetentionSettings).values({ guildId, category: "role", retentionDays: -1 }),
+      "log_retention_settings_retention_days_check",
+    );
+    await expectConstraintViolation(
+      db.insert(logRetentionSettings).values({ guildId, category: "unknown-category", retentionDays: 1 }),
+      "log_retention_settings_category_check",
     );
   });
 
-  test("log_channel_settingsはguild_id+categoryで一意", async () => {
+  test("log_channel_settingsはguild_id+categoryで一意、categoryはCHECK制約で検証される", async () => {
     await db.insert(logChannelSettings).values({ guildId, category: "message", channelId: "chan-1" });
 
-    await assertRejects(
+    await expectConstraintViolation(
       db.insert(logChannelSettings).values({ guildId, category: "message", channelId: "chan-2" }),
+      "log_channel_settings_guild_id_category_pk",
+    );
+    await expectConstraintViolation(
+      db.insert(logChannelSettings).values({ guildId, category: "unknown-category", channelId: "chan-3" }),
+      "log_channel_settings_category_check",
     );
   });
 });
