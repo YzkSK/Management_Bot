@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": ["node"],
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/activity" },
+    { "path": "../../packages/config" },
+    { "path": "../../packages/dashboard-access" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/logging" },
+    { "path": "../../packages/moderation" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/temp-voice" }
+  ]
+}

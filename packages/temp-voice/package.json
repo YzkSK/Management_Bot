@@ -1,0 +1,31 @@
+{
+  "name": "@management-bot/temp-voice",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@management-bot/core": "workspace:*",
+    "@management-bot/dashboard-access": "workspace:*",
+    "@management-bot/shared": "workspace:*",
+    "@trpc/server": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "^26.4.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/config" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/db" },
+    { "path": "./packages/core" },
+    { "path": "./packages/dashboard-access" },
+    { "path": "./packages/activity" },
+    { "path": "./packages/logging" },
+    { "path": "./packages/temp-voice" },
+    { "path": "./packages/moderation" },
+    { "path": "./apps/bot" },
+    { "path": "./apps/dashboard-api" },
+    { "path": "./apps/dashboard-web" }
+  ]
+}
