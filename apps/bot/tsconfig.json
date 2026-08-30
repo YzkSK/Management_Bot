@@ -10,9 +10,13 @@
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
+    { "path": "../../packages/activity" },
     { "path": "../../packages/config" },
     { "path": "../../packages/core" },
     { "path": "../../packages/db" },
-    { "path": "../../packages/shared" }
+    { "path": "../../packages/logging" },
+    { "path": "../../packages/moderation" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/temp-voice" }
   ]
 }

@@ -11,10 +11,14 @@
     "dev": "bun run src/index.ts"
   },
   "dependencies": {
+    "@management-bot/activity": "workspace:*",
     "@management-bot/config": "workspace:*",
     "@management-bot/core": "workspace:*",
     "@management-bot/db": "workspace:*",
+    "@management-bot/logging": "workspace:*",
+    "@management-bot/moderation": "workspace:*",
     "@management-bot/shared": "workspace:*",
+    "@management-bot/temp-voice": "workspace:*",
     "discord.js": "^14.16.0"
   },
   "devDependencies": {
