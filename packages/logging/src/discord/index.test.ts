@@ -4,15 +4,23 @@ import type { Db } from "@management-bot/db";
 import { createSendToChannel, registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
-  test("moderation.action.recordedをlogging自身のeventBusで購読する", () => {
+  test("moderation.action.recordedをlogging自身のeventBusで購読する", async () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const ctx = { client: {}, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
-    registerDiscordHandlers(ctx);
+    await registerDiscordHandlers(ctx);
 
     expect(subscribe).toHaveBeenCalledTimes(1);
     expect(subscribe.mock.calls[0]?.[0]).toBe("moderation.action.recorded");
+  });
+
+  test("eventBus.subscribeが失敗したら呼び出し元に伝播する(BotClient.registerFeaturesが起動失敗として検知できるように)", async () => {
+    const subscribe = mock(() => Promise.reject(new Error("BUSYGROUP")));
+    const eventBus = { subscribe } as unknown as DomainEventBus;
+    const ctx = { client: {}, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+
+    await expect(registerDiscordHandlers(ctx)).rejects.toThrow("BUSYGROUP");
   });
 });
 
@@ -33,28 +41,26 @@ describe("createSendToChannel", () => {
     expect(send).toHaveBeenCalledWith({ content: "hello", allowedMentions: { parse: [] } });
   });
 
-  test("チャンネルが見つからない場合は何もしない", async () => {
+  test("チャンネルが見つからない場合は例外を投げる(silentに握りつぶすと再配送されずログが欠落するため)", async () => {
     const sendToChannel = createSendToChannel(fakeCtx(null));
-    await expect(sendToChannel("c1", { content: "hello", suppressMentions: true })).resolves.toBeUndefined();
+    await expect(sendToChannel("c1", { content: "hello", suppressMentions: true })).rejects.toThrow();
   });
 
-  test("テキストベースでないチャンネルには送信しない", async () => {
+  test("テキストベースでないチャンネルには例外を投げる", async () => {
     const send = mock(() => Promise.resolve());
     const channel = { isTextBased: () => false, isSendable: () => true, send };
     const sendToChannel = createSendToChannel(fakeCtx(channel));
 
-    await sendToChannel("c1", { content: "hello", suppressMentions: true });
-
+    await expect(sendToChannel("c1", { content: "hello", suppressMentions: true })).rejects.toThrow();
     expect(send).not.toHaveBeenCalled();
   });
 
-  test("送信不可(権限不足等)なチャンネルには送信しない", async () => {
+  test("送信不可(権限不足等)なチャンネルには例外を投げる", async () => {
     const send = mock(() => Promise.resolve());
     const channel = { isTextBased: () => true, isSendable: () => false, send };
     const sendToChannel = createSendToChannel(fakeCtx(channel));
 
-    await sendToChannel("c1", { content: "hello", suppressMentions: true });
-
+    await expect(sendToChannel("c1", { content: "hello", suppressMentions: true })).rejects.toThrow();
     expect(send).not.toHaveBeenCalled();
   });
 });
