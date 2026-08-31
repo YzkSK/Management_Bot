@@ -1,0 +1,25 @@
+{
+  "name": "@management-bot/logging-retention",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "dev": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@management-bot/config": "workspace:*",
+    "@management-bot/db": "workspace:*",
+    "@management-bot/logging": "workspace:*",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "^26.4.0",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^6.0.3"
+  }
+}
