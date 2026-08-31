@@ -95,7 +95,7 @@ describe("writeLogEntry", () => {
     expect(params).toEqual(["g1", "member"]);
   });
 
-  test("同一idで再実行してもinsertはonConflictDoNothingで冪等、送信は保存の成否に関わらず毎回試みる", async () => {
+  test("同一idで再実行してもチャンネル送信は(insertの成否によらず)毎回試みる", async () => {
     const inserts: RecordedInsert[] = [];
     const db = fakeDb(inserts, { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
