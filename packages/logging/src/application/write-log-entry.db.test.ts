@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createDb, guilds, logEntries } from "@management-bot/db";
+import { createDb, guilds, logChannelSettings, logEntries } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
@@ -12,13 +12,14 @@ const { db, close } = createDb(databaseUrl);
 const guildId = `test-guild-${randomUUID()}`;
 
 afterAll(async () => {
-  await db.delete(guilds);
+  await db.delete(guilds).where(eq(guilds.id, guildId));
   await close();
 });
 
 beforeEach(async () => {
-  await db.delete(guilds);
+  await db.delete(guilds).where(eq(guilds.id, guildId));
   await db.insert(guilds).values({ id: guildId, name: "test guild" });
+  await db.insert(logChannelSettings).values({ guildId, category: "member", channelId: "chan-1" });
 });
 
 const memberJoinEntry: LogEntry = {
