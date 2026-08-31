@@ -21,3 +21,4 @@ export {
   type VoiceSessionEndedEvent,
 } from "./domain-events.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
+export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
