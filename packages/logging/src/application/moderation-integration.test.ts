@@ -52,30 +52,35 @@ describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合�
     const sendToChannel = mock(() => Promise.resolve());
     const written = Promise.withResolvers<void>();
 
-    await subscriberBus.subscribe("moderation.action.recorded", async (event, entryId) => {
-      await handleModerationEvent({ db, sendToChannel })(event, entryId);
-      written.resolve();
-    });
-    await new Promise((r) => setTimeout(r, 100));
+    try {
+      await subscriberBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        written.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
 
-    await publisherBus.publish({
-      type: "moderation.action.recorded",
-      guildId: "g1",
-      caseId: "case-1",
-      targetUserId: "u1",
-      moderatorId: "mod1",
-      action: "create",
-      actionType: "kick",
-      createdAt: "2026-08-31T00:00:00.000Z",
-    });
+      await publisherBus.publish({
+        type: "moderation.action.recorded",
+        guildId: "g1",
+        caseId: "case-1",
+        targetUserId: "u1",
+        moderatorId: "mod1",
+        action: "create",
+        actionType: "kick",
+        createdAt: "2026-08-31T00:00:00.000Z",
+      });
 
-    await written.promise;
-    expect(inserts[0]?.values).toMatchObject({
-      guildId: "g1",
-      category: "moderationCase",
-      payload: { actionType: "kick", caseId: "case-1" },
-    });
-
-    await Promise.all([publisherBus.close(), subscriberBus.close()]);
+      await Promise.race([
+        written.promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timed out waiting for handler")), 5_000)),
+      ]);
+      expect(inserts[0]?.values).toMatchObject({
+        guildId: "g1",
+        category: "moderationCase",
+        payload: { actionType: "kick", caseId: "case-1" },
+      });
+    } finally {
+      await Promise.all([publisherBus.close(), subscriberBus.close()]);
+    }
   });
 });

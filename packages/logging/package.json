@@ -23,6 +23,7 @@
     "@management-bot/db": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@trpc/server": "^11.0.0",
+    "discord.js": "^14.16.0",
     "drizzle-orm": "^0.44.0",
     "zod": "^4.4.3"
   },

@@ -8,21 +8,35 @@ interface RecordedInsert {
   values: unknown;
 }
 
-function fakeDb(inserts: RecordedInsert[], insertReturns: { id: string }[] = [{ id: "generated" }]): Db {
+/**
+ * insertedIdsは「既にDBに存在するid」の集合として振る舞う擬似ストア。
+ * 未登録idはinsert成功として登録し、登録済みidはconflict(returning: [])を返す。
+ * 実際のonConflictDoNothingの挙動(初回成功・再実行時はスキップ)を1つのfakeDbで再現する。
+ */
+function fakeDb(
+  inserts: RecordedInsert[],
+  channelSetting: { channelId: string } | undefined,
+  insertedIds: Set<string> = new Set(),
+): Db {
   return {
     insert: () => ({
       values: (values: unknown) => {
         inserts.push({ values });
+        const id = (values as { id: string }).id;
         return {
           onConflictDoNothing: () => ({
-            returning: () => Promise.resolve(insertReturns),
+            returning: () => {
+              if (insertedIds.has(id)) return Promise.resolve([]);
+              insertedIds.add(id);
+              return Promise.resolve([{ id }]);
+            },
           }),
         };
       },
     }),
     select: () => ({
       from: () => ({
-        where: () => Promise.resolve([]),
+        where: () => Promise.resolve(channelSetting ? [channelSetting] : []),
       }),
     }),
   } as unknown as Db;
@@ -40,16 +54,16 @@ const banEvent: ModerationActionRecordedEvent = {
 };
 
 describe("handleModerationEvent", () => {
-  test("moderationCaseカテゴリのログエントリとしてwriteLogEntryを呼ぶ", async () => {
+  test("moderationCaseカテゴリのログエントリとしてwriteLogEntryを呼ぶ。idはevent.typeを前置する", async () => {
     const inserts: RecordedInsert[] = [];
-    const db = fakeDb(inserts);
+    const db = fakeDb(inserts, undefined);
     const sendToChannel = mock(() => Promise.resolve());
     const handler = handleModerationEvent({ db, sendToChannel });
 
     await handler(banEvent, "1234-0");
 
     expect(inserts[0]?.values).toMatchObject({
-      id: "1234-0",
+      id: "moderation.action.recorded:1234-0",
       guildId: "g1",
       category: "moderationCase",
       payload: {
@@ -61,17 +75,19 @@ describe("handleModerationEvent", () => {
         actionType: "ban",
       },
     });
-    expect(inserts[0]?.values).toMatchObject({ id: "1234-0" });
   });
 
-  test("同一entryIdで再実行されても重複保存しない(冪等)", async () => {
-    const db = fakeDb([], []);
+  test("同一entryIdで再実行すると1回目はinsert+送信、2回目はconflictでinsertも送信もされない(冪等)", async () => {
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
     const handler = handleModerationEvent({ db, sendToChannel });
 
     await handler(banEvent, "1234-0");
+    await handler(banEvent, "1234-0");
 
-    expect(sendToChannel).not.toHaveBeenCalled();
+    expect(inserts).toHaveLength(2);
+    expect(sendToChannel).toHaveBeenCalledTimes(1);
   });
 
   test("log_entriesテーブルへinsertする", async () => {
@@ -82,7 +98,7 @@ describe("handleModerationEvent", () => {
         return {
           values: () => ({
             onConflictDoNothing: () => ({
-              returning: () => Promise.resolve([{ id: "1234-0" }]),
+              returning: () => Promise.resolve([{ id: "moderation.action.recorded:1234-0" }]),
             }),
           }),
         };

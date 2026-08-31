@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LOG_CATEGORIES } from "@management-bot/shared";
+import { LOG_CATEGORIES, MODERATION_ACTION_TYPES } from "@management-bot/shared";
 
 const nonEmptyString = z.string().min(1);
 
@@ -122,7 +122,7 @@ export const moderationCaseLogEntrySchema = z.object({
   targetUserId: nonEmptyString,
   moderatorId: nonEmptyString,
   action: z.enum(["create", "update", "resolve"]),
-  actionType: z.enum(["warn", "messageDelete", "timeout", "kick", "ban", "unban"]),
+  actionType: z.enum(MODERATION_ACTION_TYPES),
 });
 
 export const LOG_ENTRY_SCHEMAS = {

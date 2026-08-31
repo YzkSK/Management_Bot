@@ -1,9 +1,14 @@
+import type { Db } from "@management-bot/db";
 import type { FeatureKey } from "@management-bot/shared";
 import type { AnyTRPCRouter } from "@trpc/server";
 import type { BotClient } from "./client.js";
+import type { DomainEventBus } from "./domain-events-bus.js";
 
 export interface FeatureModuleContext {
   client: BotClient;
+  db: Db;
+  /** 機能間連携用。他機能への直接importではなくdomain-events経由で疎結合にする(CLAUDE.md参照)。 */
+  eventBus: DomainEventBus;
 }
 
 /**
