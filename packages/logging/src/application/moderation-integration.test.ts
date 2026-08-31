@@ -70,10 +70,15 @@ describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合�
         createdAt: "2026-08-31T00:00:00.000Z",
       });
 
-      await Promise.race([
-        written.promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timed out waiting for handler")), 5_000)),
-      ]);
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("timed out waiting for handler")), 5_000);
+      });
+      try {
+        await Promise.race([written.promise, timeout]);
+      } finally {
+        clearTimeout(timeoutId!);
+      }
       expect(inserts[0]?.values).toMatchObject({
         guildId: "g1",
         category: "moderationCase",

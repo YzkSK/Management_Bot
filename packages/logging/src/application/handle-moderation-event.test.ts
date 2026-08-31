@@ -8,30 +8,12 @@ interface RecordedInsert {
   values: unknown;
 }
 
-/**
- * insertedIdsは「既にDBに存在するid」の集合として振る舞う擬似ストア。
- * 未登録idはinsert成功として登録し、登録済みidはconflict(returning: [])を返す。
- * 実際のonConflictDoNothingの挙動(初回成功・再実行時はスキップ)を1つのfakeDbで再現する。
- */
-function fakeDb(
-  inserts: RecordedInsert[],
-  channelSetting: { channelId: string } | undefined,
-  insertedIds: Set<string> = new Set(),
-): Db {
+function fakeDb(inserts: RecordedInsert[], channelSetting: { channelId: string } | undefined): Db {
   return {
     insert: () => ({
       values: (values: unknown) => {
         inserts.push({ values });
-        const id = (values as { id: string }).id;
-        return {
-          onConflictDoNothing: () => ({
-            returning: () => {
-              if (insertedIds.has(id)) return Promise.resolve([]);
-              insertedIds.add(id);
-              return Promise.resolve([{ id }]);
-            },
-          }),
-        };
+        return { onConflictDoNothing: () => Promise.resolve() };
       },
     }),
     select: () => ({
@@ -77,7 +59,7 @@ describe("handleModerationEvent", () => {
     });
   });
 
-  test("同一entryIdで再実行すると1回目はinsert+送信、2回目はconflictでinsertも送信もされない(冪等)", async () => {
+  test("同一entryIdで再実行してもDB保存はonConflictDoNothingで冪等になる", async () => {
     const inserts: RecordedInsert[] = [];
     const db = fakeDb(inserts, { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
@@ -87,7 +69,8 @@ describe("handleModerationEvent", () => {
     await handler(banEvent, "1234-0");
 
     expect(inserts).toHaveLength(2);
-    expect(sendToChannel).toHaveBeenCalledTimes(1);
+    expect(inserts[0]?.values).toMatchObject({ id: "moderation.action.recorded:1234-0" });
+    expect(inserts[1]?.values).toMatchObject({ id: "moderation.action.recorded:1234-0" });
   });
 
   test("log_entriesテーブルへinsertする", async () => {
@@ -97,9 +80,7 @@ describe("handleModerationEvent", () => {
         inserts.push({ table });
         return {
           values: () => ({
-            onConflictDoNothing: () => ({
-              returning: () => Promise.resolve([{ id: "moderation.action.recorded:1234-0" }]),
-            }),
+            onConflictDoNothing: () => Promise.resolve(),
           }),
         };
       },

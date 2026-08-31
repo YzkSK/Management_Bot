@@ -16,24 +16,19 @@ interface RecordedInsert {
 function fakeDb(
   inserts: RecordedInsert[],
   channelSetting: { channelId: string } | undefined,
-  options: { captureWhere?: (condition: SQL | undefined) => void; insertReturns?: { id: string }[] } = {},
+  captureWhere?: (condition: SQL | undefined) => void,
 ): Db {
-  const insertReturns = options.insertReturns ?? [{ id: "generated" }];
   return {
     insert: (table: unknown) => ({
       values: (values: unknown) => {
         inserts.push({ table, values });
-        return {
-          onConflictDoNothing: () => ({
-            returning: () => Promise.resolve(insertReturns),
-          }),
-        };
+        return { onConflictDoNothing: () => Promise.resolve() };
       },
     }),
     select: () => ({
       from: (table: unknown) => ({
         where: (condition: SQL | undefined) => {
-          options.captureWhere?.(condition);
+          captureWhere?.(condition);
           return Promise.resolve(table === logChannelSettings && channelSetting ? [channelSetting] : []);
         },
       }),
@@ -88,10 +83,8 @@ describe("writeLogEntry", () => {
 
   test("select条件はguildIdとcategoryのANDで絞り込む", async () => {
     let captured: SQL | undefined;
-    const db = fakeDb([], undefined, {
-      captureWhere: (condition) => {
-        captured = condition;
-      },
+    const db = fakeDb([], undefined, (condition) => {
+      captured = condition;
     });
 
     await writeLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, memberJoinEntry);
@@ -102,13 +95,16 @@ describe("writeLogEntry", () => {
     expect(params).toEqual(["g1", "member"]);
   });
 
-  test("指定したidが既存(重複)ならinsertされずsendToChannelも呼ばない(冪等)", async () => {
-    const db = fakeDb([], { channelId: "c1" }, { insertReturns: [] });
+  test("同一idで再実行してもinsertはonConflictDoNothingで冪等、送信は保存の成否に関わらず毎回試みる", async () => {
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
 
     await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id");
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id");
 
-    expect(sendToChannel).not.toHaveBeenCalled();
+    expect(inserts).toHaveLength(2);
+    expect(sendToChannel).toHaveBeenCalledTimes(2);
   });
 
   test("idを指定するとその値でinsertする", async () => {
@@ -118,6 +114,20 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, memberJoinEntry, "fixed-entry-id");
 
     expect(inserts[0]?.values).toMatchObject({ id: "fixed-entry-id" });
+  });
+
+  test("初回送信が失敗しても同一idで再実行すれば送信される(DB保存済みでも永久欠落しない)", async () => {
+    const db = fakeDb([], { channelId: "c1" });
+    const sendToChannel = mock(() => Promise.reject(new Error("discord api error")));
+
+    await expect(writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id")).rejects.toThrow(
+      "discord api error",
+    );
+
+    sendToChannel.mockImplementation(() => Promise.resolve());
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id");
+
+    expect(sendToChannel).toHaveBeenCalledTimes(2);
   });
 });
 

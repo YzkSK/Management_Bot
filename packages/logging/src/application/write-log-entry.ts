@@ -48,13 +48,17 @@ export function formatLogEntry(entry: LogEntry): string {
  * ログ本文はユーザー入力(message.content等)を含み得るため、メンション発火を防ぐsuppressMentionsを常に指定する。
  *
  * idを省略した場合はrandomUUID()で生成する。domain-events購読ハンドラ等、
- * at-least-once配送で再実行され得る呼び出し元はentryIdなど決定的な値を渡し、
- * onConflictDoNothingにより重複保存を防ぐこと(冪等呼び出し)。
+ * at-least-once配送で再実行され得る呼び出し元はentryIdなど決定的な値を渡すこと。
+ * DB保存はonConflictDoNothingで冪等(2回目以降は何もしない)にする一方、
+ * チャンネル送信は保存の成否に関わらず毎回試みる。送信のみが失敗して
+ * 再配送された場合に、DB上は保存済みだからと送信を諦めて永久欠落させないため。
+ * sendToChannel側が一時的に失敗し再配送された場合、重複送信は起こり得る
+ * (Discord送信とDB更新を1トランザクションにはできないためat-least-once配送とする)。
  */
 export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry, id: string = randomUUID()): Promise<void> {
   const { db, sendToChannel } = deps;
 
-  const inserted = await db
+  await db
     .insert(logEntries)
     .values({
       id,
@@ -63,10 +67,7 @@ export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry, id
       payload: entry,
       createdAt: new Date(entry.createdAt),
     })
-    .onConflictDoNothing()
-    .returning({ id: logEntries.id });
-
-  if (inserted.length === 0) return;
+    .onConflictDoNothing();
 
   const [channelSetting] = await db
     .select({ channelId: logChannelSettings.channelId })
