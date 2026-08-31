@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 
 /**
  * 機能パッケージ間の連携はRedis Pub/Sub経由のイベントで疎結合にする(直接import禁止)。
@@ -28,7 +29,7 @@ export const moderationActionRecordedSchema = z.object({
   targetUserId: z.string(),
   moderatorId: z.string(),
   action: z.enum(["create", "update", "resolve"]),
-  actionType: z.enum(["warn", "messageDelete", "timeout", "kick", "ban", "unban"]),
+  actionType: z.enum(MODERATION_ACTION_TYPES),
   createdAt: z.iso.datetime(),
 });
 

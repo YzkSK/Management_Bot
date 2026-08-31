@@ -121,6 +121,7 @@
       "name": "@management-bot/core",
       "version": "0.0.0",
       "dependencies": {
+        "@management-bot/db": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@sapphire/framework": "^5.3.0",
         "@trpc/server": "^11.0.0",
@@ -173,6 +174,7 @@
         "@management-bot/db": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@trpc/server": "^11.0.0",
+        "discord.js": "^14.16.0",
         "drizzle-orm": "^0.44.0",
         "zod": "^4.4.3",
       },

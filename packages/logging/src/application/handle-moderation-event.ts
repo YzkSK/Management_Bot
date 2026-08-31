@@ -18,12 +18,13 @@ function toLogEntry(event: ModerationActionRecordedEvent): LogEntry {
 /**
  * moderation側が発行するmoderation.action.recordedを購読し、moderationCaseカテゴリの
  * ログとして書き込むハンドラ。DomainEventBus.subscribeに渡すことを想定する。
- * entryId(Redis Streamsのエントリid)をlog_entries.idとして渡すことで、
+ * entryId(Redis Streamsのエントリid)はstream単位でのみ一意なため、
+ * event.typeを前置してlog_entries.id(全体PK)としての一意性を確保する。
  * at-least-once配送による再実行(ハンドラ再試行・XAUTOCLAIMでの再配送)でも
  * ログが重複保存されないようにする。
  */
 export function handleModerationEvent(
   deps: WriteLogEntryDeps,
 ): (event: ModerationActionRecordedEvent, entryId: string) => Promise<void> {
-  return (event, entryId) => writeLogEntry(deps, toLogEntry(event), entryId);
+  return (event, entryId) => writeLogEntry(deps, toLogEntry(event), `${event.type}:${entryId}`);
 }
