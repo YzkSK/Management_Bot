@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [bot, dashboard-api, dashboard-web, backup]
+        app: [bot, dashboard-api, dashboard-web, backup, logging-retention]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

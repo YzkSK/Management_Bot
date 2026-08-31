@@ -33,6 +33,9 @@ export const envSchema = z.object({
   BACKUP_CRON: z.string().min(1).default("0 3 * * *"),
   BACKUP_DIR: z.string().min(1).default("/backups"),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
+
+  // ログ保持期限ジョブ
+  LOGGING_RETENTION_CRON: z.string().min(1).default("0 4 * * *"),
 });
 
 export type Env = z.infer<typeof envSchema>;
