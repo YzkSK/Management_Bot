@@ -1,102 +1,63 @@
 import { describe, expect, test } from "bun:test";
 import type { Db } from "@management-bot/db";
-import { logEntries, logRetentionSettings } from "@management-bot/db";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { purgeExpiredLogs } from "./purge-expired-logs.js";
 
 const pgDialect = new PgDialect();
 
-interface Setting {
-  guildId: string;
-  category: string;
-  retentionDays: number;
-}
-
 function fakeDb(
-  settings: Setting[],
-  deletedByGuildCategory: Record<string, { id: string }[]>,
-  captureDeleteWhere?: (condition: SQL | undefined) => void,
+  rows: { guild_id: string; category: string; deleted_count: number }[],
+  captureQuery?: (sql: string, params: unknown[]) => void,
 ): Db {
   return {
-    select: () => ({
-      from: (table: unknown) => ({
-        where: (condition: SQL | undefined) => {
-          if (table === logRetentionSettings) {
-            const { sql } = pgDialect.sqlToQuery(condition!);
-            expect(sql).toContain('"retention_days" > 0');
-            return Promise.resolve(settings);
-          }
-          return Promise.resolve([]);
-        },
-      }),
-    }),
-    delete: (table: unknown) => ({
-      where: (condition: SQL | undefined) => ({
-        returning: () => {
-          if (table !== logEntries) return Promise.resolve([]);
-          captureDeleteWhere?.(condition);
-          const { params } = pgDialect.sqlToQuery(condition!);
-          const key = `${params[0]}:${params[1]}`;
-          return Promise.resolve(deletedByGuildCategory[key] ?? []);
-        },
-      }),
-    }),
+    execute: (query: SQL) => {
+      const { sql, params } = pgDialect.sqlToQuery(query);
+      captureQuery?.(sql, params);
+      return Promise.resolve(rows);
+    },
   } as unknown as Db;
 }
 
 describe("purgeExpiredLogs", () => {
-  test("retentionDays>0の設定のみを対象にguild×categoryごとに削除する", async () => {
-    const settings: Setting[] = [{ guildId: "g1", category: "message", retentionDays: 30 }];
-    const db = fakeDb(settings, { "g1:message": [{ id: "e1" }, { id: "e2" }] });
+  test("削除された行をguild×categoryごとの結果に変換する", async () => {
+    const db = fakeDb([
+      { guild_id: "g1", category: "message", deleted_count: 2 },
+      { guild_id: "g2", category: "member", deleted_count: 1 },
+    ]);
 
     const result = await purgeExpiredLogs(db, new Date("2026-08-31T00:00:00.000Z"));
 
-    expect(result).toEqual([{ guildId: "g1", category: "message", deletedCount: 2 }]);
+    expect(result).toEqual([
+      { guildId: "g1", category: "message", deletedCount: 2 },
+      { guildId: "g2", category: "member", deletedCount: 1 },
+    ]);
   });
 
-  test("削除件数0のguild×categoryは結果に含めない", async () => {
-    const settings: Setting[] = [{ guildId: "g1", category: "message", retentionDays: 30 }];
-    const db = fakeDb(settings, {});
+  test("削除対象がなければ空配列を返す", async () => {
+    const db = fakeDb([]);
 
     const result = await purgeExpiredLogs(db, new Date());
 
     expect(result).toEqual([]);
   });
 
-  test("削除条件はguildId・category・createdAt<=cutoffのANDで絞り込む", async () => {
-    const settings: Setting[] = [{ guildId: "g1", category: "message", retentionDays: 7 }];
-    let captured: SQL | undefined;
-    const db = fakeDb(settings, { "g1:message": [{ id: "e1" }] }, (condition) => {
-      captured = condition;
+  test("retentionDays>0の条件・guild_id/category一致・created_atのカットオフをSQLに含む", async () => {
+    let capturedSql = "";
+    let capturedParams: unknown[] = [];
+    const db = fakeDb([], (sql, params) => {
+      capturedSql = sql;
+      capturedParams = params;
     });
 
     await purgeExpiredLogs(db, new Date("2026-08-31T00:00:00.000Z"));
 
-    const { sql, params } = pgDialect.sqlToQuery(captured!);
-    expect(sql).toContain('"guild_id" = $1');
-    expect(sql).toContain('"category" = $2');
-    expect(sql).toContain('"created_at" <= $3');
-    expect(params[0]).toBe("g1");
-    expect(params[1]).toBe("message");
-    expect(params[2]).toBe("2026-08-24T00:00:00.000Z");
-  });
-
-  test("複数guild×categoryをそれぞれ独立して処理する", async () => {
-    const settings: Setting[] = [
-      { guildId: "g1", category: "message", retentionDays: 30 },
-      { guildId: "g2", category: "member", retentionDays: 7 },
-    ];
-    const db = fakeDb(settings, {
-      "g1:message": [{ id: "e1" }],
-      "g2:member": [{ id: "e2" }, { id: "e3" }],
-    });
-
-    const result = await purgeExpiredLogs(db, new Date());
-
-    expect(result).toEqual([
-      { guildId: "g1", category: "message", deletedCount: 1 },
-      { guildId: "g2", category: "member", deletedCount: 2 },
-    ]);
+    expect(capturedSql).toContain("retention_days");
+    expect(capturedSql).toContain("> 0");
+    expect(capturedSql).toContain("guild_id");
+    expect(capturedSql).toContain("category");
+    expect(capturedSql).toContain("interval");
+    expect(capturedSql.toUpperCase()).toContain("GROUP BY");
+    expect(capturedParams).toContain("2026-08-31T00:00:00.000Z");
   });
 });
