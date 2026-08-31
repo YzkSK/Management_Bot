@@ -20,8 +20,10 @@
   "dependencies": {
     "@management-bot/core": "workspace:*",
     "@management-bot/dashboard-access": "workspace:*",
+    "@management-bot/db": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@trpc/server": "^11.0.0",
+    "drizzle-orm": "^0.44.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
