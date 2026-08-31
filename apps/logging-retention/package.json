@@ -14,6 +14,7 @@
     "@management-bot/config": "workspace:*",
     "@management-bot/db": "workspace:*",
     "@management-bot/logging": "workspace:*",
+    "drizzle-orm": "^0.44.0",
     "node-cron": "^3.0.3"
   },
   "devDependencies": {

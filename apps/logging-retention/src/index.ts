@@ -16,10 +16,19 @@ if (!cron.validate(env.LOGGING_RETENTION_CRON)) {
 }
 
 const { db, close } = createDb(env.DATABASE_URL);
-const runPurge = createPurgeRunner(db);
+const runner = createPurgeRunner(db);
 
-process.once("SIGTERM", () => void close());
-process.once("SIGINT", () => void close());
+const task = cron.schedule(env.LOGGING_RETENTION_CRON, () => void runner.run(), { timezone: TIMEZONE });
 
-cron.schedule(env.LOGGING_RETENTION_CRON, () => void runPurge(), { timezone: TIMEZONE });
+// cronのタイマーを止めてから実行中のジョブ(DELETE)完了を待ち、DBを閉じる。
+// タイマーを止めずにcloseだけ呼ぶとプロセスがtimer keep-aliveで終了しない。
+async function shutdown() {
+  task.stop();
+  await runner.waitForIdle();
+  await close();
+  process.exit(0);
+}
+process.once("SIGTERM", () => void shutdown());
+process.once("SIGINT", () => void shutdown());
+
 console.log(`Logging retention cron scheduled: ${env.LOGGING_RETENTION_CRON} (${TIMEZONE})`);
