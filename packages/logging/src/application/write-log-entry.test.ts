@@ -16,19 +16,24 @@ interface RecordedInsert {
 function fakeDb(
   inserts: RecordedInsert[],
   channelSetting: { channelId: string } | undefined,
-  captureWhere?: (condition: SQL | undefined) => void,
+  options: { captureWhere?: (condition: SQL | undefined) => void; insertReturns?: { id: string }[] } = {},
 ): Db {
+  const insertReturns = options.insertReturns ?? [{ id: "generated" }];
   return {
     insert: (table: unknown) => ({
       values: (values: unknown) => {
         inserts.push({ table, values });
-        return Promise.resolve();
+        return {
+          onConflictDoNothing: () => ({
+            returning: () => Promise.resolve(insertReturns),
+          }),
+        };
       },
     }),
     select: () => ({
       from: (table: unknown) => ({
         where: (condition: SQL | undefined) => {
-          captureWhere?.(condition);
+          options.captureWhere?.(condition);
           return Promise.resolve(table === logChannelSettings && channelSetting ? [channelSetting] : []);
         },
       }),
@@ -83,8 +88,10 @@ describe("writeLogEntry", () => {
 
   test("select条件はguildIdとcategoryのANDで絞り込む", async () => {
     let captured: SQL | undefined;
-    const db = fakeDb([], undefined, (condition) => {
-      captured = condition;
+    const db = fakeDb([], undefined, {
+      captureWhere: (condition) => {
+        captured = condition;
+      },
     });
 
     await writeLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, memberJoinEntry);
@@ -93,6 +100,24 @@ describe("writeLogEntry", () => {
     expect(sql).toContain('"guild_id" = $1');
     expect(sql).toContain('"category" = $2');
     expect(params).toEqual(["g1", "member"]);
+  });
+
+  test("指定したidが既存(重複)ならinsertされずsendToChannelも呼ばない(冪等)", async () => {
+    const db = fakeDb([], { channelId: "c1" }, { insertReturns: [] });
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id");
+
+    expect(sendToChannel).not.toHaveBeenCalled();
+  });
+
+  test("idを指定するとその値でinsertする", async () => {
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, undefined);
+
+    await writeLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, memberJoinEntry, "fixed-entry-id");
+
+    expect(inserts[0]?.values).toMatchObject({ id: "fixed-entry-id" });
   });
 });
 

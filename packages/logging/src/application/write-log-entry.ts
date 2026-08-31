@@ -41,17 +41,27 @@ export function formatLogEntry(entry: LogEntry): string {
  * ログエントリをDB保存し、guild×categoryに設定された出力先チャンネルがあれば整形して送信する。
  * 出力先未設定は正常系(DB保存のみで完了)。discord層/moderation連携から共通で呼ぶ入口。
  * ログ本文はユーザー入力(message.content等)を含み得るため、メンション発火を防ぐsuppressMentionsを常に指定する。
+ *
+ * idを省略した場合はrandomUUID()で生成する。domain-events購読ハンドラ等、
+ * at-least-once配送で再実行され得る呼び出し元はentryIdなど決定的な値を渡し、
+ * onConflictDoNothingにより重複保存を防ぐこと(冪等呼び出し)。
  */
-export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry): Promise<void> {
+export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry, id: string = randomUUID()): Promise<void> {
   const { db, sendToChannel } = deps;
 
-  await db.insert(logEntries).values({
-    id: randomUUID(),
-    guildId: entry.guildId,
-    category: entry.category,
-    payload: entry,
-    createdAt: new Date(entry.createdAt),
-  });
+  const inserted = await db
+    .insert(logEntries)
+    .values({
+      id,
+      guildId: entry.guildId,
+      category: entry.category,
+      payload: entry,
+      createdAt: new Date(entry.createdAt),
+    })
+    .onConflictDoNothing()
+    .returning({ id: logEntries.id });
+
+  if (inserted.length === 0) return;
 
   const [channelSetting] = await db
     .select({ channelId: logChannelSettings.channelId })

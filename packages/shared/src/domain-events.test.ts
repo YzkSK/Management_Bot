@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { voiceSessionEndedSchema } from "./domain-events.ts";
+import { voiceSessionEndedSchema, moderationActionRecordedSchema } from "./domain-events.ts";
 
 describe("voiceSessionEndedSchema", () => {
   test("正しいpayloadをparseできる", () => {
@@ -39,6 +39,37 @@ describe("voiceSessionEndedSchema", () => {
         startedAt: "2026-08-29T00:10:00.000Z",
         endedAt: "2026-08-29T00:00:00.000Z",
         durationSeconds: 0,
+      }),
+    ).toThrow();
+  });
+});
+
+describe("moderationActionRecordedSchema", () => {
+  test("正しいpayloadをparseできる", () => {
+    const result = moderationActionRecordedSchema.parse({
+      type: "moderation.action.recorded",
+      guildId: "1",
+      caseId: "case-1",
+      targetUserId: "2",
+      moderatorId: "3",
+      action: "create",
+      actionType: "ban",
+      createdAt: "2026-08-29T00:00:00.000Z",
+    });
+    expect(result.actionType).toBe("ban");
+  });
+
+  test("未知のactionTypeは拒否する", () => {
+    expect(() =>
+      moderationActionRecordedSchema.parse({
+        type: "moderation.action.recorded",
+        guildId: "1",
+        caseId: "case-1",
+        targetUserId: "2",
+        moderatorId: "3",
+        action: "create",
+        actionType: "notAnActionType",
+        createdAt: "2026-08-29T00:00:00.000Z",
       }),
     ).toThrow();
   });

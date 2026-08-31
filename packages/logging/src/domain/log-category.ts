@@ -122,6 +122,7 @@ export const moderationCaseLogEntrySchema = z.object({
   targetUserId: nonEmptyString,
   moderatorId: nonEmptyString,
   action: z.enum(["create", "update", "resolve"]),
+  actionType: z.enum(["warn", "messageDelete", "timeout", "kick", "ban", "unban"]),
 });
 
 export const LOG_ENTRY_SCHEMAS = {
