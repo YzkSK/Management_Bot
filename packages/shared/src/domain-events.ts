@@ -21,8 +21,22 @@ export const voiceSessionEndedSchema = z
 
 export type VoiceSessionEndedEvent = z.infer<typeof voiceSessionEndedSchema>;
 
+export const moderationActionRecordedSchema = z.object({
+  type: z.literal("moderation.action.recorded"),
+  guildId: z.string(),
+  caseId: z.string(),
+  targetUserId: z.string(),
+  moderatorId: z.string(),
+  action: z.enum(["create", "update", "resolve"]),
+  actionType: z.enum(["warn", "messageDelete", "timeout", "kick", "ban", "unban"]),
+  createdAt: z.iso.datetime(),
+});
+
+export type ModerationActionRecordedEvent = z.infer<typeof moderationActionRecordedSchema>;
+
 export const DOMAIN_EVENT_SCHEMAS = {
   "voice.session.ended": voiceSessionEndedSchema,
+  "moderation.action.recorded": moderationActionRecordedSchema,
 } as const;
 
 export type DomainEventType = keyof typeof DOMAIN_EVENT_SCHEMAS;

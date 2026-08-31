@@ -119,6 +119,7 @@ const validByCategory = {
     targetUserId: "3",
     moderatorId: "4",
     action: "create",
+    actionType: "warn",
   },
 } satisfies Record<LogCategory, unknown>;
 
