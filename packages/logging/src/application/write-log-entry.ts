@@ -19,13 +19,14 @@ export interface WriteLogEntryDeps {
 const MAX_FIELD_LENGTH = 1_900;
 
 function formatValue(value: unknown): string {
-  return String(value).replace(/[\r\n]+/g, " ").slice(0, MAX_FIELD_LENGTH);
+  return String(value).replace(/[\r\n]+/g, " ");
 }
 
 /**
  * 各カテゴリ共通のフィールド(action/対象ID群)を1行に整形する。
  * カテゴリ固有の見た目が必要になったら、ここをcategoryごとの分岐に拡張する。
- * message.contentのような任意長・改行混じりの値もDiscordの1メッセージに収まるよう正規化する。
+ * message.contentのような任意長・改行混じりの値もDiscordの1メッセージに収まるよう、
+ * カテゴリ・時刻・区切り文字を含めた最終文字列全体を上限まで切り詰める。
  */
 export function formatLogEntry(entry: LogEntry): string {
   const { category, guildId, createdAt, ...rest } = entry;
@@ -34,7 +35,7 @@ export function formatLogEntry(entry: LogEntry): string {
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}=${formatValue(value)}`)
     .join(" ");
-  return `[${category}] ${createdAt} ${details}`;
+  return `[${category}] ${createdAt} ${details}`.slice(0, MAX_FIELD_LENGTH);
 }
 
 /**
