@@ -16,7 +16,8 @@ export interface WriteLogEntryDeps {
   sendToChannel: ChannelSender;
 }
 
-const MAX_FIELD_LENGTH = 1_900;
+const MAX_MESSAGE_LENGTH = 1_900;
+const TRUNCATION_SUFFIX = "…";
 
 function formatValue(value: unknown): string {
   return String(value).replace(/[\r\n]+/g, " ");
@@ -26,7 +27,8 @@ function formatValue(value: unknown): string {
  * 各カテゴリ共通のフィールド(action/対象ID群)を1行に整形する。
  * カテゴリ固有の見た目が必要になったら、ここをcategoryごとの分岐に拡張する。
  * message.contentのような任意長・改行混じりの値もDiscordの1メッセージに収まるよう、
- * カテゴリ・時刻・区切り文字を含めた最終文字列全体を上限まで切り詰める。
+ * カテゴリ・時刻・区切り文字を含めた最終文字列全体を上限まで切り詰め、
+ * 切り詰めが発生したことが分かるようサフィックスを付与する。
  */
 export function formatLogEntry(entry: LogEntry): string {
   const { category, guildId, createdAt, ...rest } = entry;
@@ -35,7 +37,9 @@ export function formatLogEntry(entry: LogEntry): string {
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}=${formatValue(value)}`)
     .join(" ");
-  return `[${category}] ${createdAt} ${details}`.slice(0, MAX_FIELD_LENGTH);
+  const full = `[${category}] ${createdAt} ${details}`;
+  if (full.length <= MAX_MESSAGE_LENGTH) return full;
+  return full.slice(0, MAX_MESSAGE_LENGTH - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX;
 }
 
 /**
