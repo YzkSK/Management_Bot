@@ -176,6 +176,8 @@ describe("formatLogEntry", () => {
       action: "create",
       content: "x".repeat(5_000),
     };
-    expect(formatLogEntry(entry).length).toBeLessThan(2_000);
+    const line = formatLogEntry(entry);
+    expect(line.length).toBeLessThanOrEqual(1_900);
+    expect(line).toEndWith("…");
   });
 });
