@@ -7,3 +7,4 @@ export {
 } from "./write-log-entry.js";
 export { handleModerationEvent } from "./handle-moderation-event.js";
 export { purgeExpiredLogs, type PurgeExpiredLogsResult } from "./purge-expired-logs.js";
+export { findPendingPolls, type PendingPoll } from "./find-pending-polls.js";
