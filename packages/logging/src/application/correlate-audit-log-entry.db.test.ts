@@ -286,4 +286,54 @@ describe("correlateAuditLogEntry (実DB)", () => {
     const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
     expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
+
+  test("候補action群のうち、監査ログ時刻に近い方の行にのみ相関する(取り違え防止)", async () => {
+    // 同一ユーザーへnicknameChange→timeoutが連続した場合を想定。timeoutの監査ログ(t=10s)は
+    // 直近のtimeout行(t=9s)に相関すべきで、より新しいだけの無関係行を選んではいけない。
+    const nicknameLogId = await insertMemberLogEntry("u1", "nicknameChange", new Date("2026-08-31T00:00:00.000Z"));
+    const timeoutLogId = await insertMemberLogEntry("u1", "timeout", new Date("2026-08-31T00:00:09.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:10.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [nicknameRow] = await db.select().from(logEntries).where(eq(logEntries.id, nicknameLogId));
+    const [timeoutRow] = await db.select().from(logEntries).where(eq(logEntries.id, timeoutLogId));
+    expect(timeoutRow?.payload).toMatchObject({ executorId: "mod-1" });
+    expect(nicknameRow?.payload).not.toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberRoleUpdateで複数roleIdが遅延挿入されても、イベント全体で1回のリトライにまとまる", async () => {
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberRoleUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: new Date().toISOString(),
+      roleChanges: { added: ["r1", "r2", "r3"], removed: [] },
+    };
+
+    const start = Date.now();
+    const correlationPromise = correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, 300);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const logIds = await Promise.all(
+      ["r1", "r2", "r3"].map((roleId) => insertRoleLogEntry(roleId, "u1", "memberAdd", new Date())),
+    );
+    await correlationPromise;
+    const elapsedMs = Date.now() - start;
+
+    // 3ロール分を直列に2秒×3待っていたら1000ms以内には終わらない(実際は1回の300ms待機のみ)
+    expect(elapsedMs).toBeLessThan(1000);
+    for (const logId of logIds) {
+      const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+      expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+    }
+  });
 });

@@ -1,6 +1,6 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { LogCategory } from "../domain/index.js";
 import { writeLogEntry, type WriteLogEntryDeps } from "./write-log-entry.js";
 
@@ -111,9 +111,16 @@ function delay(ms: number): Promise<void> {
 interface MatchCriteria {
   guildId: string;
   category: LogCategory;
+  /** 監査ログの発生時刻。時間窓の中心であり、複数候補がある場合はこれに最も近い行を選ぶ基準にもなる。 */
+  auditAt: Date;
   windowStart: Date;
   windowEnd: Date;
   extraConditions: SQL[];
+}
+
+interface CorrelationJob {
+  criteria: MatchCriteria;
+  rewriteAction?: string;
 }
 
 /**
@@ -128,6 +135,12 @@ function actionIn(candidates: readonly string[]): SQL {
   )})`;
 }
 
+/**
+ * 候補action(logActions)を複数許容するルール(ThreadUpdate等)では、時間窓内に同一対象への
+ * 異なる操作が複数存在し得る(例: 同じユーザーへnicknameChange直後にtimeout)。
+ * 単純に「最新の行」を選ぶと、後から届いた別操作の監査ログが先の行に誤って実行者を付けてしまうため、
+ * 監査ログの発生時刻(auditAt)に最も近い行を優先する(codexレビュー指摘)。
+ */
 async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id: string } | undefined> {
   const [match] = await db
     .select({ id: logEntries.id })
@@ -142,7 +155,7 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id
         ...criteria.extraConditions,
       ),
     )
-    .orderBy(desc(logEntries.createdAt))
+    .orderBy(sql`abs(extract(epoch from (${logEntries.createdAt} - ${criteria.auditAt.toISOString()}::timestamptz)))`)
     .limit(1);
   return match;
 }
@@ -157,20 +170,28 @@ async function annotateRow(db: Db, id: string, executorId: string, rewriteAction
     .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`));
 }
 
-async function correlateRow(
-  db: Db,
-  criteria: MatchCriteria,
-  executorId: string,
-  rewriteAction: string | undefined,
-  retryDelayMs: number,
-): Promise<void> {
-  let match = await findUnannotatedRow(db, criteria);
-  if (!match) {
+/**
+ * jobsをまとめて1回だけ検索し、見つからなかった分だけ1回リトライする(codexレビュー指摘:
+ * MemberRoleUpdateでロール数ぶん直列に2秒待つと最大数十秒かかっていた不具合の修正。
+ * イベント全体で「最大1回、2秒」のリトライに揃える)。
+ */
+async function correlateJobs(db: Db, executorId: string, jobs: CorrelationJob[], retryDelayMs: number): Promise<void> {
+  if (jobs.length === 0) return;
+
+  let matches = await Promise.all(jobs.map((job) => findUnannotatedRow(db, job.criteria)));
+  if (matches.some((match) => !match)) {
     await delay(retryDelayMs);
-    match = await findUnannotatedRow(db, criteria);
+    matches = await Promise.all(
+      jobs.map((job, i) => matches[i] ?? findUnannotatedRow(db, job.criteria)),
+    );
   }
-  if (!match) return;
-  await annotateRow(db, match.id, executorId, rewriteAction);
+
+  await Promise.all(
+    jobs.map((job, i) => {
+      const match = matches[i];
+      return match ? annotateRow(db, match.id, executorId, job.rewriteAction) : undefined;
+    }),
+  );
 }
 
 /**
@@ -226,44 +247,25 @@ export async function correlateAuditLogEntry(
   if (entry.action === "MemberRoleUpdate") {
     if (!entry.targetId || !entry.roleChanges) return;
     const userId = entry.targetId;
-    for (const roleId of entry.roleChanges.added) {
-      await correlateRow(
-        deps.db,
-        {
-          guildId: entry.guildId,
-          category: "role",
-          windowStart,
-          windowEnd,
-          extraConditions: [
-            sql`${logEntries.payload} ->> 'action' = 'memberAdd'`,
-            sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
-            sql`${logEntries.payload} ->> 'userId' = ${userId}`,
-          ],
-        },
-        entry.executorId,
-        undefined,
-        retryDelayMs,
-      );
-    }
-    for (const roleId of entry.roleChanges.removed) {
-      await correlateRow(
-        deps.db,
-        {
-          guildId: entry.guildId,
-          category: "role",
-          windowStart,
-          windowEnd,
-          extraConditions: [
-            sql`${logEntries.payload} ->> 'action' = 'memberRemove'`,
-            sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
-            sql`${logEntries.payload} ->> 'userId' = ${userId}`,
-          ],
-        },
-        entry.executorId,
-        undefined,
-        retryDelayMs,
-      );
-    }
+    const roleJob = (roleId: string, logAction: "memberAdd" | "memberRemove"): CorrelationJob => ({
+      criteria: {
+        guildId: entry.guildId,
+        category: "role",
+        auditAt,
+        windowStart,
+        windowEnd,
+        extraConditions: [
+          sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+          sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
+          sql`${logEntries.payload} ->> 'userId' = ${userId}`,
+        ],
+      },
+    });
+    const jobs = [
+      ...entry.roleChanges.added.map((roleId) => roleJob(roleId, "memberAdd")),
+      ...entry.roleChanges.removed.map((roleId) => roleJob(roleId, "memberRemove")),
+    ];
+    await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
     return;
   }
 
@@ -271,20 +273,25 @@ export async function correlateAuditLogEntry(
   if (!rule) return;
   if (rule.field && !entry.targetId) return;
 
-  await correlateRow(
+  await correlateJobs(
     deps.db,
-    {
-      guildId: entry.guildId,
-      category: rule.category,
-      windowStart,
-      windowEnd,
-      extraConditions: [
-        actionIn(rule.logActions),
-        ...(rule.field ? [sql`${logEntries.payload} ->> ${rule.field} = ${entry.targetId}`] : []),
-      ],
-    },
     entry.executorId,
-    rule.rewriteAction,
+    [
+      {
+        criteria: {
+          guildId: entry.guildId,
+          category: rule.category,
+          auditAt,
+          windowStart,
+          windowEnd,
+          extraConditions: [
+            actionIn(rule.logActions),
+            ...(rule.field ? [sql`${logEntries.payload} ->> ${rule.field} = ${entry.targetId}`] : []),
+          ],
+        },
+        rewriteAction: rule.rewriteAction,
+      },
+    ],
     retryDelayMs,
   );
 }
