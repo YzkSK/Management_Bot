@@ -13,15 +13,21 @@ export function toScheduledEventDeleteLogEntry(event: GuildScheduledEvent | Part
   return { category: "scheduledEvent", guildId: event.guildId, createdAt: new Date().toISOString(), eventId: event.id, action: "delete" };
 }
 
-/** statusがActive/Completed/Canceledへ遷移した場合はstart/complete/cancel、それ以外(日時変更等)はupdateとして記録する。 */
+/**
+ * statusがActive/Completed/Canceledへ遷移した場合はstart/complete/cancel、それ以外(日時変更等)はupdateとして記録する。
+ * oldEventがnull(未キャッシュで前状態不明)の場合、「遷移した」とは判定できないためupdateとして扱う
+ * (codexレビュー指摘: nullを「遷移前ではない」と誤解釈しstart等を誤記録するバグの修正)。
+ */
 export function toScheduledEventUpdateLogEntry(
   oldEvent: GuildScheduledEvent | PartialGuildScheduledEvent | null,
   newEvent: GuildScheduledEvent,
 ): LogEntry {
   let action: "start" | "complete" | "cancel" | "update" = "update";
-  if (newEvent.isActive() && !oldEvent?.isActive()) action = "start";
-  else if (newEvent.isCompleted() && !oldEvent?.isCompleted()) action = "complete";
-  else if (newEvent.isCanceled() && !oldEvent?.isCanceled()) action = "cancel";
+  if (oldEvent) {
+    if (newEvent.isActive() && !oldEvent.isActive()) action = "start";
+    else if (newEvent.isCompleted() && !oldEvent.isCompleted()) action = "complete";
+    else if (newEvent.isCanceled() && !oldEvent.isCanceled()) action = "cancel";
+  }
 
   return { category: "scheduledEvent", guildId: newEvent.guildId, createdAt: new Date().toISOString(), eventId: newEvent.id, action };
 }

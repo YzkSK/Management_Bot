@@ -37,8 +37,8 @@ describe("scheduled-event category mappers", () => {
     expect(toScheduledEventUpdateLogEntry(fakeEvent("active"), fakeEvent("active")).action).toBe("update");
   });
 
-  test("update: oldEventがnull(uncached)でもエラーにならない", () => {
-    expect(toScheduledEventUpdateLogEntry(null, fakeEvent("active")).action).toBe("start");
+  test("update: oldEventがnull(前状態不明)なら遷移とは判定せずupdateにする", () => {
+    expect(toScheduledEventUpdateLogEntry(null, fakeEvent("active")).action).toBe("update");
   });
 });
 

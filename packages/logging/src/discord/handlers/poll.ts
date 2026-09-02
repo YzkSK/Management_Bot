@@ -27,7 +27,9 @@ export function toPollEndLogEntry(
   newMessage: OmitPartialGroupDMChannel<Message | PartialMessage>,
 ): LogEntry | undefined {
   if (!newMessage.guildId || !newMessage.author || newMessage.author.bot || !newMessage.poll) return undefined;
-  if (oldMessage.poll?.resultsFinalized || !newMessage.poll.resultsFinalized) return undefined;
+  // false→trueの遷移のみをendとして記録する。oldMessage.pollが未キャッシュ(undefined)等で前状態不明な場合は
+  // 遷移を確認できないため記録しない(codexレビュー指摘: 誤ってendを捏造するバグの修正)。
+  if (oldMessage.poll?.resultsFinalized !== false || newMessage.poll.resultsFinalized !== true) return undefined;
   return {
     category: "poll",
     guildId: newMessage.guildId,

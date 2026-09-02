@@ -58,6 +58,11 @@ describe("toPollEndLogEntry", () => {
     );
     expect(entry).toBeUndefined();
   });
+
+  test("旧pollが未キャッシュ(undefined)で前状態不明なら、newがfinalizedでも記録しない(誤検知防止)", () => {
+    const entry = toPollEndLogEntry(fakeMessage({ poll: undefined }), fakeMessage({ poll: { resultsFinalized: true } }));
+    expect(entry).toBeUndefined();
+  });
 });
 
 describe("registerPollHandlers", () => {

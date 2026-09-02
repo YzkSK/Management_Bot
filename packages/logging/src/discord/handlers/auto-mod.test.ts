@@ -18,7 +18,7 @@ function fakeExecution(channelId: string | null = "c1") {
 
 describe("auto-mod category mappers", () => {
   test("ruleCreate", () => expect(toAutoModRuleCreateLogEntry(fakeRule()).action).toBe("ruleCreate"));
-  test("ruleUpdate", () => expect(toAutoModRuleUpdateLogEntry(fakeRule(), fakeRule()).action).toBe("ruleUpdate"));
+  test("ruleUpdate", () => expect(toAutoModRuleUpdateLogEntry(fakeRule()).action).toBe("ruleUpdate"));
   test("ruleDelete", () => expect(toAutoModRuleDeleteLogEntry(fakeRule()).action).toBe("ruleDelete"));
 
   test("actionExecuted: channelIdがあれば含める", () => {

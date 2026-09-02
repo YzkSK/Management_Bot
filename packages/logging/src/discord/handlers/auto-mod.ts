@@ -16,7 +16,8 @@ export function toAutoModRuleCreateLogEntry(rule: AutoModerationRule): LogEntry 
   };
 }
 
-export function toAutoModRuleUpdateLogEntry(_oldRule: AutoModerationRule, newRule: AutoModerationRule): LogEntry {
+/** oldRuleは未使用(schema上differenceを表現するフィールドがないため)。旧ルールが未キャッシュ(null)でも記録する。 */
+export function toAutoModRuleUpdateLogEntry(newRule: AutoModerationRule): LogEntry {
   return {
     category: "autoMod",
     guildId: newRule.guild.id,
@@ -54,10 +55,9 @@ export function registerAutoModHandlers(ctx: FeatureModuleContext): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
 
   ctx.client.on("autoModerationRuleCreate", (rule) => writeLogEntrySafely(deps, toAutoModRuleCreateLogEntry(rule)));
-  ctx.client.on("autoModerationRuleUpdate", (oldRule, newRule) => {
-    if (!oldRule) return;
-    writeLogEntrySafely(deps, toAutoModRuleUpdateLogEntry(oldRule, newRule));
-  });
+  ctx.client.on("autoModerationRuleUpdate", (_oldRule, newRule) =>
+    writeLogEntrySafely(deps, toAutoModRuleUpdateLogEntry(newRule)),
+  );
   ctx.client.on("autoModerationRuleDelete", (rule) => writeLogEntrySafely(deps, toAutoModRuleDeleteLogEntry(rule)));
   ctx.client.on("autoModerationActionExecution", (execution) =>
     writeLogEntrySafely(deps, toAutoModActionExecutedLogEntry(execution)),

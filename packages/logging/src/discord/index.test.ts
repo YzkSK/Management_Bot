@@ -50,6 +50,19 @@ describe("registerDiscordHandlers", () => {
       ]),
     );
   });
+
+  test("messageCreate/messageUpdateはmessage用・poll用の両方から登録される", async () => {
+    const subscribe = mock(() => Promise.resolve());
+    const eventBus = { subscribe } as unknown as DomainEventBus;
+    const on = mock(() => undefined);
+    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+
+    await registerDiscordHandlers(ctx);
+
+    const countOf = (event: string) => on.mock.calls.filter(([registered]) => registered === event).length;
+    expect(countOf("messageCreate")).toBe(2);
+    expect(countOf("messageUpdate")).toBe(2);
+  });
 });
 
 describe("createSendToChannel", () => {
