@@ -10,16 +10,28 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
  * 必須フィールドを埋められないためログ化をスキップする(ベストエフォート)。
- * Bot自身を含むBotの発言も除外する。message出力先チャンネルへの送信(channel.send)自体が
+ * Bot自身(botUserId)の発言のみ除外する。message出力先チャンネルへの送信(channel.send)自体が
  * 新たなmessageCreateを発火させるため、除外しないとログ送信→記録→ログ送信の無限連鎖になる(codexレビュー指摘)。
+ * 他Botの発言はモデレーション上有用なため、自Bot以外は除外しない(全Bot除外は過剰な仕様だったため縮小)。
+ *
+ * botUserId未確定(ctx.client.userがまだ設定されていない、readyイベント前)の場合は
+ * フィルタが機能せず自Bot発言を素通しして無限連鎖を招き得るため、fail-closed(何も記録しない)にする。
+ * fail-open(botUserId===undefinedを「誰とも一致しない」として扱う)にすると
+ * 自Bot判定が常にfalseになり無限連鎖防止という本来の目的が壊れるため避ける(セキュリティレビュー指摘)。
  */
-function baseFields(message: AnyMessage): { guildId: string; channelId: string; authorId: string } | undefined {
-  if (!message.guildId || !message.author || message.author.bot) return undefined;
+function baseFields(
+  message: AnyMessage,
+  botUserId: string | undefined,
+): { guildId: string; channelId: string; authorId: string } | undefined {
+  if (!message.guildId || !message.author || !botUserId || message.author.id === botUserId) return undefined;
   return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
 }
 
-export function toMessageCreateLogEntry(message: OmitPartialGroupDMChannel<Message>): LogEntry | undefined {
-  const base = baseFields(message);
+export function toMessageCreateLogEntry(
+  message: OmitPartialGroupDMChannel<Message>,
+  botUserId: string | undefined,
+): LogEntry | undefined {
+  const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {
     category: "message",
@@ -31,8 +43,12 @@ export function toMessageCreateLogEntry(message: OmitPartialGroupDMChannel<Messa
 }
 
 /** 本文が変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。 */
-export function toMessageUpdateLogEntry(oldMessage: AnyMessage, newMessage: AnyMessage): LogEntry | undefined {
-  const base = baseFields(newMessage);
+export function toMessageUpdateLogEntry(
+  oldMessage: AnyMessage,
+  newMessage: AnyMessage,
+  botUserId: string | undefined,
+): LogEntry | undefined {
+  const base = baseFields(newMessage, botUserId);
   if (!base) return undefined;
   if (oldMessage.content === newMessage.content) return undefined;
   return {
@@ -44,8 +60,8 @@ export function toMessageUpdateLogEntry(oldMessage: AnyMessage, newMessage: AnyM
   };
 }
 
-export function toMessageDeleteLogEntry(message: AnyMessage): LogEntry | undefined {
-  const base = baseFields(message);
+export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string | undefined): LogEntry | undefined {
+  const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {
     category: "message",
@@ -58,11 +74,12 @@ export function toMessageDeleteLogEntry(message: AnyMessage): LogEntry | undefin
 
 export function toMessageBulkDeleteLogEntries(
   messages: ReadonlyCollection<Snowflake, Message<true> | PartialMessage<true>>,
+  botUserId: string | undefined,
 ): LogEntry[] {
   const createdAt = new Date().toISOString();
   const entries: LogEntry[] = [];
   for (const message of messages.values()) {
-    const base = baseFields(message);
+    const base = baseFields(message, botUserId);
     if (!base) continue;
     entries.push({ category: "message", ...base, createdAt, action: "bulkDelete", content: message.content || undefined });
   }
@@ -73,22 +90,22 @@ export function registerMessageHandlers(ctx: FeatureModuleContext): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
 
   ctx.client.on("messageCreate", (message) => {
-    const entry = toMessageCreateLogEntry(message);
+    const entry = toMessageCreateLogEntry(message, ctx.client.user?.id);
     if (entry) writeLogEntrySafely(deps, entry);
   });
 
   ctx.client.on("messageUpdate", (oldMessage, newMessage) => {
-    const entry = toMessageUpdateLogEntry(oldMessage, newMessage);
+    const entry = toMessageUpdateLogEntry(oldMessage, newMessage, ctx.client.user?.id);
     if (entry) writeLogEntrySafely(deps, entry);
   });
 
   ctx.client.on("messageDelete", (message) => {
-    const entry = toMessageDeleteLogEntry(message);
+    const entry = toMessageDeleteLogEntry(message, ctx.client.user?.id);
     if (entry) writeLogEntrySafely(deps, entry);
   });
 
   ctx.client.on("messageDeleteBulk", (messages) => {
-    for (const entry of toMessageBulkDeleteLogEntries(messages)) {
+    for (const entry of toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id)) {
       writeLogEntrySafely(deps, entry);
     }
   });
