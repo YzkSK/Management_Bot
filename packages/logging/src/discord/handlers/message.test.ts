@@ -53,6 +53,10 @@ describe("toMessageCreateLogEntry", () => {
     const entry = toMessageCreateLogEntry(fakeMessage({ author: { id: "other-bot" } }), BOT_USER_ID);
     expect(entry?.action).toBe("create");
   });
+
+  test("botUserId未確定(readyイベント前)ならfail-closedで何も記録しない(fail-openだと自Bot発言のフィルタが機能しなくなる)", () => {
+    expect(toMessageCreateLogEntry(fakeMessage({ author: { id: "u1" } }), undefined)).toBeUndefined();
+  });
 });
 
 describe("toMessageUpdateLogEntry", () => {

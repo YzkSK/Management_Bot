@@ -13,12 +13,17 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  * Bot自身(botUserId)の発言のみ除外する。message出力先チャンネルへの送信(channel.send)自体が
  * 新たなmessageCreateを発火させるため、除外しないとログ送信→記録→ログ送信の無限連鎖になる(codexレビュー指摘)。
  * 他Botの発言はモデレーション上有用なため、自Bot以外は除外しない(全Bot除外は過剰な仕様だったため縮小)。
+ *
+ * botUserId未確定(ctx.client.userがまだ設定されていない、readyイベント前)の場合は
+ * フィルタが機能せず自Bot発言を素通しして無限連鎖を招き得るため、fail-closed(何も記録しない)にする。
+ * fail-open(botUserId===undefinedを「誰とも一致しない」として扱う)にすると
+ * 自Bot判定が常にfalseになり無限連鎖防止という本来の目的が壊れるため避ける(セキュリティレビュー指摘)。
  */
 function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
 ): { guildId: string; channelId: string; authorId: string } | undefined {
-  if (!message.guildId || !message.author || message.author.id === botUserId) return undefined;
+  if (!message.guildId || !message.author || !botUserId || message.author.id === botUserId) return undefined;
   return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
 }
 
