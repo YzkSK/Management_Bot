@@ -1,5 +1,7 @@
+import type { Db } from "@management-bot/db";
 import { SapphireClient } from "@sapphire/framework";
 import { GatewayIntentBits } from "discord.js";
+import type { DomainEventBus } from "./domain-events-bus.js";
 import type { FeatureModule } from "./feature-module.js";
 
 /**
@@ -27,7 +29,10 @@ export class BotClient extends SapphireClient {
     });
   }
 
-  async registerFeatures(features: readonly FeatureModule[]): Promise<void> {
+  async registerFeatures(
+    features: readonly FeatureModule[],
+    deps: { db: Db; eventBusFor: (feature: FeatureModule) => DomainEventBus },
+  ): Promise<void> {
     const seen = new Set<string>();
     for (const feature of features) {
       if (seen.has(feature.key)) {
@@ -38,7 +43,7 @@ export class BotClient extends SapphireClient {
 
     for (const feature of features) {
       try {
-        await feature.registerDiscordHandlers({ client: this });
+        await feature.registerDiscordHandlers({ client: this, db: deps.db, eventBus: deps.eventBusFor(feature) });
       } catch (error) {
         throw new Error(`Failed to register feature "${feature.key}"`, { cause: error });
       }

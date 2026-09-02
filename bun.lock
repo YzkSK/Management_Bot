@@ -90,6 +90,23 @@
         "vite": "^6.0.0",
       },
     },
+    "apps/logging-retention": {
+      "name": "@management-bot/logging-retention",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/config": "workspace:*",
+        "@management-bot/db": "workspace:*",
+        "@management-bot/logging": "workspace:*",
+        "drizzle-orm": "^0.44.0",
+        "node-cron": "^3.0.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "@types/node-cron": "^3.0.11",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/activity": {
       "name": "@management-bot/activity",
       "version": "0.0.0",
@@ -121,6 +138,7 @@
       "name": "@management-bot/core",
       "version": "0.0.0",
       "dependencies": {
+        "@management-bot/db": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@sapphire/framework": "^5.3.0",
         "@trpc/server": "^11.0.0",
@@ -170,13 +188,17 @@
       "dependencies": {
         "@management-bot/core": "workspace:*",
         "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/db": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@trpc/server": "^11.0.0",
+        "discord.js": "^14.16.0",
+        "drizzle-orm": "^0.44.0",
         "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/bun": "^1.4.0",
         "@types/node": "^26.4.0",
+        "ioredis": "^5.4.0",
         "typescript": "^6.0.3",
       },
     },
@@ -393,6 +415,8 @@
     "@management-bot/db": ["@management-bot/db@workspace:packages/db"],
 
     "@management-bot/logging": ["@management-bot/logging@workspace:packages/logging"],
+
+    "@management-bot/logging-retention": ["@management-bot/logging-retention@workspace:apps/logging-retention"],
 
     "@management-bot/moderation": ["@management-bot/moderation@workspace:packages/moderation"],
 

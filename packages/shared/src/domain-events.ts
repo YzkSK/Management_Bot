@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 
 /**
  * 機能パッケージ間の連携はRedis Pub/Sub経由のイベントで疎結合にする(直接import禁止)。
@@ -21,8 +22,22 @@ export const voiceSessionEndedSchema = z
 
 export type VoiceSessionEndedEvent = z.infer<typeof voiceSessionEndedSchema>;
 
+export const moderationActionRecordedSchema = z.object({
+  type: z.literal("moderation.action.recorded"),
+  guildId: z.string(),
+  caseId: z.string(),
+  targetUserId: z.string(),
+  moderatorId: z.string(),
+  action: z.enum(["create", "update", "resolve"]),
+  actionType: z.enum(MODERATION_ACTION_TYPES),
+  createdAt: z.iso.datetime(),
+});
+
+export type ModerationActionRecordedEvent = z.infer<typeof moderationActionRecordedSchema>;
+
 export const DOMAIN_EVENT_SCHEMAS = {
   "voice.session.ended": voiceSessionEndedSchema,
+  "moderation.action.recorded": moderationActionRecordedSchema,
 } as const;
 
 export type DomainEventType = keyof typeof DOMAIN_EVENT_SCHEMAS;

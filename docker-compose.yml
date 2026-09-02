@@ -91,6 +91,18 @@ services:
       postgres:
         condition: service_healthy
 
+  logging-retention:
+    build:
+      context: .
+      dockerfile: apps/logging-retention/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   dashboard-web:
     build:
       context: .

@@ -18,6 +18,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@management-bot/db": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@sapphire/framework": "^5.3.0",
     "@trpc/server": "^11.0.0",
