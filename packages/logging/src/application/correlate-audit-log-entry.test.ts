@@ -68,7 +68,13 @@ describe("correlateAuditLogEntry", () => {
 
     expect(inserts[0]?.values).toMatchObject({
       category: "auditLogCorrelation",
-      payload: { category: "auditLogCorrelation", auditLogEntryId: "audit-1", actionType: "ChannelDelete", targetId: "c1" },
+      payload: {
+        category: "auditLogCorrelation",
+        auditLogEntryId: "audit-1",
+        actionType: "ChannelDelete",
+        targetId: "c1",
+        executorId: "mod-1",
+      },
     });
   });
 
