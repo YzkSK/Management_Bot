@@ -8,10 +8,12 @@ import {
   toMessageUpdateLogEntry,
 } from "./message.js";
 
-function fakeMessage(overrides: Partial<{ guildId: string | null; author: { id: string } | null; channelId: string; content: string }> = {}) {
+function fakeMessage(
+  overrides: Partial<{ guildId: string | null; author: { id: string; bot: boolean } | null; channelId: string; content: string }> = {},
+) {
   return {
     guildId: "g1",
-    author: { id: "u1" },
+    author: { id: "u1", bot: false },
     channelId: "c1",
     content: "hello",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -39,6 +41,10 @@ describe("toMessageCreateLogEntry", () => {
 
   test("author未解決(partial)はundefinedを返す", () => {
     expect(toMessageCreateLogEntry(fakeMessage({ author: null }))).toBeUndefined();
+  });
+
+  test("Bot(自身を含む)の発言はundefinedを返す(ログ出力チャンネルへの送信が再度messageCreateを発火する無限連鎖を防ぐ)", () => {
+    expect(toMessageCreateLogEntry(fakeMessage({ author: { id: "bot1", bot: true } }))).toBeUndefined();
   });
 });
 

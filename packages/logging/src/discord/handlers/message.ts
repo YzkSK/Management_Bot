@@ -10,9 +10,11 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
  * 必須フィールドを埋められないためログ化をスキップする(ベストエフォート)。
+ * Bot自身を含むBotの発言も除外する。message出力先チャンネルへの送信(channel.send)自体が
+ * 新たなmessageCreateを発火させるため、除外しないとログ送信→記録→ログ送信の無限連鎖になる(codexレビュー指摘)。
  */
 function baseFields(message: AnyMessage): { guildId: string; channelId: string; authorId: string } | undefined {
-  if (!message.guildId || !message.author) return undefined;
+  if (!message.guildId || !message.author || message.author.bot) return undefined;
   return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
 }
 

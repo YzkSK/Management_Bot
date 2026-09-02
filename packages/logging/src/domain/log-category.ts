@@ -29,6 +29,8 @@ export const roleLogEntrySchema = z.object({
   category: z.literal("role"),
   roleId: nonEmptyString,
   action: z.enum(["create", "update", "delete", "memberAdd", "memberRemove"]),
+  /** action=memberAdd/memberRemoveの対象メンバー。create/update/delete(ロール自体の変更)では設定しない。 */
+  userId: nonEmptyString.optional(),
 });
 
 export const channelLogEntrySchema = z.object({

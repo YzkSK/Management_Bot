@@ -12,8 +12,8 @@ function fakeRole(id = "r1") {
   return { id, guild: { id: "g1" } } as never;
 }
 
-function fakeMember(roleIds: string[]) {
-  return { guild: { id: "g1" }, roles: { cache: new Map(roleIds.map((id) => [id, fakeRole(id)])) } } as never;
+function fakeMember(roleIds: string[], id = "u1") {
+  return { id, guild: { id: "g1" }, roles: { cache: new Map(roleIds.map((rid) => [rid, fakeRole(rid)])) } } as never;
 }
 
 describe("role category mappers", () => {
@@ -23,12 +23,12 @@ describe("role category mappers", () => {
 });
 
 describe("toRoleMembershipLogEntries", () => {
-  test("追加ロールはmemberAdd、剥奪ロールはmemberRemoveになる", () => {
-    const entries = toRoleMembershipLogEntries(fakeMember(["r1"]), fakeMember(["r2"]));
+  test("追加ロールはmemberAdd、剥奪ロールはmemberRemoveになり、対象メンバーのuserIdを含む", () => {
+    const entries = toRoleMembershipLogEntries(fakeMember(["r1"], "u1"), fakeMember(["r2"], "u1"));
     expect(entries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ roleId: "r2", action: "memberAdd" }),
-        expect.objectContaining({ roleId: "r1", action: "memberRemove" }),
+        expect.objectContaining({ roleId: "r2", userId: "u1", action: "memberAdd" }),
+        expect.objectContaining({ roleId: "r1", userId: "u1", action: "memberRemove" }),
       ]),
     );
     expect(entries).toHaveLength(2);
