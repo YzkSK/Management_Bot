@@ -47,6 +47,7 @@ describe("registerDiscordHandlers", () => {
         "autoModerationRuleCreate",
         "guildScheduledEventCreate",
         "stageInstanceCreate",
+        "guildAuditLogEntryCreate",
       ]),
     );
   });

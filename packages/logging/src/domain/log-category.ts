@@ -6,6 +6,11 @@ const nonEmptyString = z.string().min(1);
 const base = {
   guildId: nonEmptyString,
   createdAt: z.iso.datetime(),
+  /**
+   * 監査ログ相関(#52)で事後的に埋める実行者。discord.jsのgatewayイベント単体では
+   * 実行者を取得できないカテゴリが大半のため、初回書き込み時は未設定(undefined)が正常系。
+   */
+  executorId: nonEmptyString.optional(),
 };
 
 export const messageLogEntrySchema = z.object({
@@ -112,7 +117,6 @@ export const auditLogCorrelationEntrySchema = z.object({
   ...base,
   category: z.literal("auditLogCorrelation"),
   auditLogEntryId: nonEmptyString,
-  executorId: nonEmptyString.optional(),
   targetId: nonEmptyString.optional(),
   actionType: nonEmptyString,
 });

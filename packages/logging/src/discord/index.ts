@@ -12,6 +12,7 @@ import { registerAutoModHandlers } from "./handlers/auto-mod.js";
 import { registerPollHandlers } from "./handlers/poll.js";
 import { registerScheduledEventHandlers } from "./handlers/scheduled-event.js";
 import { registerStageHandlers } from "./handlers/stage.js";
+import { registerAuditLogCorrelationHandlers } from "./handlers/audit-log-correlation.js";
 import { createSendToChannel } from "./send-to-channel.js";
 
 export { createSendToChannel } from "./send-to-channel.js";
@@ -45,4 +46,5 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   registerPollHandlers(ctx);
   registerScheduledEventHandlers(ctx);
   registerStageHandlers(ctx);
+  registerAuditLogCorrelationHandlers(ctx);
 }
