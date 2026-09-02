@@ -8,6 +8,10 @@ import { registerGuildHandlers } from "./handlers/guild.js";
 import { registerThreadHandlers } from "./handlers/thread.js";
 import { registerInviteHandlers } from "./handlers/invite.js";
 import { registerEmojiHandlers } from "./handlers/emoji.js";
+import { registerAutoModHandlers } from "./handlers/auto-mod.js";
+import { registerPollHandlers } from "./handlers/poll.js";
+import { registerScheduledEventHandlers } from "./handlers/scheduled-event.js";
+import { registerStageHandlers } from "./handlers/stage.js";
 import { createSendToChannel } from "./send-to-channel.js";
 
 export { createSendToChannel } from "./send-to-channel.js";
@@ -37,4 +41,8 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   registerThreadHandlers(ctx);
   registerInviteHandlers(ctx);
   registerEmojiHandlers(ctx);
+  registerAutoModHandlers(ctx);
+  registerPollHandlers(ctx);
+  registerScheduledEventHandlers(ctx);
+  registerStageHandlers(ctx);
 }

@@ -28,6 +28,9 @@ export class BotClient extends SapphireClient {
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildInvites,
         GatewayIntentBits.GuildEmojisAndStickers,
+        GatewayIntentBits.GuildScheduledEvents,
+        GatewayIntentBits.AutoModerationConfiguration,
+        GatewayIntentBits.AutoModerationExecution,
       ],
       loadMessageCommandListeners: false,
     });

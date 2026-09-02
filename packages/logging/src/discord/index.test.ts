@@ -44,6 +44,9 @@ describe("registerDiscordHandlers", () => {
         "threadCreate",
         "inviteCreate",
         "emojiCreate",
+        "autoModerationRuleCreate",
+        "guildScheduledEventCreate",
+        "stageInstanceCreate",
       ]),
     );
   });
