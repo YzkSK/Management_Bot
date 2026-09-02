@@ -1,9 +1,13 @@
+import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { LogCategory } from "../domain/index.js";
 import { writeLogEntry, type WriteLogEntryDeps } from "./write-log-entry.js";
 
-/** discord層のGuildAuditLogsEntryから作る、discord.js非依存の入力。actionはAuditLogEventの名前(例: "ChannelDelete")。 */
+/**
+ * discord層のGuildAuditLogsEntryから作る、discord.js非依存の入力。actionはAuditLogEventの名前(例: "ChannelDelete")。
+ * roleChangesはMemberRoleUpdate限定で、audit log entryのchanges($add/$remove)から抽出したroleIdの集合。
+ */
 export interface AuditLogEntryInfo {
   id: string;
   guildId: string;
@@ -11,6 +15,7 @@ export interface AuditLogEntryInfo {
   executorId: string | null;
   targetId: string | null;
   createdAt: string;
+  roleChanges?: { added: string[]; removed: string[] };
 }
 
 interface CorrelationRule {
@@ -18,51 +23,63 @@ interface CorrelationRule {
   /** payload内で対象を一意に絞り込むフィールド名。null(guild等)はguildId+category+直近時刻のみで絞り込む。 */
   field: string | null;
   /**
-   * payload.actionの期待値。これを条件に含めないと、同一対象への複数操作(例: 同じチャンネルへの
-   * ChannelUpdate直後のChannelDelete)で新しい行に誤って古い監査ログの実行者を(あるいはその逆を)
-   * 付けてしまう(codexレビュー指摘)。
+   * payload.actionの期待候補(いずれかに一致すればよい)。これを条件に含めないと、同一対象への
+   * 複数操作(例: 同じチャンネルへのChannelUpdate直後のChannelDelete)で新しい行に誤って
+   * 古い監査ログの実行者を付けてしまう(codexレビュー指摘)。
+   * ThreadUpdate/MemberUpdate/GuildScheduledEventUpdateのように1つの監査ログイベントが
+   * 複数のpayload.actionに対応し得るものは、候補を複数列挙することでカバーする
+   * (誤り: 対象自体を相関から外していたが、時間窓+対象ID一致で十分絞り込めるため候補群方式に変更)。
    */
-  logAction: string;
+  logActions: readonly string[];
+  /**
+   * 相関時にpayload.actionをこの値へ書き換える(例: MemberKick相関時にleave→kick)。
+   * 実行者だけでなく「実際は何が起きたか」もこの監査ログから初めて分かるケース用。
+   */
+  rewriteAction?: string;
 }
 
 /**
  * AuditLogEvent名(discord.js/discord-api-typesの数値enumを文字列化したもの)→
- * 対応するログカテゴリ・対象フィールド・payload.actionの対応表。#49〜#51のイベント単体では
+ * 対応するログカテゴリ・対象フィールド・payload.action候補の対応表。#49〜#51のイベント単体では
  * 実行者を取得できないカテゴリのみを対象にする。
- * 以下は対象外(過剰実装を避けるため誤相関リスクの高いものは相関しない):
- * - message/poll/autoMod実行結果: 対象(targetId)が投稿者ID等になり複数候補と衝突しやすい。
- * - MemberUpdate/ThreadUpdate/GuildScheduledEventUpdate: 1つの監査ログイベントが複数の
- *   payload.action(nicknameChange/timeout、update/archive/unarchive、start/complete/cancel/update)
- *   に対応し得て一意に決められない。
- * - role所属変更(MemberRoleUpdate): roleId+userIdの複合一致が必要で本テーブルの単一フィールド一致
- *   では表現できない。
+ * message/poll/autoMod実行結果は対象(targetId)が投稿者ID等になり複数候補と衝突しやすいため対象外
+ * (誤相関リスクの高いものは相関しない、過剰実装を避ける)。
+ * role所属変更(MemberRoleUpdate)はroleId+userIdの複合一致が必要でこのテーブルの単一フィールド
+ * 一致では表現できないため、correlateAuditLogEntry内で別処理として扱う。
  */
 const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
-  GuildUpdate: { category: "guild", field: null, logAction: "update" },
-  ChannelCreate: { category: "channel", field: "channelId", logAction: "create" },
-  ChannelUpdate: { category: "channel", field: "channelId", logAction: "update" },
-  ChannelDelete: { category: "channel", field: "channelId", logAction: "delete" },
-  MemberKick: { category: "member", field: "userId", logAction: "leave" },
-  MemberBanAdd: { category: "member", field: "userId", logAction: "ban" },
-  MemberBanRemove: { category: "member", field: "userId", logAction: "unban" },
-  RoleCreate: { category: "role", field: "roleId", logAction: "create" },
-  RoleUpdate: { category: "role", field: "roleId", logAction: "update" },
-  RoleDelete: { category: "role", field: "roleId", logAction: "delete" },
-  ThreadCreate: { category: "thread", field: "threadId", logAction: "create" },
-  ThreadDelete: { category: "thread", field: "threadId", logAction: "delete" },
-  InviteCreate: { category: "invite", field: "code", logAction: "create" },
-  InviteDelete: { category: "invite", field: "code", logAction: "delete" },
-  EmojiCreate: { category: "emoji", field: "emojiId", logAction: "create" },
-  EmojiUpdate: { category: "emoji", field: "emojiId", logAction: "update" },
-  EmojiDelete: { category: "emoji", field: "emojiId", logAction: "delete" },
-  AutoModerationRuleCreate: { category: "autoMod", field: "ruleId", logAction: "ruleCreate" },
-  AutoModerationRuleUpdate: { category: "autoMod", field: "ruleId", logAction: "ruleUpdate" },
-  AutoModerationRuleDelete: { category: "autoMod", field: "ruleId", logAction: "ruleDelete" },
-  GuildScheduledEventCreate: { category: "scheduledEvent", field: "eventId", logAction: "create" },
-  GuildScheduledEventDelete: { category: "scheduledEvent", field: "eventId", logAction: "delete" },
-  StageInstanceCreate: { category: "stage", field: "stageInstanceId", logAction: "start" },
-  StageInstanceUpdate: { category: "stage", field: "stageInstanceId", logAction: "update" },
-  StageInstanceDelete: { category: "stage", field: "stageInstanceId", logAction: "end" },
+  GuildUpdate: { category: "guild", field: null, logActions: ["update"] },
+  ChannelCreate: { category: "channel", field: "channelId", logActions: ["create"] },
+  ChannelUpdate: { category: "channel", field: "channelId", logActions: ["update"] },
+  ChannelDelete: { category: "channel", field: "channelId", logActions: ["delete"] },
+  MemberKick: { category: "member", field: "userId", logActions: ["leave"], rewriteAction: "kick" },
+  MemberBanAdd: { category: "member", field: "userId", logActions: ["ban"] },
+  MemberBanRemove: { category: "member", field: "userId", logActions: ["unban"] },
+  MemberUpdate: { category: "member", field: "userId", logActions: ["nicknameChange", "timeout"] },
+  RoleCreate: { category: "role", field: "roleId", logActions: ["create"] },
+  RoleUpdate: { category: "role", field: "roleId", logActions: ["update"] },
+  RoleDelete: { category: "role", field: "roleId", logActions: ["delete"] },
+  ThreadCreate: { category: "thread", field: "threadId", logActions: ["create"] },
+  ThreadUpdate: { category: "thread", field: "threadId", logActions: ["update", "archive", "unarchive"] },
+  ThreadDelete: { category: "thread", field: "threadId", logActions: ["delete"] },
+  InviteCreate: { category: "invite", field: "code", logActions: ["create"] },
+  InviteDelete: { category: "invite", field: "code", logActions: ["delete"] },
+  EmojiCreate: { category: "emoji", field: "emojiId", logActions: ["create"] },
+  EmojiUpdate: { category: "emoji", field: "emojiId", logActions: ["update"] },
+  EmojiDelete: { category: "emoji", field: "emojiId", logActions: ["delete"] },
+  AutoModerationRuleCreate: { category: "autoMod", field: "ruleId", logActions: ["ruleCreate"] },
+  AutoModerationRuleUpdate: { category: "autoMod", field: "ruleId", logActions: ["ruleUpdate"] },
+  AutoModerationRuleDelete: { category: "autoMod", field: "ruleId", logActions: ["ruleDelete"] },
+  GuildScheduledEventCreate: { category: "scheduledEvent", field: "eventId", logActions: ["create"] },
+  GuildScheduledEventUpdate: {
+    category: "scheduledEvent",
+    field: "eventId",
+    logActions: ["update", "start", "complete", "cancel"],
+  },
+  GuildScheduledEventDelete: { category: "scheduledEvent", field: "eventId", logActions: ["delete"] },
+  StageInstanceCreate: { category: "stage", field: "stageInstanceId", logActions: ["start"] },
+  StageInstanceUpdate: { category: "stage", field: "stageInstanceId", logActions: ["update"] },
+  StageInstanceDelete: { category: "stage", field: "stageInstanceId", logActions: ["end"] },
 };
 
 /**
@@ -80,17 +97,94 @@ const INTEGRATION_ACTIONS: Partial<Record<string, "create" | "update" | "delete"
 const CORRELATION_WINDOW_MS = 30_000;
 
 /**
- * guildAuditLogEntryCreateを受けて (1) 生の監査ログをauditLogCorrelationカテゴリとして常に保存し、
- * (2) integrationカテゴリはこれを一次情報源として新規作成し、(3) それ以外は対応する既存ログ行に
- * executorIdを追記する。(1)はダッシュボードの通常表示には出さず、必要な時に参照する想定(表示側は本タスクのスコープ外)。
- *
- * ponytail: 元イベント(#49〜#51のgatewayイベント)側のwriteLogEntryも本関数もfire-and-forgetで
- * 非同期に書き込むため、監査ログが元イベントのINSERTより先にこの関数の(3)へ到達すると
- * 対象行がまだ存在せず相関漏れになり得る(再試行しない)。実運用でDiscordのAPI応答順序上は
- * 元イベント→監査ログの順で届くことが大半で許容できると判断。悪化するようなら、
- * 未相関の監査ログを一定時間後に再照合するバッチ処理を追加する。
+ * 元イベント側のwriteLogEntry(#49〜#51)がまだINSERTを終えていないタイミングで監査ログが
+ * 先に届いた場合の取りこぼしを緩和するため、1回だけ短い遅延を空けて再検索する。
+ * ponytail: 2回目も見つからなければ諦める(バッチ再照合等の恒久対応はしない)。
+ * 大半のケースは元イベント→監査ログの順で届くため、1回のリトライで十分実用的と判断。
  */
-export async function correlateAuditLogEntry(deps: WriteLogEntryDeps, entry: AuditLogEntryInfo): Promise<void> {
+const RETRY_DELAY_MS = 2_000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface MatchCriteria {
+  guildId: string;
+  category: LogCategory;
+  windowStart: Date;
+  windowEnd: Date;
+  extraConditions: SQL[];
+}
+
+/**
+ * `= ANY(${array}::text[])`はpostgres.js経由だと配列が個別スカラーパラメータの並び(タプル)として
+ * 送られてしまい、text[]へのキャストに失敗する(実DBテストで発覚)。`IN (...)`はsql.joinで
+ * 要素ごとに別パラメータとして正しく展開されるため、配列一致にはこちらを使う。
+ */
+function actionIn(candidates: readonly string[]): SQL {
+  return sql`${logEntries.payload} ->> 'action' IN (${sql.join(
+    candidates.map((action) => sql`${action}`),
+    sql.raw(", "),
+  )})`;
+}
+
+async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id: string } | undefined> {
+  const [match] = await db
+    .select({ id: logEntries.id })
+    .from(logEntries)
+    .where(
+      and(
+        eq(logEntries.guildId, criteria.guildId),
+        eq(logEntries.category, criteria.category),
+        gte(logEntries.createdAt, criteria.windowStart),
+        lte(logEntries.createdAt, criteria.windowEnd),
+        sql`NOT (${logEntries.payload} ? 'executorId')`,
+        ...criteria.extraConditions,
+      ),
+    )
+    .orderBy(desc(logEntries.createdAt))
+    .limit(1);
+  return match;
+}
+
+async function annotateRow(db: Db, id: string, executorId: string, rewriteAction?: string): Promise<void> {
+  const patch = rewriteAction
+    ? sql`jsonb_build_object('executorId', ${executorId}::text, 'action', ${rewriteAction}::text)`
+    : sql`jsonb_build_object('executorId', ${executorId}::text)`;
+  await db
+    .update(logEntries)
+    .set({ payload: sql`${logEntries.payload} || ${patch}` })
+    .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`));
+}
+
+async function correlateRow(
+  db: Db,
+  criteria: MatchCriteria,
+  executorId: string,
+  rewriteAction: string | undefined,
+  retryDelayMs: number,
+): Promise<void> {
+  let match = await findUnannotatedRow(db, criteria);
+  if (!match) {
+    await delay(retryDelayMs);
+    match = await findUnannotatedRow(db, criteria);
+  }
+  if (!match) return;
+  await annotateRow(db, match.id, executorId, rewriteAction);
+}
+
+/**
+ * guildAuditLogEntryCreateを受けて (1) 生の監査ログをauditLogCorrelationカテゴリとして常に保存し、
+ * (2) integrationカテゴリはこれを一次情報源として新規作成し、(3) role所属変更(MemberRoleUpdate)は
+ * roleId+userIdで対応するrole行にexecutorIdを追記し、(4) それ以外は対応する既存ログ行に
+ * executorId(必要ならactionも)を追記する。(1)はダッシュボードの通常表示には出さず、
+ * 必要な時に参照する想定(表示側は本タスクのスコープ外)。
+ */
+export async function correlateAuditLogEntry(
+  deps: WriteLogEntryDeps,
+  entry: AuditLogEntryInfo,
+  retryDelayMs: number = RETRY_DELAY_MS,
+): Promise<void> {
   await writeLogEntry(
     deps,
     {
@@ -105,6 +199,8 @@ export async function correlateAuditLogEntry(deps: WriteLogEntryDeps, entry: Aud
     `auditLogCorrelation:${entry.id}`,
   );
 
+  if (!entry.executorId) return;
+
   const integrationAction = INTEGRATION_ACTIONS[entry.action];
   if (integrationAction) {
     if (!entry.targetId) return;
@@ -115,7 +211,7 @@ export async function correlateAuditLogEntry(deps: WriteLogEntryDeps, entry: Aud
         guildId: entry.guildId,
         createdAt: entry.createdAt,
         integrationId: entry.targetId,
-        executorId: entry.executorId ?? undefined,
+        executorId: entry.executorId,
         action: integrationAction,
       },
       `integration:${entry.id}`,
@@ -123,36 +219,72 @@ export async function correlateAuditLogEntry(deps: WriteLogEntryDeps, entry: Aud
     return;
   }
 
-  if (!entry.executorId) return;
+  const auditAt = new Date(entry.createdAt);
+  const windowStart = new Date(auditAt.getTime() - CORRELATION_WINDOW_MS);
+  const windowEnd = new Date(auditAt.getTime() + CORRELATION_WINDOW_MS);
+
+  if (entry.action === "MemberRoleUpdate") {
+    if (!entry.targetId || !entry.roleChanges) return;
+    const userId = entry.targetId;
+    for (const roleId of entry.roleChanges.added) {
+      await correlateRow(
+        deps.db,
+        {
+          guildId: entry.guildId,
+          category: "role",
+          windowStart,
+          windowEnd,
+          extraConditions: [
+            sql`${logEntries.payload} ->> 'action' = 'memberAdd'`,
+            sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
+            sql`${logEntries.payload} ->> 'userId' = ${userId}`,
+          ],
+        },
+        entry.executorId,
+        undefined,
+        retryDelayMs,
+      );
+    }
+    for (const roleId of entry.roleChanges.removed) {
+      await correlateRow(
+        deps.db,
+        {
+          guildId: entry.guildId,
+          category: "role",
+          windowStart,
+          windowEnd,
+          extraConditions: [
+            sql`${logEntries.payload} ->> 'action' = 'memberRemove'`,
+            sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
+            sql`${logEntries.payload} ->> 'userId' = ${userId}`,
+          ],
+        },
+        entry.executorId,
+        undefined,
+        retryDelayMs,
+      );
+    }
+    return;
+  }
+
   const rule = CORRELATION_RULES[entry.action];
   if (!rule) return;
   if (rule.field && !entry.targetId) return;
 
-  const auditAt = new Date(entry.createdAt);
-  const windowStart = new Date(auditAt.getTime() - CORRELATION_WINDOW_MS);
-  const windowEnd = new Date(auditAt.getTime() + CORRELATION_WINDOW_MS);
-  const notYetCorrelated = sql`NOT (${logEntries.payload} ? 'executorId')`;
-  const [match] = await deps.db
-    .select({ id: logEntries.id })
-    .from(logEntries)
-    .where(
-      and(
-        eq(logEntries.guildId, entry.guildId),
-        eq(logEntries.category, rule.category),
-        gte(logEntries.createdAt, windowStart),
-        lte(logEntries.createdAt, windowEnd),
-        sql`${logEntries.payload} ->> 'action' = ${rule.logAction}`,
-        notYetCorrelated,
-        rule.field ? sql`${logEntries.payload} ->> ${rule.field} = ${entry.targetId}` : undefined,
-      ),
-    )
-    .orderBy(desc(logEntries.createdAt))
-    .limit(1);
-
-  if (!match) return;
-
-  await deps.db
-    .update(logEntries)
-    .set({ payload: sql`${logEntries.payload} || jsonb_build_object('executorId', ${entry.executorId}::text)` })
-    .where(and(eq(logEntries.id, match.id), notYetCorrelated));
+  await correlateRow(
+    deps.db,
+    {
+      guildId: entry.guildId,
+      category: rule.category,
+      windowStart,
+      windowEnd,
+      extraConditions: [
+        actionIn(rule.logActions),
+        ...(rule.field ? [sql`${logEntries.payload} ->> ${rule.field} = ${entry.targetId}`] : []),
+      ],
+    },
+    entry.executorId,
+    rule.rewriteAction,
+    retryDelayMs,
+  );
 }

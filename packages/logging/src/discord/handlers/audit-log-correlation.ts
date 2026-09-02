@@ -4,6 +4,22 @@ import type { AuditLogEntryInfo, WriteLogEntryDeps } from "../../application/ind
 import { correlateAuditLogEntry } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 
+/**
+ * MemberRoleUpdateのchangesは`$add`/`$remove`キーでロール配列(id/name)を持つ。
+ * role所属変更ログ(#49 handlers/role.ts)はroleId+userIdの複合一致で相関するため、
+ * ここでroleIdの集合に変換しておく。
+ */
+function extractRoleChanges(entry: GuildAuditLogsEntry): { added: string[]; removed: string[] } | undefined {
+  if (entry.action !== AuditLogEvent.MemberRoleUpdate) return undefined;
+  const added: string[] = [];
+  const removed: string[] = [];
+  for (const change of entry.changes) {
+    if (change.key === "$add") added.push(...(change.new ?? []).map((role) => role.id));
+    if (change.key === "$remove") removed.push(...(change.new ?? []).map((role) => role.id));
+  }
+  return { added, removed };
+}
+
 /** AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。 */
 export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string): AuditLogEntryInfo {
   return {
@@ -13,6 +29,7 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
     executorId: entry.executorId,
     targetId: entry.targetId,
     createdAt: entry.createdAt.toISOString(),
+    roleChanges: extractRoleChanges(entry),
   };
 }
 
