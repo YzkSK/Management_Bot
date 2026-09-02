@@ -7,7 +7,8 @@ describe("registerDiscordHandlers", () => {
   test("moderation.action.recordedをlogging自身のeventBusで購読する", async () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
-    const ctx = { client: {}, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const on = mock(() => undefined);
+    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
@@ -18,9 +19,29 @@ describe("registerDiscordHandlers", () => {
   test("eventBus.subscribeが失敗したら呼び出し元に伝播する(BotClient.registerFeaturesが起動失敗として検知できるように)", async () => {
     const subscribe = mock(() => Promise.reject(new Error("BUSYGROUP")));
     const eventBus = { subscribe } as unknown as DomainEventBus;
-    const ctx = { client: {}, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const on = mock(() => undefined);
+    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await expect(registerDiscordHandlers(ctx)).rejects.toThrow("BUSYGROUP");
+  });
+
+  test("message/member/role/channelの各カテゴリハンドラを登録する", async () => {
+    const subscribe = mock(() => Promise.resolve());
+    const eventBus = { subscribe } as unknown as DomainEventBus;
+    const on = mock(() => undefined);
+    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+
+    await registerDiscordHandlers(ctx);
+
+    const events = on.mock.calls.map((call) => call[0]);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        "messageCreate",
+        "guildMemberAdd",
+        "roleCreate",
+        "channelCreate",
+      ]),
+    );
   });
 });
 
