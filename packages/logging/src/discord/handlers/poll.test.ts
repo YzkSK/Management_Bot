@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
+import type { Db } from "@management-bot/db";
 import { registerPollHandlers, toPollCreateLogEntry, toPollEndLogEntry } from "./poll.js";
 
 function fakeMessage(
@@ -29,8 +30,8 @@ describe("toPollCreateLogEntry", () => {
     expect(toPollCreateLogEntry(fakeMessage({ poll: null }))).toBeUndefined();
   });
 
-  test("Botの投稿はundefined", () => {
-    expect(toPollCreateLogEntry(fakeMessage({ author: { id: "b1", bot: true } }))).toBeUndefined();
+  test("Botが作成したpollも除外せず記録する(loop対策が不要なため)", () => {
+    expect(toPollCreateLogEntry(fakeMessage({ author: { id: "b1", bot: true } }))?.action).toBe("create");
   });
 });
 
@@ -66,12 +67,80 @@ describe("toPollEndLogEntry", () => {
 });
 
 describe("registerPollHandlers", () => {
-  test("messageCreate/messageUpdateをclient.onに登録する", () => {
+  test("messageCreate/messageUpdateをclient.onに登録し、readyでの再照合をclient.onceに登録する", () => {
     const on = mock(() => undefined);
-    const ctx = { client: { on }, db: {} } as unknown as FeatureModuleContext;
+    const once = mock(() => undefined);
+    const ctx = { client: { on, once }, db: {} } as unknown as FeatureModuleContext;
 
     registerPollHandlers(ctx);
 
     expect(on.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(["messageCreate", "messageUpdate"]));
+    expect(once.mock.calls.map((call) => call[0])).toEqual(["ready"]);
+  });
+});
+
+describe("poll終了の再照合(起動時)", () => {
+  function fakeDb(pendingRows: { guild_id: string; channel_id: string; message_id: string }[], inserts: unknown[]): Db {
+    return {
+      execute: () => Promise.resolve(pendingRows),
+      insert: () => ({
+        values: (values: unknown) => {
+          inserts.push(values);
+          return { onConflictDoNothing: () => Promise.resolve() };
+        },
+      }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    } as unknown as Db;
+  }
+
+  function fakeCtx(db: Db, message: unknown): FeatureModuleContext {
+    const once = mock((_event: string, listener: () => void) => {
+      readyListener = listener;
+    });
+    const channels = { fetch: () => Promise.resolve({ isTextBased: () => true, messages: { fetch: () => Promise.resolve(message) } }) };
+    return { client: { on: mock(() => undefined), once, channels }, db } as unknown as FeatureModuleContext;
+  }
+
+  let readyListener: (() => void) | undefined;
+
+  test("resultsFinalizedがtrueのpendingなpollはendを記録する", async () => {
+    const inserts: unknown[] = [];
+    const db = fakeDb([{ guild_id: "g1", channel_id: "c1", message_id: "m1" }], inserts);
+    const ctx = fakeCtx(db, { poll: { resultsFinalized: true } });
+
+    registerPollHandlers(ctx);
+    await readyListener?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({ category: "poll", payload: { action: "end" } });
+  });
+
+  test("resultsFinalizedがまだfalseなら何もしない", async () => {
+    const inserts: unknown[] = [];
+    const db = fakeDb([{ guild_id: "g1", channel_id: "c1", message_id: "m1" }], inserts);
+    const ctx = fakeCtx(db, { poll: { resultsFinalized: false } });
+
+    registerPollHandlers(ctx);
+    await readyListener?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inserts).toHaveLength(0);
+  });
+
+  test("メッセージが取得できない(削除済み等)場合は何もしない", async () => {
+    const inserts: unknown[] = [];
+    const db = fakeDb([{ guild_id: "g1", channel_id: "c1", message_id: "m1" }], inserts);
+    const once = mock((_event: string, listener: () => void) => {
+      readyListener = listener;
+    });
+    const channels = { fetch: () => Promise.reject(new Error("Unknown Message")) };
+    const ctx = { client: { on: mock(() => undefined), once, channels }, db } as unknown as FeatureModuleContext;
+
+    registerPollHandlers(ctx);
+    await readyListener?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inserts).toHaveLength(0);
   });
 });

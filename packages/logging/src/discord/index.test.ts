@@ -8,7 +8,8 @@ describe("registerDiscordHandlers", () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
-    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const once = mock(() => undefined);
+    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
@@ -20,7 +21,8 @@ describe("registerDiscordHandlers", () => {
     const subscribe = mock(() => Promise.reject(new Error("BUSYGROUP")));
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
-    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const once = mock(() => undefined);
+    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await expect(registerDiscordHandlers(ctx)).rejects.toThrow("BUSYGROUP");
   });
@@ -29,7 +31,8 @@ describe("registerDiscordHandlers", () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
-    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const once = mock(() => undefined);
+    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
@@ -56,7 +59,8 @@ describe("registerDiscordHandlers", () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
-    const ctx = { client: { on }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const once = mock(() => undefined);
+    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
