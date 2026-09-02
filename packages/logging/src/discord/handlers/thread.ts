@@ -23,11 +23,17 @@ export function toThreadDeleteLogEntry(thread: AnyThreadChannel): LogEntry | und
   return { category: "thread", ...base, createdAt: new Date().toISOString(), action: "delete" };
 }
 
-/** archived差分をarchive/unarchiveとして記録し、それ以外(名前変更・ロック等)はupdateとして記録する。 */
+/**
+ * archived差分をarchive/unarchiveとして記録し、それ以外(名前変更・ロック等)はupdateとして記録する。
+ * archivedはboolean|nullで、null(状態不明)は差分ありと誤判定しないようboolean同士の比較に限定する
+ * (codexレビュー指摘: null→falseを誤ってunarchiveと記録するバグの修正)。
+ */
 export function toThreadUpdateLogEntry(oldThread: AnyThreadChannel, newThread: AnyThreadChannel): LogEntry | undefined {
   const base = baseFields(newThread);
   if (!base) return undefined;
-  const action = oldThread.archived === newThread.archived ? "update" : newThread.archived ? "archive" : "unarchive";
+  const archiveStateChanged =
+    oldThread.archived !== null && newThread.archived !== null && oldThread.archived !== newThread.archived;
+  const action = archiveStateChanged ? (newThread.archived ? "archive" : "unarchive") : "update";
   return { category: "thread", ...base, createdAt: new Date().toISOString(), action };
 }
 

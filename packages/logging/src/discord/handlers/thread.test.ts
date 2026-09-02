@@ -33,6 +33,12 @@ describe("thread category mappers", () => {
     const entry = toThreadUpdateLogEntry(fakeThread({ archived: false }), fakeThread({ archived: false }));
     expect(entry?.action).toBe("update");
   });
+
+  test("update: archivedがnull(状態不明)を含む場合はupdate扱いにする(archive/unarchiveと誤判定しない)", () => {
+    expect(toThreadUpdateLogEntry(fakeThread({ archived: null }), fakeThread({ archived: false }))?.action).toBe("update");
+    expect(toThreadUpdateLogEntry(fakeThread({ archived: false }), fakeThread({ archived: null }))?.action).toBe("update");
+    expect(toThreadUpdateLogEntry(fakeThread({ archived: null }), fakeThread({ archived: true }))?.action).toBe("update");
+  });
 });
 
 describe("registerThreadHandlers", () => {
