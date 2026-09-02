@@ -40,6 +40,10 @@ describe("registerDiscordHandlers", () => {
         "guildMemberAdd",
         "roleCreate",
         "channelCreate",
+        "guildUpdate",
+        "threadCreate",
+        "inviteCreate",
+        "emojiCreate",
       ]),
     );
   });

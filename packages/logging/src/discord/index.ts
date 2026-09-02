@@ -4,6 +4,10 @@ import { registerMessageHandlers } from "./handlers/message.js";
 import { registerMemberHandlers } from "./handlers/member.js";
 import { registerRoleHandlers } from "./handlers/role.js";
 import { registerChannelHandlers } from "./handlers/channel.js";
+import { registerGuildHandlers } from "./handlers/guild.js";
+import { registerThreadHandlers } from "./handlers/thread.js";
+import { registerInviteHandlers } from "./handlers/invite.js";
+import { registerEmojiHandlers } from "./handlers/emoji.js";
 import { createSendToChannel } from "./send-to-channel.js";
 
 export { createSendToChannel } from "./send-to-channel.js";
@@ -29,4 +33,8 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   registerMemberHandlers(ctx);
   registerRoleHandlers(ctx);
   registerChannelHandlers(ctx);
+  registerGuildHandlers(ctx);
+  registerThreadHandlers(ctx);
+  registerInviteHandlers(ctx);
+  registerEmojiHandlers(ctx);
 }
