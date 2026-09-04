@@ -50,15 +50,26 @@ export function formatLogEntry(entry: LogEntry): string {
  * idを省略した場合はrandomUUID()で生成する。domain-events購読ハンドラ等、
  * at-least-once配送で再実行され得る呼び出し元はentryIdなど決定的な値を渡すこと。
  * DB保存はonConflictDoNothingで冪等(2回目以降は何もしない)にする一方、
- * チャンネル送信は保存の成否に関わらず毎回試みる。送信のみが失敗して
+ * チャンネル送信はデフォルトで保存の成否に関わらず毎回試みる。送信のみが失敗して
  * 再配送された場合に、DB上は保存済みだからと送信を諦めて永久欠落させないため。
  * sendToChannel側が一時的に失敗し再配送された場合、重複送信は起こり得る
  * (Discord送信とDB更新を1トランザクションにはできないためat-least-once配送とする)。
+ *
+ * skipNotifyIfExistsをtrueにすると、この呼び出し以前に同じidの行が既に存在した場合は
+ * 送信をスキップする。同じ論理イベントを複数の独立した経路(例: poll.tsのmessageUpdateと
+ * 起動時再照合)が同じidで並行して書き込み得る場合に、片方が既存行を検知して
+ * 重複通知を避けるためのオプトイン。上記の「送信のみ失敗した再配送」を待つ呼び出し元は
+ * 使わないこと(その場合は毎回falseのままでよい)。
  */
-export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry, id: string = randomUUID()): Promise<void> {
+export async function writeLogEntry(
+  deps: WriteLogEntryDeps,
+  entry: LogEntry,
+  id: string = randomUUID(),
+  skipNotifyIfExists = false,
+): Promise<void> {
   const { db, sendToChannel } = deps;
 
-  await db
+  const inserted = await db
     .insert(logEntries)
     .values({
       id,
@@ -67,7 +78,10 @@ export async function writeLogEntry(deps: WriteLogEntryDeps, entry: LogEntry, id
       payload: entry,
       createdAt: new Date(entry.createdAt),
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: logEntries.id });
+
+  if (skipNotifyIfExists && inserted.length === 0) return;
 
   const [channelSetting] = await db
     .select({ channelId: logChannelSettings.channelId })

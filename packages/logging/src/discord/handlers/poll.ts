@@ -54,6 +54,8 @@ async function reconcilePendingPoll(ctx: FeatureModuleContext, deps: WriteLogEnt
   const message = await channel.messages.fetch(pending.messageId).catch(() => null);
   if (!message?.poll?.resultsFinalized) return;
 
+  // messageUpdateハンドラと同じidを使うため、先に書き込まれていた場合は通知をスキップする
+  // (skipNotifyIfExists。両経路が競合してもDiscordへの重複通知を防ぐ)。
   await writeLogEntry(
     deps,
     {
@@ -65,6 +67,7 @@ async function reconcilePendingPoll(ctx: FeatureModuleContext, deps: WriteLogEnt
       action: "end",
     },
     `poll:end:${pending.messageId}`,
+    true,
   );
 }
 
@@ -100,9 +103,10 @@ export function registerPollHandlers(ctx: FeatureModuleContext): void {
   ctx.client.on("messageUpdate", (oldMessage, newMessage) => {
     const entry = toPollEndLogEntry(oldMessage, newMessage);
     // ready時のreconcilePendingPollと同じ`poll:end:${messageId}`をidに使い、
-    // 起動時再照合とmessageUpdateが同一pollのendを競合して検知してもDB上は1行にdedupする
-    // (coderabbitレビュー指摘: 別々のid(乱数)だと重複end記録・重複通知になる)。
-    if (entry) writeLogEntrySafely(deps, entry, `poll:end:${newMessage.id}`);
+    // 起動時再照合とmessageUpdateが同一pollのendを競合して検知してもDB上は1行にdedupする。
+    // skipNotifyIfExistsも合わせて渡し、先に書き込まれていた場合はDiscordへの通知もスキップする
+    // (coderabbitレビュー指摘: 別々のid(乱数)だと重複end記録に、idを揃えるだけでは重複通知になる)。
+    if (entry) writeLogEntrySafely(deps, entry, `poll:end:${newMessage.id}`, true);
   });
   registerPollReconciliation(ctx, deps);
 }
