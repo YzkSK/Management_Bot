@@ -15,8 +15,16 @@ describe("invite category mappers", () => {
     expect(toInviteCreateLogEntry(fakeInvite({ guild: null }))).toBeUndefined();
   });
 
+  test("create: channelId不明ならundefined", () => {
+    expect(toInviteCreateLogEntry(fakeInvite({ channelId: null }))).toBeUndefined();
+  });
+
   test("delete", () => {
     expect(toInviteDeleteLogEntry(fakeInvite())?.action).toBe("delete");
+  });
+
+  test("delete: channelId不明ならundefined", () => {
+    expect(toInviteDeleteLogEntry(fakeInvite({ channelId: null }))).toBeUndefined();
   });
 });
 
