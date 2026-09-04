@@ -337,6 +337,36 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
     expect(result.every((r) => r.channelId === "c1")).toBe(true);
   });
 
+  test("setChannelSettingForAllCategoriesはchannelId=nullで全カテゴリの設定を削除する", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
+    await caller.setChannelSettingForAllCategories({ guildId, channelId: null });
+
+    const rows = await db.select().from(logChannelSettings).where(eq(logChannelSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
+  });
+
+  test("setChannelSettingForAllCategoriesもMANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    const thrown = await captureRejection(caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" }));
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+  });
+
   test("setChannelSettingForAllCategoriesも実在しないチャンネルIDならBAD_REQUEST", async () => {
     await grantManageLoggingSettings();
     const caller = createCaller({

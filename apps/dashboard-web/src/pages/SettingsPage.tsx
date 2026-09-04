@@ -6,6 +6,7 @@ import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import { MAX_RETENTION_DAYS, parseRetentionDaysInput } from "./parse-retention-days.js";
+import { uniformValue } from "./uniform-value.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const NO_CHANNEL = "__none__";
+/** 一括設定チャンネルSelectの初期状態(カテゴリごとに設定がバラバラで、まだ明示選択されていない)。 */
+const UNCHOSEN = "";
 
 interface ChannelOption {
   id: string;
@@ -23,10 +26,12 @@ function RetentionInput({
   guildId,
   category,
   retentionDays,
+  disabled,
 }: {
   guildId: string;
   category: LogCategory;
   retentionDays: number;
+  disabled?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState(String(retentionDays));
@@ -48,7 +53,7 @@ function RetentionInput({
         className="w-28"
         aria-label={`${CATEGORY_LABELS[category]}の保持期間(日)`}
         value={value}
-        disabled={mutation.isPending}
+        disabled={disabled || mutation.isPending}
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => {
           const parsed = parseRetentionDaysInput(value);
@@ -66,14 +71,30 @@ function RetentionInput({
   );
 }
 
-function BulkRetentionControl({ guildId }: { guildId: string }) {
+function BulkRetentionControl({
+  guildId,
+  retentionDaysList,
+  onPendingChange,
+}: {
+  guildId: string;
+  retentionDaysList: readonly number[];
+  onPendingChange: (pending: boolean) => void;
+}) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState("");
+  const uniform = uniformValue(retentionDaysList);
+  const [value, setValue] = useState(uniform !== undefined ? String(uniform) : "");
+
+  useEffect(() => setValue(uniform !== undefined ? String(uniform) : ""), [uniform]);
+
   const mutation = useMutation({
     ...trpc.logging.setRetentionSettingForAllCategories.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: trpc.logging.listRetentionSettings.queryOptions({ guildId }).queryKey }),
   });
+
+  useEffect(() => onPendingChange(mutation.isPending), [mutation.isPending, onPendingChange]);
+
+  const parsed = parseRetentionDaysInput(value);
 
   return (
     <div className="flex items-end gap-2">
@@ -87,15 +108,16 @@ function BulkRetentionControl({ guildId }: { guildId: string }) {
           min={0}
           max={MAX_RETENTION_DAYS}
           className="w-28"
+          placeholder={uniform === undefined ? "カテゴリごとに異なる" : undefined}
           value={value}
+          disabled={mutation.isPending}
           onChange={(e) => setValue(e.target.value)}
         />
       </div>
       <Button
         type="button"
-        disabled={mutation.isPending}
+        disabled={parsed === null || mutation.isPending}
         onClick={() => {
-          const parsed = parseRetentionDaysInput(value);
           if (parsed !== null) {
             mutation.mutate({ guildId, retentionDays: parsed });
           }
@@ -103,28 +125,46 @@ function BulkRetentionControl({ guildId }: { guildId: string }) {
       >
         全カテゴリに適用
       </Button>
+      {value !== "" && parsed === null && <p className="text-destructive text-xs self-center">0〜{MAX_RETENTION_DAYS}で入力してください</p>}
       {mutation.isError && <p className="text-destructive text-xs self-center">保存に失敗しました</p>}
       {mutation.isSuccess && <p className="text-muted-foreground text-xs self-center">適用しました</p>}
     </div>
   );
 }
 
-function BulkChannelControl({ guildId, options }: { guildId: string; options: readonly ChannelOption[] }) {
+function BulkChannelControl({
+  guildId,
+  channelIdList,
+  options,
+  onPendingChange,
+}: {
+  guildId: string;
+  channelIdList: readonly (string | null)[];
+  options: readonly ChannelOption[];
+  onPendingChange: (pending: boolean) => void;
+}) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(NO_CHANNEL);
+  const uniform = uniformValue(channelIdList);
+  const initialValue = uniform === undefined ? UNCHOSEN : (uniform ?? NO_CHANNEL);
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => setValue(initialValue), [initialValue]);
+
   const mutation = useMutation({
     ...trpc.logging.setChannelSettingForAllCategories.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: trpc.logging.listChannelSettings.queryOptions({ guildId }).queryKey }),
   });
 
+  useEffect(() => onPendingChange(mutation.isPending), [mutation.isPending, onPendingChange]);
+
   return (
     <div className="flex items-end gap-2">
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium">出力先チャンネル</label>
-        <Select value={value} onValueChange={setValue}>
+        <Select value={value} onValueChange={setValue} disabled={mutation.isPending}>
           <SelectTrigger className="w-48" aria-label="全カテゴリの出力先チャンネル">
-            <SelectValue />
+            <SelectValue placeholder="カテゴリごとに異なる" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={NO_CHANNEL}>未設定</SelectItem>
@@ -138,7 +178,7 @@ function BulkChannelControl({ guildId, options }: { guildId: string; options: re
       </div>
       <Button
         type="button"
-        disabled={mutation.isPending}
+        disabled={value === UNCHOSEN || mutation.isPending}
         onClick={() => mutation.mutate({ guildId, channelId: value === NO_CHANNEL ? null : value })}
       >
         全カテゴリに適用
@@ -154,11 +194,13 @@ function ChannelSelect({
   category,
   channelId,
   options,
+  disabled,
 }: {
   guildId: string;
   category: LogCategory;
   channelId: string | null;
   options: readonly ChannelOption[];
+  disabled?: boolean;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -171,7 +213,7 @@ function ChannelSelect({
     <div className="flex flex-col gap-1">
       <Select
         value={channelId ?? NO_CHANNEL}
-        disabled={mutation.isPending}
+        disabled={disabled || mutation.isPending}
         onValueChange={(value) => mutation.mutate({ guildId, category, channelId: value === NO_CHANNEL ? null : value })}
       >
         <SelectTrigger className="w-48" aria-label={`${CATEGORY_LABELS[category]}の出力先チャンネル`}>
@@ -193,6 +235,8 @@ function ChannelSelect({
 
 export function SettingsPage() {
   const { guildId } = useParams<{ guildId: string }>();
+  const [bulkRetentionPending, setBulkRetentionPending] = useState(false);
+  const [bulkChannelPending, setBulkChannelPending] = useState(false);
 
   const retentionQuery = useQuery({
     ...trpc.logging.listRetentionSettings.queryOptions({ guildId: guildId ?? "" }),
@@ -246,9 +290,18 @@ export function SettingsPage() {
       {retentionQuery.data && channelSettingsQuery.data && channelOptionsQuery.data && (
         <>
           <div className="flex flex-col gap-4 rounded-lg border p-4">
-            <h2 className="text-sm font-semibold">基本設定(すべてのカテゴリに適用)</h2>
-            <BulkRetentionControl guildId={guildId} />
-            <BulkChannelControl guildId={guildId} options={channelOptionsQuery.data} />
+            <h2 className="text-sm font-semibold">一括設定(すべてのカテゴリへ同じ値を適用)</h2>
+            <BulkRetentionControl
+              guildId={guildId}
+              retentionDaysList={retentionQuery.data.map((s) => s.retentionDays)}
+              onPendingChange={setBulkRetentionPending}
+            />
+            <BulkChannelControl
+              guildId={guildId}
+              channelIdList={channelSettingsQuery.data.map((s) => s.channelId)}
+              options={channelOptionsQuery.data}
+              onPendingChange={setBulkChannelPending}
+            />
           </div>
 
           <details>
@@ -268,7 +321,12 @@ export function SettingsPage() {
                     <TableRow key={setting.category}>
                       <TableCell>{CATEGORY_LABELS[setting.category]}</TableCell>
                       <TableCell>
-                        <RetentionInput guildId={guildId} category={setting.category} retentionDays={setting.retentionDays} />
+                        <RetentionInput
+                          guildId={guildId}
+                          category={setting.category}
+                          retentionDays={setting.retentionDays}
+                          disabled={bulkRetentionPending}
+                        />
                       </TableCell>
                       <TableCell>
                         <ChannelSelect
@@ -276,6 +334,7 @@ export function SettingsPage() {
                           category={setting.category}
                           channelId={channelSetting?.channelId ?? null}
                           options={channelOptionsQuery.data}
+                          disabled={bulkChannelPending}
                         />
                       </TableCell>
                     </TableRow>
