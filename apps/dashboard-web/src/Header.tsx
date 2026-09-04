@@ -4,9 +4,9 @@ interface HeaderProps {
 
 export function Header({ discordUserId }: HeaderProps) {
   return (
-    <header style={{ display: "flex", justifyContent: "space-between", padding: "0.75rem 1rem", borderBottom: "1px solid #ddd" }}>
-      <strong>Management Bot Dashboard</strong>
-      <span>{discordUserId}</span>
+    <header className="flex items-center justify-between border-b px-4 py-3">
+      <strong className="text-sm font-semibold">Management Bot Dashboard</strong>
+      <span className="text-muted-foreground text-sm">{discordUserId}</span>
     </header>
   );
 }

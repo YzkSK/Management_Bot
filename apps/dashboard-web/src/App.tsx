@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { LogListPage } from "./pages/LogListPage.js";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED";
@@ -21,15 +22,21 @@ export function App() {
   }, [isUnauthorized]);
 
   if (me.isPending) {
-    return <div>読み込み中...</div>;
+    return <div className="p-4 text-sm">読み込み中...</div>;
   }
 
   if (isUnauthorized) {
-    return <div>ログインへリダイレクト中...</div>;
+    return <div className="p-4 text-sm">ログインへリダイレクト中...</div>;
   }
 
   if (me.isError) {
-    return <div role="alert">接続に失敗しました。時間をおいて再度お試しください。</div>;
+    return (
+      <div className="p-4">
+        <Alert variant="destructive">
+          <AlertDescription>接続に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (

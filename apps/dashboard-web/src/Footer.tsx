@@ -1,7 +1,3 @@
 export function Footer() {
-  return (
-    <footer style={{ padding: "0.75rem 1rem", borderTop: "1px solid #ddd", color: "#666", fontSize: "0.8rem" }}>
-      © Management Bot
-    </footer>
-  );
+  return <footer className="text-muted-foreground border-t px-4 py-3 text-xs">© Management Bot</footer>;
 }

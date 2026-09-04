@@ -10,11 +10,11 @@ interface LayoutProps {
 export function Layout({ discordUserId }: LayoutProps) {
   const { guildId } = useParams<{ guildId?: string }>();
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <div className="flex min-h-screen flex-col">
       <Header discordUserId={discordUserId} />
-      <div style={{ display: "flex", flex: 1 }}>
+      <div className="flex flex-1">
         <Sidebar guildId={guildId} />
-        <main style={{ flex: 1, padding: "1rem" }}>
+        <main className="flex-1 p-4">
           <Outlet />
         </main>
       </div>
