@@ -8,7 +8,9 @@ import {
   listRetentionSettings,
   maskSensitiveFields,
   setChannelSetting,
+  setChannelSettingForAllCategories,
   setRetentionSetting,
+  setRetentionSettingForAllCategories,
 } from "../application/index.js";
 
 const listLogEntriesInput = z.object({
@@ -32,10 +34,20 @@ const setRetentionSettingInput = z.object({
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
+const setRetentionSettingForAllCategoriesInput = z.object({
+  guildId: z.string().min(1),
+  retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
+});
+
 const setChannelSettingInput = z.object({
   guildId: z.string().min(1),
   category: z.enum(LOG_CATEGORIES),
   /** nullで出力先未設定に戻す(該当カテゴリの送信を停止)。 */
+  channelId: z.string().min(1).nullable(),
+});
+
+const setChannelSettingForAllCategoriesInput = z.object({
+  guildId: z.string().min(1),
   channelId: z.string().min(1).nullable(),
 });
 
@@ -95,5 +107,23 @@ export const loggingRouter = router({
         }
       }
       await setChannelSetting(ctx.db, input.guildId, input.category, input.channelId);
+    }),
+
+  setRetentionSettingForAllCategories: protectedProcedure
+    .input(setRetentionSettingForAllCategoriesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(({ ctx, input }) => setRetentionSettingForAllCategories(ctx.db, input.guildId, input.retentionDays)),
+
+  setChannelSettingForAllCategories: protectedProcedure
+    .input(setChannelSettingForAllCategoriesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(async ({ ctx, input }) => {
+      if (input.channelId !== null) {
+        const options = await ctx.getGuildChannels(input.guildId);
+        if (!options.some((option) => option.id === input.channelId)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
+        }
+      }
+      await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
     }),
 });

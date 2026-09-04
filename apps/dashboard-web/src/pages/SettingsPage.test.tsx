@@ -43,4 +43,26 @@ describe("SettingsPage", () => {
     expect(html).toContain('aria-label="メッセージの保持期間(日)"');
     expect(html).toContain('aria-label="メッセージの出力先チャンネル"');
   });
+
+  test("全カテゴリ一括設定のコントロールを描画し、カテゴリごとの設定はdetails配下に隠す", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", retentionDays: 30 },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", channelId: "c1" },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
+      { id: "c1", name: "general" },
+    ]);
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("基本設定(すべてのカテゴリに適用)");
+    expect(html).toContain('aria-label="全カテゴリの出力先チャンネル"');
+    expect(html).toContain("全カテゴリに適用");
+    expect(html).toContain("<details>");
+    expect(html).toContain("カテゴリごとに設定する(任意)");
+    expect(html.indexOf("基本設定")).toBeLessThan(html.indexOf("<details>"));
+  });
 });

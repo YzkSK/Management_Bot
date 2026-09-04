@@ -66,6 +66,89 @@ function RetentionInput({
   );
 }
 
+function BulkRetentionControl({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const [value, setValue] = useState("");
+  const mutation = useMutation({
+    ...trpc.logging.setRetentionSettingForAllCategories.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.logging.listRetentionSettings.queryOptions({ guildId }).queryKey }),
+  });
+
+  return (
+    <div className="flex items-end gap-2">
+      <div className="flex flex-col gap-1">
+        <label htmlFor="bulk-retention-days" className="text-sm font-medium">
+          保持期間(日、0=無期限)
+        </label>
+        <Input
+          id="bulk-retention-days"
+          type="number"
+          min={0}
+          max={MAX_RETENTION_DAYS}
+          className="w-28"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </div>
+      <Button
+        type="button"
+        disabled={mutation.isPending}
+        onClick={() => {
+          const parsed = parseRetentionDaysInput(value);
+          if (parsed !== null) {
+            mutation.mutate({ guildId, retentionDays: parsed });
+          }
+        }}
+      >
+        全カテゴリに適用
+      </Button>
+      {mutation.isError && <p className="text-destructive text-xs self-center">保存に失敗しました</p>}
+      {mutation.isSuccess && <p className="text-muted-foreground text-xs self-center">適用しました</p>}
+    </div>
+  );
+}
+
+function BulkChannelControl({ guildId, options }: { guildId: string; options: readonly ChannelOption[] }) {
+  const queryClient = useQueryClient();
+  const [value, setValue] = useState(NO_CHANNEL);
+  const mutation = useMutation({
+    ...trpc.logging.setChannelSettingForAllCategories.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.logging.listChannelSettings.queryOptions({ guildId }).queryKey }),
+  });
+
+  return (
+    <div className="flex items-end gap-2">
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium">出力先チャンネル</label>
+        <Select value={value} onValueChange={setValue}>
+          <SelectTrigger className="w-48" aria-label="全カテゴリの出力先チャンネル">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_CHANNEL}>未設定</SelectItem>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                #{option.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button
+        type="button"
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate({ guildId, channelId: value === NO_CHANNEL ? null : value })}
+      >
+        全カテゴリに適用
+      </Button>
+      {mutation.isError && <p className="text-destructive text-xs self-center">保存に失敗しました</p>}
+      {mutation.isSuccess && <p className="text-muted-foreground text-xs self-center">適用しました</p>}
+    </div>
+  );
+}
+
 function ChannelSelect({
   guildId,
   category,
@@ -161,36 +244,47 @@ export function SettingsPage() {
       )}
 
       {retentionQuery.data && channelSettingsQuery.data && channelOptionsQuery.data && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>カテゴリ</TableHead>
-              <TableHead>保持期間(日、0=無期限)</TableHead>
-              <TableHead>出力先チャンネル</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {retentionQuery.data.map((setting) => {
-              const channelSetting = channelSettingsQuery.data.find((c) => c.category === setting.category);
-              return (
-                <TableRow key={setting.category}>
-                  <TableCell>{CATEGORY_LABELS[setting.category]}</TableCell>
-                  <TableCell>
-                    <RetentionInput guildId={guildId} category={setting.category} retentionDays={setting.retentionDays} />
-                  </TableCell>
-                  <TableCell>
-                    <ChannelSelect
-                      guildId={guildId}
-                      category={setting.category}
-                      channelId={channelSetting?.channelId ?? null}
-                      options={channelOptionsQuery.data}
-                    />
-                  </TableCell>
+        <>
+          <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <h2 className="text-sm font-semibold">基本設定(すべてのカテゴリに適用)</h2>
+            <BulkRetentionControl guildId={guildId} />
+            <BulkChannelControl guildId={guildId} options={channelOptionsQuery.data} />
+          </div>
+
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">カテゴリごとに設定する(任意)</summary>
+            <Table className="mt-2">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>カテゴリ</TableHead>
+                  <TableHead>保持期間(日、0=無期限)</TableHead>
+                  <TableHead>出力先チャンネル</TableHead>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {retentionQuery.data.map((setting) => {
+                  const channelSetting = channelSettingsQuery.data.find((c) => c.category === setting.category);
+                  return (
+                    <TableRow key={setting.category}>
+                      <TableCell>{CATEGORY_LABELS[setting.category]}</TableCell>
+                      <TableCell>
+                        <RetentionInput guildId={guildId} category={setting.category} retentionDays={setting.retentionDays} />
+                      </TableCell>
+                      <TableCell>
+                        <ChannelSelect
+                          guildId={guildId}
+                          category={setting.category}
+                          channelId={channelSetting?.channelId ?? null}
+                          options={channelOptionsQuery.data}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </details>
+        </>
       )}
     </div>
   );

@@ -18,10 +18,12 @@ export {
 export {
   listRetentionSettings,
   setRetentionSetting,
+  setRetentionSettingForAllCategories,
   type RetentionSetting,
 } from "./retention-settings.js";
 export {
   listChannelSettings,
   setChannelSetting,
+  setChannelSettingForAllCategories,
   type ChannelSetting,
 } from "./channel-settings.js";
