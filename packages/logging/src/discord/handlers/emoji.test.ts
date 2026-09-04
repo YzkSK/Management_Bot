@@ -7,9 +7,26 @@ function fakeEmoji(id = "e1") {
 }
 
 describe("emoji category mappers", () => {
-  test("create", () => expect(toEmojiCreateLogEntry(fakeEmoji()).action).toBe("create"));
-  test("update", () => expect(toEmojiUpdateLogEntry(fakeEmoji(), fakeEmoji()).action).toBe("update"));
-  test("delete", () => expect(toEmojiDeleteLogEntry(fakeEmoji()).action).toBe("delete"));
+  test("create", () => {
+    const entry = toEmojiCreateLogEntry(fakeEmoji());
+    expect(entry.action).toBe("create");
+    expect(entry.guildId).toBe("g1");
+    expect(entry.emojiId).toBe("e1");
+  });
+
+  test("update: newEmoji側のidがLogEntryに設定される", () => {
+    const entry = toEmojiUpdateLogEntry(fakeEmoji("old-e"), fakeEmoji("new-e"));
+    expect(entry.action).toBe("update");
+    expect(entry.guildId).toBe("g1");
+    expect(entry.emojiId).toBe("new-e");
+  });
+
+  test("delete", () => {
+    const entry = toEmojiDeleteLogEntry(fakeEmoji());
+    expect(entry.action).toBe("delete");
+    expect(entry.guildId).toBe("g1");
+    expect(entry.emojiId).toBe("e1");
+  });
 });
 
 describe("registerEmojiHandlers", () => {

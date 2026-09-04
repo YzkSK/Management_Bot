@@ -11,13 +11,20 @@ import {
 const BOT_USER_ID = "bot1";
 
 function fakeMessage(
-  overrides: Partial<{ guildId: string | null; author: { id: string } | null; channelId: string; content: string }> = {},
+  overrides: Partial<{
+    guildId: string | null;
+    author: { id: string } | null;
+    channelId: string;
+    content: string;
+    partial: boolean;
+  }> = {},
 ) {
   return {
     guildId: "g1",
     author: { id: "u1" },
     channelId: "c1",
     content: "hello",
+    partial: false,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
   } as never;
@@ -69,6 +76,16 @@ describe("toMessageUpdateLogEntry", () => {
   test("本文が変化していなければundefinedを返す(ピン留め等のメタデータ更新)", () => {
     expect(
       toMessageUpdateLogEntry(fakeMessage({ content: "same" }), fakeMessage({ content: "same" }), BOT_USER_ID),
+    ).toBeUndefined();
+  });
+
+  test("oldMessageがpartialならcontent比較をせずundefinedを返す(誤ったupdateログ防止)", () => {
+    expect(
+      toMessageUpdateLogEntry(
+        fakeMessage({ content: "old", partial: true }),
+        fakeMessage({ content: "new" }),
+        BOT_USER_ID,
+      ),
     ).toBeUndefined();
   });
 });

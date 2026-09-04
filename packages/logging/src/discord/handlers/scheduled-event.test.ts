@@ -11,9 +11,21 @@ function fakeEvent(status: "scheduled" | "active" | "completed" | "canceled" = "
   return {
     id,
     guildId: "g1",
+    status,
     isActive: () => status === "active",
     isCompleted: () => status === "completed",
     isCanceled: () => status === "canceled",
+  } as never;
+}
+
+function fakePartialEvent(id = "e1") {
+  return {
+    id,
+    guildId: "g1",
+    status: null,
+    isActive: () => false,
+    isCompleted: () => false,
+    isCanceled: () => false,
   } as never;
 }
 
@@ -39,6 +51,10 @@ describe("scheduled-event category mappers", () => {
 
   test("update: oldEventがnull(前状態不明)なら遷移とは判定せずupdateにする", () => {
     expect(toScheduledEventUpdateLogEntry(null, fakeEvent("active")).action).toBe("update");
+  });
+
+  test("update: oldEventがpartialでstatus不明(null)なら遷移とは判定せずupdateにする", () => {
+    expect(toScheduledEventUpdateLogEntry(fakePartialEvent(), fakeEvent("active")).action).toBe("update");
   });
 });
 
