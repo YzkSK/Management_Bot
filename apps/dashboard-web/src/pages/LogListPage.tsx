@@ -52,7 +52,7 @@ export function LogListPage() {
           setPagination(INITIAL_PAGINATION);
         }}
       >
-        <SelectTrigger className="w-48">
+        <SelectTrigger className="w-48" aria-label="ログのカテゴリ">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
