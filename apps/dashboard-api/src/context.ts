@@ -1,4 +1,8 @@
-import type { DashboardAccessContext, GuildMembership } from "@management-bot/dashboard-access";
+import type {
+  ChannelOption,
+  DashboardAccessContext,
+  GuildMembership,
+} from "@management-bot/dashboard-access";
 import type { Db } from "@management-bot/db";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
@@ -14,6 +18,11 @@ async function getGuildMembershipNotImplemented(): Promise<GuildMembership | nul
   return null;
 }
 
+/** getGuildMembershipNotImplemented同様、bot側との連携配線はPhase 1以降。空の選択肢として扱う。 */
+async function getGuildChannelsNotImplemented(): Promise<readonly ChannelOption[]> {
+  return [];
+}
+
 /**
  * `@hono/trpc-server`のcreateContext型は`Record<string, unknown>`を要求するが、
  * 実際にはinitTRPC.context<DashboardAccessContext>()で定義した型がそのままprocedureに渡る。
@@ -27,6 +36,7 @@ export function createContext(
       db,
       sessionId: getCookie(c, SESSION_COOKIE),
       getGuildMembership: getGuildMembershipNotImplemented,
+      getGuildChannels: getGuildChannelsNotImplemented,
     };
     return ctx as unknown as Record<string, unknown>;
   };

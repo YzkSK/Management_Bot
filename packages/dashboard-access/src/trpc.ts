@@ -9,6 +9,11 @@ export interface GuildMembership {
   roleIds: readonly string[];
 }
 
+export interface ChannelOption {
+  id: string;
+  name: string;
+}
+
 export interface DashboardAccessContext {
   db: Db;
   sessionId: string | undefined;
@@ -17,6 +22,12 @@ export interface DashboardAccessContext {
    * dashboard-api側でDiscord APIやキャッシュから供給する。
    */
   getGuildMembership: (guildId: string, discordUserId: string) => Promise<GuildMembership | null>;
+  /**
+   * guildId直下のテキストチャンネル一覧を返す。Dashboard UIでのセレクター表示・
+   * チャンネルID設定時の実在検証に使う(IDの直接入力を禁止するため)。
+   * dashboard-api側でDiscord APIやキャッシュから供給する。
+   */
+  getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();

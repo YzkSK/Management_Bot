@@ -17,4 +17,5 @@ export {
   createCallerFactory,
   type DashboardAccessContext,
   type GuildMembership,
+  type ChannelOption,
 } from "./trpc.js";

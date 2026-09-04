@@ -15,3 +15,13 @@ export {
   type ListLogEntriesInput,
   type ListLogEntriesResult,
 } from "./list-log-entries.js";
+export {
+  listRetentionSettings,
+  setRetentionSetting,
+  type RetentionSetting,
+} from "./retention-settings.js";
+export {
+  listChannelSettings,
+  setChannelSetting,
+  type ChannelSetting,
+} from "./channel-settings.js";
