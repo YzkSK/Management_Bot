@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { API_URL, trpc } from "./trpc.js";
-import { Sidebar } from "./Sidebar.js";
+import { Layout } from "./Layout.js";
+import { LogListPage } from "./pages/LogListPage.js";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED";
@@ -19,21 +22,33 @@ export function App() {
   }, [isUnauthorized]);
 
   if (me.isPending) {
-    return <div>読み込み中...</div>;
+    return <div className="p-4 text-sm">読み込み中...</div>;
   }
 
   if (isUnauthorized) {
-    return <div>ログインへリダイレクト中...</div>;
+    return <div className="p-4 text-sm">ログインへリダイレクト中...</div>;
   }
 
   if (me.isError) {
-    return <div role="alert">接続に失敗しました。時間をおいて再度お試しください。</div>;
+    return (
+      <div className="p-4">
+        <Alert variant="destructive">
+          <AlertDescription>接続に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (
-    <div style={{ display: "flex" }}>
-      <Sidebar />
-      <main>ようこそ</main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Layout discordUserId={me.data.discordUserId} />}>
+          <Route index element={<div>ようこそ</div>} />
+        </Route>
+        <Route path="/guilds/:guildId" element={<Layout discordUserId={me.data.discordUserId} />}>
+          <Route path="logs" element={<LogListPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
