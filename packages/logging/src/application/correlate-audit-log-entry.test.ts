@@ -21,8 +21,10 @@ function fakeDb(options: {
   inserts: RecordedInsert[];
   updates: RecordedUpdate[];
   selectResult?: { id: string }[];
+  /** UPDATEが実際に行を更新できたか(競り負けをシミュレートする場合はfalseを渡す)。省略時はtrue。 */
+  updateSucceeds?: boolean;
 }): Db {
-  const { inserts, updates, selectResult = [] } = options;
+  const { inserts, updates, selectResult = [], updateSucceeds = true } = options;
   return {
     insert: (table: unknown) => ({
       values: (values: unknown) => {
@@ -46,7 +48,11 @@ function fakeDb(options: {
     update: (table: unknown) => ({
       set: (set: unknown) => {
         updates.push({ table, set });
-        return { where: () => Promise.resolve() };
+        return {
+          where: () => ({
+            returning: () => Promise.resolve(updateSucceeds ? selectResult.slice(0, 1) : []),
+          }),
+        };
       },
     }),
   } as unknown as Db;
@@ -217,6 +223,58 @@ describe("correlateAuditLogEntry", () => {
 
     // added 1件 + removed 1件 = 2回のUPDATE
     expect(updates).toHaveLength(2);
+  });
+
+  test("候補行への注釈が並行イベントに競り負けたら(0件更新)、除外して別候補にリトライする", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const selectCalls: unknown[] = [];
+    const updateWhereCalls: unknown[] = [];
+    let selectCallCount = 0;
+    const db = {
+      insert: () => ({
+        values: (values: unknown) => {
+          inserts.push({ table: undefined, values });
+          return { onConflictDoNothing: () => Promise.resolve() };
+        },
+      }),
+      select: () => ({
+        from: () => ({
+          where: (whereArg: unknown) => {
+            selectCalls.push(whereArg);
+            return {
+              then: (resolve: (rows: unknown[]) => void) => resolve([]),
+              orderBy: () => ({
+                // 1回目はlog-1、リトライ(2回目)はlog-2を候補として返す(実際は除外条件で
+                // log-1がSQL側で弾かれるが、ここではモックなので呼び出し回数で切り替える)。
+                limit: () => {
+                  selectCallCount += 1;
+                  return Promise.resolve(selectCallCount === 1 ? [{ id: "log-1" }] : [{ id: "log-2" }]);
+                },
+              }),
+            };
+          },
+        }),
+      }),
+      update: () => ({
+        set: (set: unknown) => {
+          updates.push({ table: logEntries, set });
+          return {
+            where: (whereArg: unknown) => {
+              updateWhereCalls.push(whereArg);
+              // log-1は他イベントに競り負けて0件更新、log-2は成功する想定。
+              return { returning: () => Promise.resolve(updates.length === 1 ? [] : [{ id: "log-2" }]) };
+            },
+          };
+        },
+      }),
+    } as unknown as Db;
+
+    await correlateAuditLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, baseEntry, 0);
+
+    expect(updates).toHaveLength(2);
+    // writeLogEntryのlogChannelSettings参照1回 + findUnannotatedRowの初回・リトライで2回 = 3回。
+    expect(selectCalls).toHaveLength(3);
   });
 
   test("MemberRoleUpdateでroleChangesが無ければ何もしない", async () => {

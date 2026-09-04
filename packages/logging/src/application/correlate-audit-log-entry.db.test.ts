@@ -309,6 +309,41 @@ describe("correlateAuditLogEntry (実DB)", () => {
     expect(nicknameRow?.payload).not.toMatchObject({ executorId: "mod-1" });
   });
 
+  test("同じチャンネルへの2つの操作の監査ログが並行して届いても、それぞれ別の行に相関する(競合時の取り違え防止)", async () => {
+    const firstLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:00.000Z"));
+    const secondLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:01.000Z"));
+    const firstEntry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "ChannelDelete",
+      executorId: "mod-1",
+      targetId: "c-concurrent",
+      createdAt: "2026-08-31T00:00:00.100Z",
+    };
+    const secondEntry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "ChannelDelete",
+      executorId: "mod-2",
+      targetId: "c-concurrent",
+      createdAt: "2026-08-31T00:00:01.100Z",
+    };
+
+    await Promise.all([
+      correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, firstEntry, NO_RETRY_DELAY),
+      correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, secondEntry, NO_RETRY_DELAY),
+    ]);
+
+    const [firstRow] = await db.select().from(logEntries).where(eq(logEntries.id, firstLogId));
+    const [secondRow] = await db.select().from(logEntries).where(eq(logEntries.id, secondLogId));
+    const executorIds = [firstRow?.payload, secondRow?.payload].map(
+      (payload) => (payload as { executorId?: string }).executorId,
+    );
+    // どちらの行にも実行者が付き、同じ実行者が両方の行を奪うことはない(競り負けた側は別候補にリトライする)。
+    expect(executorIds).toContain("mod-1");
+    expect(executorIds).toContain("mod-2");
+  });
+
   test("MemberRoleUpdateで複数roleIdが遅延挿入されても、イベント全体で1回のリトライにまとまる", async () => {
     const entry: AuditLogEntryInfo = {
       id: randomUUID(),

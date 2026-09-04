@@ -140,8 +140,10 @@ function actionIn(candidates: readonly string[]): SQL {
  * 異なる操作が複数存在し得る(例: 同じユーザーへnicknameChange直後にtimeout)。
  * 単純に「最新の行」を選ぶと、後から届いた別操作の監査ログが先の行に誤って実行者を付けてしまうため、
  * 監査ログの発生時刻(auditAt)に最も近い行を優先する(codexレビュー指摘)。
+ * excludeIdsは、選んだ候補行への注釈(annotateRow)が他の並行イベントに競り負けた場合の
+ * リトライで、同じ行を選び直さないために使う(coderabbitレビュー指摘)。
  */
-async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id: string } | undefined> {
+async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: readonly string[]): Promise<{ id: string } | undefined> {
   const [match] = await db
     .select({ id: logEntries.id })
     .from(logEntries)
@@ -152,6 +154,7 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id
         gte(logEntries.createdAt, criteria.windowStart),
         lte(logEntries.createdAt, criteria.windowEnd),
         sql`NOT (${logEntries.payload} ? 'executorId')`,
+        ...(excludeIds.length > 0 ? [sql`${logEntries.id} NOT IN (${sql.join(excludeIds.map((id) => sql`${id}`), sql.raw(", "))})`] : []),
         ...criteria.extraConditions,
       ),
     )
@@ -160,38 +163,58 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria): Promise<{ id
   return match;
 }
 
-async function annotateRow(db: Db, id: string, executorId: string, rewriteAction?: string): Promise<void> {
+/**
+ * WHERE条件(該当id かつ executorId未設定)に一致した行があった場合のみUPDATEが成立する。
+ * 候補選択(findUnannotatedRow)からこのUPDATEまでの間に、並行する別イベントの
+ * annotateRowが同じ行を先に確定させていると0件更新になり得るため、戻り値のreturningで
+ * 実際に更新できたかを呼び出し元に返す(coderabbitレビュー指摘: 従来はここを見ずに
+ * 「候補が見つかった=相関成功」とみなしていたため、競り負けたジョブは実行者を失っていた)。
+ */
+async function annotateRow(db: Db, id: string, executorId: string, rewriteAction?: string): Promise<boolean> {
   const patch = rewriteAction
     ? sql`jsonb_build_object('executorId', ${executorId}::text, 'action', ${rewriteAction}::text)`
     : sql`jsonb_build_object('executorId', ${executorId}::text)`;
-  await db
+  const updated = await db
     .update(logEntries)
     .set({ payload: sql`${logEntries.payload} || ${patch}` })
-    .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`));
+    .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`))
+    .returning({ id: logEntries.id });
+  return updated.length > 0;
 }
 
 /**
- * jobsをまとめて1回だけ検索し、見つからなかった分だけ1回リトライする(codexレビュー指摘:
+ * 候補選択とannotateRowをセットで1回試し、失敗(候補なし、または競り負け)ならexcludeIdsに
+ * 競り負けた行を積んで呼び出し元へfalseを返す。
+ */
+async function claimRow(
+  db: Db,
+  executorId: string,
+  job: CorrelationJob,
+  excludeIds: string[],
+): Promise<boolean> {
+  const match = await findUnannotatedRow(db, job.criteria, excludeIds);
+  if (!match) return false;
+  const success = await annotateRow(db, match.id, executorId, job.rewriteAction);
+  if (!success) excludeIds.push(match.id);
+  return success;
+}
+
+/**
+ * jobsをまとめて1回だけ試行し、失敗した分(未着手・競り負け問わず)だけ1回リトライする(codexレビュー指摘:
  * MemberRoleUpdateでロール数ぶん直列に2秒待つと最大数十秒かかっていた不具合の修正。
  * イベント全体で「最大1回、2秒」のリトライに揃える)。
  */
 async function correlateJobs(db: Db, executorId: string, jobs: CorrelationJob[], retryDelayMs: number): Promise<void> {
   if (jobs.length === 0) return;
 
-  let matches = await Promise.all(jobs.map((job) => findUnannotatedRow(db, job.criteria)));
-  if (matches.some((match) => !match)) {
+  const excludeIds: string[][] = jobs.map(() => []);
+  let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, job, excludeIds[i]!)));
+  if (results.some((success) => !success)) {
     await delay(retryDelayMs);
-    matches = await Promise.all(
-      jobs.map((job, i) => matches[i] ?? findUnannotatedRow(db, job.criteria)),
+    results = await Promise.all(
+      jobs.map((job, i) => (results[i] ? Promise.resolve(true) : claimRow(db, executorId, job, excludeIds[i]!))),
     );
   }
-
-  await Promise.all(
-    jobs.map((job, i) => {
-      const match = matches[i];
-      return match ? annotateRow(db, match.id, executorId, job.rewriteAction) : undefined;
-    }),
-  );
 }
 
 /**
