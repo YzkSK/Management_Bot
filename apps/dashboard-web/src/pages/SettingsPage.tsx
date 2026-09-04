@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
+import { MAX_RETENTION_DAYS, parseRetentionDaysInput } from "./parse-retention-days.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const NO_CHANNEL = "__none__";
-const MAX_RETENTION_DAYS = 36_500;
 
 interface ChannelOption {
   id: string;
@@ -35,29 +35,34 @@ function RetentionInput({
 
   const mutation = useMutation({
     ...trpc.logging.setRetentionSetting.mutationOptions(),
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: trpc.logging.listRetentionSettings.queryOptions({ guildId }).queryKey }),
   });
 
   return (
-    <Input
-      type="number"
-      min={0}
-      max={MAX_RETENTION_DAYS}
-      className="w-28"
-      aria-label={`${CATEGORY_LABELS[category]}の保持期間(日)`}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        const parsed = Number(value);
-        const isValid = Number.isInteger(parsed) && parsed >= 0 && parsed <= MAX_RETENTION_DAYS;
-        if (isValid && parsed !== retentionDays) {
-          mutation.mutate({ guildId, category, retentionDays: parsed });
-        } else {
-          setValue(String(retentionDays));
-        }
-      }}
-    />
+    <div className="flex flex-col gap-1">
+      <Input
+        type="number"
+        min={0}
+        max={MAX_RETENTION_DAYS}
+        className="w-28"
+        aria-label={`${CATEGORY_LABELS[category]}の保持期間(日)`}
+        value={value}
+        disabled={mutation.isPending}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const parsed = parseRetentionDaysInput(value);
+          if (parsed === null) {
+            setValue(String(retentionDays));
+            return;
+          }
+          if (parsed !== retentionDays) {
+            mutation.mutate({ guildId, category, retentionDays: parsed });
+          }
+        }}
+      />
+      {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました</p>}
+    </div>
   );
 }
 
@@ -75,27 +80,31 @@ function ChannelSelect({
   const queryClient = useQueryClient();
   const mutation = useMutation({
     ...trpc.logging.setChannelSetting.mutationOptions(),
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: trpc.logging.listChannelSettings.queryOptions({ guildId }).queryKey }),
   });
 
   return (
-    <Select
-      value={channelId ?? NO_CHANNEL}
-      onValueChange={(value) => mutation.mutate({ guildId, category, channelId: value === NO_CHANNEL ? null : value })}
-    >
-      <SelectTrigger className="w-48" aria-label={`${CATEGORY_LABELS[category]}の出力先チャンネル`}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NO_CHANNEL}>未設定</SelectItem>
-        {options.map((option) => (
-          <SelectItem key={option.id} value={option.id}>
-            #{option.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-1">
+      <Select
+        value={channelId ?? NO_CHANNEL}
+        disabled={mutation.isPending}
+        onValueChange={(value) => mutation.mutate({ guildId, category, channelId: value === NO_CHANNEL ? null : value })}
+      >
+        <SelectTrigger className="w-48" aria-label={`${CATEGORY_LABELS[category]}の出力先チャンネル`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_CHANNEL}>未設定</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.id} value={option.id}>
+              #{option.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました</p>}
+    </div>
   );
 }
 
