@@ -1,0 +1,1 @@
+CREATE INDEX "log_entries_guild_created_at_id_idx" ON "log_entries" USING btree ("guild_id","created_at","id");

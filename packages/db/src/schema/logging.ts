@@ -28,6 +28,11 @@ export const logEntries = pgTable(
       table.category,
       table.createdAt,
     ),
+    index("log_entries_guild_created_at_id_idx").on(
+      table.guildId,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 

@@ -9,3 +9,19 @@ export { handleModerationEvent } from "./handle-moderation-event.js";
 export { purgeExpiredLogs, type PurgeExpiredLogsResult } from "./purge-expired-logs.js";
 export { correlateAuditLogEntry, type AuditLogEntryInfo } from "./correlate-audit-log-entry.js";
 export { findPendingPolls, type PendingPoll } from "./find-pending-polls.js";
+export {
+  listLogEntries,
+  maskSensitiveFields,
+  type ListLogEntriesInput,
+  type ListLogEntriesResult,
+} from "./list-log-entries.js";
+export {
+  listRetentionSettings,
+  setRetentionSetting,
+  type RetentionSetting,
+} from "./retention-settings.js";
+export {
+  listChannelSettings,
+  setChannelSetting,
+  type ChannelSetting,
+} from "./channel-settings.js";

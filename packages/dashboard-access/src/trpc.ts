@@ -9,6 +9,11 @@ export interface GuildMembership {
   roleIds: readonly string[];
 }
 
+export interface ChannelOption {
+  id: string;
+  name: string;
+}
+
 export interface DashboardAccessContext {
   db: Db;
   sessionId: string | undefined;
@@ -17,6 +22,14 @@ export interface DashboardAccessContext {
    * dashboard-api側でDiscord APIやキャッシュから供給する。
    */
   getGuildMembership: (guildId: string, discordUserId: string) => Promise<GuildMembership | null>;
+  /**
+   * guildId直下の、botがメッセージ送信可能なテキストチャンネル一覧を返す。
+   * Dashboard UIでのセレクター表示・チャンネルID設定時の実在検証に使う
+   * (IDの直接入力を禁止するため)。送信不可(権限不足・アナウンス専用等)の
+   * チャンネルを含めると、設定自体は成功してもログ配信が以後毎回失敗するため
+   * 実装側で送信可否まで絞り込むこと。dashboard-api側でDiscord APIやキャッシュから供給する。
+   */
+  getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();
@@ -75,6 +88,6 @@ export function requireCapability(cap: number) {
       throw new TRPCError({ code: "FORBIDDEN" });
     }
 
-    return next({ ctx });
+    return next({ ctx: { ...ctx, capabilities } });
   });
 }
