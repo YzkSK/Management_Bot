@@ -42,7 +42,11 @@ export function toMessageCreateLogEntry(
   };
 }
 
-/** 本文が変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。 */
+/**
+ * 本文が変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。
+ * oldMessageがpartial(contentが未取得でnull)の場合、実際は本文が変わっていなくても
+ * content比較が常に不一致になり誤ったupdateログを生成するため、比較前にスキップする。
+ */
 export function toMessageUpdateLogEntry(
   oldMessage: AnyMessage,
   newMessage: AnyMessage,
@@ -50,6 +54,7 @@ export function toMessageUpdateLogEntry(
 ): LogEntry | undefined {
   const base = baseFields(newMessage, botUserId);
   if (!base) return undefined;
+  if (oldMessage.partial) return undefined;
   if (oldMessage.content === newMessage.content) return undefined;
   return {
     category: "message",
