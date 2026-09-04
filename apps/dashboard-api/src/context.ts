@@ -6,42 +6,75 @@ import type {
 } from "@management-bot/dashboard-access";
 import { getSessionAccessToken, listMyGuilds } from "@management-bot/dashboard-access";
 import type { Db } from "@management-bot/db";
+import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
-import { fetchUserGuilds } from "./oauth/discord-client.js";
+import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
 
-/**
- * ギルド在籍確認はDiscord Gateway/APIキャッシュ(bot側)への問い合わせが必要だが、
- * そのRedis/RPC連携はPhase 1以降で機能パッケージと一緒に配線する。
- * Phase 0時点ではダッシュボードapp-routerが空のため実際には呼ばれないが、
- * 未在籍として扱う(null)ことでrequireCapabilityがFORBIDDENに倒すようにし、500化を防ぐ。
- */
-async function getGuildMembershipNotImplemented(): Promise<GuildMembership | null> {
-  return null;
-}
-
-/** getGuildMembershipNotImplemented同様、bot側との連携配線はPhase 1以降。空の選択肢として扱う。 */
+/** getGuildChannelsはbot側(Discord Gateway/APIキャッシュ)への問い合わせが必要で、そのRedis/RPC連携はPhase 1以降で機能パッケージと一緒に配線する。 */
 async function getGuildChannelsNotImplemented(): Promise<readonly ChannelOption[]> {
   return [];
 }
 
 /**
- * ログインユーザー自身のOAuth2アクセストークン(`identify guilds`スコープ)でDiscordの所属guild一覧を取得し、
- * bot導入済み(guildsテーブル)かつ管理者権限を持つものだけに絞り込む。
- * getGuildMembership/getGuildChannelsと異なりbot側RPCを必要としないため、Phase 0時点で実装できる。
+ * ログインユーザー自身のOAuth2アクセストークン(`identify guilds`スコープ)でDiscordの所属guild一覧を取得する。
+ * セッション切れ・未ログインは空配列/nullに倒し、Discord側でトークンが失効している場合はUNAUTHORIZEDを投げて
+ * フロントの再ログイン導線(AppのisUnauthorizedError)に乗せる。
+ * ponytail: リクエストごとにDiscord APIへ問い合わせておりキャッシュしない。ログ一覧のポーリング等で
+ * レート制限に触れるようならセッション単位の短命キャッシュを追加すること。
  */
-function createListMyGuilds(db: Db, sessionId: string | undefined, sessionSecret: string): () => Promise<readonly ManagedGuild[]> {
+async function fetchCurrentUserGuilds(
+  db: Db,
+  sessionId: string | undefined,
+  sessionSecret: string,
+): Promise<readonly DiscordUserGuild[] | null> {
+  if (!sessionId) {
+    return null;
+  }
+  const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
+  if (!accessToken) {
+    return null;
+  }
+  try {
+    return await fetchUserGuilds(accessToken);
+  } catch (error) {
+    if (error instanceof DiscordTokenInvalidError) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+    throw error;
+  }
+}
+
+function createListMyGuilds(
+  db: Db,
+  sessionId: string | undefined,
+  sessionSecret: string,
+): () => Promise<readonly ManagedGuild[]> {
   return async () => {
-    if (!sessionId) {
-      return [];
-    }
-    const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
-    if (!accessToken) {
-      return [];
-    }
-    const userGuilds = await fetchUserGuilds(accessToken);
-    return listMyGuilds(db, userGuilds);
+    const userGuilds = await fetchCurrentUserGuilds(db, sessionId, sessionSecret);
+    return userGuilds ? listMyGuilds(db, userGuilds) : [];
+  };
+}
+
+/**
+ * ダッシュボードの独自capability(VIEW_LOGS等)は、onboardGuild時に発行される
+ * オーナー(全capability)と@everyone(roleId===guildId、閲覧系ベースライン)の2種類の
+ * capabilityGrantに基づく。Discord本来のロール一覧までは取得しない(`guilds.members.read`
+ * スコープの追加同意が必要になるため)ので、実在確認できたguildについては
+ * 「オーナーかどうか」と「@everyoneロール(=在籍者全員)」のみを返す簡易実装とする。
+ * ponytail: 独自にcapability grantを個別付与されたユーザーの実ロールまでは反映しない。
+ * 必要になったら`guilds.members.read`スコープを追加してDiscordのロールIDを取得する。
+ */
+function createGetGuildMembership(
+  db: Db,
+  sessionId: string | undefined,
+  sessionSecret: string,
+): (guildId: string) => Promise<GuildMembership | null> {
+  return async (guildId) => {
+    const userGuilds = await fetchCurrentUserGuilds(db, sessionId, sessionSecret);
+    const membership = userGuilds?.find((guild) => guild.id === guildId);
+    return membership ? { isOwner: membership.owner, roleIds: [guildId] } : null;
   };
 }
 
@@ -59,7 +92,7 @@ export function createContext(
     const ctx: DashboardAccessContext = {
       db,
       sessionId,
-      getGuildMembership: getGuildMembershipNotImplemented,
+      getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
       getGuildChannels: getGuildChannelsNotImplemented,
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
     };

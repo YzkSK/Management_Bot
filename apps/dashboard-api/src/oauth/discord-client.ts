@@ -52,12 +52,15 @@ export async function fetchDiscordUserId(accessToken: string): Promise<string> {
   return user.id;
 }
 
+/** アクセストークンがDiscord側で失効・取り消し済み(401/403)。呼び出し元は再ログイン導線に倒すこと。 */
+export class DiscordTokenInvalidError extends Error {}
+
 const userGuildSchema = z.object({
   id: z.string(),
   name: z.string(),
   owner: z.boolean(),
   /** ビットフィールドを10進文字列で表す(discord.jsのPermissionsBitFieldと同様の理由でBigInt互換の文字列表現)。 */
-  permissions: z.string(),
+  permissions: z.string().regex(/^\d+$/, "permissions must be an unsigned decimal string"),
 });
 
 export type DiscordUserGuild = z.infer<typeof userGuildSchema>;
@@ -67,6 +70,9 @@ export async function fetchUserGuilds(accessToken: string): Promise<readonly Dis
   const response = await fetch(`${DISCORD_API_BASE}/users/@me/guilds`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+  if (response.status === 401 || response.status === 403) {
+    throw new DiscordTokenInvalidError();
+  }
   if (!response.ok) {
     throw new Error(`Discord user guilds fetch failed: ${response.status}`);
   }
