@@ -35,9 +35,11 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout discordUserId={me.data.discordUserId} />}>
+        <Route path="/" element={<Layout discordUserId={me.data.discordUserId} />}>
           <Route index element={<div>ようこそ</div>} />
-          <Route path="guilds/:guildId/logs" element={<LogListPage />} />
+        </Route>
+        <Route path="/guilds/:guildId" element={<Layout discordUserId={me.data.discordUserId} />}>
+          <Route path="logs" element={<LogListPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
