@@ -99,7 +99,10 @@ export function registerPollHandlers(ctx: FeatureModuleContext): void {
   });
   ctx.client.on("messageUpdate", (oldMessage, newMessage) => {
     const entry = toPollEndLogEntry(oldMessage, newMessage);
-    if (entry) writeLogEntrySafely(deps, entry);
+    // ready時のreconcilePendingPollと同じ`poll:end:${messageId}`をidに使い、
+    // 起動時再照合とmessageUpdateが同一pollのendを競合して検知してもDB上は1行にdedupする
+    // (coderabbitレビュー指摘: 別々のid(乱数)だと重複end記録・重複通知になる)。
+    if (entry) writeLogEntrySafely(deps, entry, `poll:end:${newMessage.id}`);
   });
   registerPollReconciliation(ctx, deps);
 }

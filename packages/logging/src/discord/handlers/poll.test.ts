@@ -66,6 +66,33 @@ describe("toPollEndLogEntry", () => {
   });
 });
 
+describe("messageUpdateでのpoll end記録", () => {
+  test("reconcilePendingPollと同じ`poll:end:${messageId}`をidに使い、起動時再照合と競合してもDBで1行にdedupされる", async () => {
+    const inserts: { id: string }[] = [];
+    const db = {
+      insert: () => ({
+        values: (values: { id: string }) => {
+          inserts.push(values);
+          return { onConflictDoNothing: () => Promise.resolve() };
+        },
+      }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    } as unknown as Db;
+    const on = mock((_event: string, listener: (...args: unknown[]) => void) => {
+      if (_event === "messageUpdate") {
+        listener(fakeMessage({ poll: { resultsFinalized: false } }), fakeMessage({ poll: { resultsFinalized: true } }));
+      }
+    });
+    const ctx = { client: { on, once: mock(() => undefined) }, db } as unknown as FeatureModuleContext;
+
+    registerPollHandlers(ctx);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].id).toBe("poll:end:m1");
+  });
+});
+
 describe("registerPollHandlers", () => {
   test("messageCreate/messageUpdateをclient.onに登録し、readyでの再照合をclient.onceに登録する", () => {
     const on = mock(() => undefined);
