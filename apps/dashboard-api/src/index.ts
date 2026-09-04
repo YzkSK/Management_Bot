@@ -14,6 +14,7 @@ const dashboardEnvSchema = envSchema.pick({
   DISCORD_OAUTH_REDIRECT_URI: true,
   DASHBOARD_WEB_URL: true,
   SESSION_SECRET: true,
+  DISCORD_TOKEN: true,
 });
 
 const env = parseEnv(dashboardEnvSchema);
@@ -41,7 +42,7 @@ app.use(
   "/trpc/*",
   trpcServer({
     router: appRouter,
-    createContext: createContext(db, env.SESSION_SECRET),
+    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN),
   }),
 );
 

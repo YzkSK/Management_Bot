@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_OPTIONS, CATEGORY_LABELS } from "./category-labels.js";
@@ -43,7 +43,12 @@ export function LogListPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">ログ一覧</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">ログ一覧</h1>
+        <Button asChild variant="outline">
+          <Link to={`/guilds/${guildId}/logs/settings`}>設定</Link>
+        </Button>
+      </div>
 
       <Select
         value={category === "" ? ALL_CATEGORIES : category}
