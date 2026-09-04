@@ -104,7 +104,14 @@ export function LogListPage() {
                       <TableCell>{summary.action ?? "-"}</TableCell>
                       <TableCell>{summary.executorId ?? "-"}</TableCell>
                       <TableCell>
-                        <pre className="text-muted-foreground text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
+                        {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
+                        {Object.keys(summary.details).length > 0 && (
+                          <details>
+                            <summary className="text-muted-foreground cursor-pointer text-xs">詳細</summary>
+                            <pre className="text-muted-foreground mt-1 text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
+                          </details>
+                        )}
+                        {!summary.content && Object.keys(summary.details).length === 0 && "-"}
                       </TableCell>
                     </TableRow>
                   );

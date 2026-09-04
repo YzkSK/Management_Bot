@@ -131,6 +131,17 @@ export const moderationCaseLogEntrySchema = z.object({
   actionType: z.enum(MODERATION_ACTION_TYPES),
 });
 
+export const voiceLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("voice"),
+  userId: nonEmptyString,
+  /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
+  channelId: nonEmptyString,
+  /** action=moveの場合のみ、移動元のチャンネルID。 */
+  previousChannelId: nonEmptyString.optional(),
+  action: z.enum(["join", "leave", "move"]),
+});
+
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
   member: memberLogEntrySchema,
@@ -147,6 +158,7 @@ export const LOG_ENTRY_SCHEMAS = {
   stage: stageLogEntrySchema,
   auditLogCorrelation: auditLogCorrelationEntrySchema,
   moderationCase: moderationCaseLogEntrySchema,
+  voice: voiceLogEntrySchema,
 } as const;
 
 export type LogCategory = keyof typeof LOG_ENTRY_SCHEMAS;

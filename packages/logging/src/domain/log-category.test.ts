@@ -121,6 +121,14 @@ const validByCategory = {
     action: "create",
     actionType: "warn",
   },
+  voice: {
+    category: "voice",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    userId: "2",
+    channelId: "3",
+    action: "join",
+  },
 } satisfies Record<LogCategory, unknown>;
 
 describe("logEntrySchema", () => {

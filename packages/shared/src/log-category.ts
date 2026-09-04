@@ -14,6 +14,7 @@ export const LOG_CATEGORIES = [
   "stage",
   "auditLogCorrelation",
   "moderationCase",
+  "voice",
 ] as const;
 
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
