@@ -3,7 +3,7 @@ import { createDb, guilds, logEntries } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
-import { listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
+import { decodeCursor, encodeCursor, listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -72,7 +72,7 @@ describe("listLogEntries", () => {
     expect(result.entries[0]?.entry.category).toBe("member");
   });
 
-  test("createdAt降順で返し、limitと同数返った場合はnextCursorを返す", async () => {
+  test("createdAt降順で返し、まだ後続がある場合のみnextCursorを返す", async () => {
     await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
     await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");
     await insert(memberEntry({ userId: "u3" }), "2026-08-31T00:00:02.000Z");
@@ -83,7 +83,18 @@ describe("listLogEntries", () => {
       "u3",
       "u2",
     ]);
-    expect(result.nextCursor).toBe("2026-08-31T00:00:01.000Z");
+    expect(result.nextCursor).not.toBeNull();
+    expect(decodeCursor(result.nextCursor!).createdAt).toBe("2026-08-31T00:00:01.000Z");
+  });
+
+  test("残件がちょうどlimit件でも、それ以上残っていなければnextCursorはnull", async () => {
+    await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
+    await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");
+
+    const result = await listLogEntries(db, { guildId, limit: 2 });
+
+    expect(result.entries).toHaveLength(2);
+    expect(result.nextCursor).toBeNull();
   });
 
   test("limit未満しか返らない場合はnextCursorがnull", async () => {
@@ -101,11 +112,31 @@ describe("listLogEntries", () => {
     const result = await listLogEntries(db, {
       guildId,
       limit: 50,
-      cursor: "2026-08-31T00:00:01.000Z",
+      cursor: encodeCursor({
+        createdAt: "2026-08-31T00:00:01.000Z",
+        id: "00000000-0000-0000-0000-000000000000",
+      }),
     });
 
     expect(result.entries).toHaveLength(1);
     expect((result.entries[0]?.entry as { userId: string }).userId).toBe("u1");
+  });
+
+  test("同一createdAtのエントリはidの降順で欠落・重複なく分割される", async () => {
+    await insert(memberEntry({ userId: "u1" }), "2026-08-31T00:00:00.000Z");
+    await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:00.000Z");
+    await insert(memberEntry({ userId: "u3" }), "2026-08-31T00:00:00.000Z");
+
+    const page1 = await listLogEntries(db, { guildId, limit: 2 });
+    expect(page1.entries).toHaveLength(2);
+    expect(page1.nextCursor).not.toBeNull();
+
+    const page2 = await listLogEntries(db, { guildId, limit: 2, cursor: page1.nextCursor! });
+    expect(page2.entries).toHaveLength(1);
+    expect(page2.nextCursor).toBeNull();
+
+    const seenIds = [...page1.entries, ...page2.entries].map((e) => e.id);
+    expect(new Set(seenIds).size).toBe(3);
   });
 });
 
