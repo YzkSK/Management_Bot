@@ -36,12 +36,7 @@ try {
     eventBusFor: (feature) => eventBuses.get(feature.key)!,
   });
 
-  client.once("ready", (readyClient) => {
-    console.log(`Logged in as ${readyClient.user.tag}`);
-    console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
-  });
-
-  client.on("guildCreate", (guild) => {
+  const onboard = (guild: { id: string; name: string; ownerId: string }) => {
     const task = onboardGuild(db, {
       guildId: guild.id,
       guildName: guild.name,
@@ -51,7 +46,18 @@ try {
     });
     pendingOnboardings.add(task);
     void task.finally(() => pendingOnboardings.delete(task));
+  };
+
+  client.once("ready", (readyClient) => {
+    console.log(`Logged in as ${readyClient.user.tag}`);
+    console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
+    // guildCreateは新規参加時のみ発火するため、起動時点で既に参加済みのguildはここで同期する。
+    for (const guild of readyClient.guilds.cache.values()) {
+      onboard(guild);
+    }
   });
+
+  client.on("guildCreate", (guild) => onboard(guild));
 
   await client.login(env.DISCORD_TOKEN);
 } catch (error) {
