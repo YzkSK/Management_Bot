@@ -27,9 +27,9 @@ function fakeDb(options: {
   const { inserts, updates, selectResult = [], updateSucceeds = true } = options;
   return {
     insert: (table: unknown) => ({
-      values: (values: unknown) => {
+      values: (values: { id: string }) => {
         inserts.push({ table, values });
-        return { onConflictDoNothing: () => Promise.resolve() };
+        return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: values.id }]) }) };
       },
     }),
     select: () => ({
@@ -233,9 +233,9 @@ describe("correlateAuditLogEntry", () => {
     let selectCallCount = 0;
     const db = {
       insert: () => ({
-        values: (values: unknown) => {
+        values: (values: { id: string }) => {
           inserts.push({ table: undefined, values });
-          return { onConflictDoNothing: () => Promise.resolve() };
+          return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: values.id }]) }) };
         },
       }),
       select: () => ({
