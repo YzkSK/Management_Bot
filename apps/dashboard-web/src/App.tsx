@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
+import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -43,7 +44,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout discordUserId={me.data.discordUserId} />}>
-          <Route index element={<div>ようこそ</div>} />
+          <Route index element={<GuildListPage />} />
         </Route>
         <Route path="/guilds/:guildId" element={<Layout discordUserId={me.data.discordUserId} />}>
           <Route path="logs" element={<LogListPage />} />

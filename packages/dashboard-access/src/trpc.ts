@@ -14,9 +14,19 @@ export interface ChannelOption {
   name: string;
 }
 
+export interface ManagedGuild {
+  id: string;
+  name: string;
+}
+
 export interface DashboardAccessContext {
   db: Db;
   sessionId: string | undefined;
+  /**
+   * ログインユーザーが管理者権限(オーナーまたはMANAGE_GUILD)を持ち、かつbotが導入済みのguild一覧を返す。
+   * Dashboardのサーバー選択画面で使う。dashboard-api側でDiscord APIから供給する。
+   */
+  listMyGuilds: () => Promise<readonly ManagedGuild[]>;
   /**
    * guildIdにおけるdiscordUserIdの在籍状態を返す。非在籍(脱退・キック済み等)はnull。
    * dashboard-api側でDiscord APIやキャッシュから供給する。
