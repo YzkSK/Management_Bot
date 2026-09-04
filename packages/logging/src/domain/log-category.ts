@@ -131,16 +131,20 @@ export const moderationCaseLogEntrySchema = z.object({
   actionType: z.enum(MODERATION_ACTION_TYPES),
 });
 
-export const voiceLogEntrySchema = z.object({
+const voiceBase = {
   ...base,
   category: z.literal("voice"),
   userId: nonEmptyString,
   /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
   channelId: nonEmptyString,
-  /** action=moveの場合のみ、移動元のチャンネルID。 */
-  previousChannelId: nonEmptyString.optional(),
-  action: z.enum(["join", "leave", "move"]),
-});
+};
+
+/** previousChannelId(移動元)はaction=moveの場合のみ必須にする(join/leaveでは持たせない)。 */
+export const voiceLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({ ...voiceBase, action: z.literal("join") }),
+  z.object({ ...voiceBase, action: z.literal("leave") }),
+  z.object({ ...voiceBase, action: z.literal("move"), previousChannelId: nonEmptyString }),
+]);
 
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
