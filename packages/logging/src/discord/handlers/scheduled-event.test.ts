@@ -1,0 +1,72 @@
+import { describe, expect, mock, test } from "bun:test";
+import type { FeatureModuleContext } from "@management-bot/core";
+import {
+  registerScheduledEventHandlers,
+  toScheduledEventCreateLogEntry,
+  toScheduledEventDeleteLogEntry,
+  toScheduledEventUpdateLogEntry,
+} from "./scheduled-event.js";
+
+function fakeEvent(status: "scheduled" | "active" | "completed" | "canceled" = "scheduled", id = "e1") {
+  return {
+    id,
+    guildId: "g1",
+    status,
+    isActive: () => status === "active",
+    isCompleted: () => status === "completed",
+    isCanceled: () => status === "canceled",
+  } as never;
+}
+
+function fakePartialEvent(id = "e1") {
+  return {
+    id,
+    guildId: "g1",
+    status: null,
+    isActive: () => false,
+    isCompleted: () => false,
+    isCanceled: () => false,
+  } as never;
+}
+
+describe("scheduled-event category mappers", () => {
+  test("create", () => expect(toScheduledEventCreateLogEntry(fakeEvent()).action).toBe("create"));
+  test("delete", () => expect(toScheduledEventDeleteLogEntry(fakeEvent()).action).toBe("delete"));
+
+  test("update: scheduled→activeはstart", () => {
+    expect(toScheduledEventUpdateLogEntry(fakeEvent("scheduled"), fakeEvent("active")).action).toBe("start");
+  });
+
+  test("update: active→completedはcomplete", () => {
+    expect(toScheduledEventUpdateLogEntry(fakeEvent("active"), fakeEvent("completed")).action).toBe("complete");
+  });
+
+  test("update: scheduled→canceledはcancel", () => {
+    expect(toScheduledEventUpdateLogEntry(fakeEvent("scheduled"), fakeEvent("canceled")).action).toBe("cancel");
+  });
+
+  test("update: statusが変わらない編集(日時変更等)はupdate", () => {
+    expect(toScheduledEventUpdateLogEntry(fakeEvent("active"), fakeEvent("active")).action).toBe("update");
+  });
+
+  test("update: oldEventがnull(前状態不明)なら遷移とは判定せずupdateにする", () => {
+    expect(toScheduledEventUpdateLogEntry(null, fakeEvent("active")).action).toBe("update");
+  });
+
+  test("update: oldEventがpartialでstatus不明(null)なら遷移とは判定せずupdateにする", () => {
+    expect(toScheduledEventUpdateLogEntry(fakePartialEvent(), fakeEvent("active")).action).toBe("update");
+  });
+});
+
+describe("registerScheduledEventHandlers", () => {
+  test("必要な3イベントをclient.onに登録する", () => {
+    const on = mock(() => undefined);
+    const ctx = { client: { on }, db: {} } as unknown as FeatureModuleContext;
+
+    registerScheduledEventHandlers(ctx);
+
+    expect(on.mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining(["guildScheduledEventCreate", "guildScheduledEventDelete", "guildScheduledEventUpdate"]),
+    );
+  });
+});

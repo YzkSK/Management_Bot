@@ -17,12 +17,18 @@ function fakeDb(
   inserts: RecordedInsert[],
   channelSetting: { channelId: string } | undefined,
   captureWhere?: (condition: SQL | undefined) => void,
+  /** falseにすると、insertが既存行との競合で0件になったこと(onConflictDoNothingが実際に発動)をシミュレートする。 */
+  insertSucceeds = true,
 ): Db {
   return {
     insert: (table: unknown) => ({
       values: (values: unknown) => {
         inserts.push({ table, values });
-        return { onConflictDoNothing: () => Promise.resolve() };
+        return {
+          onConflictDoNothing: () => ({
+            returning: () => Promise.resolve(insertSucceeds ? [{ id: (values as { id: string }).id }] : []),
+          }),
+        };
       },
     }),
     select: () => ({
@@ -114,6 +120,24 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, memberJoinEntry, "fixed-entry-id");
 
     expect(inserts[0]?.values).toMatchObject({ id: "fixed-entry-id" });
+  });
+
+  test("skipNotifyIfExists=trueで、既に同一idの行が存在する(insertが競合で0件)場合は送信しない", async () => {
+    const db = fakeDb([], { channelId: "c1" }, undefined, false);
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id", true);
+
+    expect(sendToChannel).not.toHaveBeenCalled();
+  });
+
+  test("skipNotifyIfExists=trueでも、insertが新規行として成功していれば送信する", async () => {
+    const db = fakeDb([], { channelId: "c1" }, undefined, true);
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id", true);
+
+    expect(sendToChannel).toHaveBeenCalledTimes(1);
   });
 
   test("初回送信が失敗しても同一idで再実行すれば送信される(DB保存済みでも永久欠落しない)", async () => {

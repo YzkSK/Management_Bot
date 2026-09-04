@@ -42,4 +42,14 @@ describe("writeLogEntry (実DB, onConflictDoNothingの実挙動を検証)", () =
     expect(rows).toHaveLength(1);
     expect(sendToChannel).toHaveBeenCalledTimes(2);
   });
+
+  test("skipNotifyIfExists=trueだと、同一idで既に保存済みの場合は再実行時に送信しない", async () => {
+    const sendToChannel = mock(() => Promise.resolve());
+    const id = randomUUID();
+
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, id, true);
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, id, true);
+
+    expect(sendToChannel).toHaveBeenCalledTimes(1);
+  });
 });
