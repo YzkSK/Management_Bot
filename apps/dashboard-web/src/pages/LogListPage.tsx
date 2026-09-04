@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_OPTIONS, CATEGORY_LABELS } from "./category-labels.js";
+import { formatCreatedAt } from "./format-created-at.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
 import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
 
@@ -15,14 +16,15 @@ export function LogListPage() {
   const [category, setCategory] = useState<LogCategory | "">("");
   const [pagination, setPagination] = useState(INITIAL_PAGINATION);
 
-  const logsQuery = useQuery(
-    trpc.logging.listLogEntries.queryOptions({
+  const logsQuery = useQuery({
+    ...trpc.logging.listLogEntries.queryOptions({
       guildId: guildId ?? "",
       category: category === "" ? undefined : category,
       limit: PAGE_SIZE,
       cursor: currentCursor(pagination),
     }),
-  );
+    enabled: Boolean(guildId),
+  });
 
   if (!guildId) {
     return <div role="alert">サーバーが指定されていません。</div>;
@@ -57,19 +59,24 @@ export function LogListPage() {
 
       {logsQuery.data && (
         <>
-          <ul>
-            {logsQuery.data.entries.map(({ id, entry }) => {
-              const summary = summarizeLogEntry(entry);
-              return (
-                <li key={id}>
-                  <time>{summary.createdAt}</time> [{CATEGORY_LABELS[entry.category]}]
-                  {summary.action && ` ${summary.action}`}
-                  {summary.executorId && ` by ${summary.executorId}`}
-                  <pre>{JSON.stringify(summary.details)}</pre>
-                </li>
-              );
-            })}
-          </ul>
+          {logsQuery.data.entries.length === 0 ? (
+            <p>該当するログはありません。</p>
+          ) : (
+            <ul>
+              {logsQuery.data.entries.map(({ id, entry }) => {
+                const summary = summarizeLogEntry(entry);
+                return (
+                  <li key={id}>
+                    <time dateTime={summary.createdAt}>{formatCreatedAt(summary.createdAt)}</time> [
+                    {CATEGORY_LABELS[entry.category]}]
+                    {summary.action && ` ${summary.action}`}
+                    {summary.executorId && ` by ${summary.executorId}`}
+                    <pre>{JSON.stringify(summary.details, null, 2)}</pre>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <button type="button" disabled={pagination.pageIndex === 0} onClick={() => setPagination(goPrevPage(pagination))}>
             前へ
           </button>
