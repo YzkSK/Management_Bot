@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { API_URL, trpc } from "./trpc.js";
-import { Sidebar } from "./Sidebar.js";
+import { Layout } from "./Layout.js";
+import { LogListPage } from "./pages/LogListPage.js";
 
 export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED";
@@ -31,9 +33,13 @@ export function App() {
   }
 
   return (
-    <div style={{ display: "flex" }}>
-      <Sidebar />
-      <main>ようこそ</main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout discordUserId={me.data.discordUserId} />}>
+          <Route index element={<div>ようこそ</div>} />
+          <Route path="guilds/:guildId/logs" element={<LogListPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
