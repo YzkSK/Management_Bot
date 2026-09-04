@@ -23,9 +23,11 @@ export interface DashboardAccessContext {
    */
   getGuildMembership: (guildId: string, discordUserId: string) => Promise<GuildMembership | null>;
   /**
-   * guildId直下のテキストチャンネル一覧を返す。Dashboard UIでのセレクター表示・
-   * チャンネルID設定時の実在検証に使う(IDの直接入力を禁止するため)。
-   * dashboard-api側でDiscord APIやキャッシュから供給する。
+   * guildId直下の、botがメッセージ送信可能なテキストチャンネル一覧を返す。
+   * Dashboard UIでのセレクター表示・チャンネルID設定時の実在検証に使う
+   * (IDの直接入力を禁止するため)。送信不可(権限不足・アナウンス専用等)の
+   * チャンネルを含めると、設定自体は成功してもログ配信が以後毎回失敗するため
+   * 実装側で送信可否まで絞り込むこと。dashboard-api側でDiscord APIやキャッシュから供給する。
    */
   getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
 }

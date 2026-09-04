@@ -23,10 +23,13 @@ const guildIdInput = z.object({
   guildId: z.string().min(1),
 });
 
+/** 100年。無期限保存(0)以外の実運用上限として設定し、DBのinteger範囲外の値を弾く。 */
+const MAX_RETENTION_DAYS = 36_500;
+
 const setRetentionSettingInput = z.object({
   guildId: z.string().min(1),
   category: z.enum(LOG_CATEGORIES),
-  retentionDays: z.number().int().min(0),
+  retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
 const setChannelSettingInput = z.object({

@@ -1,5 +1,13 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { createDb, capabilityGrants, guilds, logEntries, sessions } from "@management-bot/db";
+import {
+  createDb,
+  capabilityGrants,
+  guilds,
+  logChannelSettings,
+  logEntries,
+  logRetentionSettings,
+  sessions,
+} from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import {
   createCallerFactory,
@@ -125,8 +133,21 @@ async function grantManageLoggingSettings(): Promise<void> {
   });
 }
 
+/**
+ * expect(promise).rejects.toThrow()はmutation呼び出しに対してbun:testがハングする
+ * 既知の相性問題があるため、try/catchで代替する。
+ */
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+    return undefined;
+  } catch (e) {
+    return e;
+  }
+}
+
 describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
-  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(list)", async () => {
     const caller = createCaller({
       db,
       sessionId: "session-1",
@@ -135,6 +156,27 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
     });
 
     await expect(caller.listRetentionSettings({ guildId })).rejects.toThrow();
+  });
+
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(set)", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    const thrown = await captureRejection(
+      caller.setRetentionSetting({ guildId, category: "message", retentionDays: 30 }),
+    );
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+    const rows = await db
+      .select()
+      .from(logRetentionSettings)
+      .where(eq(logRetentionSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
   });
 
   test("設定の取得・更新ができる", async () => {
@@ -154,7 +196,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
 });
 
 describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOptions", () => {
-  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(list)", async () => {
     const caller = createCaller({
       db,
       sessionId: "session-1",
@@ -163,6 +205,38 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
     });
 
     await expect(caller.listChannelSettings({ guildId })).rejects.toThrow();
+  });
+
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(listChannelOptions)", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    await expect(caller.listChannelOptions({ guildId })).rejects.toThrow();
+  });
+
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(set)", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    const thrown = await captureRejection(
+      caller.setChannelSetting({ guildId, category: "message", channelId: "c1" }),
+    );
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+    const rows = await db
+      .select()
+      .from(logChannelSettings)
+      .where(eq(logChannelSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
   });
 
   test("listChannelOptionsはgetGuildChannelsの結果を返す", async () => {
@@ -206,14 +280,16 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
     });
 
-    // 注: expect(promise).rejects.toThrow()はこのmutation呼び出しに対してbun:testが
-    // ハングする既知の相性問題があるため、try/catchで代替している。
-    let thrown: unknown;
-    try {
-      await caller.setChannelSetting({ guildId, category: "message", channelId: "nonexistent" });
-    } catch (e) {
-      thrown = e;
-    }
+    const thrown = await captureRejection(
+      caller.setChannelSetting({ guildId, category: "message", channelId: "nonexistent" }),
+    );
+
     expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("BAD_REQUEST");
+    const rows = await db
+      .select()
+      .from(logChannelSettings)
+      .where(eq(logChannelSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
   });
 });
