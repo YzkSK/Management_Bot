@@ -75,6 +75,6 @@ export function requireCapability(cap: number) {
       throw new TRPCError({ code: "FORBIDDEN" });
     }
 
-    return next({ ctx });
+    return next({ ctx: { ...ctx, capabilities } });
   });
 }
