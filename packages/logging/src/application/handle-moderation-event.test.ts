@@ -11,9 +11,9 @@ interface RecordedInsert {
 function fakeDb(inserts: RecordedInsert[], channelSetting: { channelId: string } | undefined): Db {
   return {
     insert: () => ({
-      values: (values: unknown) => {
+      values: (values: { id: string }) => {
         inserts.push({ values });
-        return { onConflictDoNothing: () => Promise.resolve() };
+        return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: values.id }]) }) };
       },
     }),
     select: () => ({
@@ -80,7 +80,7 @@ describe("handleModerationEvent", () => {
         inserts.push({ table });
         return {
           values: () => ({
-            onConflictDoNothing: () => Promise.resolve(),
+            onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "x" }]) }),
           }),
         };
       },
