@@ -19,8 +19,10 @@ export const messageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   authorId: nonEmptyString,
-  action: z.enum(["create", "update", "delete", "bulkDelete"]),
+  action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
+  /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
+  messageId: nonEmptyString.optional(),
 });
 
 export const reactionLogEntrySchema = z.object({
