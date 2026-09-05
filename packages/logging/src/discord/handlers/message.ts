@@ -19,11 +19,18 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  * fail-open(botUserId===undefinedを「誰とも一致しない」として扱う)にすると
  * 自Bot判定が常にfalseになり無限連鎖防止という本来の目的が壊れるため避ける(セキュリティレビュー指摘)。
  */
+/**
+ * excludeBotAuthor: pinログは「投稿の作成」ではなく「ピン状態の変更」を記録するものであり、
+ * ログ送信メッセージがピン留めされて無限連鎖する経路もないため、自Bot投稿の除外は不要
+ * (むしろBotの告知等を管理者がピン留めした操作を記録できなくなってしまう、codexレビュー指摘)。
+ */
 function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
+  excludeBotAuthor = true,
 ): { guildId: string; channelId: string; authorId: string } | undefined {
-  if (!message.guildId || !message.author || !botUserId || message.author.id === botUserId) return undefined;
+  if (!message.guildId || !message.author) return undefined;
+  if (excludeBotAuthor && (!botUserId || message.author.id === botUserId)) return undefined;
   return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
 }
 
@@ -75,12 +82,13 @@ export function toMessagePinLogEntry(
   newMessage: AnyMessage,
   botUserId: string | undefined,
 ): LogEntry | undefined {
-  const base = baseFields(newMessage, botUserId);
+  const base = baseFields(newMessage, botUserId, false);
   if (!base) return undefined;
   if (oldMessage.partial || oldMessage.pinned === newMessage.pinned) return undefined;
   return {
     category: "message",
     ...base,
+    messageId: newMessage.id,
     createdAt: new Date().toISOString(),
     action: newMessage.pinned ? "pin" : "unpin",
   };

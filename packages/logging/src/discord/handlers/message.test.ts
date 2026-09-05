@@ -13,6 +13,7 @@ const BOT_USER_ID = "bot1";
 
 function fakeMessage(
   overrides: Partial<{
+    id: string;
     guildId: string | null;
     author: { id: string } | null;
     channelId: string;
@@ -22,6 +23,7 @@ function fakeMessage(
   }> = {},
 ) {
   return {
+    id: "m1",
     guildId: "g1",
     author: { id: "u1" },
     channelId: "c1",
@@ -94,8 +96,22 @@ describe("toMessageUpdateLogEntry", () => {
 });
 
 describe("toMessagePinLogEntry", () => {
-  test("pinned: false→trueでpinエントリを返す", () => {
-    const entry = toMessagePinLogEntry(fakeMessage({ pinned: false }), fakeMessage({ pinned: true }), BOT_USER_ID);
+  test("pinned: false→trueでpinエントリを返す(対象メッセージIDを含む)", () => {
+    const entry = toMessagePinLogEntry(
+      fakeMessage({ id: "m1", pinned: false }),
+      fakeMessage({ id: "m1", pinned: true }),
+      BOT_USER_ID,
+    );
+    expect(entry?.action).toBe("pin");
+    expect(entry && "messageId" in entry ? entry.messageId : undefined).toBe("m1");
+  });
+
+  test("自Bot投稿のピン留めも記録する(pinログは投稿者ではなくピン状態の変更を記録するため除外しない)", () => {
+    const entry = toMessagePinLogEntry(
+      fakeMessage({ author: { id: BOT_USER_ID }, pinned: false }),
+      fakeMessage({ author: { id: BOT_USER_ID }, pinned: true }),
+      BOT_USER_ID,
+    );
     expect(entry?.action).toBe("pin");
   });
 
