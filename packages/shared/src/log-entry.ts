@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { LOG_CATEGORIES, MODERATION_ACTION_TYPES } from "@management-bot/shared";
+import { LOG_CATEGORIES } from "./log-category.js";
+import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 
 const nonEmptyString = z.string().min(1);
 

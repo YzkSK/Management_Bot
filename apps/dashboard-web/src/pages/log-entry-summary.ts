@@ -1,4 +1,4 @@
-import { getLogEntrySubjectId, type LogEntry } from "@management-bot/logging";
+import { getLogEntrySubjectId, getLogEntrySubjectField, type LogEntry } from "@management-bot/shared";
 
 export interface LogEntrySummary {
   category: string;
@@ -16,7 +16,9 @@ const BASE_FIELDS = new Set(["category", "createdAt", "executorId", "guildId"]);
 
 /** カテゴリごとに形の異なるLogEntryを、一覧表示用の共通形式に変換する。 */
 export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
-  const subjectId = ("executorId" in entry ? entry.executorId : undefined) ?? getLogEntrySubjectId(entry);
+  const executorId = "executorId" in entry ? entry.executorId : undefined;
+  const subjectId = executorId ?? getLogEntrySubjectId(entry);
+  const subjectField = executorId !== undefined ? "executorId" : getLogEntrySubjectField(entry);
   const details: Record<string, unknown> = {};
   let action: string | null = null;
   let content: string | null = null;
@@ -29,7 +31,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
       content = value;
       continue;
     }
-    if (!BASE_FIELDS.has(key) && value !== subjectId) {
+    if (!BASE_FIELDS.has(key) && key !== subjectField) {
       details[key] = value;
     }
   }

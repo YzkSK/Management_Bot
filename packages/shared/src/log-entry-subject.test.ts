@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { getLogEntrySubjectId } from "./log-entry-subject.js";
-import type { LogEntry } from "./log-category.js";
+import type { LogEntry } from "./log-entry.js";
 
 describe("getLogEntrySubjectId", () => {
   test("messageはauthorIdを返す", () => {

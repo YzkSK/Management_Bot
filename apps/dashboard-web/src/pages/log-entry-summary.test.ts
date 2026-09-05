@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { summarizeLogEntry } from "./log-entry-summary.js";
-import type { LogEntry } from "@management-bot/logging";
+import type { LogEntry } from "@management-bot/shared";
 
 describe("summarizeLogEntry", () => {
   test("executorIdがあればexecutorIdをsubjectIdとして使う", () => {
@@ -81,5 +81,40 @@ describe("summarizeLogEntry", () => {
     } as unknown as LogEntry;
 
     expect(summarizeLogEntry(entry).content).toBeNull();
+  });
+
+  test("executorIdとカテゴリ固有主体IDの値が偶然一致してもdetailsからはフィールド名で判定して除外する(値ではなくキーで比較)", () => {
+    // roleのmemberAdd: subjectIdはuserId由来だが、自己付与(executorId===userId)だとexecutorIdが優先される。
+    // このときuserIdはsubjectIdと値が同じでも、フィールドとしては別物なのでdetailsに残るべき。
+    const entry = {
+      category: "role",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      executorId: "u1",
+      roleId: "r1",
+      userId: "u1",
+      action: "memberAdd",
+    } as unknown as LogEntry;
+
+    const summary = summarizeLogEntry(entry);
+
+    expect(summary.subjectId).toBe("u1");
+    expect(summary.details).toEqual({ roleId: "r1", userId: "u1" });
+  });
+
+  test("executorIdとカテゴリ固有主体IDの両方がある場合はexecutorIdが優先される", () => {
+    const entry = {
+      category: "message",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      channelId: "c1",
+      authorId: "a1",
+      executorId: "mod1",
+      action: "delete",
+    } as unknown as LogEntry;
+
+    const summary = summarizeLogEntry(entry);
+
+    expect(summary.subjectId).toBe("mod1");
   });
 });

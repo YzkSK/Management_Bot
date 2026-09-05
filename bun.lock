@@ -75,7 +75,6 @@
       "name": "@management-bot/dashboard-web",
       "version": "0.0.0",
       "dependencies": {
-        "@management-bot/logging": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@radix-ui/react-select": "^2.3.7",
         "@radix-ui/react-slot": "^1.3.3",
