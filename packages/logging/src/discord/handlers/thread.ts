@@ -1,5 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
-import type { AnyThreadChannel } from "discord.js";
+import type { AnyThreadChannel, PartialThreadMember, ReadonlyCollection, Snowflake, ThreadMember } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
 import type { WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
@@ -37,6 +37,28 @@ export function toThreadUpdateLogEntry(oldThread: AnyThreadChannel, newThread: A
   return { category: "thread", ...base, createdAt: new Date().toISOString(), action };
 }
 
+/**
+ * role.tsのtoRoleMembershipLogEntries(memberAdd/memberRemove)と同じパターンで、
+ * threadMembersUpdateのaddedMembers/removedMembersを対象メンバーごとのLogEntryに変換する。
+ */
+export function toThreadMembershipLogEntries(
+  addedMembers: ReadonlyCollection<Snowflake, ThreadMember>,
+  removedMembers: ReadonlyCollection<Snowflake, ThreadMember | PartialThreadMember>,
+  thread: AnyThreadChannel,
+): LogEntry[] {
+  const base = baseFields(thread);
+  if (!base) return [];
+  const createdAt = new Date().toISOString();
+  const entries: LogEntry[] = [];
+  for (const userId of addedMembers.keys()) {
+    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberAdd" });
+  }
+  for (const userId of removedMembers.keys()) {
+    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberRemove" });
+  }
+  return entries;
+}
+
 export function registerThreadHandlers(ctx: FeatureModuleContext): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
 
@@ -51,5 +73,10 @@ export function registerThreadHandlers(ctx: FeatureModuleContext): void {
   ctx.client.on("threadUpdate", (oldThread, newThread) => {
     const entry = toThreadUpdateLogEntry(oldThread, newThread);
     if (entry) writeLogEntrySafely(deps, entry);
+  });
+  ctx.client.on("threadMembersUpdate", (addedMembers, removedMembers, thread) => {
+    for (const entry of toThreadMembershipLogEntries(addedMembers, removedMembers, thread)) {
+      writeLogEntrySafely(deps, entry);
+    }
   });
 }
