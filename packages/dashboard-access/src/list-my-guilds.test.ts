@@ -1,18 +1,21 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, guilds } from "@management-bot/db";
+import { inArray } from "drizzle-orm";
 import { isManagedGuild, listMyGuilds } from "./list-my-guilds.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
 
 const { db, close } = createDb(databaseUrl);
+const guildIds = ["bot-installed-1", "bot-installed-2"];
 
 afterAll(async () => {
+  await db.delete(guilds).where(inArray(guilds.id, guildIds));
   await close();
 });
 
 beforeEach(async () => {
-  await db.delete(guilds);
+  await db.delete(guilds).where(inArray(guilds.id, guildIds));
   await db.insert(guilds).values([
     { id: "bot-installed-1", name: "bot導入済み1" },
     { id: "bot-installed-2", name: "bot導入済み2" },

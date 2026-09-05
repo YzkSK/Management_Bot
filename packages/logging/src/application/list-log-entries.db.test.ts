@@ -72,6 +72,28 @@ describe("listLogEntries", () => {
     expect(result.entries[0]?.entry.category).toBe("member");
   });
 
+  test("excludeCategoriesで指定したカテゴリは結果に含まれない", async () => {
+    await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
+    await insert(
+      {
+        category: "auditLogCorrelation",
+        guildId,
+        createdAt: "2026-08-31T00:00:01.000Z",
+        auditLogEntryId: "audit-1",
+        actionType: "MEMBER_KICK",
+      },
+      "2026-08-31T00:00:01.000Z",
+    );
+
+    const result = await listLogEntries(db, {
+      guildId,
+      limit: 50,
+      excludeCategories: ["auditLogCorrelation"],
+    });
+
+    expect(result.entries.every((e) => e.entry.category !== "auditLogCorrelation")).toBe(true);
+  });
+
   test("createdAt降順で返し、まだ後続がある場合のみnextCursorを返す", async () => {
     await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
     await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");

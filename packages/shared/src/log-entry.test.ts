@@ -5,7 +5,7 @@ import {
   parseLogEntry,
   safeParseLogEntry,
   type LogCategory,
-} from "./log-category.js";
+} from "./log-entry.js";
 
 const validByCategory = {
   message: {

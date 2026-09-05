@@ -1,7 +1,7 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
 import type { LogCategory } from "@management-bot/shared";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, lt, notInArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
 
@@ -25,6 +25,8 @@ export interface ListLogEntriesInput {
   limit: number;
   /** 前ページ最終行からencodeCursorで得たカーソル。これより古いエントリを返す。 */
   cursor?: string;
+  /** これらのカテゴリは結果から除外する(categoryフィルタと併用可)。 */
+  excludeCategories?: readonly LogCategory[];
 }
 
 export interface ListLogEntriesResult {
@@ -43,6 +45,9 @@ export async function listLogEntries(
 ): Promise<ListLogEntriesResult> {
   const conditions = [eq(logEntries.guildId, input.guildId)];
   if (input.category) conditions.push(eq(logEntries.category, input.category));
+  if (input.excludeCategories && input.excludeCategories.length > 0) {
+    conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
+  }
   if (input.cursor) {
     const cursor = decodeCursor(input.cursor);
     const cursorCreatedAt = new Date(cursor.createdAt);

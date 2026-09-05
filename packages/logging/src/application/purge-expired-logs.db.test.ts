@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, guilds, logEntries, logRetentionSettings } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { purgeExpiredLogs } from "./purge-expired-logs.js";
+import { purgeExpiredLogs, type PurgeExpiredLogsResult } from "./purge-expired-logs.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -26,6 +26,15 @@ async function insertLogEntry(createdAt: Date, category = "message"): Promise<st
   return id;
 }
 
+/**
+ * purgeExpiredLogsは全guild横断で削除するため、CI上でturborepoが他パッケージ
+ * (logging-retention)のDB依存テストと並行実行されると、そちらが同時に挿入した
+ * expired行まで削除結果に混ざる。このテストのguildId分だけを抽出して検証する。
+ */
+function forThisGuild(result: PurgeExpiredLogsResult[]): PurgeExpiredLogsResult[] {
+  return result.filter((row) => row.guildId === guildId);
+}
+
 describe("purgeExpiredLogs (実DB)", () => {
   test("retentionDays=0(無期限)の設定はどれだけ古くても削除しない", async () => {
     await db.insert(logRetentionSettings).values({ guildId, category: "message", retentionDays: 0 });
@@ -33,7 +42,7 @@ describe("purgeExpiredLogs (実DB)", () => {
 
     const result = await purgeExpiredLogs(db, new Date("2026-08-31T00:00:00.000Z"));
 
-    expect(result).toEqual([]);
+    expect(forThisGuild(result)).toEqual([]);
     const remaining = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
     expect(remaining).toHaveLength(1);
   });
@@ -43,7 +52,7 @@ describe("purgeExpiredLogs (実DB)", () => {
 
     const result = await purgeExpiredLogs(db, new Date("2026-08-31T00:00:00.000Z"));
 
-    expect(result).toEqual([]);
+    expect(forThisGuild(result)).toEqual([]);
     const remaining = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
     expect(remaining).toHaveLength(1);
   });
@@ -54,7 +63,7 @@ describe("purgeExpiredLogs (実DB)", () => {
 
     const result = await purgeExpiredLogs(db, new Date("2026-01-08T00:00:00.000Z"));
 
-    expect(result).toEqual([{ guildId, category: "message", deletedCount: 1 }]);
+    expect(forThisGuild(result)).toEqual([{ guildId, category: "message", deletedCount: 1 }]);
     const remaining = await db.select().from(logEntries).where(eq(logEntries.id, id));
     expect(remaining).toHaveLength(0);
   });
@@ -65,7 +74,7 @@ describe("purgeExpiredLogs (実DB)", () => {
 
     const result = await purgeExpiredLogs(db, new Date("2026-01-07T23:59:59.999Z"));
 
-    expect(result).toEqual([]);
+    expect(forThisGuild(result)).toEqual([]);
     const remaining = await db.select().from(logEntries).where(eq(logEntries.id, id));
     expect(remaining).toHaveLength(1);
   });
@@ -77,7 +86,7 @@ describe("purgeExpiredLogs (実DB)", () => {
 
     const result = await purgeExpiredLogs(db, new Date("2026-08-31T00:00:00.000Z"));
 
-    expect(result).toEqual([{ guildId, category: "message", deletedCount: 1 }]);
+    expect(forThisGuild(result)).toEqual([{ guildId, category: "message", deletedCount: 1 }]);
     expect(await db.select().from(logEntries).where(eq(logEntries.id, expiredId))).toHaveLength(0);
     expect(await db.select().from(logEntries).where(eq(logEntries.id, freshId))).toHaveLength(1);
   });

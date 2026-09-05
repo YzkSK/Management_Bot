@@ -3,12 +3,14 @@ import { CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/sha
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  getDisplaySettings,
   listChannelSettings,
   listLogEntries,
   listRetentionSettings,
   maskSensitiveFields,
   setChannelSetting,
   setChannelSettingForAllCategories,
+  setDisplaySetting,
   setRetentionSetting,
   setRetentionSettingForAllCategories,
 } from "../application/index.js";
@@ -51,14 +53,31 @@ const setChannelSettingForAllCategoriesInput = z.object({
   channelId: z.string().min(1).nullable(),
 });
 
+const setDisplaySettingInput = z.object({
+  guildId: z.string().min(1),
+  hideAuditLogCorrelation: z.boolean(),
+});
+
+const resolveDisplayNamesInput = z.object({
+  guildId: z.string().min(1),
+  userIds: z.array(z.string()).default([]),
+  channelIds: z.array(z.string()).default([]),
+});
+
 export const loggingRouter = router({
   listLogEntries: protectedProcedure
     .input(listLogEntriesInput)
     .use(requireCapability(CAPABILITIES.VIEW_LOGS))
     .query(async ({ ctx, input }) => {
+      const displaySettings = await getDisplaySettings(ctx.db, input.guildId);
+      const excludeCategories =
+        displaySettings.hideAuditLogCorrelation && input.category !== "auditLogCorrelation"
+          ? (["auditLogCorrelation"] as const)
+          : undefined;
+
       let result;
       try {
-        result = await listLogEntries(ctx.db, input);
+        result = await listLogEntries(ctx.db, { ...input, excludeCategories });
       } catch {
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
       }
@@ -125,5 +144,41 @@ export const loggingRouter = router({
         }
       }
       await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
+    }),
+
+  getDisplaySettings: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .query(({ ctx, input }) => getDisplaySettings(ctx.db, input.guildId)),
+
+  setDisplaySetting: protectedProcedure
+    .input(setDisplaySettingInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(({ ctx, input }) => setDisplaySetting(ctx.db, input.guildId, input.hideAuditLogCorrelation)),
+
+  /**
+   * ログ一覧でユーザーID/チャンネルIDをそのまま見せず名前表示するため、まとめて解決する。
+   * 解決できなかったIDはレスポンスに含めない(呼び出し側でIDへフォールバック表示する)。
+   */
+  resolveDisplayNames: protectedProcedure
+    .input(resolveDisplayNamesInput)
+    .use(requireCapability(CAPABILITIES.VIEW_LOGS))
+    .query(async ({ ctx, input }) => {
+      const uniqueUserIds = [...new Set(input.userIds)];
+      const [userNames, channels] = await Promise.all([
+        uniqueUserIds.length > 0
+          ? ctx.getGuildMemberNames(input.guildId, uniqueUserIds)
+          : Promise.resolve(new Map<string, string>()),
+        ctx.getGuildChannels(input.guildId),
+      ]);
+      const channelNameById = new Map(channels.map((c) => [c.id, c.name]));
+      const wantedChannelIds = new Set(input.channelIds);
+
+      return {
+        users: Object.fromEntries(userNames),
+        channels: Object.fromEntries(
+          [...channelNameById].filter(([id]) => wantedChannelIds.has(id)),
+        ),
+      };
     }),
 });

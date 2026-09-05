@@ -86,4 +86,115 @@ describe("LogListPage", () => {
     // content自体はdetailsのJSONに二重掲載されない
     expect(html.indexOf("こんにちは")).toBeLessThan(html.indexOf("<details>"));
   });
+
+  test("executorIdがないmessageエントリはauthorIdを実行者列に表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "a1",
+              action: "create",
+              content: "こんにちは",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain(">a1<");
+  });
+
+  test("実行者列にsubjectIdの表示名(resolveDisplayNamesの結果)が表示される", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              action: "delete",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    queryClient.setQueryData(
+      trpc.logging.resolveDisplayNames.queryOptions({
+        guildId: "g1",
+        userIds: ["u1"],
+        channelIds: [],
+      }).queryKey,
+      { users: { u1: "テストユーザー" }, channels: {} },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("テストユーザー");
+    expect(html).not.toContain(">u1<");
+  });
+
+  test("名前解決できないIDはそのままID表示にフォールバックする", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              action: "delete",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    queryClient.setQueryData(
+      trpc.logging.resolveDisplayNames.queryOptions({
+        guildId: "g1",
+        userIds: ["u1"],
+        channelIds: [],
+      }).queryKey,
+      { users: {}, channels: {} },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain(">u1<");
+  });
 });
