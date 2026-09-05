@@ -1,27 +1,41 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, capabilityGrants, guilds } from "@management-bot/db";
 import { ALL_CAPABILITIES, CAPABILITIES } from "@management-bot/shared";
+import { inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { resolveEffectiveCapabilities } from "./effective-capabilities.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
 
 const { db, close } = createDb(databaseUrl);
+const testId = randomUUID();
+const guildId1 = `guild-1-${testId}`;
+const guildId2 = `guild-2-${testId}`;
+const guildIds = [guildId1, guildId2];
+const grantId1 = `grant-1-${testId}`;
+const grantId2 = `grant-2-${testId}`;
+const grantIds = [grantId1, grantId2];
+
+async function cleanup(): Promise<void> {
+  await db.delete(capabilityGrants).where(inArray(capabilityGrants.id, grantIds));
+  await db.delete(guilds).where(inArray(guilds.id, guildIds));
+}
 
 afterAll(async () => {
+  await cleanup();
   await close();
 });
 
 beforeEach(async () => {
-  await db.delete(capabilityGrants);
-  await db.delete(guilds);
-  await db.insert(guilds).values({ id: "guild-1", name: "test guild" });
+  await cleanup();
+  await db.insert(guilds).values({ id: guildId1, name: "test guild" });
 });
 
 describe("resolveEffectiveCapabilities", () => {
   test("ギルドオーナーは無条件でALL_CAPABILITIESを持つ", async () => {
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "owner-1",
       isOwner: true,
       roleIds: [],
@@ -32,15 +46,15 @@ describe("resolveEffectiveCapabilities", () => {
 
   test("user向けgrantのcapabilitiesを返す", async () => {
     await db.insert(capabilityGrants).values({
-      id: "grant-1",
-      guildId: "guild-1",
+      id: grantId1,
+      guildId: guildId1,
       targetType: "user",
       targetId: "user-1",
       capabilities: CAPABILITIES.VIEW_ACTIVITY,
     });
 
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: [],
@@ -52,15 +66,15 @@ describe("resolveEffectiveCapabilities", () => {
   test("role向けgrantとuser向けgrantをOR結合する", async () => {
     await db.insert(capabilityGrants).values([
       {
-        id: "grant-1",
-        guildId: "guild-1",
+        id: grantId1,
+        guildId: guildId1,
         targetType: "user",
         targetId: "user-1",
         capabilities: CAPABILITIES.VIEW_ACTIVITY,
       },
       {
-        id: "grant-2",
-        guildId: "guild-1",
+        id: grantId2,
+        guildId: guildId1,
         targetType: "role",
         targetId: "role-1",
         capabilities: CAPABILITIES.VIEW_LOGS,
@@ -68,7 +82,7 @@ describe("resolveEffectiveCapabilities", () => {
     ]);
 
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: ["role-1"],
@@ -79,7 +93,7 @@ describe("resolveEffectiveCapabilities", () => {
 
   test("該当するgrantがなければ0を返す", async () => {
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: [],
@@ -89,17 +103,17 @@ describe("resolveEffectiveCapabilities", () => {
   });
 
   test("別ギルドのgrantは無視する", async () => {
-    await db.insert(guilds).values({ id: "guild-2", name: "other guild" });
+    await db.insert(guilds).values({ id: guildId2, name: "other guild" });
     await db.insert(capabilityGrants).values({
-      id: "grant-1",
-      guildId: "guild-2",
+      id: grantId1,
+      guildId: guildId2,
       targetType: "user",
       targetId: "user-1",
       capabilities: CAPABILITIES.VIEW_ACTIVITY,
     });
 
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: [],
@@ -110,15 +124,15 @@ describe("resolveEffectiveCapabilities", () => {
 
   test("@everyoneロール(targetId===guildId)へのgrantはroleIdsを渡さなくても適用される", async () => {
     await db.insert(capabilityGrants).values({
-      id: "grant-1",
-      guildId: "guild-1",
+      id: grantId1,
+      guildId: guildId1,
       targetType: "role",
-      targetId: "guild-1",
+      targetId: guildId1,
       capabilities: CAPABILITIES.VIEW_ACTIVITY,
     });
 
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: [],
@@ -129,15 +143,15 @@ describe("resolveEffectiveCapabilities", () => {
 
   test("不正なcapabilitiesマスク(未知ビットを含む)を持つgrantは無視する", async () => {
     await db.insert(capabilityGrants).values({
-      id: "grant-1",
-      guildId: "guild-1",
+      id: grantId1,
+      guildId: guildId1,
       targetType: "user",
       targetId: "user-1",
       capabilities: 1 << 20,
     });
 
     const result = await resolveEffectiveCapabilities(db, {
-      guildId: "guild-1",
+      guildId: guildId1,
       discordUserId: "user-1",
       isOwner: false,
       roleIds: [],
