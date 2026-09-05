@@ -47,6 +47,7 @@ describe("registerDiscordHandlers", () => {
         "threadCreate",
         "inviteCreate",
         "emojiCreate",
+        "stickerCreate",
         "autoModerationRuleCreate",
         "guildScheduledEventCreate",
         "stageInstanceCreate",

@@ -7,6 +7,7 @@ export const LOG_CATEGORIES = [
   "thread",
   "invite",
   "emoji",
+  "sticker",
   "autoMod",
   "integration",
   "poll",
