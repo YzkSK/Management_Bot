@@ -250,6 +250,18 @@ export function SettingsPage() {
     ...trpc.logging.listChannelOptions.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
   });
+  const displaySettingsQuery = useQuery({
+    ...trpc.logging.getDisplaySettings.queryOptions({ guildId: guildId ?? "" }),
+    enabled: Boolean(guildId),
+  });
+  const queryClient = useQueryClient();
+  const displaySettingsMutation = useMutation({
+    ...trpc.logging.setDisplaySetting.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.logging.getDisplaySettings.queryOptions({ guildId: guildId ?? "" }).queryKey,
+      }),
+  });
 
   if (!guildId) {
     return (
@@ -259,7 +271,7 @@ export function SettingsPage() {
     );
   }
 
-  const queries = [retentionQuery, channelSettingsQuery, channelOptionsQuery];
+  const queries = [retentionQuery, channelSettingsQuery, channelOptionsQuery, displaySettingsQuery];
   const isForbidden = queries.some(
     (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
   );
@@ -302,6 +314,22 @@ export function SettingsPage() {
               options={channelOptionsQuery.data}
               onPendingChange={setBulkChannelPending}
             />
+            {displaySettingsQuery.data && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!displaySettingsQuery.data.hideAuditLogCorrelation}
+                  disabled={displaySettingsMutation.isPending}
+                  onChange={(e) =>
+                    displaySettingsMutation.mutate({
+                      guildId,
+                      hideAuditLogCorrelation: !e.target.checked,
+                    })
+                  }
+                />
+                ログ一覧に「監査ログ相関」カテゴリを表示する
+              </label>
+            )}
           </div>
 
           <details>
