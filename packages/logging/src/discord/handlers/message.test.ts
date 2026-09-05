@@ -20,6 +20,7 @@ function fakeMessage(
     content: string;
     partial: boolean;
     pinned: boolean;
+    system: boolean;
   }> = {},
 ) {
   return {
@@ -47,6 +48,14 @@ describe("toMessageCreateLogEntry", () => {
       action: "create",
       content: "hello",
     });
+  });
+
+  test("システムメッセージ(スレッド作成時のThreadCreated等)はundefinedを返す(threadCreateログと重複するため)", () => {
+    expect(toMessageCreateLogEntry(fakeMessage({ system: true }), BOT_USER_ID)).toBeUndefined();
+  });
+
+  test("通常メッセージ(system:false)はcreateエントリを返す", () => {
+    expect(toMessageCreateLogEntry(fakeMessage({ system: false }), BOT_USER_ID)?.action).toBe("create");
   });
 
   test("DMメッセージ(guildIdなし)はundefinedを返す", () => {

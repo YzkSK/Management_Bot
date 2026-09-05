@@ -38,6 +38,10 @@ export function toMessageCreateLogEntry(
   message: OmitPartialGroupDMChannel<Message>,
   botUserId: string | undefined,
 ): LogEntry | undefined {
+  // Discordが自動生成するシステムメッセージ(ThreadCreated/ピン通知/参加通知/Boost等)は
+  // ユーザーによる投稿ではないため対象外にする。ThreadCreatedはthreadCreateログと重複し、
+  // ピン通知はtoMessagePinLogEntryで別途action:"pin"として記録される。
+  if (message.system) return undefined;
   const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {
