@@ -23,10 +23,14 @@ function extractRoleChanges(entry: GuildAuditLogsEntry): { added: string[]; remo
 /**
  * MessageDeleteのtargetId(投稿者ID)だけでは対象チャンネルを特定できないため、
  * extra.channel.idから取得する。それ以外のactionではundefined。
+ * Discord APIのaudit log optional infoは仕様上欠損し得るため、extra/channel/idの
+ * いずれかが欠けている場合もエラーにせずundefinedを返す(codexレビュー指摘)。
  */
 function extractMessageDeleteChannelId(entry: GuildAuditLogsEntry): string | undefined {
   if (entry.action !== AuditLogEvent.MessageDelete) return undefined;
-  return (entry.extra as { channel: { id: string } }).channel.id;
+  const extra = entry.extra as { channel?: { id?: unknown } } | null | undefined;
+  const channelId = extra?.channel?.id;
+  return typeof channelId === "string" ? channelId : undefined;
 }
 
 /** AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。 */

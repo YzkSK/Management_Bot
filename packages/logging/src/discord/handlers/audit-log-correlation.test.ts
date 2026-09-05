@@ -74,6 +74,21 @@ describe("toAuditLogEntryInfo", () => {
     const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
     expect(info.messageDeleteChannelId).toBeUndefined();
   });
+
+  test("MessageDeleteでextraがnull/channel欠損でも例外を投げずundefinedを返す(監査ログのoptional infoは仕様上欠損し得るため)", () => {
+    expect(
+      toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MessageDelete, extra: null }), "g1")
+        .messageDeleteChannelId,
+    ).toBeUndefined();
+    expect(
+      toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MessageDelete, extra: {} }), "g1")
+        .messageDeleteChannelId,
+    ).toBeUndefined();
+    expect(
+      toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MessageDelete, extra: { channel: {} } }), "g1")
+        .messageDeleteChannelId,
+    ).toBeUndefined();
+  });
 });
 
 describe("registerAuditLogCorrelationHandlers", () => {
