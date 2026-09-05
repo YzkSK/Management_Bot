@@ -69,7 +69,9 @@ export const threadLogEntrySchema = z.object({
   category: z.literal("thread"),
   threadId: nonEmptyString,
   channelId: nonEmptyString,
-  action: z.enum(["create", "update", "delete", "archive", "unarchive"]),
+  action: z.enum(["create", "update", "delete", "archive", "unarchive", "memberAdd", "memberRemove"]),
+  /** action=memberAdd/memberRemoveの対象メンバー。それ以外(スレッド自体の変更)では設定しない。 */
+  userId: nonEmptyString.optional(),
 });
 
 export const inviteLogEntrySchema = z.object({

@@ -16,6 +16,8 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
       return entry.userId;
     case "role":
       return entry.userId;
+    case "thread":
+      return entry.userId;
     case "autoMod":
       return entry.userId;
     case "voice":
@@ -24,7 +26,6 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
       return entry.targetUserId;
     case "channel":
     case "guild":
-    case "thread":
     case "invite":
     case "emoji":
     case "sticker":
@@ -51,6 +52,8 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
       return "userId";
     case "role":
       return entry.userId !== undefined ? "userId" : undefined;
+    case "thread":
+      return entry.userId !== undefined ? "userId" : undefined;
     case "autoMod":
       return "userId";
     case "voice":
@@ -59,7 +62,6 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
       return "targetUserId";
     case "channel":
     case "guild":
-    case "thread":
     case "invite":
     case "emoji":
     case "sticker":
