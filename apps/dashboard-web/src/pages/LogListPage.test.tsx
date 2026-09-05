@@ -24,6 +24,12 @@ describe("LogListPage", () => {
     expect(html).toContain("読み込み中");
   });
 
+  test("初期状態ではリアルタイム更新の接続状況を表示する", () => {
+    const queryClient = new QueryClient();
+    const html = renderPage("g1", queryClient);
+    expect(html).toContain("リアルタイム更新: 接続中...");
+  });
+
   test("カテゴリセレクトにアクセシブルな名前が付いている", () => {
     const queryClient = new QueryClient();
     const html = renderPage("g1", queryClient);

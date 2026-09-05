@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
@@ -8,6 +8,7 @@ import { CATEGORY_OPTIONS, CATEGORY_LABELS } from "./category-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
 import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
+import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,10 +17,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
 
+const CONNECTION_STATUS_LABELS = {
+  connecting: "リアルタイム更新: 接続中...",
+  open: "リアルタイム更新: 有効",
+  reconnecting: "リアルタイム更新: 切断中(再接続を試みています)",
+  stopped: "リアルタイム更新: 停止しました(画面を再読み込みしてください)",
+} as const;
+
+/** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
+const INVALIDATE_DEBOUNCE_MS = 300;
+
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [category, setCategory] = useState<LogCategory | "">("");
   const [pagination, setPagination] = useState(INITIAL_PAGINATION);
+  const queryClient = useQueryClient();
 
   const logsQuery = useQuery({
     ...trpc.logging.listLogEntries.queryOptions({
@@ -29,6 +41,25 @@ export function LogListPage() {
       cursor: currentCursor(pagination),
     }),
     enabled: Boolean(guildId),
+  });
+
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionStatus = useLogEntryNotifications(guildId ?? "", (notifiedCategory) => {
+    // 過去ページを閲覧中は表示中の内容を壊さないよう、最新ページ(先頭)表示中のみ自動更新する。
+    if (pagination.pageIndex !== 0) return;
+    if (category !== "" && category !== notifiedCategory) return;
+    if (invalidateTimerRef.current) return; // 連続通知は1回のrefetchにまとめる
+    invalidateTimerRef.current = setTimeout(() => {
+      invalidateTimerRef.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: trpc.logging.listLogEntries.queryOptions({
+          guildId: guildId ?? "",
+          category: category === "" ? undefined : category,
+          limit: PAGE_SIZE,
+          cursor: undefined,
+        }).queryKey,
+      });
+    }, INVALIDATE_DEBOUNCE_MS);
   });
 
   if (!guildId) {
@@ -49,6 +80,14 @@ export function LogListPage() {
           <Link to={`/guilds/${guildId}/logs/settings`}>設定</Link>
         </Button>
       </div>
+
+      <p
+        className={
+          connectionStatus === "open" ? "text-muted-foreground text-xs" : "text-destructive text-xs"
+        }
+      >
+        {CONNECTION_STATUS_LABELS[connectionStatus]}
+      </p>
 
       <Select
         value={category === "" ? ALL_CATEGORIES : category}

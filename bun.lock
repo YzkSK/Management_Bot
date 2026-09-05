@@ -67,6 +67,7 @@
       "devDependencies": {
         "@types/bun": "^1.4.0",
         "@types/node": "^26.4.0",
+        "drizzle-orm": "^0.44.0",
         "typescript": "^6.0.3",
       },
     },
@@ -87,6 +88,7 @@
         "react-dom": "^19.0.0",
         "react-router-dom": "^7.1.0",
         "tailwind-merge": "^3.6.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@management-bot/dashboard-api": "workspace:*",
@@ -183,6 +185,7 @@
         "@management-bot/shared": "workspace:*",
         "drizzle-orm": "^0.44.0",
         "postgres": "^3.4.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/bun": "^1.4.0",
