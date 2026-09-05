@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, guilds, logEntries } from "@management-bot/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { AuditLogEntryInfo } from "./correlate-audit-log-entry.js";
 import { correlateAuditLogEntry } from "./correlate-audit-log-entry.js";
@@ -175,7 +175,9 @@ describe("correlateAuditLogEntry (実DB)", () => {
     const [row] = await db
       .select()
       .from(logEntries)
-      .where(eq(logEntries.category, "auditLogCorrelation"));
+      // 本番データにも同カテゴリの行が存在しうるため、guildId(このテスト専用のランダムUUID)
+      // でも絞り込み、無関係な行を誤って拾わないようにする(codexレビュー指摘: guildIdスコープ漏れ)。
+      .where(and(eq(logEntries.category, "auditLogCorrelation"), eq(logEntries.guildId, guildId)));
     expect(row?.payload).toMatchObject({ auditLogEntryId: entry.id, actionType: "ChannelDelete", executorId: "mod-1" });
   });
 
@@ -191,7 +193,10 @@ describe("correlateAuditLogEntry (実DB)", () => {
 
     await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
 
-    const [row] = await db.select().from(logEntries).where(eq(logEntries.category, "integration"));
+    const [row] = await db
+      .select()
+      .from(logEntries)
+      .where(and(eq(logEntries.category, "integration"), eq(logEntries.guildId, guildId)));
     expect(row?.payload).toMatchObject({ integrationId: "integration-1", action: "create", executorId: "mod-1" });
   });
 
