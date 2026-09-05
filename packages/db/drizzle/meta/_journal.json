@@ -43,6 +43,13 @@
       "when": 1788517240216,
       "tag": "0005_small_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788566610114,
+      "tag": "0006_log-entry-notify-trigger",
+      "breakpoints": true
     }
   ]
 }

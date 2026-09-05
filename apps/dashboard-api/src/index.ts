@@ -1,11 +1,13 @@
 import { trpcServer } from "@hono/trpc-server";
 import { parseEnv, envSchema } from "@management-bot/config";
-import { createDb } from "@management-bot/db";
+import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { appRouter } from "./app-router.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
+import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
+import { createLogWsRoutes } from "./ws/routes.js";
 
 const dashboardEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -46,4 +48,9 @@ app.use(
   }),
 );
 
-export default app;
+const { app: wsApp, websocket } = createLogWsRoutes(db, env.SESSION_SECRET);
+app.route("/ws", wsApp);
+
+listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, category }) => broadcastNewLogEntry(guildId, category));
+
+export default { fetch: app.fetch, websocket };

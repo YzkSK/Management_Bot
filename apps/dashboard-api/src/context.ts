@@ -24,7 +24,7 @@ function createGetGuildChannels(botToken: string): (guildId: string) => Promise<
  * ponytail: リクエストごとにDiscord APIへ問い合わせておりキャッシュしない。ログ一覧のポーリング等で
  * レート制限に触れるようならセッション単位の短命キャッシュを追加すること。
  */
-async function fetchCurrentUserGuilds(
+export async function fetchCurrentUserGuilds(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
@@ -66,16 +66,23 @@ function createListMyGuilds(
  * ponytail: 独自にcapability grantを個別付与されたユーザーの実ロールまでは反映しない。
  * 必要になったら`guilds.members.read`スコープを追加してDiscordのロールIDを取得する。
  */
+export async function resolveGuildMembership(
+  db: Db,
+  sessionId: string | undefined,
+  sessionSecret: string,
+  guildId: string,
+): Promise<GuildMembership | null> {
+  const userGuilds = await fetchCurrentUserGuilds(db, sessionId, sessionSecret);
+  const membership = userGuilds?.find((guild) => guild.id === guildId);
+  return membership ? { isOwner: membership.owner, roleIds: [guildId] } : null;
+}
+
 function createGetGuildMembership(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
 ): (guildId: string) => Promise<GuildMembership | null> {
-  return async (guildId) => {
-    const userGuilds = await fetchCurrentUserGuilds(db, sessionId, sessionSecret);
-    const membership = userGuilds?.find((guild) => guild.id === guildId);
-    return membership ? { isOwner: membership.owner, roleIds: [guildId] } : null;
-  };
+  return (guildId) => resolveGuildMembership(db, sessionId, sessionSecret, guildId);
 }
 
 /**
