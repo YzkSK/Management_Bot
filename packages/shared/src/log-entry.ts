@@ -19,7 +19,7 @@ export const messageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   authorId: nonEmptyString,
-  action: z.enum(["create", "update", "delete", "bulkDelete"]),
+  action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
 });
 

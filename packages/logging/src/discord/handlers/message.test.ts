@@ -5,6 +5,7 @@ import {
   toMessageBulkDeleteLogEntries,
   toMessageCreateLogEntry,
   toMessageDeleteLogEntry,
+  toMessagePinLogEntry,
   toMessageUpdateLogEntry,
 } from "./message.js";
 
@@ -17,6 +18,7 @@ function fakeMessage(
     channelId: string;
     content: string;
     partial: boolean;
+    pinned: boolean;
   }> = {},
 ) {
   return {
@@ -25,6 +27,7 @@ function fakeMessage(
     channelId: "c1",
     content: "hello",
     partial: false,
+    pinned: false,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
   } as never;
@@ -84,6 +87,34 @@ describe("toMessageUpdateLogEntry", () => {
       toMessageUpdateLogEntry(
         fakeMessage({ content: "old", partial: true }),
         fakeMessage({ content: "new" }),
+        BOT_USER_ID,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("toMessagePinLogEntry", () => {
+  test("pinned: false→trueでpinエントリを返す", () => {
+    const entry = toMessagePinLogEntry(fakeMessage({ pinned: false }), fakeMessage({ pinned: true }), BOT_USER_ID);
+    expect(entry?.action).toBe("pin");
+  });
+
+  test("pinned: true→falseでunpinエントリを返す", () => {
+    const entry = toMessagePinLogEntry(fakeMessage({ pinned: true }), fakeMessage({ pinned: false }), BOT_USER_ID);
+    expect(entry?.action).toBe("unpin");
+  });
+
+  test("pinnedが変化していなければundefinedを返す", () => {
+    expect(
+      toMessagePinLogEntry(fakeMessage({ pinned: false }), fakeMessage({ pinned: false }), BOT_USER_ID),
+    ).toBeUndefined();
+  });
+
+  test("oldMessageがpartialならundefinedを返す(変化を判定できないため)", () => {
+    expect(
+      toMessagePinLogEntry(
+        fakeMessage({ pinned: false, partial: true }),
+        fakeMessage({ pinned: true }),
         BOT_USER_ID,
       ),
     ).toBeUndefined();

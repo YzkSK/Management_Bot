@@ -65,6 +65,27 @@ export function toMessageUpdateLogEntry(
   };
 }
 
+/**
+ * discord.jsにピン留め専用のgatewayイベント(channelPinsUpdate)は対象メッセージを含まないため、
+ * pinned真偽値の変化を持つmessageUpdateから合成する。oldMessage.pinnedがpartialで未取得
+ * (undefined)の場合は変化を判定できないためスキップする。
+ */
+export function toMessagePinLogEntry(
+  oldMessage: AnyMessage,
+  newMessage: AnyMessage,
+  botUserId: string | undefined,
+): LogEntry | undefined {
+  const base = baseFields(newMessage, botUserId);
+  if (!base) return undefined;
+  if (oldMessage.partial || oldMessage.pinned === newMessage.pinned) return undefined;
+  return {
+    category: "message",
+    ...base,
+    createdAt: new Date().toISOString(),
+    action: newMessage.pinned ? "pin" : "unpin",
+  };
+}
+
 export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string | undefined): LogEntry | undefined {
   const base = baseFields(message, botUserId);
   if (!base) return undefined;
@@ -102,6 +123,9 @@ export function registerMessageHandlers(ctx: FeatureModuleContext): void {
   ctx.client.on("messageUpdate", (oldMessage, newMessage) => {
     const entry = toMessageUpdateLogEntry(oldMessage, newMessage, ctx.client.user?.id);
     if (entry) writeLogEntrySafely(deps, entry);
+
+    const pinEntry = toMessagePinLogEntry(oldMessage, newMessage, ctx.client.user?.id);
+    if (pinEntry) writeLogEntrySafely(deps, pinEntry);
   });
 
   ctx.client.on("messageDelete", (message) => {
