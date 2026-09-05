@@ -193,6 +193,35 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
 
     expect(result.find((r) => r.category === "message")?.retentionDays).toBe(30);
   });
+
+  test("setRetentionSettingForAllCategoriesは全カテゴリを一括で同じ値にする", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    await caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 });
+    const result = await caller.listRetentionSettings({ guildId });
+
+    expect(result.every((r) => r.retentionDays === 60)).toBe(true);
+  });
+
+  test("setRetentionSettingForAllCategoriesもMANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    const thrown = await captureRejection(caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 }));
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+  });
 });
 
 describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOptions", () => {
@@ -291,5 +320,67 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       .from(logChannelSettings)
       .where(eq(logChannelSettings.guildId, guildId));
     expect(rows).toHaveLength(0);
+  });
+
+  test("setChannelSettingForAllCategoriesは全カテゴリを一括で同じチャンネルにする", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
+    const result = await caller.listChannelSettings({ guildId });
+
+    expect(result.every((r) => r.channelId === "c1")).toBe(true);
+  });
+
+  test("setChannelSettingForAllCategoriesはchannelId=nullで全カテゴリの設定を削除する", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
+    await caller.setChannelSettingForAllCategories({ guildId, channelId: null });
+
+    const rows = await db.select().from(logChannelSettings).where(eq(logChannelSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
+  });
+
+  test("setChannelSettingForAllCategoriesもMANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    const thrown = await captureRejection(caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" }));
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+  });
+
+  test("setChannelSettingForAllCategoriesも実在しないチャンネルIDならBAD_REQUEST", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+    });
+
+    const thrown = await captureRejection(
+      caller.setChannelSettingForAllCategories({ guildId, channelId: "nonexistent" }),
+    );
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("BAD_REQUEST");
   });
 });

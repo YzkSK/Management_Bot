@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_OPTIONS, CATEGORY_LABELS } from "./category-labels.js";
@@ -43,7 +43,12 @@ export function LogListPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">ログ一覧</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">ログ一覧</h1>
+        <Button asChild variant="outline">
+          <Link to={`/guilds/${guildId}/logs/settings`}>設定</Link>
+        </Button>
+      </div>
 
       <Select
         value={category === "" ? ALL_CATEGORIES : category}
@@ -104,7 +109,14 @@ export function LogListPage() {
                       <TableCell>{summary.action ?? "-"}</TableCell>
                       <TableCell>{summary.executorId ?? "-"}</TableCell>
                       <TableCell>
-                        <pre className="text-muted-foreground text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
+                        {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
+                        {Object.keys(summary.details).length > 0 && (
+                          <details>
+                            <summary className="text-muted-foreground cursor-pointer text-xs">詳細</summary>
+                            <pre className="text-muted-foreground mt-1 text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
+                          </details>
+                        )}
+                        {!summary.content && Object.keys(summary.details).length === 0 && "-"}
                       </TableCell>
                     </TableRow>
                   );

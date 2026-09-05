@@ -16,6 +16,7 @@ export const CATEGORY_LABELS: Record<LogCategory, string> = {
   stage: "ステージ",
   auditLogCorrelation: "監査ログ相関",
   moderationCase: "モデレーション",
+  voice: "ボイスチャンネル",
 };
 
 export const CATEGORY_OPTIONS: readonly { value: LogCategory; label: string }[] = LOG_CATEGORIES.map((category) => ({
