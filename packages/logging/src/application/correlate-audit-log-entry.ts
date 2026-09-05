@@ -16,6 +16,8 @@ export interface AuditLogEntryInfo {
   targetId: string | null;
   createdAt: string;
   roleChanges?: { added: string[]; removed: string[] };
+  /** MessageDelete限定。監査ログのextra.channel.idから取得する(targetId=投稿者IDのみでは対象チャンネルを特定できないため)。 */
+  messageDeleteChannelId?: string;
 }
 
 interface CorrelationRule {
@@ -42,8 +44,11 @@ interface CorrelationRule {
  * AuditLogEvent名(discord.js/discord-api-typesの数値enumを文字列化したもの)→
  * 対応するログカテゴリ・対象フィールド・payload.action候補の対応表。#49〜#51のイベント単体では
  * 実行者を取得できないカテゴリのみを対象にする。
- * message/poll/autoMod実行結果は対象(targetId)が投稿者ID等になり複数候補と衝突しやすいため対象外
- * (誤相関リスクの高いものは相関しない、過剰実装を避ける)。
+ * poll/autoMod実行結果は対象(targetId)が投稿者ID等になり複数候補と衝突しやすいため対象外
+ * (誤相関リスクの高いものは相関しない、過剰実装を避ける)。message categoryのうちsingle delete
+ * (MessageDelete)のみ、channelId+authorId(targetId)の複合一致で誤相関リスクを抑えられるため
+ * correlateAuditLogEntry内で別処理として対応する(bulkDeleteは1つの監査ログが複数メッセージに
+ * 対応し相関精度が低いため対象外)。
  * role所属変更(MemberRoleUpdate)はroleId+userIdの複合一致が必要でこのテーブルの単一フィールド
  * 一致では表現できないため、correlateAuditLogEntry内で別処理として扱う。
  */
@@ -223,7 +228,8 @@ async function correlateJobs(db: Db, executorId: string, jobs: CorrelationJob[],
 /**
  * guildAuditLogEntryCreateを受けて (1) 生の監査ログをauditLogCorrelationカテゴリとして常に保存し、
  * (2) integrationカテゴリはこれを一次情報源として新規作成し、(3) role所属変更(MemberRoleUpdate)は
- * roleId+userIdで対応するrole行にexecutorIdを追記し、(4) それ以外は対応する既存ログ行に
+ * roleId+userIdで対応するrole行にexecutorIdを追記し、(4) message single delete(MessageDelete)は
+ * channelId+authorIdで対応するmessage行にexecutorIdを追記し、(5) それ以外は対応する既存ログ行に
  * executorId(必要ならactionも)を追記する。(1)はダッシュボードの通常表示には出さず、
  * 必要な時に参照する想定(表示側は本タスクのスコープ外)。
  */
@@ -292,6 +298,32 @@ export async function correlateAuditLogEntry(
       ...entry.roleChanges.removed.map((roleId) => roleJob(roleId, "memberRemove")),
     ];
     await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+    return;
+  }
+
+  if (entry.action === "MessageDelete") {
+    if (!entry.targetId || !entry.messageDeleteChannelId) return;
+    await correlateJobs(
+      deps.db,
+      entry.executorId,
+      [
+        {
+          criteria: {
+            guildId: entry.guildId,
+            category: "message",
+            auditAt,
+            windowStart,
+            windowEnd,
+            extraConditions: [
+              sql`${logEntries.payload} ->> 'action' = 'delete'`,
+              sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
+              sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
+            ],
+          },
+        },
+      ],
+      retryDelayMs,
+    );
     return;
   }
 
