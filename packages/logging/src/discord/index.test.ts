@@ -41,6 +41,7 @@ describe("registerDiscordHandlers", () => {
       expect.arrayContaining([
         "messageCreate",
         "messageReactionAdd",
+        "messageReactionRemove",
         "guildMemberAdd",
         "roleCreate",
         "channelCreate",

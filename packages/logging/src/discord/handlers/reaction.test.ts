@@ -2,10 +2,10 @@ import { describe, expect, mock, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
 import { registerReactionHandlers, toReactionAddLogEntry, toReactionRemoveLogEntry } from "./reaction.js";
 
-function fakeReaction(emojiIdentifier = "%F0%9F%98%80") {
+function fakeReaction(emojiDisplay = "😀") {
   return {
     message: { guildId: "g1", channelId: "c1", id: "m1" },
-    emoji: { identifier: emojiIdentifier },
+    emoji: { toString: () => emojiDisplay },
   } as never;
 }
 
@@ -21,7 +21,7 @@ describe("reaction category mappers", () => {
     expect((entry as { channelId: string }).channelId).toBe("c1");
     expect((entry as { messageId: string }).messageId).toBe("m1");
     expect((entry as { userId: string }).userId).toBe("u1");
-    expect((entry as { emoji: string }).emoji).toBe("%F0%9F%98%80");
+    expect((entry as { emoji: string }).emoji).toBe("😀");
   });
 
   test("remove", () => {
@@ -30,7 +30,7 @@ describe("reaction category mappers", () => {
   });
 
   test("messageがpartialでguildId未取得の場合はundefined", () => {
-    const reaction = { message: { guildId: null, channelId: "c1", id: "m1" }, emoji: { identifier: "x" } } as never;
+    const reaction = { message: { guildId: null, channelId: "c1", id: "m1" }, emoji: { toString: () => "x" } } as never;
     expect(toReactionAddLogEntry(reaction, fakeUser())).toBeUndefined();
   });
 

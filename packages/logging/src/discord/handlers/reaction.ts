@@ -27,7 +27,7 @@ function toReactionLogEntry(
     channelId: message.channelId,
     messageId: message.id,
     userId: user.id,
-    emoji: reaction.emoji.identifier,
+    emoji: reaction.emoji.toString(),
     action,
   };
 }
