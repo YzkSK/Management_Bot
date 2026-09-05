@@ -16,6 +16,11 @@ export {
   type ListLogEntriesResult,
 } from "./list-log-entries.js";
 export {
+  getDisplaySettings,
+  setDisplaySetting,
+  type DisplaySettings,
+} from "./display-settings.js";
+export {
   listRetentionSettings,
   setRetentionSetting,
   setRetentionSettingForAllCategories,
