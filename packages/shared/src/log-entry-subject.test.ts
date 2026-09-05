@@ -51,6 +51,31 @@ describe("getLogEntrySubjectId", () => {
     expect(getLogEntrySubjectId(entry)).toBeUndefined();
   });
 
+  test("threadはmemberAdd/memberRemoveの対象userIdを返す", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      userId: "u1",
+      action: "memberAdd",
+    } satisfies LogEntry;
+    expect(getLogEntrySubjectId(entry)).toBe("u1");
+  });
+
+  test("threadはuserId未設定(create/update/delete等)ならundefined", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      action: "update",
+    } satisfies LogEntry;
+    expect(getLogEntrySubjectId(entry)).toBeUndefined();
+  });
+
   test("guildはundefined(ユーザーIDを持たないカテゴリ)", () => {
     const entry = {
       category: "guild",
