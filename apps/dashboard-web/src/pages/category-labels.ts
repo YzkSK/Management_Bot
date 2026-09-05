@@ -2,6 +2,7 @@ import { LOG_CATEGORIES, type LogCategory } from "@management-bot/shared";
 
 export const CATEGORY_LABELS: Record<LogCategory, string> = {
   message: "メッセージ",
+  reaction: "リアクション",
   member: "メンバー",
   role: "ロール",
   channel: "チャンネル",

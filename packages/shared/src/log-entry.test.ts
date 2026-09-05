@@ -16,6 +16,16 @@ const validByCategory = {
     authorId: "3",
     action: "create",
   },
+  reaction: {
+    category: "reaction",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    channelId: "2",
+    messageId: "3",
+    userId: "4",
+    emoji: "😀",
+    action: "add",
+  },
   member: {
     category: "member",
     guildId: "1",

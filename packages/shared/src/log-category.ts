@@ -1,5 +1,6 @@
 export const LOG_CATEGORIES = [
   "message",
+  "reaction",
   "member",
   "role",
   "channel",

@@ -23,6 +23,16 @@ export const messageLogEntrySchema = z.object({
   content: z.string().optional(),
 });
 
+export const reactionLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("reaction"),
+  channelId: nonEmptyString,
+  messageId: nonEmptyString,
+  userId: nonEmptyString,
+  emoji: nonEmptyString,
+  action: z.enum(["add", "remove"]),
+});
+
 export const memberLogEntrySchema = z.object({
   ...base,
   category: z.literal("member"),
@@ -156,6 +166,7 @@ export const voiceLogEntrySchema = z.discriminatedUnion("action", [
 
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
+  reaction: reactionLogEntrySchema,
   member: memberLogEntrySchema,
   role: roleLogEntrySchema,
   channel: channelLogEntrySchema,
