@@ -40,6 +40,12 @@ export interface DashboardAccessContext {
    * 実装側で送信可否まで絞り込むこと。dashboard-api側でDiscord APIやキャッシュから供給する。
    */
   getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
+  /**
+   * 指定したdiscordユーザーIDごとの表示名(サーバーニックネーム優先)を解決する。
+   * ダッシュボードのログ一覧でユーザーIDをそのまま見せず名前表示するために使う。
+   * 解決できなかったID(脱退済み等)はMapに含めない。dashboard-api側でDiscord APIから供給する。
+   */
+  getGuildMemberNames: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();

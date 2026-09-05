@@ -85,6 +85,11 @@ function channelsOf(...options: ChannelOption[]) {
   return async (): Promise<readonly ChannelOption[]> => options;
 }
 
+function memberNamesOf(names: Record<string, string>) {
+  return async (_guildId: string, userIds: readonly string[]): Promise<ReadonlyMap<string, string>> =>
+    new Map(userIds.filter((id) => id in names).map((id) => [id, names[id] as string]));
+}
+
 describe("loggingRouter.listLogEntries", () => {
   test("VIEW_LOGSのみを持つ場合はcontentがマスクされる", async () => {
     await db.insert(capabilityGrants).values({
@@ -99,6 +104,7 @@ describe("loggingRouter.listLogEntries", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -120,6 +126,7 @@ describe("loggingRouter.listLogEntries", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -133,6 +140,7 @@ describe("loggingRouter.listLogEntries", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await expect(caller.listLogEntries({ guildId, limit: 50 })).rejects.toThrow();
@@ -169,6 +177,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await expect(caller.listRetentionSettings({ guildId })).rejects.toThrow();
@@ -180,6 +189,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(
@@ -202,6 +212,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await caller.setRetentionSetting({ guildId, category: "message", retentionDays: 30 });
@@ -217,6 +228,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 });
@@ -231,6 +243,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 }));
@@ -247,6 +260,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await expect(caller.listChannelSettings({ guildId })).rejects.toThrow();
@@ -258,6 +272,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await expect(caller.listChannelOptions({ guildId })).rejects.toThrow();
@@ -269,6 +284,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(
@@ -291,6 +307,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const result = await caller.listChannelOptions({ guildId });
@@ -305,6 +322,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await caller.setChannelSetting({ guildId, category: "message", channelId: "c1" });
@@ -323,6 +341,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(
@@ -345,6 +364,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
@@ -360,6 +380,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
@@ -375,6 +396,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" }));
@@ -390,6 +412,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const thrown = await captureRejection(
@@ -415,6 +438,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -435,6 +459,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const result = await caller.listLogEntries({ guildId, category: "auditLogCorrelation", limit: 50 });
@@ -455,6 +480,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const before = await caller.getDisplaySettings({ guildId });
@@ -480,6 +506,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
     });
 
     const getThrown = await captureRejection(caller.getDisplaySettings({ guildId }));
@@ -492,5 +519,43 @@ describe("loggingRouter.listLogEntries + display settings", () => {
 
     const rows = await db.select().from(logDisplaySettings).where(eq(logDisplaySettings.guildId, guildId));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("loggingRouter.resolveDisplayNames", () => {
+  test("resolveDisplayNamesはgetGuildMemberNames/getGuildChannelsを介してid→nameを返す", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      getGuildMemberNames: memberNamesOf({ u1: "解決された名前" }),
+    });
+
+    const result = await caller.resolveDisplayNames({ guildId, userIds: ["u1"], channelIds: ["c1"] });
+
+    expect(result).toEqual({
+      users: { u1: "解決された名前" },
+      channels: { c1: "general" },
+    });
+  });
+
+  test("VIEW_LOGSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
+    });
+
+    await expect(caller.resolveDisplayNames({ guildId, userIds: [], channelIds: [] })).rejects.toThrow();
   });
 });

@@ -9,12 +9,18 @@ import type { Db } from "@management-bot/db";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
-import { fetchGuildChannels } from "./discord/bot-client.js";
+import { fetchGuildChannels, fetchGuildMemberNames } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => fetchGuildChannels(botToken, guildId);
+}
+
+function createGetGuildMemberNames(
+  botToken: string,
+): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
+  return (guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds);
 }
 
 /**
@@ -102,6 +108,7 @@ export function createContext(
       sessionId,
       getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
       getGuildChannels: createGetGuildChannels(botToken),
+      getGuildMemberNames: createGetGuildMemberNames(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
     };
     return ctx as unknown as Record<string, unknown>;
