@@ -25,7 +25,14 @@ export function broadcastNewLogEntry(guildId: string, category: string): void {
   const clients = clientsByGuild.get(guildId);
   if (!clients || clients.size === 0) return;
   const message = JSON.stringify({ type: "newLogEntry", category });
-  for (const ws of clients) {
-    ws.send(message);
+  // 1クライアントへのsend失敗(既に切断済みのsocket等)で残りのクライアントへの配信が
+  // 止まらないよう、クライアントごとに例外を隔離する。
+  for (const ws of [...clients]) {
+    try {
+      ws.send(message);
+    } catch (error) {
+      console.error(`Failed to send log notification to a client of guild ${guildId}`, error);
+      unregisterLogClient(guildId, ws);
+    }
   }
 }

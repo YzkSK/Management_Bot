@@ -28,7 +28,11 @@ export function buildLogWsUrl(apiUrl: string, guildId: string): string {
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30_000;
 
-/** 切断からの再接続待機時間(指数バックオフ、上限あり)。attemptは1から。 */
-export function nextReconnectDelayMs(attempt: number): number {
-  return Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+/**
+ * 切断からの再接続待機時間(full jitter: 0〜指数バックオフ上限のランダム値)。attemptは1から。
+ * 多数のクライアントが同時切断した際に一斉再接続してサーバーへ負荷が集中するのを避ける。
+ */
+export function nextReconnectDelayMs(attempt: number, random: () => number = Math.random): number {
+  const cap = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+  return Math.round(random() * cap);
 }

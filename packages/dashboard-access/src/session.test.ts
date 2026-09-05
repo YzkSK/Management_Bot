@@ -29,12 +29,13 @@ async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferIn
 }
 
 describe("validateSession", () => {
-  test("有効なセッションIDならdiscordUserIdを返す", async () => {
-    await insertSession(db);
+  test("有効なセッションIDならdiscordUserId・expiresAtを返す", async () => {
+    const expiresAt = new Date(Date.now() + 60_000);
+    await insertSession(db, { expiresAt });
 
     const result = await validateSession(db, "session-1");
 
-    expect(result).toEqual({ discordUserId: "user-1" });
+    expect(result).toEqual({ discordUserId: "user-1", expiresAt });
   });
 
   test("存在しないセッションIDはnullを返す", async () => {

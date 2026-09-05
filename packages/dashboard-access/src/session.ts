@@ -5,6 +5,7 @@ import { decryptToken, encryptToken } from "./token-crypto.js";
 
 export interface ValidatedSession {
   discordUserId: string;
+  expiresAt: Date;
 }
 
 export async function validateSession(
@@ -12,7 +13,7 @@ export async function validateSession(
   sessionId: string,
 ): Promise<ValidatedSession | null> {
   const [row] = await db
-    .select({ discordUserId: sessions.discordUserId })
+    .select({ discordUserId: sessions.discordUserId, expiresAt: sessions.expiresAt })
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
     .limit(1);

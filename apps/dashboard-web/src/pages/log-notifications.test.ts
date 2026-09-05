@@ -36,16 +36,24 @@ describe("buildLogWsUrl", () => {
 });
 
 describe("nextReconnectDelayMs", () => {
-  test("1回目は基準値", () => {
-    expect(nextReconnectDelayMs(1)).toBe(1000);
+  test("1回目の上限は基準値(random=1で上限まで返る)", () => {
+    expect(nextReconnectDelayMs(1, () => 1)).toBe(1000);
   });
 
-  test("試行回数に応じて倍々になる", () => {
-    expect(nextReconnectDelayMs(2)).toBe(2000);
-    expect(nextReconnectDelayMs(3)).toBe(4000);
+  test("試行回数に応じて上限が倍々になる", () => {
+    expect(nextReconnectDelayMs(2, () => 1)).toBe(2000);
+    expect(nextReconnectDelayMs(3, () => 1)).toBe(4000);
   });
 
   test("上限(30秒)を超えない", () => {
-    expect(nextReconnectDelayMs(10)).toBe(30_000);
+    expect(nextReconnectDelayMs(10, () => 1)).toBe(30_000);
+  });
+
+  test("random=0なら待機時間0(jitterの下限)", () => {
+    expect(nextReconnectDelayMs(5, () => 0)).toBe(0);
+  });
+
+  test("randomの値に応じて上限内でスケールする", () => {
+    expect(nextReconnectDelayMs(2, () => 0.5)).toBe(1000);
   });
 });

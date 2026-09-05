@@ -67,6 +67,7 @@
       "devDependencies": {
         "@types/bun": "^1.4.0",
         "@types/node": "^26.4.0",
+        "drizzle-orm": "^0.44.0",
         "typescript": "^6.0.3",
       },
     },

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
@@ -20,8 +20,12 @@ const ALL_CATEGORIES = "__all__";
 const CONNECTION_STATUS_LABELS = {
   connecting: "リアルタイム更新: 接続中...",
   open: "リアルタイム更新: 有効",
-  closed: "リアルタイム更新: 切断中(再接続を試みています)",
+  reconnecting: "リアルタイム更新: 切断中(再接続を試みています)",
+  stopped: "リアルタイム更新: 停止しました(画面を再読み込みしてください)",
 } as const;
+
+/** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
+const INVALIDATE_DEBOUNCE_MS = 300;
 
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -39,18 +43,23 @@ export function LogListPage() {
     enabled: Boolean(guildId),
   });
 
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionStatus = useLogEntryNotifications(guildId ?? "", (notifiedCategory) => {
     // 過去ページを閲覧中は表示中の内容を壊さないよう、最新ページ(先頭)表示中のみ自動更新する。
     if (pagination.pageIndex !== 0) return;
     if (category !== "" && category !== notifiedCategory) return;
-    void queryClient.invalidateQueries({
-      queryKey: trpc.logging.listLogEntries.queryOptions({
-        guildId: guildId ?? "",
-        category: category === "" ? undefined : category,
-        limit: PAGE_SIZE,
-        cursor: undefined,
-      }).queryKey,
-    });
+    if (invalidateTimerRef.current) return; // 連続通知は1回のrefetchにまとめる
+    invalidateTimerRef.current = setTimeout(() => {
+      invalidateTimerRef.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: trpc.logging.listLogEntries.queryOptions({
+          guildId: guildId ?? "",
+          category: category === "" ? undefined : category,
+          limit: PAGE_SIZE,
+          cursor: undefined,
+        }).queryKey,
+      });
+    }, INVALIDATE_DEBOUNCE_MS);
   });
 
   if (!guildId) {

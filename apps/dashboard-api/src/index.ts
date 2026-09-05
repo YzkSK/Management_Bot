@@ -48,9 +48,14 @@ app.use(
   }),
 );
 
-const { app: wsApp, websocket } = createLogWsRoutes(db, env.SESSION_SECRET);
+const { app: wsApp, websocket } = createLogWsRoutes(db, env.SESSION_SECRET, env.DASHBOARD_WEB_URL);
 app.route("/ws", wsApp);
 
-listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, category }) => broadcastNewLogEntry(guildId, category));
+const logNotifications = listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, category }) =>
+  broadcastNewLogEntry(guildId, category),
+);
+logNotifications.ready.catch((error: unknown) => {
+  console.error("Failed to start listening for log entry inserts (dashboard live updates disabled)", error);
+});
 
 export default { fetch: app.fetch, websocket };
