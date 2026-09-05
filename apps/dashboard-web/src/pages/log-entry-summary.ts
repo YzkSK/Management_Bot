@@ -8,6 +8,8 @@ export interface LogEntrySummary {
   action: string | null;
   /** メッセージ本文等、そのまま読める形で表示したいテキスト。 */
   content: string | null;
+  /** action=updateの編集前本文(message)。移行前の既存ログや対象外カテゴリではnull。 */
+  previousContent: string | null;
   /** 上記以外のcategory固有フィールド。一覧では隠し、詳細展開時のみJSONで描画する。 */
   details: Record<string, unknown>;
 }
@@ -22,6 +24,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
   const details: Record<string, unknown> = {};
   let action: string | null = null;
   let content: string | null = null;
+  let previousContent: string | null = null;
   for (const [key, value] of Object.entries(entry)) {
     if (key === "action" && typeof value === "string") {
       action = value;
@@ -29,6 +32,10 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     }
     if (key === "content" && typeof value === "string") {
       content = value;
+      continue;
+    }
+    if (key === "previousContent" && typeof value === "string") {
+      previousContent = value;
       continue;
     }
     if (!BASE_FIELDS.has(key) && key !== subjectField) {
@@ -41,6 +48,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     subjectId: subjectId ?? null,
     action,
     content,
+    previousContent,
     details,
   };
 }

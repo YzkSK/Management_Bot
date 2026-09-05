@@ -21,6 +21,8 @@ export const messageLogEntrySchema = z.object({
   authorId: nonEmptyString,
   action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
+  /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
+  previousContent: z.string().optional(),
   /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
 });
