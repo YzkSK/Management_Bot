@@ -79,6 +79,12 @@ describe("toMessageUpdateLogEntry", () => {
     expect(entry && "previousContent" in entry ? entry.previousContent : undefined).toBe("old");
   });
 
+  test("編集前本文が空文字でもpreviousContentとして記録する", () => {
+    const entry = toMessageUpdateLogEntry(fakeMessage({ content: "" }), fakeMessage({ content: "追記後" }), BOT_USER_ID);
+    expect(entry?.action).toBe("update");
+    expect(entry && "previousContent" in entry ? entry.previousContent : undefined).toBe("");
+  });
+
   test("本文が変化していなければundefinedを返す(ピン留め等のメタデータ更新)", () => {
     expect(
       toMessageUpdateLogEntry(fakeMessage({ content: "same" }), fakeMessage({ content: "same" }), BOT_USER_ID),

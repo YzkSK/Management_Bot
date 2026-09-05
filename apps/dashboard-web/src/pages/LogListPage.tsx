@@ -175,19 +175,27 @@ export function LogListPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {summary.previousContent && (
-                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap text-muted-foreground line-through">
-                            {summary.previousContent}
+                        {summary.previousContent !== null && (
+                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap text-muted-foreground">
+                            <span className="mr-2 text-xs">編集前</span>
+                            <del>{summary.previousContent || "(本文なし)"}</del>
                           </p>
                         )}
-                        {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
+                        {summary.content && (
+                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">
+                            {summary.previousContent !== null && (
+                              <span className="text-muted-foreground mr-2 text-xs">編集後</span>
+                            )}
+                            {summary.content}
+                          </p>
+                        )}
                         {Object.keys(summary.details).length > 0 && (
                           <details>
                             <summary className="text-muted-foreground cursor-pointer text-xs">詳細</summary>
                             <pre className="text-muted-foreground mt-1 text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
                           </details>
                         )}
-                        {!summary.content && !summary.previousContent && Object.keys(summary.details).length === 0 && "-"}
+                        {!summary.content && summary.previousContent === null && Object.keys(summary.details).length === 0 && "-"}
                       </TableCell>
                     </TableRow>
                   );
