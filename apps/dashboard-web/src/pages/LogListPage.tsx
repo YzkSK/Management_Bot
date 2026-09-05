@@ -146,7 +146,7 @@ export function LogListPage() {
                       </TableCell>
                       <TableCell>{CATEGORY_LABELS[entry.category]}</TableCell>
                       <TableCell>{summary.action ?? "-"}</TableCell>
-                      <TableCell>{summary.executorId ?? "-"}</TableCell>
+                      <TableCell>{summary.subjectId ?? "-"}</TableCell>
                       <TableCell>
                         {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
                         {Object.keys(summary.details).length > 0 && (
