@@ -3,12 +3,14 @@ import { CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/sha
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  getDisplaySettings,
   listChannelSettings,
   listLogEntries,
   listRetentionSettings,
   maskSensitiveFields,
   setChannelSetting,
   setChannelSettingForAllCategories,
+  setDisplaySetting,
   setRetentionSetting,
   setRetentionSettingForAllCategories,
 } from "../application/index.js";
@@ -51,14 +53,25 @@ const setChannelSettingForAllCategoriesInput = z.object({
   channelId: z.string().min(1).nullable(),
 });
 
+const setDisplaySettingInput = z.object({
+  guildId: z.string().min(1),
+  hideAuditLogCorrelation: z.boolean(),
+});
+
 export const loggingRouter = router({
   listLogEntries: protectedProcedure
     .input(listLogEntriesInput)
     .use(requireCapability(CAPABILITIES.VIEW_LOGS))
     .query(async ({ ctx, input }) => {
+      const displaySettings = await getDisplaySettings(ctx.db, input.guildId);
+      const excludeCategories =
+        displaySettings.hideAuditLogCorrelation && input.category !== "auditLogCorrelation"
+          ? (["auditLogCorrelation"] as const)
+          : undefined;
+
       let result;
       try {
-        result = await listLogEntries(ctx.db, input);
+        result = await listLogEntries(ctx.db, { ...input, excludeCategories });
       } catch {
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
       }
@@ -126,4 +139,14 @@ export const loggingRouter = router({
       }
       await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
     }),
+
+  getDisplaySettings: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .query(({ ctx, input }) => getDisplaySettings(ctx.db, input.guildId)),
+
+  setDisplaySetting: protectedProcedure
+    .input(setDisplaySettingInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(({ ctx, input }) => setDisplaySetting(ctx.db, input.guildId, input.hideAuditLogCorrelation)),
 });

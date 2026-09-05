@@ -4,6 +4,7 @@ import {
   capabilityGrants,
   guilds,
   logChannelSettings,
+  logDisplaySettings,
   logEntries,
   logRetentionSettings,
   sessions,
@@ -56,6 +57,21 @@ beforeEach(async () => {
     },
     createdAt: new Date("2026-08-31T00:00:00.000Z"),
   });
+  await db.insert(logEntries).values({
+    id: randomUUID(),
+    guildId,
+    category: "auditLogCorrelation",
+    payload: {
+      category: "auditLogCorrelation",
+      guildId,
+      createdAt: "2026-08-31T00:00:01.000Z",
+      auditLogEntryId: "audit-1",
+      targetId: "t1",
+      actionType: "MEMBER_KICK",
+    },
+    createdAt: new Date("2026-08-31T00:00:01.000Z"),
+  });
+  await db.delete(logDisplaySettings).where(eq(logDisplaySettings.guildId, guildId));
 });
 
 const createCaller = createCallerFactory(loggingRouter);
@@ -382,5 +398,88 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
 
     expect(thrown).toBeInstanceOf(TRPCError);
     expect((thrown as TRPCError).code).toBe("BAD_REQUEST");
+  });
+});
+
+describe("loggingRouter.listLogEntries + display settings", () => {
+  test("hideAuditLogCorrelation=true(デフォルト)の場合、auditLogCorrelationを除外する", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    const result = await caller.listLogEntries({ guildId, limit: 50 });
+
+    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(false);
+    expect(result.entries.some((e) => e.entry.category === "message")).toBe(true);
+  });
+
+  test("category=auditLogCorrelationを明示指定した場合は除外しない", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    const result = await caller.listLogEntries({ guildId, category: "auditLogCorrelation", limit: 50 });
+
+    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(true);
+  });
+
+  test("getDisplaySettings/setDisplaySettingで設定を読み書きでき、listLogEntriesに反映される", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS | CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    const before = await caller.getDisplaySettings({ guildId });
+    expect(before.hideAuditLogCorrelation).toBe(true);
+
+    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false });
+    const after = await caller.getDisplaySettings({ guildId });
+    expect(after.hideAuditLogCorrelation).toBe(false);
+
+    const result = await caller.listLogEntries({ guildId, limit: 50 });
+    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(true);
+  });
+
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(getDisplaySettings/setDisplaySetting)", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+    });
+
+    await expect(caller.getDisplaySettings({ guildId })).rejects.toThrow();
+    const thrown = await captureRejection(caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false }));
+    expect(thrown).toBeInstanceOf(TRPCError);
+    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
   });
 });
