@@ -28,6 +28,7 @@ export { MODERATION_ACTION_TYPES, type ModerationActionType } from "./moderation
 export {
   LOG_ENTRY_SCHEMAS,
   messageLogEntrySchema,
+  reactionLogEntrySchema,
   memberLogEntrySchema,
   roleLogEntrySchema,
   channelLogEntrySchema,

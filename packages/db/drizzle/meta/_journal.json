@@ -64,6 +64,13 @@
       "when": 1788593286106,
       "tag": "0008_dear_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788594055755,
+      "tag": "0009_open_frightful_four",
+      "breakpoints": true
     }
   ]
 }

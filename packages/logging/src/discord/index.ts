@@ -1,6 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { handleModerationEvent } from "../application/index.js";
 import { registerMessageHandlers } from "./handlers/message.js";
+import { registerReactionHandlers } from "./handlers/reaction.js";
 import { registerMemberHandlers } from "./handlers/member.js";
 import { registerRoleHandlers } from "./handlers/role.js";
 import { registerChannelHandlers } from "./handlers/channel.js";
@@ -37,6 +38,7 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   );
 
   registerMessageHandlers(ctx);
+  registerReactionHandlers(ctx);
   registerMemberHandlers(ctx);
   registerRoleHandlers(ctx);
   registerChannelHandlers(ctx);

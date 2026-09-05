@@ -10,6 +10,8 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
       return entry.authorId;
+    case "reaction":
+      return entry.userId;
     case "member":
       return entry.userId;
     case "role":
@@ -43,6 +45,8 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
       return "authorId";
+    case "reaction":
+      return "userId";
     case "member":
       return "userId";
     case "role":
