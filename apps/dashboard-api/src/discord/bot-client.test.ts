@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchGuildChannels } from "./bot-client.ts";
+import { fetchGuildChannels, fetchGuildMemberNames } from "./bot-client.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -116,5 +116,74 @@ describe("fetchGuildChannels", () => {
     });
 
     await expect(fetchGuildChannels("test-bot-token", "g1")).rejects.toThrow();
+  });
+});
+
+describe("fetchGuildMemberNames", () => {
+  test("nickがあればnickを使う", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": {
+        status: 200,
+        body: { nick: "ニックネーム", user: { username: "user1", global_name: "User One" } },
+      },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("ニックネーム");
+  });
+
+  test("nickがなければglobal_nameを使う", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": {
+        status: 200,
+        body: { nick: null, user: { username: "user1", global_name: "User One" } },
+      },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("User One");
+  });
+
+  test("nickもglobal_nameもなければusernameを使う", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": {
+        status: 200,
+        body: { nick: null, user: { username: "user1", global_name: null } },
+      },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("user1");
+  });
+
+  test("404(脱退済み等)はMapに含めない", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 404 },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.has("u1")).toBe(false);
+  });
+
+  test("複数IDを並列解決する", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": {
+        status: 200,
+        body: { nick: null, user: { username: "user-u1", global_name: null } },
+      },
+      "/guilds/g1/members/u2": {
+        status: 200,
+        body: { nick: null, user: { username: "user-u2", global_name: null } },
+      },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1", "u2"]);
+
+    expect(result.get("u1")).toBe("user-u1");
+    expect(result.get("u2")).toBe("user-u2");
   });
 });

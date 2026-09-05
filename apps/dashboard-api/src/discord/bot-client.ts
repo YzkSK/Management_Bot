@@ -29,6 +29,14 @@ const guildMemberSchema = z.object({ roles: z.array(z.string()) });
 
 const meSchema = z.object({ id: z.string() });
 
+const guildMemberWithUserSchema = z.object({
+  nick: z.string().nullable().optional(),
+  user: z.object({
+    username: z.string(),
+    global_name: z.string().nullable().optional(),
+  }),
+});
+
 async function discordGet<T>(botToken: string, path: string, schema: z.ZodType<T>): Promise<T | "not_found"> {
   const response = await fetch(`${DISCORD_API_BASE}${path}`, {
     headers: { Authorization: `Bot ${botToken}` },
@@ -74,4 +82,30 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
       }),
     )
     .map((channel) => ({ id: channel.id, name: channel.name }));
+}
+
+/**
+ * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
+ * 解決する。並列にfetchするが、userIds件数はダッシュボードの1ページ(最大100件)内のユニークID数程度に
+ * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない)。
+ * 脱退済み等で404の場合はMapに含めない(呼び出し側でIDそのまま表示にフォールバックする)。
+ */
+export async function fetchGuildMemberNames(
+  botToken: string,
+  guildId: string,
+  userIds: readonly string[],
+): Promise<Map<string, string>> {
+  const entries = await Promise.all(
+    userIds.map(async (userId) => {
+      const member = await discordGet(
+        botToken,
+        `/guilds/${guildId}/members/${userId}`,
+        guildMemberWithUserSchema,
+      );
+      if (member === "not_found") return undefined;
+      const name = member.nick || member.user.global_name || member.user.username;
+      return [userId, name] as const;
+    }),
+  );
+  return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
 }
