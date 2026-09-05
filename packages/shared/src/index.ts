@@ -35,6 +35,7 @@ export {
   threadLogEntrySchema,
   inviteLogEntrySchema,
   emojiLogEntrySchema,
+  stickerLogEntrySchema,
   autoModLogEntrySchema,
   integrationLogEntrySchema,
   pollLogEntrySchema,
