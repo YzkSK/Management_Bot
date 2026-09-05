@@ -66,6 +66,13 @@ const validByCategory = {
     emojiId: "2",
     action: "create",
   },
+  sticker: {
+    category: "sticker",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    stickerId: "2",
+    action: "create",
+  },
   autoMod: {
     category: "autoMod",
     guildId: "1",

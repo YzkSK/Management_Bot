@@ -25,6 +25,7 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
     case "thread":
     case "invite":
     case "emoji":
+    case "sticker":
     case "integration":
     case "poll":
     case "scheduledEvent":
@@ -57,6 +58,7 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
     case "thread":
     case "invite":
     case "emoji":
+    case "sticker":
     case "integration":
     case "poll":
     case "scheduledEvent":

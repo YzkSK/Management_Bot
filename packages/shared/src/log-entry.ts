@@ -75,6 +75,13 @@ export const emojiLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete"]),
 });
 
+export const stickerLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("sticker"),
+  stickerId: nonEmptyString,
+  action: z.enum(["create", "update", "delete"]),
+});
+
 export const autoModLogEntrySchema = z.object({
   ...base,
   category: z.literal("autoMod"),
@@ -156,6 +163,7 @@ export const LOG_ENTRY_SCHEMAS = {
   thread: threadLogEntrySchema,
   invite: inviteLogEntrySchema,
   emoji: emojiLogEntrySchema,
+  sticker: stickerLogEntrySchema,
   autoMod: autoModLogEntrySchema,
   integration: integrationLogEntrySchema,
   poll: pollLogEntrySchema,

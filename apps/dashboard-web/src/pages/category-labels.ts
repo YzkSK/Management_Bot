@@ -9,6 +9,7 @@ export const CATEGORY_LABELS: Record<LogCategory, string> = {
   thread: "スレッド",
   invite: "招待",
   emoji: "絵文字",
+  sticker: "スタンプ",
   autoMod: "AutoMod",
   integration: "連携",
   poll: "投票",
