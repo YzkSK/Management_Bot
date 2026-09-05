@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
@@ -41,6 +41,29 @@ export function LogListPage() {
       cursor: currentCursor(pagination),
     }),
     enabled: Boolean(guildId),
+  });
+
+  const subjectIds = useMemo(
+    () =>
+      logsQuery.data
+        ? [
+            ...new Set(
+              logsQuery.data.entries
+                .map(({ entry }) => summarizeLogEntry(entry).subjectId)
+                .filter((id): id is string => id !== null),
+            ),
+          ]
+        : [],
+    [logsQuery.data],
+  );
+
+  const namesQuery = useQuery({
+    ...trpc.logging.resolveDisplayNames.queryOptions({
+      guildId: guildId ?? "",
+      userIds: subjectIds,
+      channelIds: [],
+    }),
+    enabled: Boolean(guildId) && subjectIds.length > 0,
   });
 
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,7 +169,11 @@ export function LogListPage() {
                       </TableCell>
                       <TableCell>{CATEGORY_LABELS[entry.category]}</TableCell>
                       <TableCell>{summary.action ?? "-"}</TableCell>
-                      <TableCell>{summary.subjectId ?? "-"}</TableCell>
+                      <TableCell>
+                        {summary.subjectId
+                          ? (namesQuery.data?.users[summary.subjectId] ?? summary.subjectId)
+                          : "-"}
+                      </TableCell>
                       <TableCell>
                         {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
                         {Object.keys(summary.details).length > 0 && (
