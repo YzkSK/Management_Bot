@@ -419,8 +419,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
 
-    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(false);
-    expect(result.entries.some((e) => e.entry.category === "message")).toBe(true);
+    expect(result.entries.map(({ entry }) => entry.category).sort()).toEqual(["message"]);
   });
 
   test("category=auditLogCorrelationを明示指定した場合は除外しない", async () => {
@@ -440,7 +439,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
 
     const result = await caller.listLogEntries({ guildId, category: "auditLogCorrelation", limit: 50 });
 
-    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(true);
+    expect(result.entries.map(({ entry }) => entry.category)).toEqual(["auditLogCorrelation"]);
   });
 
   test("getDisplaySettings/setDisplaySettingで設定を読み書きでき、listLogEntriesに反映される", async () => {
@@ -465,8 +464,14 @@ describe("loggingRouter.listLogEntries + display settings", () => {
     const after = await caller.getDisplaySettings({ guildId });
     expect(after.hideAuditLogCorrelation).toBe(false);
 
-    const result = await caller.listLogEntries({ guildId, limit: 50 });
-    expect(result.entries.some((e) => e.entry.category === "auditLogCorrelation")).toBe(true);
+    const shown = await caller.listLogEntries({ guildId, limit: 50 });
+    expect(shown.entries.map(({ entry }) => entry.category).sort()).toEqual(
+      ["auditLogCorrelation", "message"].sort(),
+    );
+
+    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: true });
+    const hiddenAgain = await caller.listLogEntries({ guildId, limit: 50 });
+    expect(hiddenAgain.entries.map(({ entry }) => entry.category)).toEqual(["message"]);
   });
 
   test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(getDisplaySettings/setDisplaySetting)", async () => {
@@ -477,9 +482,15 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildChannels: channelsOf(),
     });
 
-    await expect(caller.getDisplaySettings({ guildId })).rejects.toThrow();
-    const thrown = await captureRejection(caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false }));
-    expect(thrown).toBeInstanceOf(TRPCError);
-    expect((thrown as TRPCError).code).toBe("FORBIDDEN");
+    const getThrown = await captureRejection(caller.getDisplaySettings({ guildId }));
+    expect(getThrown).toBeInstanceOf(TRPCError);
+    expect((getThrown as TRPCError).code).toBe("FORBIDDEN");
+
+    const setThrown = await captureRejection(caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false }));
+    expect(setThrown).toBeInstanceOf(TRPCError);
+    expect((setThrown as TRPCError).code).toBe("FORBIDDEN");
+
+    const rows = await db.select().from(logDisplaySettings).where(eq(logDisplaySettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
   });
 });
