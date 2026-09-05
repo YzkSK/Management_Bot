@@ -22,6 +22,7 @@ describe("summarizeLogEntry", () => {
       subjectId: "u1",
       action: "delete",
       content: null,
+      previousContent: null,
       details: { channelId: "c1", authorId: "a1" },
     });
   });
@@ -100,6 +101,38 @@ describe("summarizeLogEntry", () => {
 
     expect(summary.subjectId).toBe("u1");
     expect(summary.details).toEqual({ roleId: "r1", userId: "u1" });
+  });
+
+  test("previousContentはdetailsに埋めずそのまま取り出す(編集ログ)", () => {
+    const entry = {
+      category: "message",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      channelId: "c1",
+      authorId: "a1",
+      action: "update",
+      content: "編集後",
+      previousContent: "編集前",
+    } as unknown as LogEntry;
+
+    const summary = summarizeLogEntry(entry);
+    expect(summary.content).toBe("編集後");
+    expect(summary.previousContent).toBe("編集前");
+    expect(summary.details).toEqual({ channelId: "c1" });
+  });
+
+  test("previousContent未設定(移行前の既存ログ等)の場合はnullになる", () => {
+    const entry = {
+      category: "message",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      channelId: "c1",
+      authorId: "a1",
+      action: "update",
+      content: "編集後",
+    } as unknown as LogEntry;
+
+    expect(summarizeLogEntry(entry).previousContent).toBeNull();
   });
 
   test("executorIdとカテゴリ固有主体IDの両方がある場合はexecutorIdが優先される", () => {

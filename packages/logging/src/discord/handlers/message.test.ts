@@ -72,10 +72,11 @@ describe("toMessageCreateLogEntry", () => {
 });
 
 describe("toMessageUpdateLogEntry", () => {
-  test("本文が変化していればupdateエントリを返す", () => {
+  test("本文が変化していればupdateエントリを返す(編集前本文も含む)", () => {
     const entry = toMessageUpdateLogEntry(fakeMessage({ content: "old" }), fakeMessage({ content: "new" }), BOT_USER_ID);
     expect(entry?.action).toBe("update");
     expect(entry && "content" in entry ? entry.content : undefined).toBe("new");
+    expect(entry && "previousContent" in entry ? entry.previousContent : undefined).toBe("old");
   });
 
   test("本文が変化していなければundefinedを返す(ピン留め等のメタデータ更新)", () => {

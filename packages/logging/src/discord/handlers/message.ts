@@ -69,6 +69,7 @@ export function toMessageUpdateLogEntry(
     createdAt: new Date().toISOString(),
     action: "update",
     content: newMessage.content || undefined,
+    previousContent: oldMessage.content || undefined,
   };
 }
 

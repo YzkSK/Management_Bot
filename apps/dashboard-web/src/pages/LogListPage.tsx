@@ -175,6 +175,11 @@ export function LogListPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
+                        {summary.previousContent && (
+                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap text-muted-foreground line-through">
+                            {summary.previousContent}
+                          </p>
+                        )}
                         {summary.content && <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">{summary.content}</p>}
                         {Object.keys(summary.details).length > 0 && (
                           <details>
@@ -182,7 +187,7 @@ export function LogListPage() {
                             <pre className="text-muted-foreground mt-1 text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
                           </details>
                         )}
-                        {!summary.content && Object.keys(summary.details).length === 0 && "-"}
+                        {!summary.content && !summary.previousContent && Object.keys(summary.details).length === 0 && "-"}
                       </TableCell>
                     </TableRow>
                   );
