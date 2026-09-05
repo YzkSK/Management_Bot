@@ -277,6 +277,35 @@ describe("correlateAuditLogEntry", () => {
     expect(selectCalls).toHaveLength(3);
   });
 
+  test("MessageDeleteはchannelId+authorId(targetId)で一致するmessage delete行に相関する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] });
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      { ...baseEntry, action: "MessageDelete", targetId: "author-1", messageDeleteChannelId: "channel-1" },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.table).toBe(logEntries);
+  });
+
+  test("MessageDeleteはmessageDeleteChannelIdがなければ相関しない", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] });
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      { ...baseEntry, action: "MessageDelete", targetId: "author-1", messageDeleteChannelId: undefined },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(0);
+  });
+
   test("MemberRoleUpdateでroleChangesが無ければ何もしない", async () => {
     const inserts: RecordedInsert[] = [];
     const updates: RecordedUpdate[] = [];

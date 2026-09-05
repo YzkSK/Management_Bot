@@ -20,6 +20,15 @@ function extractRoleChanges(entry: GuildAuditLogsEntry): { added: string[]; remo
   return { added, removed };
 }
 
+/**
+ * MessageDeleteのtargetId(投稿者ID)だけでは対象チャンネルを特定できないため、
+ * extra.channel.idから取得する。それ以外のactionではundefined。
+ */
+function extractMessageDeleteChannelId(entry: GuildAuditLogsEntry): string | undefined {
+  if (entry.action !== AuditLogEvent.MessageDelete) return undefined;
+  return (entry.extra as { channel: { id: string } }).channel.id;
+}
+
 /** AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。 */
 export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string): AuditLogEntryInfo {
   return {
@@ -30,6 +39,7 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
     targetId: entry.targetId,
     createdAt: entry.createdAt.toISOString(),
     roleChanges: extractRoleChanges(entry),
+    messageDeleteChannelId: extractMessageDeleteChannelId(entry),
   };
 }
 

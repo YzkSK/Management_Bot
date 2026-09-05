@@ -10,6 +10,7 @@ function fakeAuditLogEntry(
     executorId: string | null;
     targetId: string | null;
     changes: { key: string; new?: { id: string; name: string }[] }[];
+    extra: unknown;
   }> = {},
 ) {
   return {
@@ -19,6 +20,7 @@ function fakeAuditLogEntry(
     targetId: "c1",
     createdAt: new Date("2026-08-31T00:00:00.000Z"),
     changes: [],
+    extra: null,
     ...overrides,
   } as never;
 }
@@ -58,6 +60,19 @@ describe("toAuditLogEntryInfo", () => {
   test("MemberRoleUpdate以外はroleChangesがundefinedになる", () => {
     const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
     expect(info.roleChanges).toBeUndefined();
+  });
+
+  test("MessageDeleteはextra.channel.idをmessageDeleteChannelIdとして抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MessageDelete, extra: { channel: { id: "c1" }, count: 1 } }),
+      "g1",
+    );
+    expect(info.messageDeleteChannelId).toBe("c1");
+  });
+
+  test("MessageDelete以外はmessageDeleteChannelIdがundefinedになる", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
+    expect(info.messageDeleteChannelId).toBeUndefined();
   });
 });
 
