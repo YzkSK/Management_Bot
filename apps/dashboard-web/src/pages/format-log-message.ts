@@ -258,6 +258,18 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "stage": {
+      const target = channelName(entry.channelId, names);
+      switch (entry.action) {
+        case "start":
+          return `${executorName} が ${target} でステージを開始しました`;
+        case "update":
+          return `${executorName} がステージを更新しました`;
+        case "end":
+          return `${executorName} が ${target} のステージを終了しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
