@@ -651,7 +651,24 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が連携を削除しました");
   });
 
-  test("投票作成(実行者未相関): 不明なユーザーにフォールバックする", () => {
+  test("投票作成: 投稿者(executorId)の表示名を実行者として表示する", () => {
+    const entry = {
+      category: "poll",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      messageId: "m1",
+      channelId: "c1",
+      executorId: "u1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Alice" }, channels: { c1: "アンケート" } });
+
+    expect(message).toBe("Alice が #アンケート に投票を作成しました");
+  });
+
+  test("投票作成(executorId未設定の過去データ): 不明なユーザーにフォールバックする", () => {
     const entry = {
       category: "poll",
       guildId: "g1",
