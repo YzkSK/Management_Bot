@@ -231,6 +231,16 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "poll": {
+      const target = channelName(entry.channelId, names);
+      switch (entry.action) {
+        case "create":
+          return `${executorName} が ${target} に投票を作成しました`;
+        case "end":
+          return `${target} の投票が終了しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {

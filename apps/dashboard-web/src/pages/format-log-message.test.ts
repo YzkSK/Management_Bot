@@ -651,6 +651,38 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が連携を削除しました");
   });
 
+  test("投票作成(実行者未相関): 不明なユーザーにフォールバックする", () => {
+    const entry = {
+      category: "poll",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      messageId: "m1",
+      channelId: "c1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: {}, channels: { c1: "アンケート" } });
+
+    expect(message).toBe("不明なユーザー が #アンケート に投票を作成しました");
+  });
+
+  test("投票終了", () => {
+    const entry = {
+      category: "poll",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      messageId: "m1",
+      channelId: "c1",
+      action: "end",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: {}, channels: { c1: "アンケート" } });
+
+    expect(message).toBe("#アンケート の投票が終了しました");
+  });
+
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {
     const entry = {
       category: "auditLogCorrelation",
