@@ -102,6 +102,23 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
 }
 
 /**
+ * guild直下の全チャンネル(種別・送信可否を問わない)のid/nameを返す。表示名解決専用
+ * (issue #144: fetchGuildChannelsはテキスト送信可能チャンネルのみに絞るため、ボイスチャンネル等の
+ * ログでチャンネル名が解決できずIDのまま表示されてしまう問題への対応)。
+ * guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
+ */
+export async function fetchAllGuildChannelNames(
+  botToken: string,
+  guildId: string,
+): Promise<readonly ChannelOption[]> {
+  const channels = await discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema));
+  if (channels === "not_found") {
+    return [];
+  }
+  return channels.map((channel) => ({ id: channel.id, name: channel.name }));
+}
+
+/**
  * Botがそのguildで持つ実効権限(guildロールのpermissionsのOR合成、チャンネルoverwriteは含まない)を返す。
  * ViewAuditLog等、チャンネル単位のoverwriteが存在しない権限の判定に使う
  * (issue #80: integration/auditLogCorrelationがguildAuditLogEntryCreateイベントに依存するため)。
