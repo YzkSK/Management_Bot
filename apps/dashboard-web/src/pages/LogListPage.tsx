@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_OPTIONS, CATEGORY_ACCENT } from "./category-labels.js";
+import { diffPermissions } from "./discord-permission-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { formatLogMessage } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
@@ -280,16 +281,45 @@ export function LogListPage() {
 
                         {summary.changes !== null && (
                           <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
-                            {Object.entries(summary.changes).map(([field, change]) => (
-                              <div key={field} className="text-sm">
-                                <span className="text-muted-foreground mr-2 text-xs">
-                                  {CHANGE_FIELD_LABELS[field] ?? field}
-                                </span>
-                                <del className="text-muted-foreground">{formatChangeValue(field, change.before, names.channels)}</del>
-                                <span className="mx-1">→</span>
-                                <span>{formatChangeValue(field, change.after, names.channels)}</span>
-                              </div>
-                            ))}
+                            {Object.entries(summary.changes).map(([field, change]) => {
+                              const permissionsDiff =
+                                field === "permissions" && typeof change.before === "string" && typeof change.after === "string"
+                                  ? diffPermissions(change.before, change.after)
+                                  : null;
+                              if (permissionsDiff) {
+                                const { added, removed } = permissionsDiff;
+                                return (
+                                  <div key={field} className="text-sm">
+                                    <span className="text-muted-foreground mr-2 text-xs">
+                                      {CHANGE_FIELD_LABELS[field] ?? field}
+                                    </span>
+                                    {added.length === 0 && removed.length === 0 && (
+                                      <span className="text-muted-foreground">変更なし</span>
+                                    )}
+                                    {added.map((name) => (
+                                      <span key={`added-${name}`} className="mr-2 text-green-600 dark:text-green-500">
+                                        +{name}
+                                      </span>
+                                    ))}
+                                    {removed.map((name) => (
+                                      <del key={`removed-${name}`} className="text-muted-foreground mr-2">
+                                        {name}
+                                      </del>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={field} className="text-sm">
+                                  <span className="text-muted-foreground mr-2 text-xs">
+                                    {CHANGE_FIELD_LABELS[field] ?? field}
+                                  </span>
+                                  <del className="text-muted-foreground">{formatChangeValue(field, change.before, names.channels)}</del>
+                                  <span className="mx-1">→</span>
+                                  <span>{formatChangeValue(field, change.after, names.channels)}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 
