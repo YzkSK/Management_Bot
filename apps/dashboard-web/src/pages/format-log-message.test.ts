@@ -183,6 +183,42 @@ describe("formatLogMessage", () => {
     expect(message).toBe("u1 がサーバーから退出しました");
   });
 
+  test("リアクション追加", () => {
+    const entry = {
+      category: "reaction",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      messageId: "m1",
+      userId: "u1",
+      emoji: "👍",
+      action: "add",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
+
+    expect(message).toBe("Yuzuki が 👍 でリアクションしました");
+  });
+
+  test("リアクション削除", () => {
+    const entry = {
+      category: "reaction",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      messageId: "m1",
+      userId: "u1",
+      emoji: "👍",
+      action: "remove",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
+
+    expect(message).toBe("Yuzuki が 👍 のリアクションを外しました");
+  });
+
   test("未対応の組み合わせは汎用フォールバック文言になる", () => {
     const entry = {
       category: "guild",

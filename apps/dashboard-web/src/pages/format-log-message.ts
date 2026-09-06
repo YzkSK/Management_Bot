@@ -140,6 +140,16 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "reaction": {
+      const targetName = userName(entry.userId, names);
+      switch (entry.action) {
+        case "add":
+          return `${targetName} が ${entry.emoji} でリアクションしました`;
+        case "remove":
+          return `${targetName} が ${entry.emoji} のリアクションを外しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
