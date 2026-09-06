@@ -149,7 +149,7 @@ describe("LogListPage", () => {
       trpc.logging.resolveDisplayNames.queryOptions({
         guildId: "g1",
         userIds: ["u1"],
-        channelIds: [],
+        channelIds: ["c1"],
       }).queryKey,
       { users: { u1: "テストユーザー" }, channels: {} },
     );
@@ -189,12 +189,53 @@ describe("LogListPage", () => {
       trpc.logging.resolveDisplayNames.queryOptions({
         guildId: "g1",
         userIds: ["u1"],
-        channelIds: [],
+        channelIds: ["c1"],
       }).queryKey,
       { users: {}, channels: {} },
     );
     const html = renderPage("g1", queryClient);
 
     expect(html).toContain(">u1<");
+  });
+
+  test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "voice",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              userId: "u1",
+              channelId: "c2",
+              previousChannelId: "c1",
+              action: "move",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    queryClient.setQueryData(
+      trpc.logging.resolveDisplayNames.queryOptions({
+        guildId: "g1",
+        userIds: ["u1"],
+        channelIds: ["c1", "c2"],
+      }).queryKey,
+      { users: { u1: "Sora" }, channels: { c1: "雑談", c2: "ゲーム部屋" } },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("雑談");
+    expect(html).toContain("ゲーム部屋");
   });
 });

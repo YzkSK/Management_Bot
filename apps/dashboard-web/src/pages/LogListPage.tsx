@@ -57,13 +57,32 @@ export function LogListPage() {
     [logsQuery.data],
   );
 
+  const channelIds = useMemo(
+    () =>
+      logsQuery.data
+        ? Array.from(
+            new Set(
+              logsQuery.data.entries.flatMap(({ entry }) =>
+                Object.entries(entry)
+                  .filter(
+                    ([key, value]): value is string =>
+                      (key === "channelId" || key === "previousChannelId") && typeof value === "string",
+                  )
+                  .map(([, value]) => value),
+              ),
+            ),
+          ).sort()
+        : [],
+    [logsQuery.data],
+  );
+
   const namesQuery = useQuery({
     ...trpc.logging.resolveDisplayNames.queryOptions({
       guildId: guildId ?? "",
       userIds: subjectIds,
-      channelIds: [],
+      channelIds,
     }),
-    enabled: Boolean(guildId) && subjectIds.length > 0,
+    enabled: Boolean(guildId) && (subjectIds.length > 0 || channelIds.length > 0),
   });
 
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,6 +206,18 @@ export function LogListPage() {
                               <span className="text-muted-foreground mr-2 text-xs">編集後</span>
                             )}
                             {summary.content}
+                          </p>
+                        )}
+                        {("channelId" in summary.details || "previousChannelId" in summary.details) && namesQuery.data?.channels && (
+                          <p className="mb-1 max-w-md text-sm text-muted-foreground">
+                            {[
+                              "previousChannelId" in summary.details &&
+                                namesQuery.data.channels[summary.details.previousChannelId as string],
+                              "channelId" in summary.details &&
+                                namesQuery.data.channels[summary.details.channelId as string],
+                            ]
+                              .filter((name): name is string => Boolean(name))
+                              .join(" → ")}
                           </p>
                         )}
                         {Object.keys(summary.details).length > 0 && (
