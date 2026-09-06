@@ -63,12 +63,9 @@ export function LogListPage() {
         ? Array.from(
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) =>
-                Object.entries(entry)
-                  .filter(
-                    ([key, value]): value is string =>
-                      (key === "channelId" || key === "previousChannelId") && typeof value === "string",
-                  )
-                  .map(([, value]) => value),
+                Object.entries(entry).flatMap(([key, value]) =>
+                  (key === "channelId" || key === "previousChannelId") && typeof value === "string" ? [value] : [],
+                ),
               ),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
