@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { CATEGORY_OPTIONS, CATEGORY_LABELS, CATEGORY_ACCENT } from "./category-labels.js";
+import { CATEGORY_OPTIONS, CATEGORY_ACCENT } from "./category-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { formatLogMessage } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
@@ -227,9 +227,9 @@ export function LogListPage() {
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground font-semibold tracking-wide uppercase">
-                              カテゴリ
+                              実行者ID
                             </span>
-                            <span>{CATEGORY_LABELS[entry.category]}</span>
+                            <span className="font-mono">{summary.subjectId ?? "-"}</span>
                           </div>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground font-semibold tracking-wide uppercase">
