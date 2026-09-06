@@ -225,6 +225,8 @@ describe("LogListPage", () => {
         nextCursor: null,
       },
     );
+    // channelIds: ["c1", "c2"]でキャッシュしておき、queryKeyが一致した場合のみusersの解決結果がヒットすることで
+    // channelId/previousChannelIdが正しくresolveDisplayNamesのchannelIdsに集約されたことを間接的に検証する。
     queryClient.setQueryData(
       trpc.logging.resolveDisplayNames.queryOptions({
         guildId: "g1",
@@ -235,7 +237,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("雑談");
-    expect(html).toContain("ゲーム部屋");
+    expect(html).toContain("Sora");
+    expect(html).not.toContain(">u1<");
   });
 });

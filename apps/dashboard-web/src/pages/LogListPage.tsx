@@ -71,7 +71,7 @@ export function LogListPage() {
                   .map(([, value]) => value),
               ),
             ),
-          ).sort()
+          ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
     [logsQuery.data],
   );
@@ -206,18 +206,6 @@ export function LogListPage() {
                               <span className="text-muted-foreground mr-2 text-xs">編集後</span>
                             )}
                             {summary.content}
-                          </p>
-                        )}
-                        {("channelId" in summary.details || "previousChannelId" in summary.details) && namesQuery.data?.channels && (
-                          <p className="mb-1 max-w-md text-sm text-muted-foreground">
-                            {[
-                              "previousChannelId" in summary.details &&
-                                namesQuery.data.channels[summary.details.previousChannelId as string],
-                              "channelId" in summary.details &&
-                                namesQuery.data.channels[summary.details.channelId as string],
-                            ]
-                              .filter((name): name is string => Boolean(name))
-                              .join(" → ")}
                           </p>
                         )}
                         {Object.keys(summary.details).length > 0 && (
