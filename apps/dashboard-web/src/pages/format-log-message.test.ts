@@ -812,6 +812,38 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が #ステージ でステージを開始しました");
   });
 
+  test("ステージ開始(実行者未相関)", () => {
+    const entry = {
+      category: "stage",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      stageInstanceId: "si1",
+      channelId: "c1",
+      action: "start",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: {}, channels: { c1: "ステージ" } });
+
+    expect(message).toBe("不明なユーザー が #ステージ でステージを開始しました");
+  });
+
+  test("ステージ終了(実行者未相関)", () => {
+    const entry = {
+      category: "stage",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      stageInstanceId: "si1",
+      channelId: "c1",
+      action: "end",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: {}, channels: { c1: "ステージ" } });
+
+    expect(message).toBe("不明なユーザー が #ステージ のステージを終了しました");
+  });
+
   test("ステージ更新(実行者未相関)", () => {
     const entry = {
       category: "stage",
