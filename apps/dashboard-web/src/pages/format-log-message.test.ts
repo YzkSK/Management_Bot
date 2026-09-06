@@ -410,6 +410,22 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が招待リンクを削除しました");
   });
 
+  test("招待リンク作成(実行者未相関): 不明なユーザーにフォールバックする", () => {
+    const entry = {
+      category: "invite",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      code: "abc123",
+      channelId: "c1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("不明なユーザー が #c1 の招待リンクを作成しました");
+  });
+
   test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
     const entry = {
       category: "autoMod",
