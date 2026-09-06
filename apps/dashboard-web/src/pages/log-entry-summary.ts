@@ -1,8 +1,8 @@
 import { getLogEntrySubjectId, getLogEntrySubjectField, type LogEntry } from "@management-bot/shared";
 
 export interface LogEntryFieldChange {
-  before: string | number | boolean;
-  after: string | number | boolean;
+  before: string | number | boolean | null;
+  after: string | number | boolean | null;
 }
 
 export interface LogEntrySummary {

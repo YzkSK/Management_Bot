@@ -222,4 +222,22 @@ describe("logEntrySchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  test("channel: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.channel,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("channel: changesにtopicのnull(未設定)を含む場合も成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.channel,
+      action: "update",
+      changes: { topic: { before: null, after: "new topic" } },
+    });
+    expect(result.success).toBe(true);
+  });
 });
