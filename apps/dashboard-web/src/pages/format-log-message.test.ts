@@ -537,6 +537,40 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin がAutoModルールを作成しました");
   });
 
+  test("AutoModルール更新", () => {
+    const entry = {
+      category: "autoMod",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      ruleId: "r1",
+      userId: "u1",
+      executorId: "mod1",
+      action: "ruleUpdate",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がAutoModルールを更新しました");
+  });
+
+  test("AutoModルール削除", () => {
+    const entry = {
+      category: "autoMod",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      ruleId: "r1",
+      userId: "u1",
+      executorId: "mod1",
+      action: "ruleDelete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がAutoModルールを削除しました");
+  });
+
   test("AutoModルール作成(実行者未相関): 不明なユーザーにフォールバックする", () => {
     const entry = {
       category: "autoMod",
