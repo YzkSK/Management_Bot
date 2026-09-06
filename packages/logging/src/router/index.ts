@@ -171,7 +171,7 @@ export const loggingRouter = router({
         uniqueUserIds.length > 0
           ? ctx.getGuildMemberNames(input.guildId, uniqueUserIds)
           : Promise.resolve(new Map<string, string>()),
-        ctx.getGuildChannels(input.guildId),
+        ctx.getAllGuildChannels(input.guildId),
       ]);
       const channelNameById = new Map(channels.map((c) => [c.id, c.name]));
       const wantedChannelIds = new Set(input.channelIds);

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchBotGuildPermissions, fetchGuildChannels, fetchGuildMemberNames } from "./bot-client.ts";
+import {
+  fetchAllGuildChannelNames,
+  fetchBotGuildPermissions,
+  fetchGuildChannels,
+  fetchGuildMemberNames,
+} from "./bot-client.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -116,6 +121,55 @@ describe("fetchGuildChannels", () => {
     });
 
     await expect(fetchGuildChannels("test-bot-token", "g1")).rejects.toThrow();
+  });
+});
+
+describe("fetchAllGuildChannelNames", () => {
+  test("送信可否・チャンネル種別を問わず全チャンネルのid/nameを返す(ボイスチャンネル含む)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [
+          { id: "c1", name: "general", type: 0, permission_overwrites: [] },
+          { id: "c2", name: "voice", type: 2, permission_overwrites: [] },
+        ],
+      },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([
+      { id: "c1", name: "general" },
+      { id: "c2", name: "voice" },
+    ]);
+  });
+
+  test("guild不明(404)は空配列を返す", async () => {
+    mockFetch({
+      "/guilds/g1/channels": { status: 404 },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([]);
+  });
+
+  test("Bot未参加(403)は空配列を返す", async () => {
+    mockFetch({
+      "/guilds/g1/channels": { status: 403 },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([]);
+  });
+
+  test("5xxはErrorを投げる", async () => {
+    mockFetch({
+      "/guilds/g1/channels": { status: 500 },
+    });
+
+    await expect(fetchAllGuildChannelNames("test-bot-token", "g1")).rejects.toThrow();
   });
 });
 

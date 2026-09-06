@@ -44,6 +44,12 @@ export interface DashboardAccessContext {
    */
   getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
   /**
+   * guildId直下の全チャンネル(種別・送信可否を問わない)を返す。ログ一覧のchannelId→name表示名解決専用
+   * (issue #144)。getGuildChannelsは送信可能チャンネルのみに絞るため、ボイスチャンネル等のログでは
+   * 使えない。表示専用なのでdashboard-api側で短命キャッシュしてよい。
+   */
+  getAllGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
+  /**
    * guildId直下でchannelIdが実在し、botがメッセージ送信可能かをキャッシュを介さず確認する。
    * チャンネルID設定のmutation(setChannelSetting等)の実在検証専用。dashboard-api側でDiscord APIから供給する。
    */

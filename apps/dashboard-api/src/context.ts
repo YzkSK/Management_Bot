@@ -9,7 +9,12 @@ import type { Db } from "@management-bot/db";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
-import { fetchBotGuildPermissions, fetchGuildChannels, fetchGuildMemberNames } from "./discord/bot-client.js";
+import {
+  fetchAllGuildChannelNames,
+  fetchBotGuildPermissions,
+  fetchGuildChannels,
+  fetchGuildMemberNames,
+} from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -28,10 +33,15 @@ const userGuildsCache = createTtlCache<readonly DiscordUserGuild[] | null>(USER_
  */
 const GUILD_TTL_MS = 30_000;
 const guildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
+const allGuildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
+}
+
+function createGetAllGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
+  return (guildId) => allGuildChannelsCache(guildId, () => fetchAllGuildChannelNames(botToken, guildId));
 }
 
 /**
@@ -144,6 +154,7 @@ export function createContext(
       discordClientId,
       getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
       getGuildChannels: createGetGuildChannels(botToken),
+      getAllGuildChannels: createGetAllGuildChannels(botToken),
       verifyGuildChannel: createVerifyGuildChannel(botToken),
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
