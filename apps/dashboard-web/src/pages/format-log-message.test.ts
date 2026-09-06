@@ -196,4 +196,18 @@ describe("formatLogMessage", () => {
 
     expect(message).toBe("サーバー設定が更新されました");
   });
+
+  test("自然文未実装カテゴリは日本語ラベルでフォールバックする", () => {
+    const entry = {
+      category: "invite",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("招待: create");
+  });
 });

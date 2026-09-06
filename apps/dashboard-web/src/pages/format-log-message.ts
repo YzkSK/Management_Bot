@@ -1,4 +1,5 @@
 import type { LogEntry } from "@management-bot/shared";
+import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
 interface NameResolvers {
@@ -123,5 +124,5 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     }
   }
 
-  return `${summary.action ?? "更新"}: ${entry.category}`;
+  return `${CATEGORY_LABELS[entry.category]}: ${summary.action ?? "更新"}`;
 }
