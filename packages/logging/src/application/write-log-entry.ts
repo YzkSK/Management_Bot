@@ -20,7 +20,8 @@ const MAX_MESSAGE_LENGTH = 1_900;
 const TRUNCATION_SUFFIX = "…";
 
 function formatValue(value: unknown): string {
-  return String(value).replace(/[\r\n]+/g, " ");
+  const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+  return text.replace(/[\r\n]+/g, " ");
 }
 
 /**

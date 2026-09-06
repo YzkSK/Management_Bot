@@ -9,7 +9,12 @@ export function toRoleCreateLogEntry(role: Role): LogEntry {
   return { category: "role", guildId: role.guild.id, createdAt: new Date().toISOString(), roleId: role.id, action: "create" };
 }
 
-const TRACKED_ROLE_FIELDS = ["name", "color", "hoist", "mentionable", "position", "permissions"] as const;
+/**
+ * positionは対象外: ロールの並び替えでは移動させた本人以外の複数ロールでも
+ * positionが実際に変わりroleUpdateが発火するため、追跡対象にすると
+ * 「無関係なロールへの波及を記録しない」というこの修正の目的が再び壊れる。
+ */
+const TRACKED_ROLE_FIELDS = ["name", "color", "hoist", "mentionable", "permissions"] as const;
 
 function getTrackedRoleValue(role: Role, field: (typeof TRACKED_ROLE_FIELDS)[number]): string | number | boolean {
   if (field === "permissions") return role.permissions.bitfield.toString();

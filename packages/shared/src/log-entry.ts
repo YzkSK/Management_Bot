@@ -51,8 +51,11 @@ export const roleLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。create/update/delete(ロール自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
-  /** action=updateのみ設定する変更フィールドごとのbefore/after。 */
-  changes: z.record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) })).optional(),
+  /** action=updateのみ設定する変更フィールドごとのbefore/after。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+  changes: z
+    .record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) }))
+    .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
+    .optional(),
 });
 
 export const channelLogEntrySchema = z.object({

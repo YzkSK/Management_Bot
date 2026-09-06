@@ -204,4 +204,19 @@ describe("formatLogEntry", () => {
     expect(line.length).toBeLessThanOrEqual(1_900);
     expect(line).toEndWith("…");
   });
+
+  test("オブジェクト値(changes等)はJSON文字列化し、[object Object]にならない", () => {
+    const entry: LogEntry = {
+      category: "role",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      roleId: "r1",
+      action: "update",
+      changes: { name: { before: "old", after: "new" } },
+    };
+    const line = formatLogEntry(entry);
+    expect(line).not.toContain("[object Object]");
+    expect(line).toContain(`"before":"old"`);
+    expect(line).toContain(`"after":"new"`);
+  });
 });

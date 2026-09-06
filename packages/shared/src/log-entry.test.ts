@@ -204,4 +204,22 @@ describe("logEntrySchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test("role: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.role,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("role: changesにフィールドごとのbefore/afterがある場合は成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.role,
+      action: "update",
+      changes: { name: { before: "old", after: "new" } },
+    });
+    expect(result.success).toBe(true);
+  });
 });
