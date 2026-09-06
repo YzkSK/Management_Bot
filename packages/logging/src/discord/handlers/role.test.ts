@@ -8,8 +8,18 @@ import {
   toRoleUpdateLogEntry,
 } from "./role.js";
 
-function fakeRole(id = "r1") {
-  return { id, guild: { id: "g1" } } as never;
+function fakeRole(id = "r1", overrides: Partial<Record<"name" | "color" | "hoist" | "mentionable" | "position", unknown>> = {}) {
+  return {
+    id,
+    guild: { id: "g1" },
+    name: "role",
+    color: 0,
+    hoist: false,
+    mentionable: false,
+    position: 0,
+    permissions: { bitfield: 0n },
+    ...overrides,
+  } as never;
 }
 
 function fakeMember(roleIds: string[], id = "u1") {
@@ -18,7 +28,14 @@ function fakeMember(roleIds: string[], id = "u1") {
 
 describe("role category mappers", () => {
   test("create", () => expect(toRoleCreateLogEntry(fakeRole()).action).toBe("create"));
-  test("update", () => expect(toRoleUpdateLogEntry(fakeRole(), fakeRole()).action).toBe("update"));
+  test("update: 名前が変わればchangesに反映される", () => {
+    const entry = toRoleUpdateLogEntry(fakeRole("r1", { name: "old" }), fakeRole("r1", { name: "new" }));
+    expect(entry?.action).toBe("update");
+    expect(entry).toMatchObject({ changes: { name: { before: "old", after: "new" } } });
+  });
+  test("update: 差分がなければnull(無関係ロールへの波及を記録しない)", () => {
+    expect(toRoleUpdateLogEntry(fakeRole(), fakeRole())).toBeNull();
+  });
   test("delete", () => expect(toRoleDeleteLogEntry(fakeRole()).action).toBe("delete"));
 });
 
