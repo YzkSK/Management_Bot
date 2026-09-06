@@ -603,6 +603,53 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Yuzuki の発言に対してAutoModが作動しました");
   });
 
+  test("連携追加", () => {
+    const entry = {
+      category: "integration",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      integrationId: "i1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が連携を追加しました");
+  });
+
+  test("連携更新", () => {
+    const entry = {
+      category: "integration",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      integrationId: "i1",
+      executorId: "mod1",
+      action: "update",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が連携を更新しました");
+  });
+
+  test("連携削除(実行者未相関)", () => {
+    const entry = {
+      category: "integration",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      integrationId: "i1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("不明なユーザー が連携を削除しました");
+  });
+
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {
     const entry = {
       category: "auditLogCorrelation",

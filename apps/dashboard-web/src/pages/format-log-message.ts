@@ -220,6 +220,17 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "integration": {
+      switch (entry.action) {
+        case "create":
+          return `${executorName} が連携を追加しました`;
+        case "update":
+          return `${executorName} が連携を更新しました`;
+        case "delete":
+          return `${executorName} が連携を削除しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
