@@ -4,15 +4,15 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { CATEGORY_OPTIONS, CATEGORY_LABELS } from "./category-labels.js";
+import { CATEGORY_OPTIONS, CATEGORY_LABELS, CATEGORY_ACCENT } from "./category-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
+import { formatLogMessage } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
 import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
@@ -81,6 +81,19 @@ export function LogListPage() {
     }),
     enabled: Boolean(guildId) && (subjectIds.length > 0 || channelIds.length > 0),
   });
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionStatus = useLogEntryNotifications(guildId ?? "", (notifiedCategory) => {
@@ -165,59 +178,80 @@ export function LogListPage() {
           {logsQuery.data.entries.length === 0 ? (
             <p className="text-muted-foreground text-sm">該当するログはありません。</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>日時</TableHead>
-                  <TableHead>カテゴリ</TableHead>
-                  <TableHead>アクション</TableHead>
-                  <TableHead>実行者</TableHead>
-                  <TableHead>詳細</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logsQuery.data.entries.map(({ id, entry }) => {
-                  const summary = summarizeLogEntry(entry);
-                  return (
-                    <TableRow key={id}>
-                      <TableCell>
-                        <time dateTime={summary.createdAt}>{formatCreatedAt(summary.createdAt)}</time>
-                      </TableCell>
-                      <TableCell>{CATEGORY_LABELS[entry.category]}</TableCell>
-                      <TableCell>{summary.action ?? "-"}</TableCell>
-                      <TableCell>
-                        {summary.subjectId
-                          ? (namesQuery.data?.users[summary.subjectId] ?? summary.subjectId)
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {summary.previousContent !== null && (
-                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap text-muted-foreground">
-                            <span className="mr-2 text-xs">編集前</span>
-                            <del>{summary.previousContent || "(本文なし)"}</del>
-                          </p>
-                        )}
-                        {summary.content && (
-                          <p className="mb-1 max-w-md text-sm whitespace-pre-wrap">
+            <div className="flex flex-col gap-2">
+              {logsQuery.data.entries.map(({ id, entry }) => {
+                const summary = summarizeLogEntry(entry);
+                const names = { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
+                const message = formatLogMessage(entry, summary, names);
+                const isExpanded = expandedIds.has(id);
+
+                return (
+                  <div key={id} className="rounded-lg border">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(id)}
+                      className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
+                    >
+                      <span
+                        className="mt-0.5 size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 text-sm">{message}</span>
+                      <time dateTime={summary.createdAt} className="text-muted-foreground shrink-0 text-xs">
+                        {formatCreatedAt(summary.createdAt)}
+                      </time>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                        {(summary.content !== null || summary.previousContent !== null) && (
+                          <div className="rounded-md border bg-card p-3">
                             {summary.previousContent !== null && (
-                              <span className="text-muted-foreground mr-2 text-xs">編集後</span>
+                              <p className="mb-1 text-sm whitespace-pre-wrap text-muted-foreground">
+                                <span className="mr-2 text-xs">編集前</span>
+                                <del>{summary.previousContent || "(本文なし)"}</del>
+                              </p>
                             )}
-                            {summary.content}
-                          </p>
+                            {summary.content && (
+                              <p className="text-sm whitespace-pre-wrap">
+                                {summary.previousContent !== null && (
+                                  <span className="text-muted-foreground mr-2 text-xs">編集後</span>
+                                )}
+                                {summary.content}
+                              </p>
+                            )}
+                          </div>
                         )}
-                        {Object.keys(summary.details).length > 0 && (
-                          <details>
-                            <summary className="text-muted-foreground cursor-pointer text-xs">詳細</summary>
-                            <pre className="text-muted-foreground mt-1 text-xs">{JSON.stringify(summary.details, null, 2)}</pre>
-                          </details>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground font-semibold tracking-wide uppercase">
+                              カテゴリ
+                            </span>
+                            <span>{CATEGORY_LABELS[entry.category]}</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground font-semibold tracking-wide uppercase">
+                              ログID
+                            </span>
+                            <span className="font-mono">{id}</span>
+                          </div>
+                        </div>
+
+                        {summary.subjectId && (
+                          <div className="flex gap-2">
+                            <Button type="button" variant="outline" size="sm">
+                              このユーザーで絞り込み
+                            </Button>
+                          </div>
                         )}
-                        {!summary.content && summary.previousContent === null && Object.keys(summary.details).length === 0 && "-"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
           <div className="flex gap-2">
             <Button

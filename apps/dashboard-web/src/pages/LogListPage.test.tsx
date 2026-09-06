@@ -51,7 +51,7 @@ describe("LogListPage", () => {
     expect(html).toContain("該当するログはありません");
   });
 
-  test("メッセージ本文はテキストとして表示し、残りのフィールドはdetails配下に隠す", () => {
+  test("一覧では自然文の見出しのみを表示し、本文は展開後に表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
       trpc.logging.listLogEntries.queryOptions({
@@ -80,11 +80,9 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("こんにちは");
-    expect(html).toContain("<details>");
-    expect(html).toContain("channelId");
-    // content自体はdetailsのJSONに二重掲載されない
-    expect(html.indexOf("こんにちは")).toBeLessThan(html.indexOf("<details>"));
+    expect(html).toContain("がメッセージを投稿しました");
+    // 初期状態(未展開)ではカードは折りたたまれており、本文はクリックして展開するまでDOMに現れない。
+    expect(html).not.toContain("こんにちは");
   });
 
   test("executorIdがないmessageエントリはauthorIdを実行者列に表示する", () => {
@@ -116,7 +114,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">a1<");
+    expect(html).toContain("a1 がメッセージを投稿しました");
   });
 
   test("実行者列にsubjectIdの表示名(resolveDisplayNamesの結果)が表示される", () => {
@@ -195,7 +193,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">u1<");
+    expect(html).toContain("u1 が自分のメッセージを削除しました");
   });
 
   test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
