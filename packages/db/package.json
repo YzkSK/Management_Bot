@@ -16,7 +16,8 @@
   "dependencies": {
     "@management-bot/shared": "workspace:*",
     "drizzle-orm": "^0.44.0",
-    "postgres": "^3.4.0"
+    "postgres": "^3.4.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",

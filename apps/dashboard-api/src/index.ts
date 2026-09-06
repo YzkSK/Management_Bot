@@ -1,11 +1,13 @@
 import { trpcServer } from "@hono/trpc-server";
 import { parseEnv, envSchema } from "@management-bot/config";
-import { createDb } from "@management-bot/db";
+import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { appRouter } from "./app-router.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
+import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
+import { createLogWsRoutes } from "./ws/routes.js";
 
 const dashboardEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -14,6 +16,7 @@ const dashboardEnvSchema = envSchema.pick({
   DISCORD_OAUTH_REDIRECT_URI: true,
   DASHBOARD_WEB_URL: true,
   SESSION_SECRET: true,
+  DISCORD_TOKEN: true,
 });
 
 const env = parseEnv(dashboardEnvSchema);
@@ -41,8 +44,18 @@ app.use(
   "/trpc/*",
   trpcServer({
     router: appRouter,
-    createContext: createContext(db),
+    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID),
   }),
 );
 
-export default app;
+const { app: wsApp, websocket } = createLogWsRoutes(db, env.SESSION_SECRET, env.DASHBOARD_WEB_URL);
+app.route("/ws", wsApp);
+
+const logNotifications = listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, category }) =>
+  broadcastNewLogEntry(guildId, category),
+);
+logNotifications.ready.catch((error: unknown) => {
+  console.error("Failed to start listening for log entry inserts (dashboard live updates disabled)", error);
+});
+
+export default { fetch: app.fetch, websocket };

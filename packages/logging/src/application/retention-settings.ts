@@ -38,3 +38,25 @@ export async function setRetentionSetting(
       set: { retentionDays },
     });
 }
+
+/**
+ * 全カテゴリの保持期間を一括で同じ値に設定する(カテゴリごとの個別設定は上書きされる)。
+ * ponytail: 現時点のLOG_CATEGORIESへ実際に行を書き込むだけで、「ギルド単位の既定値」を
+ * 別途保持しているわけではない。将来LOG_CATEGORIESにカテゴリを追加した場合、既存ギルドの
+ * 新カテゴリはretentionDays=0(無期限)から始まり、過去の一括設定値を継承しない。
+ * 継承が必要になったらguild単位のデフォルト値テーブルを別途設け、カテゴリ別設定を
+ * そのoverrideとして扱う設計に切り替えること。
+ */
+export async function setRetentionSettingForAllCategories(
+  db: Db,
+  guildId: string,
+  retentionDays: number,
+): Promise<void> {
+  await db
+    .insert(logRetentionSettings)
+    .values(LOG_CATEGORIES.map((category) => ({ guildId, category, retentionDays })))
+    .onConflictDoUpdate({
+      target: [logRetentionSettings.guildId, logRetentionSettings.category],
+      set: { retentionDays },
+    });
+}

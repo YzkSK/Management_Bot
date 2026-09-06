@@ -16,4 +16,18 @@ describe("buildInviteUrl", () => {
 
     expect(url.searchParams.get("permissions")).toBe("16");
   });
+
+  test("guildIdを指定するとguild_id/disable_guild_selectを含み対象guildを固定する", () => {
+    const url = new URL(buildInviteUrl("123456", 16n, { guildId: "guild-1" }));
+
+    expect(url.searchParams.get("guild_id")).toBe("guild-1");
+    expect(url.searchParams.get("disable_guild_select")).toBe("true");
+  });
+
+  test("guildId未指定ではguild_id/disable_guild_selectを含まない", () => {
+    const url = new URL(buildInviteUrl("123456"));
+
+    expect(url.searchParams.has("guild_id")).toBe(false);
+    expect(url.searchParams.has("disable_guild_select")).toBe(false);
+  });
 });

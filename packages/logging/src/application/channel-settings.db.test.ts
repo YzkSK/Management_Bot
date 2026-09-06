@@ -3,7 +3,7 @@ import { createDb, guilds, logChannelSettings } from "@management-bot/db";
 import { LOG_CATEGORIES } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { listChannelSettings, setChannelSetting } from "./channel-settings.js";
+import { listChannelSettings, setChannelSetting, setChannelSettingForAllCategories } from "./channel-settings.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -81,6 +81,33 @@ describe("setChannelSetting", () => {
       .select()
       .from(logChannelSettings)
       .where(eq(logChannelSettings.guildId, guildId));
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("setChannelSettingForAllCategories", () => {
+  test("全カテゴリに同じchannelIdを設定する", async () => {
+    await setChannelSettingForAllCategories(db, guildId, "c1");
+
+    const result = await listChannelSettings(db, guildId);
+    expect(result.every((r) => r.channelId === "c1")).toBe(true);
+  });
+
+  test("一部カテゴリだけ個別設定済みでも、全カテゴリを一括値で上書きする", async () => {
+    await setChannelSetting(db, guildId, "message", "c1");
+
+    await setChannelSettingForAllCategories(db, guildId, "c2");
+
+    const result = await listChannelSettings(db, guildId);
+    expect(result.every((r) => r.channelId === "c2")).toBe(true);
+  });
+
+  test("channelId=nullで全カテゴリの設定を削除する", async () => {
+    await setChannelSettingForAllCategories(db, guildId, "c1");
+
+    await setChannelSettingForAllCategories(db, guildId, null);
+
+    const rows = await db.select().from(logChannelSettings).where(eq(logChannelSettings.guildId, guildId));
     expect(rows).toHaveLength(0);
   });
 });

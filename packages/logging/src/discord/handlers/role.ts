@@ -9,8 +9,28 @@ export function toRoleCreateLogEntry(role: Role): LogEntry {
   return { category: "role", guildId: role.guild.id, createdAt: new Date().toISOString(), roleId: role.id, action: "create" };
 }
 
-export function toRoleUpdateLogEntry(_oldRole: Role, newRole: Role): LogEntry {
-  return { category: "role", guildId: newRole.guild.id, createdAt: new Date().toISOString(), roleId: newRole.id, action: "update" };
+/**
+ * positionは対象外: ロールの並び替えでは移動させた本人以外の複数ロールでも
+ * positionが実際に変わりroleUpdateが発火するため、追跡対象にすると
+ * 「無関係なロールへの波及を記録しない」というこの修正の目的が再び壊れる。
+ */
+const TRACKED_ROLE_FIELDS = ["name", "color", "hoist", "mentionable", "permissions"] as const;
+
+function getTrackedRoleValue(role: Role, field: (typeof TRACKED_ROLE_FIELDS)[number]): string | number | boolean {
+  if (field === "permissions") return role.permissions.bitfield.toString();
+  return role[field];
+}
+
+/** oldRoleとnewRoleを比較し、実際に変化したフィールドのみをchangesに含める。無関係なロールへの波及等で差分がなければnullを返す。 */
+export function toRoleUpdateLogEntry(oldRole: Role, newRole: Role): LogEntry | null {
+  const changes: Record<string, { before: string | number | boolean; after: string | number | boolean }> = {};
+  for (const field of TRACKED_ROLE_FIELDS) {
+    const before = getTrackedRoleValue(oldRole, field);
+    const after = getTrackedRoleValue(newRole, field);
+    if (before !== after) changes[field] = { before, after };
+  }
+  if (Object.keys(changes).length === 0) return null;
+  return { category: "role", guildId: newRole.guild.id, createdAt: new Date().toISOString(), roleId: newRole.id, action: "update", changes };
 }
 
 export function toRoleDeleteLogEntry(role: Role): LogEntry {
@@ -45,7 +65,10 @@ export function registerRoleHandlers(ctx: FeatureModuleContext): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
 
   ctx.client.on("roleCreate", (role) => writeLogEntrySafely(deps, toRoleCreateLogEntry(role)));
-  ctx.client.on("roleUpdate", (oldRole, newRole) => writeLogEntrySafely(deps, toRoleUpdateLogEntry(oldRole, newRole)));
+  ctx.client.on("roleUpdate", (oldRole, newRole) => {
+    const entry = toRoleUpdateLogEntry(oldRole, newRole);
+    if (entry) writeLogEntrySafely(deps, entry);
+  });
   ctx.client.on("roleDelete", (role) => writeLogEntrySafely(deps, toRoleDeleteLogEntry(role)));
   ctx.client.on("guildMemberUpdate", (oldMember, newMember) => {
     for (const entry of toRoleMembershipLogEntries(oldMember, newMember)) {

@@ -1,9 +1,19 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
-import { registerThreadHandlers, toThreadCreateLogEntry, toThreadDeleteLogEntry, toThreadUpdateLogEntry } from "./thread.js";
+import {
+  registerThreadHandlers,
+  toThreadCreateLogEntry,
+  toThreadDeleteLogEntry,
+  toThreadMembershipLogEntries,
+  toThreadUpdateLogEntry,
+} from "./thread.js";
 
 function fakeThread(overrides: Partial<{ id: string; guildId: string; parentId: string | null; archived: boolean | null }> = {}) {
   return { id: "t1", guildId: "g1", parentId: "c1", archived: false, ...overrides } as never;
+}
+
+function fakeCollection(ids: string[]) {
+  return new Map(ids.map((id) => [id, { id }])) as never;
 }
 
 describe("thread category mappers", () => {
@@ -41,15 +51,32 @@ describe("thread category mappers", () => {
   });
 });
 
+describe("toThreadMembershipLogEntries", () => {
+  test("addedMembersはmemberAdd、removedMembersはmemberRemoveになり、対象メンバーのuserIdを含む", () => {
+    const entries = toThreadMembershipLogEntries(fakeCollection(["u1"]), fakeCollection(["u2"]), fakeThread());
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "u1", action: "memberAdd", threadId: "t1" }),
+        expect.objectContaining({ userId: "u2", action: "memberRemove", threadId: "t1" }),
+      ]),
+    );
+    expect(entries).toHaveLength(2);
+  });
+
+  test("親チャンネル不明なら空配列", () => {
+    expect(toThreadMembershipLogEntries(fakeCollection(["u1"]), fakeCollection([]), fakeThread({ parentId: null }))).toEqual([]);
+  });
+});
+
 describe("registerThreadHandlers", () => {
-  test("必要な3イベントをclient.onに登録する", () => {
+  test("必要な4イベントをclient.onに登録する", () => {
     const on = mock(() => undefined);
     const ctx = { client: { on }, db: {} } as unknown as FeatureModuleContext;
 
     registerThreadHandlers(ctx);
 
     expect(on.mock.calls.map((call) => call[0])).toEqual(
-      expect.arrayContaining(["threadCreate", "threadDelete", "threadUpdate"]),
+      expect.arrayContaining(["threadCreate", "threadDelete", "threadUpdate", "threadMembersUpdate"]),
     );
   });
 });

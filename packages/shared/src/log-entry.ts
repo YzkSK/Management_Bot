@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { LOG_CATEGORIES, MODERATION_ACTION_TYPES } from "@management-bot/shared";
+import { LOG_CATEGORIES } from "./log-category.js";
+import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 
 const nonEmptyString = z.string().min(1);
 
@@ -18,15 +19,29 @@ export const messageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   authorId: nonEmptyString,
-  action: z.enum(["create", "update", "delete", "bulkDelete"]),
+  action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
+  /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
+  previousContent: z.string().optional(),
+  /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
+  messageId: nonEmptyString.optional(),
+});
+
+export const reactionLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("reaction"),
+  channelId: nonEmptyString,
+  messageId: nonEmptyString,
+  userId: nonEmptyString,
+  emoji: nonEmptyString,
+  action: z.enum(["add", "remove"]),
 });
 
 export const memberLogEntrySchema = z.object({
   ...base,
   category: z.literal("member"),
   userId: nonEmptyString,
-  action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "nicknameChange"]),
+  action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "timeoutRemove", "nicknameChange"]),
 });
 
 export const roleLogEntrySchema = z.object({
@@ -36,19 +51,36 @@ export const roleLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。create/update/delete(ロール自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** action=updateのみ設定する変更フィールドごとのbefore/after。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+  changes: z
+    .record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) }))
+    .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
+    .optional(),
 });
+
+const channelChangeValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const channelLogEntrySchema = z.object({
   ...base,
   category: z.literal("channel"),
   channelId: nonEmptyString,
   action: z.enum(["create", "update", "delete"]),
+  /** action=updateのみ設定する変更フィールドごとのbefore/after。topicはnull(未設定)を取り得るため許容する。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+  changes: z
+    .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
+    .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
+    .optional(),
 });
 
 export const guildLogEntrySchema = z.object({
   ...base,
   category: z.literal("guild"),
   action: z.enum(["update"]),
+  /** action=updateのみ設定する変更フィールドごとのbefore/after。icon/afkChannelIdはnull(未設定)を取り得るため許容する。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+  changes: z
+    .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
+    .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
+    .optional(),
 });
 
 export const threadLogEntrySchema = z.object({
@@ -56,7 +88,9 @@ export const threadLogEntrySchema = z.object({
   category: z.literal("thread"),
   threadId: nonEmptyString,
   channelId: nonEmptyString,
-  action: z.enum(["create", "update", "delete", "archive", "unarchive"]),
+  action: z.enum(["create", "update", "delete", "archive", "unarchive", "memberAdd", "memberRemove"]),
+  /** action=memberAdd/memberRemoveの対象メンバー。それ以外(スレッド自体の変更)では設定しない。 */
+  userId: nonEmptyString.optional(),
 });
 
 export const inviteLogEntrySchema = z.object({
@@ -71,6 +105,13 @@ export const emojiLogEntrySchema = z.object({
   ...base,
   category: z.literal("emoji"),
   emojiId: nonEmptyString,
+  action: z.enum(["create", "update", "delete"]),
+});
+
+export const stickerLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("sticker"),
+  stickerId: nonEmptyString,
   action: z.enum(["create", "update", "delete"]),
 });
 
@@ -131,8 +172,24 @@ export const moderationCaseLogEntrySchema = z.object({
   actionType: z.enum(MODERATION_ACTION_TYPES),
 });
 
+const voiceBase = {
+  ...base,
+  category: z.literal("voice"),
+  userId: nonEmptyString,
+  /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
+  channelId: nonEmptyString,
+};
+
+/** previousChannelId(移動元)はaction=moveの場合のみ必須にする(join/leaveでは持たせない)。 */
+export const voiceLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({ ...voiceBase, action: z.literal("join") }),
+  z.object({ ...voiceBase, action: z.literal("leave") }),
+  z.object({ ...voiceBase, action: z.literal("move"), previousChannelId: nonEmptyString }),
+]);
+
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
+  reaction: reactionLogEntrySchema,
   member: memberLogEntrySchema,
   role: roleLogEntrySchema,
   channel: channelLogEntrySchema,
@@ -140,6 +197,7 @@ export const LOG_ENTRY_SCHEMAS = {
   thread: threadLogEntrySchema,
   invite: inviteLogEntrySchema,
   emoji: emojiLogEntrySchema,
+  sticker: stickerLogEntrySchema,
   autoMod: autoModLogEntrySchema,
   integration: integrationLogEntrySchema,
   poll: pollLogEntrySchema,
@@ -147,6 +205,7 @@ export const LOG_ENTRY_SCHEMAS = {
   stage: stageLogEntrySchema,
   auditLogCorrelation: auditLogCorrelationEntrySchema,
   moderationCase: moderationCaseLogEntrySchema,
+  voice: voiceLogEntrySchema,
 } as const;
 
 export type LogCategory = keyof typeof LOG_ENTRY_SCHEMAS;

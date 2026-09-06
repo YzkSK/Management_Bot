@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, guilds, logEntries } from "@management-bot/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { AuditLogEntryInfo } from "./correlate-audit-log-entry.js";
 import { correlateAuditLogEntry } from "./correlate-audit-log-entry.js";
@@ -42,6 +42,18 @@ async function insertChannelLogEntry(
       action: overrides.action ?? "delete",
       ...(overrides.executorId ? { executorId: overrides.executorId } : {}),
     },
+    createdAt,
+  });
+  return id;
+}
+
+async function insertInviteLogEntry(code: string, action: string, createdAt: Date): Promise<string> {
+  const id = randomUUID();
+  await db.insert(logEntries).values({
+    id,
+    guildId,
+    category: "invite",
+    payload: { category: "invite", guildId, createdAt: createdAt.toISOString(), channelId: "c1", code, action },
     createdAt,
   });
   return id;
@@ -175,7 +187,9 @@ describe("correlateAuditLogEntry (実DB)", () => {
     const [row] = await db
       .select()
       .from(logEntries)
-      .where(eq(logEntries.category, "auditLogCorrelation"));
+      // 本番データにも同カテゴリの行が存在しうるため、guildId(このテスト専用のランダムUUID)
+      // でも絞り込み、無関係な行を誤って拾わないようにする(codexレビュー指摘: guildIdスコープ漏れ)。
+      .where(and(eq(logEntries.category, "auditLogCorrelation"), eq(logEntries.guildId, guildId)));
     expect(row?.payload).toMatchObject({ auditLogEntryId: entry.id, actionType: "ChannelDelete", executorId: "mod-1" });
   });
 
@@ -191,8 +205,45 @@ describe("correlateAuditLogEntry (実DB)", () => {
 
     await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
 
-    const [row] = await db.select().from(logEntries).where(eq(logEntries.category, "integration"));
+    const [row] = await db
+      .select()
+      .from(logEntries)
+      .where(and(eq(logEntries.category, "integration"), eq(logEntries.guildId, guildId)));
     expect(row?.payload).toMatchObject({ integrationId: "integration-1", action: "create", executorId: "mod-1" });
+  });
+
+  test("InviteCreateはtargetId(招待コード)でinvite行にexecutorIdを追記する", async () => {
+    const logId = await insertInviteLogEntry("abc123", "create", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "InviteCreate",
+      executorId: "mod-1",
+      targetId: "abc123",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("InviteDeleteはtargetId(招待コード)でinvite行にexecutorIdを追記する", async () => {
+    const logId = await insertInviteLogEntry("abc123", "delete", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "InviteDelete",
+      executorId: "mod-1",
+      targetId: "abc123",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
   test("MemberKickは相関時にleave行のactionをkickへ書き換える", async () => {
@@ -307,6 +358,23 @@ describe("correlateAuditLogEntry (実DB)", () => {
     const [timeoutRow] = await db.select().from(logEntries).where(eq(logEntries.id, timeoutLogId));
     expect(timeoutRow?.payload).toMatchObject({ executorId: "mod-1" });
     expect(nicknameRow?.payload).not.toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("タイムアウト解除(timeoutRemove)にも実行者を相関する", async () => {
+    const logId = await insertMemberLogEntry("u1", "timeoutRemove", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
   test("同じチャンネルへの2つの操作の監査ログが並行して届いても、それぞれ別の行に相関する(競合時の取り違え防止)", async () => {

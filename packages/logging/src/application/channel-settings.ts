@@ -46,3 +46,23 @@ export async function setChannelSetting(
       set: { channelId },
     });
 }
+
+/** 全カテゴリの出力先チャンネルを一括で同じ値に設定する(カテゴリごとの個別設定は上書きされる)。channelId=nullは全カテゴリ未設定に戻す。 */
+export async function setChannelSettingForAllCategories(
+  db: Db,
+  guildId: string,
+  channelId: string | null,
+): Promise<void> {
+  if (channelId === null) {
+    await db.delete(logChannelSettings).where(eq(logChannelSettings.guildId, guildId));
+    return;
+  }
+
+  await db
+    .insert(logChannelSettings)
+    .values(LOG_CATEGORIES.map((category) => ({ guildId, category, channelId })))
+    .onConflictDoUpdate({
+      target: [logChannelSettings.guildId, logChannelSettings.category],
+      set: { channelId },
+    });
+}

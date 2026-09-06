@@ -36,7 +36,10 @@ describe("createPurgeRunner (実DB, advisory lock経由の実行)", () => {
 
     await runner.run();
 
-    expect(onResult.mock.calls[0]?.[0]).toContain("deleted 1 entries");
+    // purgeExpiredLogsは全guild横断で削除するため、CI上で他パッケージ(logging)の
+    // DB依存テストと並行実行されるとdeleted件数の合計は変動しうる。このテストの
+    // 行が実際に削除されたかどうかだけをDBで確認する(メッセージの件数文字列には依存しない)。
+    expect(onResult.mock.calls[0]?.[0]).toMatch(/^Logging retention job: deleted \d+ entries across \d+ guild\/category$/);
     const remaining = await db.select().from(logEntries).where(eq(logEntries.id, expiredId));
     expect(remaining).toHaveLength(0);
   });

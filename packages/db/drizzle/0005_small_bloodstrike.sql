@@ -1,0 +1,6 @@
+ALTER TABLE "log_channel_settings" DROP CONSTRAINT "log_channel_settings_category_check";--> statement-breakpoint
+ALTER TABLE "log_entries" DROP CONSTRAINT "log_entries_category_check";--> statement-breakpoint
+ALTER TABLE "log_retention_settings" DROP CONSTRAINT "log_retention_settings_category_check";--> statement-breakpoint
+ALTER TABLE "log_channel_settings" ADD CONSTRAINT "log_channel_settings_category_check" CHECK ("log_channel_settings"."category" IN ('message', 'member', 'role', 'channel', 'guild', 'thread', 'invite', 'emoji', 'autoMod', 'integration', 'poll', 'scheduledEvent', 'stage', 'auditLogCorrelation', 'moderationCase', 'voice'));--> statement-breakpoint
+ALTER TABLE "log_entries" ADD CONSTRAINT "log_entries_category_check" CHECK ("log_entries"."category" IN ('message', 'member', 'role', 'channel', 'guild', 'thread', 'invite', 'emoji', 'autoMod', 'integration', 'poll', 'scheduledEvent', 'stage', 'auditLogCorrelation', 'moderationCase', 'voice'));--> statement-breakpoint
+ALTER TABLE "log_retention_settings" ADD CONSTRAINT "log_retention_settings_category_check" CHECK ("log_retention_settings"."category" IN ('message', 'member', 'role', 'channel', 'guild', 'thread', 'invite', 'emoji', 'autoMod', 'integration', 'poll', 'scheduledEvent', 'stage', 'auditLogCorrelation', 'moderationCase', 'voice'));

@@ -1,5 +1,6 @@
 export const LOG_CATEGORIES = [
   "message",
+  "reaction",
   "member",
   "role",
   "channel",
@@ -7,6 +8,7 @@ export const LOG_CATEGORIES = [
   "thread",
   "invite",
   "emoji",
+  "sticker",
   "autoMod",
   "integration",
   "poll",
@@ -14,6 +16,7 @@ export const LOG_CATEGORIES = [
   "stage",
   "auditLogCorrelation",
   "moderationCase",
+  "voice",
 ] as const;
 
 export type LogCategory = (typeof LOG_CATEGORIES)[number];

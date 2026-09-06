@@ -25,3 +25,30 @@ export {
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
 export { MODERATION_ACTION_TYPES, type ModerationActionType } from "./moderation-action-type.js";
+export {
+  LOG_ENTRY_SCHEMAS,
+  messageLogEntrySchema,
+  reactionLogEntrySchema,
+  memberLogEntrySchema,
+  roleLogEntrySchema,
+  channelLogEntrySchema,
+  guildLogEntrySchema,
+  threadLogEntrySchema,
+  inviteLogEntrySchema,
+  emojiLogEntrySchema,
+  stickerLogEntrySchema,
+  autoModLogEntrySchema,
+  integrationLogEntrySchema,
+  pollLogEntrySchema,
+  scheduledEventLogEntrySchema,
+  stageLogEntrySchema,
+  auditLogCorrelationEntrySchema,
+  moderationCaseLogEntrySchema,
+  voiceLogEntrySchema,
+  logEntrySchema,
+  parseLogEntry,
+  safeParseLogEntry,
+  type LogEntry,
+} from "./log-entry.js";
+export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
+export { buildInviteUrl } from "./invite-url.js";

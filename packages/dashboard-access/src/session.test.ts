@@ -1,24 +1,28 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { createDb, guilds, sessions, type Db } from "@management-bot/db";
-import { validateSession } from "./session.ts";
+import { createDb, sessions, type Db } from "@management-bot/db";
+import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { getSessionAccessToken, validateSession } from "./session.ts";
+import { encryptToken } from "./token-crypto.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
 
 const { db, close } = createDb(databaseUrl);
+const sessionId = `session-1-${randomUUID()}`;
 
 afterAll(async () => {
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
   await close();
 });
 
 beforeEach(async () => {
-  await db.delete(sessions);
-  await db.delete(guilds);
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
 });
 
 async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferInsert> = {}) {
   await db.insert(sessions).values({
-    id: "session-1",
+    id: sessionId,
     discordUserId: "user-1",
     encryptedAccessToken: "test-access-token",
     encryptedRefreshToken: "test-refresh-token",
@@ -28,12 +32,13 @@ async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferIn
 }
 
 describe("validateSession", () => {
-  test("有効なセッションIDならdiscordUserIdを返す", async () => {
-    await insertSession(db);
+  test("有効なセッションIDならdiscordUserId・expiresAtを返す", async () => {
+    const expiresAt = new Date(Date.now() + 60_000);
+    await insertSession(db, { expiresAt });
 
-    const result = await validateSession(db, "session-1");
+    const result = await validateSession(db, sessionId);
 
-    expect(result).toEqual({ discordUserId: "user-1" });
+    expect(result).toEqual({ discordUserId: "user-1", expiresAt });
   });
 
   test("存在しないセッションIDはnullを返す", async () => {
@@ -45,7 +50,36 @@ describe("validateSession", () => {
   test("期限切れセッションはnullを返す", async () => {
     await insertSession(db, { expiresAt: new Date(Date.now() - 1000) });
 
-    const result = await validateSession(db, "session-1");
+    const result = await validateSession(db, sessionId);
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("getSessionAccessToken", () => {
+  const sessionSecret = "test-session-secret";
+
+  test("有効なセッションなら復号したアクセストークンを返す", async () => {
+    await insertSession(db, { encryptedAccessToken: encryptToken("raw-access-token", sessionSecret) });
+
+    const result = await getSessionAccessToken(db, sessionId, sessionSecret);
+
+    expect(result).toBe("raw-access-token");
+  });
+
+  test("存在しないセッションIDはnullを返す", async () => {
+    const result = await getSessionAccessToken(db, "nonexistent", sessionSecret);
+
+    expect(result).toBeNull();
+  });
+
+  test("期限切れセッションはnullを返す", async () => {
+    await insertSession(db, {
+      encryptedAccessToken: encryptToken("raw-access-token", sessionSecret),
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    const result = await getSessionAccessToken(db, sessionId, sessionSecret);
 
     expect(result).toBeNull();
   });

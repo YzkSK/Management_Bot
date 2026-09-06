@@ -5,7 +5,7 @@ import {
   parseLogEntry,
   safeParseLogEntry,
   type LogCategory,
-} from "./log-category.js";
+} from "./log-entry.js";
 
 const validByCategory = {
   message: {
@@ -15,6 +15,16 @@ const validByCategory = {
     channelId: "2",
     authorId: "3",
     action: "create",
+  },
+  reaction: {
+    category: "reaction",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    channelId: "2",
+    messageId: "3",
+    userId: "4",
+    emoji: "😀",
+    action: "add",
   },
   member: {
     category: "member",
@@ -64,6 +74,13 @@ const validByCategory = {
     guildId: "1",
     createdAt: "2026-08-30T00:00:00.000Z",
     emojiId: "2",
+    action: "create",
+  },
+  sticker: {
+    category: "sticker",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    stickerId: "2",
     action: "create",
   },
   autoMod: {
@@ -120,6 +137,14 @@ const validByCategory = {
     moderatorId: "4",
     action: "create",
     actionType: "warn",
+  },
+  voice: {
+    category: "voice",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    userId: "2",
+    channelId: "3",
+    action: "join",
   },
 } satisfies Record<LogCategory, unknown>;
 
@@ -178,5 +203,59 @@ describe("logEntrySchema", () => {
       createdAt: "not-a-date",
     });
     expect(result.success).toBe(false);
+  });
+
+  test("role: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.role,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("role: changesにフィールドごとのbefore/afterがある場合は成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.role,
+      action: "update",
+      changes: { name: { before: "old", after: "new" } },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("channel: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.channel,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("channel: changesにtopicのnull(未設定)を含む場合も成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.channel,
+      action: "update",
+      changes: { topic: { before: null, after: "new topic" } },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("guild: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.guild,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("guild: changesにiconのnull(未設定)を含む場合も成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.guild,
+      action: "update",
+      changes: { icon: { before: null, after: "hash" } },
+    });
+    expect(result.success).toBe(true);
   });
 });

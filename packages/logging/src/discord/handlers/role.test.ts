@@ -8,8 +8,19 @@ import {
   toRoleUpdateLogEntry,
 } from "./role.js";
 
-function fakeRole(id = "r1") {
-  return { id, guild: { id: "g1" } } as never;
+function fakeRole(id = "r1", overrides: Partial<Record<"name" | "color" | "hoist" | "mentionable" | "position", unknown> & { bitfield: bigint }> = {}) {
+  const { bitfield, ...rest } = overrides;
+  return {
+    id,
+    guild: { id: "g1" },
+    name: "role",
+    color: 0,
+    hoist: false,
+    mentionable: false,
+    position: 0,
+    permissions: { bitfield: bitfield ?? 0n },
+    ...rest,
+  } as never;
 }
 
 function fakeMember(roleIds: string[], id = "u1") {
@@ -18,7 +29,34 @@ function fakeMember(roleIds: string[], id = "u1") {
 
 describe("role category mappers", () => {
   test("create", () => expect(toRoleCreateLogEntry(fakeRole()).action).toBe("create"));
-  test("update", () => expect(toRoleUpdateLogEntry(fakeRole(), fakeRole()).action).toBe("update"));
+  test("update: 名前が変わればchangesに反映される", () => {
+    const entry = toRoleUpdateLogEntry(fakeRole("r1", { name: "old" }), fakeRole("r1", { name: "new" }));
+    expect(entry?.action).toBe("update");
+    expect(entry).toMatchObject({ changes: { name: { before: "old", after: "new" } } });
+  });
+  test("update: 差分がなければnull(無関係ロールへの波及を記録しない)", () => {
+    expect(toRoleUpdateLogEntry(fakeRole(), fakeRole())).toBeNull();
+  });
+  test("update: positionのみの変更はnull(ロール並び替え時の他ロールへの波及を記録しない)", () => {
+    expect(toRoleUpdateLogEntry(fakeRole("r1", { position: 1 }), fakeRole("r1", { position: 2 }))).toBeNull();
+  });
+  test("update: color/hoist/mentionableの差分もそれぞれchangesに反映される", () => {
+    const entry = toRoleUpdateLogEntry(
+      fakeRole("r1", { color: 1, hoist: false, mentionable: false }),
+      fakeRole("r1", { color: 2, hoist: true, mentionable: true }),
+    );
+    expect(entry).toMatchObject({
+      changes: {
+        color: { before: 1, after: 2 },
+        hoist: { before: false, after: true },
+        mentionable: { before: false, after: true },
+      },
+    });
+  });
+  test("update: permissionsの差分はbitfieldを文字列化して記録する", () => {
+    const entry = toRoleUpdateLogEntry(fakeRole("r1", { bitfield: 1n }), fakeRole("r1", { bitfield: 2n }));
+    expect(entry).toMatchObject({ changes: { permissions: { before: "1", after: "2" } } });
+  });
   test("delete", () => expect(toRoleDeleteLogEntry(fakeRole()).action).toBe("delete"));
 });
 

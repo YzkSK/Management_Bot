@@ -44,12 +44,12 @@ describe("toMemberUpdateLogEntries", () => {
     expect(entries).toEqual([expect.objectContaining({ action: "timeout" })]);
   });
 
-  test("タイムアウト解除(nullに戻る)は記録しない", () => {
+  test("タイムアウト解除(nullに戻る)ならtimeoutRemoveを1件返す", () => {
     const entries = toMemberUpdateLogEntries(
       fakeMember({ communicationDisabledUntilTimestamp: Date.now() + 60_000 }),
       fakeMember({ communicationDisabledUntilTimestamp: null }),
     );
-    expect(entries).toEqual([]);
+    expect(entries).toEqual([expect.objectContaining({ action: "timeoutRemove" })]);
   });
 
   test("変化がなければ空配列", () => {

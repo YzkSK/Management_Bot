@@ -1,15 +1,21 @@
 import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
-import { CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
+import { buildInviteUrl, CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
+import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
+  getDisplaySettings,
   listChannelSettings,
   listLogEntries,
   listRetentionSettings,
   maskSensitiveFields,
   setChannelSetting,
+  setChannelSettingForAllCategories,
+  setDisplaySetting,
   setRetentionSetting,
+  setRetentionSettingForAllCategories,
 } from "../application/index.js";
+import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const listLogEntriesInput = z.object({
   guildId: z.string().min(1),
@@ -32,6 +38,11 @@ const setRetentionSettingInput = z.object({
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
+const setRetentionSettingForAllCategoriesInput = z.object({
+  guildId: z.string().min(1),
+  retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
+});
+
 const setChannelSettingInput = z.object({
   guildId: z.string().min(1),
   category: z.enum(LOG_CATEGORIES),
@@ -39,14 +50,36 @@ const setChannelSettingInput = z.object({
   channelId: z.string().min(1).nullable(),
 });
 
+const setChannelSettingForAllCategoriesInput = z.object({
+  guildId: z.string().min(1),
+  channelId: z.string().min(1).nullable(),
+});
+
+const setDisplaySettingInput = z.object({
+  guildId: z.string().min(1),
+  hideAuditLogCorrelation: z.boolean(),
+});
+
+const resolveDisplayNamesInput = z.object({
+  guildId: z.string().min(1),
+  userIds: z.array(z.string()).default([]),
+  channelIds: z.array(z.string()).default([]),
+});
+
 export const loggingRouter = router({
   listLogEntries: protectedProcedure
     .input(listLogEntriesInput)
     .use(requireCapability(CAPABILITIES.VIEW_LOGS))
     .query(async ({ ctx, input }) => {
+      const displaySettings = await getDisplaySettings(ctx.db, input.guildId);
+      const excludeCategories =
+        displaySettings.hideAuditLogCorrelation && input.category !== "auditLogCorrelation"
+          ? (["auditLogCorrelation"] as const)
+          : undefined;
+
       let result;
       try {
-        result = await listLogEntries(ctx.db, input);
+        result = await listLogEntries(ctx.db, { ...input, excludeCategories });
       } catch {
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
       }
@@ -89,11 +122,87 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .mutation(async ({ ctx, input }) => {
       if (input.channelId !== null) {
-        const options = await ctx.getGuildChannels(input.guildId);
-        if (!options.some((option) => option.id === input.channelId)) {
+        const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
+        if (!exists) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
         }
       }
       await setChannelSetting(ctx.db, input.guildId, input.category, input.channelId);
+    }),
+
+  setRetentionSettingForAllCategories: protectedProcedure
+    .input(setRetentionSettingForAllCategoriesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(({ ctx, input }) => setRetentionSettingForAllCategories(ctx.db, input.guildId, input.retentionDays)),
+
+  setChannelSettingForAllCategories: protectedProcedure
+    .input(setChannelSettingForAllCategoriesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(async ({ ctx, input }) => {
+      if (input.channelId !== null) {
+        const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
+        if (!exists) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
+        }
+      }
+      await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
+    }),
+
+  getDisplaySettings: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .query(({ ctx, input }) => getDisplaySettings(ctx.db, input.guildId)),
+
+  setDisplaySetting: protectedProcedure
+    .input(setDisplaySettingInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .mutation(({ ctx, input }) => setDisplaySetting(ctx.db, input.guildId, input.hideAuditLogCorrelation)),
+
+  /**
+   * ログ一覧でユーザーID/チャンネルIDをそのまま見せず名前表示するため、まとめて解決する。
+   * 解決できなかったIDはレスポンスに含めない(呼び出し側でIDへフォールバック表示する)。
+   */
+  resolveDisplayNames: protectedProcedure
+    .input(resolveDisplayNamesInput)
+    .use(requireCapability(CAPABILITIES.VIEW_LOGS))
+    .query(async ({ ctx, input }) => {
+      const uniqueUserIds = [...new Set(input.userIds)];
+      const [userNames, channels] = await Promise.all([
+        uniqueUserIds.length > 0
+          ? ctx.getGuildMemberNames(input.guildId, uniqueUserIds)
+          : Promise.resolve(new Map<string, string>()),
+        ctx.getGuildChannels(input.guildId),
+      ]);
+      const channelNameById = new Map(channels.map((c) => [c.id, c.name]));
+      const wantedChannelIds = new Set(input.channelIds);
+
+      return {
+        users: Object.fromEntries(userNames),
+        channels: Object.fromEntries(
+          [...channelNameById].filter(([id]) => wantedChannelIds.has(id)),
+        ),
+      };
+    }),
+
+  /**
+   * integration/auditLogCorrelation(実行者事後補完・kick判定等)はguildAuditLogEntryCreate
+   * イベントに依存するが、Botに「監査ログを見る」権限(ViewAuditLog)がないと配信されない(issue #80)。
+   * 権限保有状況と、不足時にDashboardから案内する再認可URL(必要権限のみを含む)を返す。
+   */
+  getAuditLogPermissionStatus: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .query(async ({ ctx, input }) => {
+      const permissions = await ctx.getBotPermissions(input.guildId);
+      const hasViewAuditLog =
+        (permissions & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator ||
+        (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
+
+      return {
+        hasViewAuditLog,
+        reauthorizeUrl: hasViewAuditLog
+          ? null
+          : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS, { guildId: input.guildId }),
+      };
     }),
 });

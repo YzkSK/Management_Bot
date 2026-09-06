@@ -16,12 +16,19 @@ export {
   type ListLogEntriesResult,
 } from "./list-log-entries.js";
 export {
+  getDisplaySettings,
+  setDisplaySetting,
+  type DisplaySettings,
+} from "./display-settings.js";
+export {
   listRetentionSettings,
   setRetentionSetting,
+  setRetentionSettingForAllCategories,
   type RetentionSetting,
 } from "./retention-settings.js";
 export {
   listChannelSettings,
   setChannelSetting,
+  setChannelSettingForAllCategories,
   type ChannelSetting,
 } from "./channel-settings.js";

@@ -3,7 +3,7 @@ import { createDb, guilds, logRetentionSettings } from "@management-bot/db";
 import { LOG_CATEGORIES } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { listRetentionSettings, setRetentionSetting } from "./retention-settings.js";
+import { listRetentionSettings, setRetentionSetting, setRetentionSettingForAllCategories } from "./retention-settings.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -61,5 +61,23 @@ describe("setRetentionSetting", () => {
       .where(eq(logRetentionSettings.guildId, guildId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.retentionDays).toBe(7);
+  });
+});
+
+describe("setRetentionSettingForAllCategories", () => {
+  test("未設定のギルドに全カテゴリ分を新規作成する", async () => {
+    await setRetentionSettingForAllCategories(db, guildId, 90);
+
+    const result = await listRetentionSettings(db, guildId);
+    expect(result.every((r) => r.retentionDays === 90)).toBe(true);
+  });
+
+  test("一部カテゴリだけ個別設定済みでも、全カテゴリを一括値で上書きする", async () => {
+    await setRetentionSetting(db, guildId, "message", 14);
+
+    await setRetentionSettingForAllCategories(db, guildId, 30);
+
+    const result = await listRetentionSettings(db, guildId);
+    expect(result.every((r) => r.retentionDays === 30)).toBe(true);
   });
 });

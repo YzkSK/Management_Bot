@@ -40,6 +40,8 @@ describe("registerDiscordHandlers", () => {
     expect(events).toEqual(
       expect.arrayContaining([
         "messageCreate",
+        "messageReactionAdd",
+        "messageReactionRemove",
         "guildMemberAdd",
         "roleCreate",
         "channelCreate",
@@ -47,6 +49,7 @@ describe("registerDiscordHandlers", () => {
         "threadCreate",
         "inviteCreate",
         "emojiCreate",
+        "stickerCreate",
         "autoModerationRuleCreate",
         "guildScheduledEventCreate",
         "stageInstanceCreate",

@@ -277,6 +277,59 @@ describe("correlateAuditLogEntry", () => {
     expect(selectCalls).toHaveLength(3);
   });
 
+  test("MessageDeleteはchannelId+authorId(targetId)で一致するmessage delete行に相関する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const selectWhereArgs: unknown[] = [];
+    const db = {
+      ...fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] }),
+      select: () => ({
+        from: () => ({
+          where: (whereArg: unknown) => {
+            selectWhereArgs.push(whereArg);
+            return {
+              then: (resolve: (rows: unknown[]) => void) => resolve([]),
+              orderBy: () => ({ limit: () => Promise.resolve([{ id: "log-1" }]) }),
+            };
+          },
+        }),
+      }),
+    } as unknown as Db;
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      { ...baseEntry, action: "MessageDelete", targetId: "author-1", messageDeleteChannelId: "channel-1" },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.table).toBe(logEntries);
+    // findUnannotatedRowのwhere条件にchannelId/authorId/action=deleteが含まれることを検証する
+    // (条件を誤って外しても検知できるように、モックが常にヒットを返すだけのテストにしない)。
+    const correlationWhereCall = selectWhereArgs.find(
+      (whereArg) => pgDialect.sqlToQuery(whereArg as Parameters<typeof pgDialect.sqlToQuery>[0]).params.includes("channel-1"),
+    );
+    expect(correlationWhereCall).toBeDefined();
+    const { sql, params } = pgDialect.sqlToQuery(correlationWhereCall as Parameters<typeof pgDialect.sqlToQuery>[0]);
+    expect(params).toContain("channel-1");
+    expect(params).toContain("author-1");
+    expect(sql).toContain("'delete'");
+  });
+
+  test("MessageDeleteはmessageDeleteChannelIdがなければ相関しない", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] });
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      { ...baseEntry, action: "MessageDelete", targetId: "author-1", messageDeleteChannelId: undefined },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(0);
+  });
+
   test("MemberRoleUpdateでroleChangesが無ければ何もしない", async () => {
     const inserts: RecordedInsert[] = [];
     const updates: RecordedUpdate[] = [];

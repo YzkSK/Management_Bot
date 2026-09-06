@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { sessions, type Db } from "@management-bot/db";
 import { and, eq, gt } from "drizzle-orm";
-import { encryptToken } from "./token-crypto.js";
+import { decryptToken, encryptToken } from "./token-crypto.js";
 
 export interface ValidatedSession {
   discordUserId: string;
+  expiresAt: Date;
 }
 
 export async function validateSession(
@@ -12,12 +13,27 @@ export async function validateSession(
   sessionId: string,
 ): Promise<ValidatedSession | null> {
   const [row] = await db
-    .select({ discordUserId: sessions.discordUserId })
+    .select({ discordUserId: sessions.discordUserId, expiresAt: sessions.expiresAt })
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
     .limit(1);
 
   return row ?? null;
+}
+
+/** セッションに紐づくDiscordのOAuth2アクセストークンを復号して返す。Discord API(ユーザー権限)呼び出し用。 */
+export async function getSessionAccessToken(
+  db: Db,
+  sessionId: string,
+  sessionSecret: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ encryptedAccessToken: sessions.encryptedAccessToken })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
+    .limit(1);
+
+  return row ? decryptToken(row.encryptedAccessToken, sessionSecret) : null;
 }
 
 export interface CreateSessionInput {

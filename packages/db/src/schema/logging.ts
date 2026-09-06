@@ -1,4 +1,4 @@
-import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
 import { LOG_CATEGORIES } from "@management-bot/shared";
 import { guilds } from "./core.js";
@@ -66,3 +66,11 @@ export const logChannelSettings = pgTable(
     check("log_channel_settings_category_check", categoryCheck(table.category)),
   ],
 );
+
+export const logDisplaySettings = pgTable("log_display_settings", {
+  guildId: text("guild_id")
+    .primaryKey()
+    .references(() => guilds.id, { onDelete: "cascade" }),
+  /** trueの場合、auditLogCorrelationカテゴリの生ログをダッシュボードの一覧表示から除外する。 */
+  hideAuditLogCorrelation: boolean("hide_audit_log_correlation").notNull().default(true),
+});

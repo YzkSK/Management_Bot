@@ -23,15 +23,19 @@ function fakeMessage(
 
 describe("toPollCreateLogEntry", () => {
   test("pollを持つメッセージはcreateエントリを返す", () => {
-    expect(toPollCreateLogEntry(fakeMessage())?.action).toBe("create");
+    const entry = toPollCreateLogEntry(fakeMessage());
+    expect(entry?.action).toBe("create");
+    expect(entry).toMatchObject({ executorId: "u1" });
   });
 
   test("pollがなければundefined", () => {
     expect(toPollCreateLogEntry(fakeMessage({ poll: null }))).toBeUndefined();
   });
 
-  test("Botが作成したpollも除外せず記録する(loop対策が不要なため)", () => {
-    expect(toPollCreateLogEntry(fakeMessage({ author: { id: "b1", bot: true } }))?.action).toBe("create");
+  test("Botが作成したpollも除外せず記録し、Bot自身をexecutorIdとする(loop対策が不要なため)", () => {
+    const entry = toPollCreateLogEntry(fakeMessage({ author: { id: "b1", bot: true } }));
+    expect(entry?.action).toBe("create");
+    expect(entry).toMatchObject({ executorId: "b1" });
   });
 });
 

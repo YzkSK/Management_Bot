@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { createDb, type Db } from "../client.ts";
-import { guilds, logChannelSettings, logEntries, logRetentionSettings } from "./index.ts";
+import { guilds, logChannelSettings, logDisplaySettings, logEntries, logRetentionSettings } from "./index.ts";
 
 interface PgErrorCause {
   code?: string;
@@ -89,6 +89,22 @@ describe("logging schema", () => {
     await expectConstraintViolation(
       db.insert(logChannelSettings).values({ guildId, category: "unknown-category", channelId: "chan-3" }),
       "log_channel_settings_category_check",
+    );
+  });
+
+  test("log_display_settingsはguild_idを主キーに持ち、hide_audit_log_correlationはデフォルトでtrue", async () => {
+    await db.insert(logDisplaySettings).values({ guildId });
+
+    const [row] = await db
+      .select()
+      .from(logDisplaySettings)
+      .where(eq(logDisplaySettings.guildId, guildId))
+      .limit(1);
+    expect(row?.hideAuditLogCorrelation).toBe(true);
+
+    await expectConstraintViolation(
+      db.insert(logDisplaySettings).values({ guildId }),
+      "log_display_settings_pkey",
     );
   });
 });

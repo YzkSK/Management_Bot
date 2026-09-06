@@ -3,7 +3,8 @@ export {
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
+  getLogEntrySubjectId,
   type LogCategory,
   type LogEntry,
-} from "./log-category.js";
+} from "@management-bot/shared";
 export { isExpired } from "./retention.js";

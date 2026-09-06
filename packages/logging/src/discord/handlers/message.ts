@@ -19,11 +19,18 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  * fail-open(botUserId===undefinedを「誰とも一致しない」として扱う)にすると
  * 自Bot判定が常にfalseになり無限連鎖防止という本来の目的が壊れるため避ける(セキュリティレビュー指摘)。
  */
+/**
+ * excludeBotAuthor: pinログは「投稿の作成」ではなく「ピン状態の変更」を記録するものであり、
+ * ログ送信メッセージがピン留めされて無限連鎖する経路もないため、自Bot投稿の除外は不要
+ * (むしろBotの告知等を管理者がピン留めした操作を記録できなくなってしまう、codexレビュー指摘)。
+ */
 function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
+  excludeBotAuthor = true,
 ): { guildId: string; channelId: string; authorId: string } | undefined {
-  if (!message.guildId || !message.author || !botUserId || message.author.id === botUserId) return undefined;
+  if (!message.guildId || !message.author) return undefined;
+  if (excludeBotAuthor && (!botUserId || message.author.id === botUserId)) return undefined;
   return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
 }
 
@@ -31,6 +38,10 @@ export function toMessageCreateLogEntry(
   message: OmitPartialGroupDMChannel<Message>,
   botUserId: string | undefined,
 ): LogEntry | undefined {
+  // Discordが自動生成するシステムメッセージ(ThreadCreated/ピン通知/参加通知/Boost等)は
+  // ユーザーによる投稿ではないため対象外にする。ThreadCreatedはthreadCreateログと重複し、
+  // ピン通知はtoMessagePinLogEntryで別途action:"pin"として記録される。
+  if (message.system) return undefined;
   const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {
@@ -62,6 +73,29 @@ export function toMessageUpdateLogEntry(
     createdAt: new Date().toISOString(),
     action: "update",
     content: newMessage.content || undefined,
+    previousContent: oldMessage.content,
+  };
+}
+
+/**
+ * discord.jsにピン留め専用のgatewayイベント(channelPinsUpdate)は対象メッセージを含まないため、
+ * pinned真偽値の変化を持つmessageUpdateから合成する。oldMessage.pinnedがpartialで未取得
+ * (undefined)の場合は変化を判定できないためスキップする。
+ */
+export function toMessagePinLogEntry(
+  oldMessage: AnyMessage,
+  newMessage: AnyMessage,
+  botUserId: string | undefined,
+): LogEntry | undefined {
+  const base = baseFields(newMessage, botUserId, false);
+  if (!base) return undefined;
+  if (oldMessage.partial || oldMessage.pinned === newMessage.pinned) return undefined;
+  return {
+    category: "message",
+    ...base,
+    messageId: newMessage.id,
+    createdAt: new Date().toISOString(),
+    action: newMessage.pinned ? "pin" : "unpin",
   };
 }
 
@@ -102,6 +136,9 @@ export function registerMessageHandlers(ctx: FeatureModuleContext): void {
   ctx.client.on("messageUpdate", (oldMessage, newMessage) => {
     const entry = toMessageUpdateLogEntry(oldMessage, newMessage, ctx.client.user?.id);
     if (entry) writeLogEntrySafely(deps, entry);
+
+    const pinEntry = toMessagePinLogEntry(oldMessage, newMessage, ctx.client.user?.id);
+    if (pinEntry) writeLogEntrySafely(deps, pinEntry);
   });
 
   ctx.client.on("messageDelete", (message) => {
