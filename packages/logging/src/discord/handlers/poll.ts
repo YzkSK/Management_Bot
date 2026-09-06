@@ -22,6 +22,7 @@ export function toPollCreateLogEntry(message: OmitPartialGroupDMChannel<Message>
     messageId: message.id,
     channelId: message.channelId,
     action: "create",
+    executorId: message.author.id,
   };
 }
 
