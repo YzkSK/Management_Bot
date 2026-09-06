@@ -635,19 +635,20 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が連携を更新しました");
   });
 
-  test("連携削除(実行者未相関)", () => {
+  test("連携削除", () => {
     const entry = {
       category: "integration",
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       integrationId: "i1",
+      executorId: "mod1",
       action: "delete",
     } as unknown as LogEntry;
     const summary = summarizeLogEntry(entry);
 
-    const message = formatLogMessage(entry, summary, noNames);
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("不明なユーザー が連携を削除しました");
+    expect(message).toBe("Admin が連携を削除しました");
   });
 
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {
