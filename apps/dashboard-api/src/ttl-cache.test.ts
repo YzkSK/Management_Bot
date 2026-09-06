@@ -32,7 +32,8 @@ describe("createTtlCache", () => {
   });
 
   test("TTL経過後は再度loadする", async () => {
-    const cache = createTtlCache<number>(1);
+    let now = 0;
+    const cache = createTtlCache<number>(100, () => now);
     let calls = 0;
     const load = async () => {
       calls++;
@@ -40,7 +41,7 @@ describe("createTtlCache", () => {
     };
 
     const first = await cache("k", load);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    now += 101;
     const second = await cache("k", load);
 
     expect(first).toBe(1);
@@ -63,7 +64,10 @@ describe("createTtlCache", () => {
   });
 
   test("TTL経過後に新エントリを積んだ後、古いエントリの遅延失敗が新エントリを消さない", async () => {
-    const cache = createTtlCache<number>(1);
+    // 時刻を手動注入し、実時間待機に依存しない(CI環境の遅延でsecondがthirdを
+    // 呼ぶ前に期限切れ・再ロードされてしまうフレーキーさを避けるため)。
+    let now = 0;
+    const cache = createTtlCache<number>(100, () => now);
     let rejectFirst: ((error: Error) => void) | undefined;
     const first = cache(
       "k",
@@ -73,8 +77,8 @@ describe("createTtlCache", () => {
         }),
     );
 
-    // TTL(1ms)を経過させ、新しいエントリで置き換える。
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    // firstのTTLを経過させ、新しいエントリで置き換える。
+    now += 101;
     const second = cache("k", async () => 2);
     expect(await second).toBe(2);
 
