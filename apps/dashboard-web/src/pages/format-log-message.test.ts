@@ -699,6 +699,53 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin がイベントを作成しました");
   });
 
+  test("イベント更新", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      executorId: "mod1",
+      action: "update",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がイベントを更新しました");
+  });
+
+  test("イベント削除", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      executorId: "mod1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がイベントを削除しました");
+  });
+
+  test("イベント終了", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      action: "complete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("イベントが終了しました");
+  });
+
   test("イベント開始(実行者なし)", () => {
     const entry = {
       category: "scheduledEvent",
@@ -714,7 +761,7 @@ describe("formatLogMessage", () => {
     expect(message).toBe("イベントが開始しました");
   });
 
-  test("イベント中止", () => {
+  test("イベント中止(実行者なし)", () => {
     const entry = {
       category: "scheduledEvent",
       guildId: "g1",
@@ -727,6 +774,22 @@ describe("formatLogMessage", () => {
     const message = formatLogMessage(entry, summary, noNames);
 
     expect(message).toBe("イベントが中止されました");
+  });
+
+  test("イベント中止(実行者あり)", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      executorId: "mod1",
+      action: "cancel",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がイベントを中止しました");
   });
 
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {

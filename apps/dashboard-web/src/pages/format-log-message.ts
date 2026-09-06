@@ -254,7 +254,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
         case "complete":
           return "イベントが終了しました";
         case "cancel":
-          return "イベントが中止されました";
+          return entry.executorId ? `${executorName} がイベントを中止しました` : "イベントが中止されました";
       }
       break;
     }
