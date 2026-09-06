@@ -126,7 +126,7 @@ describe("resolveGuildLevelPermissions", () => {
     expect(permissions & VIEW_AUDIT_LOG).toBe(0n);
   });
 
-  test("ADMINISTRATORを持てば全権限ビットを持つとみなす", () => {
+  test("ADMINISTRATORビット自体は展開せずそのまま返す(呼び出し側で個別判定する)", () => {
     const permissions = resolveGuildLevelPermissions({
       guildId: "g1",
       botRoleIds: ["r1"],
@@ -136,6 +136,7 @@ describe("resolveGuildLevelPermissions", () => {
       ],
     });
 
-    expect(permissions & VIEW_AUDIT_LOG).toBe(VIEW_AUDIT_LOG);
+    expect(permissions & ADMINISTRATOR).toBe(ADMINISTRATOR);
+    expect(permissions & VIEW_AUDIT_LOG).toBe(0n);
   });
 });

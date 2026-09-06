@@ -1,6 +1,6 @@
 const VIEW_CHANNEL = 0x400n;
 const SEND_MESSAGES = 0x800n;
-const ADMINISTRATOR = 0x8n;
+export const ADMINISTRATOR = 0x8n;
 const REQUIRED_TO_SEND = VIEW_CHANNEL | SEND_MESSAGES;
 
 export interface PermissionOverwrite {
@@ -19,7 +19,8 @@ export interface RolePermission {
 /**
  * guildロール(@everyone含む)のpermissionsをOR合成した、チャンネルoverwrite適用前の
  * guildレベル実効権限。ViewAuditLog等、チャンネル単位のoverwriteが存在しない権限の判定に使う。
- * ADMINISTRATORの場合は全権限を持つとみなし、全ビット1を返す。
+ * ADMINISTRATORビット自体は展開せずそのまま返すので、呼び出し側で個別に判定すること
+ * (`(permissions & ADMINISTRATOR) === ADMINISTRATOR`)。
  */
 export function resolveGuildLevelPermissions(input: {
   guildId: string;
@@ -29,12 +30,7 @@ export function resolveGuildLevelPermissions(input: {
   const roleById = new Map(input.guildRoles.map((role) => [role.id, role.permissions]));
   const everyonePermissions = roleById.get(input.guildId) ?? 0n;
   const botRolePermissions = input.botRoleIds.reduce((acc, roleId) => acc | (roleById.get(roleId) ?? 0n), 0n);
-  const permissions = everyonePermissions | botRolePermissions;
-
-  if ((permissions & ADMINISTRATOR) === ADMINISTRATOR) {
-    return (1n << 64n) - 1n;
-  }
-  return permissions;
+  return everyonePermissions | botRolePermissions;
 }
 
 /**

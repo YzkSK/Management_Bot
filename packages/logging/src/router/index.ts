@@ -1,6 +1,7 @@
 import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
 import { buildInviteUrl, CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
+import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
   getDisplaySettings,
@@ -193,13 +194,15 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .query(async ({ ctx, input }) => {
       const permissions = await ctx.getBotPermissions(input.guildId);
-      const hasViewAuditLog = (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
+      const hasViewAuditLog =
+        (permissions & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator ||
+        (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
 
       return {
         hasViewAuditLog,
         reauthorizeUrl: hasViewAuditLog
           ? null
-          : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS),
+          : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS, { guildId: input.guildId }),
       };
     }),
 });

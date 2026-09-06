@@ -151,6 +151,18 @@ describe("fetchBotGuildPermissions", () => {
 
     expect(permissions).toBe(0n);
   });
+
+  test("Bot memberが404(未参加)の場合も0nを返す", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": { status: 200, body: [{ id: "g1", permissions: VIEW_AUDIT_LOG }] },
+      "/guilds/g1/members/bot1": { status: 404 },
+    });
+
+    const permissions = await fetchBotGuildPermissions("test-bot-token", "g1");
+
+    expect(permissions).toBe(0n);
+  });
 });
 
 describe("fetchGuildMemberNames", () => {

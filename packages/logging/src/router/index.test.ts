@@ -16,6 +16,7 @@ import {
   type GuildMembership,
 } from "@management-bot/dashboard-access";
 import { TRPCError } from "@trpc/server";
+import { PermissionFlagsBits } from "discord.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { loggingRouter } from "./index.js";
@@ -635,6 +636,29 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
     expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null });
   });
 
+  test("ADMINISTRATORを持つ場合もhasViewAuditLog:trueかつreauthorizeUrl:null", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(PermissionFlagsBits.Administrator),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.getAuditLogPermissionStatus({ guildId });
+
+    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null });
+  });
+
   test("ViewAuditLog権限がない場合は必要な権限のみを含む再認可URLを返す", async () => {
     await db.insert(capabilityGrants).values({
       id: randomUUID(),
@@ -659,6 +683,8 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
     const url = new URL(result.reauthorizeUrl ?? "");
     expect(url.searchParams.get("client_id")).toBe("test-client-id");
     expect(url.searchParams.get("permissions")).toBe(LOGGING_REQUIRED_PERMISSIONS.toString());
+    expect(url.searchParams.get("guild_id")).toBe(guildId);
+    expect(url.searchParams.get("disable_guild_select")).toBe("true");
   });
 
   test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
