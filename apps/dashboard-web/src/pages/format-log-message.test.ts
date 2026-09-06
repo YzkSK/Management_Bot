@@ -442,6 +442,22 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が絵文字を追加しました");
   });
 
+  test("絵文字更新", () => {
+    const entry = {
+      category: "emoji",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      emojiId: "e1",
+      executorId: "mod1",
+      action: "update",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が絵文字を更新しました");
+  });
+
   test("絵文字削除(実行者未相関)", () => {
     const entry = {
       category: "emoji",
