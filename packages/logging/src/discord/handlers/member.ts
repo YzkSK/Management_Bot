@@ -51,8 +51,9 @@ export function toMemberUnbanLogEntry(ban: GuildBan): LogEntry {
 }
 
 /**
- * 1回のguildMemberUpdateでニックネーム変更とタイムアウト付与が同時に起こり得るため、複数エントリを返す。
- * タイムアウト解除(nullに戻る/期限切れ)はschema上表現するaction値がないため記録しない。
+ * 1回のguildMemberUpdateでニックネーム変更とタイムアウト付与/解除が同時に起こり得るため、複数エントリを返す。
+ * 期限切れによる自動解除と手動解除はdiscord.jsのイベントだけでは区別できないため、どちらもtimeoutRemoveとして
+ * 一律記録する(#81)。区別が必要な場合は#52の監査ログ相関(実行者の有無)に委ねる。
  */
 export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMember, newMember: GuildMember): LogEntry[] {
   const createdAt = new Date().toISOString();
@@ -62,11 +63,12 @@ export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMe
     entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "nicknameChange" });
   }
 
-  if (
-    newMember.communicationDisabledUntilTimestamp !== null &&
-    oldMember.communicationDisabledUntilTimestamp !== newMember.communicationDisabledUntilTimestamp
-  ) {
-    entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "timeout" });
+  if (oldMember.communicationDisabledUntilTimestamp !== newMember.communicationDisabledUntilTimestamp) {
+    if (newMember.communicationDisabledUntilTimestamp !== null) {
+      entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "timeout" });
+    } else {
+      entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "timeoutRemove" });
+    }
   }
 
   return entries;

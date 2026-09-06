@@ -60,7 +60,7 @@ const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
   MemberKick: { category: "member", field: "userId", logActions: ["leave"], rewriteAction: "kick" },
   MemberBanAdd: { category: "member", field: "userId", logActions: ["ban"] },
   MemberBanRemove: { category: "member", field: "userId", logActions: ["unban"] },
-  MemberUpdate: { category: "member", field: "userId", logActions: ["nicknameChange", "timeout"] },
+  MemberUpdate: { category: "member", field: "userId", logActions: ["nicknameChange", "timeout", "timeoutRemove"] },
   RoleCreate: { category: "role", field: "roleId", logActions: ["create"] },
   RoleUpdate: { category: "role", field: "roleId", logActions: ["update"] },
   RoleDelete: { category: "role", field: "roleId", logActions: ["delete"] },

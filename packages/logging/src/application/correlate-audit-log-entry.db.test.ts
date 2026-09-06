@@ -314,6 +314,23 @@ describe("correlateAuditLogEntry (実DB)", () => {
     expect(nicknameRow?.payload).not.toMatchObject({ executorId: "mod-1" });
   });
 
+  test("タイムアウト解除(timeoutRemove)にも実行者を相関する", async () => {
+    const logId = await insertMemberLogEntry("u1", "timeoutRemove", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
   test("同じチャンネルへの2つの操作の監査ログが並行して届いても、それぞれ別の行に相関する(競合時の取り違え防止)", async () => {
     const firstLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:00.000Z"));
     const secondLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:01.000Z"));

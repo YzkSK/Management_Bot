@@ -41,7 +41,7 @@ export const memberLogEntrySchema = z.object({
   ...base,
   category: z.literal("member"),
   userId: nonEmptyString,
-  action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "nicknameChange"]),
+  action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "timeoutRemove", "nicknameChange"]),
 });
 
 export const roleLogEntrySchema = z.object({
