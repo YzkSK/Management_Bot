@@ -426,6 +426,37 @@ describe("formatLogMessage", () => {
     expect(message).toBe("不明なユーザー が #c1 の招待リンクを作成しました");
   });
 
+  test("絵文字追加", () => {
+    const entry = {
+      category: "emoji",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      emojiId: "e1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が絵文字を追加しました");
+  });
+
+  test("絵文字削除(実行者未相関)", () => {
+    const entry = {
+      category: "emoji",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      emojiId: "e1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("不明なユーザー が絵文字を削除しました");
+  });
+
   test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
     const entry = {
       category: "autoMod",

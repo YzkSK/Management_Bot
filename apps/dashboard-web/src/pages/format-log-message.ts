@@ -184,6 +184,17 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "emoji": {
+      switch (entry.action) {
+        case "create":
+          return `${executorName} が絵文字を追加しました`;
+        case "update":
+          return `${executorName} が絵文字を更新しました`;
+        case "delete":
+          return `${executorName} が絵文字を削除しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
