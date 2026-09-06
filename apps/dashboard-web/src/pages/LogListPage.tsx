@@ -193,7 +193,7 @@ export function LogListPage() {
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
                       <span
-                        className="mt-0.5 size-2 shrink-0 rounded-full"
+                        className="size-2 shrink-0 rounded-full"
                         style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
                         aria-hidden="true"
                       />
@@ -239,12 +239,11 @@ export function LogListPage() {
                           </div>
                         </div>
 
-                        {summary.subjectId && (
-                          <div className="flex gap-2">
-                            <Button type="button" variant="outline" size="sm">
-                              このユーザーで絞り込み
-                            </Button>
-                          </div>
+                        {Object.keys(summary.details).length > 0 && (
+                          <details>
+                            <summary className="text-muted-foreground cursor-pointer text-xs">生データ</summary>
+                            <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>
+                          </details>
                         )}
                       </div>
                     )}
