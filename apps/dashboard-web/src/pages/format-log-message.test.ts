@@ -257,6 +257,40 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が Yuzuki をスレッドに追加しました");
   });
 
+  test("スレッドメンバー追加(実行者未相関): 対象者自身の参加として表示する", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      userId: "u1",
+      action: "memberAdd",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
+
+    expect(message).toBe("Yuzuki がスレッドに参加しました");
+  });
+
+  test("スレッドメンバー削除(実行者未相関): 対象者自身の退出として表示する", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      userId: "u1",
+      action: "memberRemove",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
+
+    expect(message).toBe("Yuzuki がスレッドから退出しました");
+  });
+
   test("未対応の組み合わせは汎用フォールバック文言になる", () => {
     const entry = {
       category: "guild",

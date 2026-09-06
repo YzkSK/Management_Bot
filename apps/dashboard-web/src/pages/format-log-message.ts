@@ -162,14 +162,16 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
           return `${executorName} がスレッドをアーカイブしました`;
         case "unarchive":
           return `${executorName} がスレッドのアーカイブを解除しました`;
-        case "memberAdd":
-          return entry.userId
-            ? `${executorName} が ${userName(entry.userId, names)} をスレッドに追加しました`
-            : `${executorName} がスレッドにメンバーを追加しました`;
-        case "memberRemove":
-          return entry.userId
-            ? `${executorName} が ${userName(entry.userId, names)} をスレッドから削除しました`
-            : `${executorName} がスレッドからメンバーを削除しました`;
+        case "memberAdd": {
+          if (!entry.userId) return `${executorName} がスレッドにメンバーを追加しました`;
+          const targetName = userName(entry.userId, names);
+          return entry.executorId ? `${executorName} が ${targetName} をスレッドに追加しました` : `${targetName} がスレッドに参加しました`;
+        }
+        case "memberRemove": {
+          if (!entry.userId) return `${executorName} がスレッドからメンバーを削除しました`;
+          const targetName = userName(entry.userId, names);
+          return entry.executorId ? `${executorName} が ${targetName} をスレッドから削除しました` : `${targetName} がスレッドから退出しました`;
+        }
       }
       break;
     }
