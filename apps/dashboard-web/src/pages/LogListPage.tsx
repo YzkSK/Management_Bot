@@ -17,6 +17,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
 
+/** role updateのchangesキーを表示用の日本語ラベルに変換する。未知キーはそのまま表示する。 */
+const ROLE_CHANGE_FIELD_LABELS: Record<string, string> = {
+  name: "名前",
+  color: "色",
+  hoist: "表示を分離",
+  mentionable: "メンション許可",
+  permissions: "権限",
+};
+
 const CONNECTION_STATUS_LABELS = {
   connecting: "リアルタイム更新: 接続中...",
   open: "リアルタイム更新: 有効",
@@ -230,6 +239,21 @@ export function LogListPage() {
                                 {summary.content}
                               </p>
                             )}
+                          </div>
+                        )}
+
+                        {summary.changes !== null && (
+                          <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
+                            {Object.entries(summary.changes).map(([field, change]) => (
+                              <div key={field} className="text-sm">
+                                <span className="text-muted-foreground mr-2 text-xs">
+                                  {ROLE_CHANGE_FIELD_LABELS[field] ?? field}
+                                </span>
+                                <del className="text-muted-foreground">{String(change.before)}</del>
+                                <span className="mx-1">→</span>
+                                <span>{String(change.after)}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
 

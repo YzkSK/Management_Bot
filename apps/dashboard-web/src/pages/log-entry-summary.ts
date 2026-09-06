@@ -1,5 +1,10 @@
 import { getLogEntrySubjectId, getLogEntrySubjectField, type LogEntry } from "@management-bot/shared";
 
+export interface LogEntryFieldChange {
+  before: string | number | boolean;
+  after: string | number | boolean;
+}
+
 export interface LogEntrySummary {
   category: string;
   createdAt: string;
@@ -14,6 +19,8 @@ export interface LogEntrySummary {
   content: string | null;
   /** action=updateの編集前本文(message)。移行前の既存ログや対象外カテゴリではnull。 */
   previousContent: string | null;
+  /** action=updateのフィールドごとの変更前後(role)。対象外カテゴリ・差分なしではnull。 */
+  changes: Record<string, LogEntryFieldChange> | null;
   /** 上記以外のcategory固有フィールド。一覧では隠し、詳細展開時のみJSONで描画する。 */
   details: Record<string, unknown>;
 }
@@ -30,6 +37,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
   let action: string | null = null;
   let content: string | null = null;
   let previousContent: string | null = null;
+  let changes: Record<string, LogEntryFieldChange> | null = null;
   for (const [key, value] of Object.entries(entry)) {
     if (key === "action" && typeof value === "string") {
       action = value;
@@ -41,6 +49,10 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     }
     if (key === "previousContent" && typeof value === "string") {
       previousContent = value;
+      continue;
+    }
+    if (key === "changes" && typeof value === "object" && value !== null) {
+      changes = value as Record<string, LogEntryFieldChange>;
       continue;
     }
     if (!BASE_FIELDS.has(key) && key !== subjectField) {
@@ -56,6 +68,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     action,
     content,
     previousContent,
+    changes,
     details,
   };
 }

@@ -25,6 +25,7 @@ describe("summarizeLogEntry", () => {
       action: "delete",
       content: null,
       previousContent: null,
+      changes: null,
       details: { channelId: "c1", authorId: "a1" },
     });
   });
@@ -153,5 +154,34 @@ describe("summarizeLogEntry", () => {
     expect(summary.subjectId).toBe("mod1");
     expect(summary.executorId).toBe("mod1");
     expect(summary.categorySubjectId).toBe("a1");
+  });
+
+  test("role updateのchangesはdetailsに埋めずそのまま取り出す", () => {
+    const entry = {
+      category: "role",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      executorId: "mod1",
+      roleId: "r1",
+      action: "update",
+      changes: { name: { before: "old", after: "new" } },
+    } as unknown as LogEntry;
+
+    const summary = summarizeLogEntry(entry);
+    expect(summary.changes).toEqual({ name: { before: "old", after: "new" } });
+    expect(summary.details).toEqual({ roleId: "r1" });
+  });
+
+  test("changes未設定の場合はnullになる", () => {
+    const entry = {
+      category: "role",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      executorId: "mod1",
+      roleId: "r1",
+      action: "memberAdd",
+    } as unknown as LogEntry;
+
+    expect(summarizeLogEntry(entry).changes).toBeNull();
   });
 });
