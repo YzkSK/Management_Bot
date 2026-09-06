@@ -219,6 +219,44 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Yuzuki が 👍 のリアクションを外しました");
   });
 
+  test("スレッド作成", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスレッドを作成しました");
+  });
+
+  test("スレッドメンバー追加", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      userId: "u1",
+      action: "memberAdd",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { mod1: "Admin", u1: "Yuzuki" },
+      channels: {},
+    });
+
+    expect(message).toBe("Admin が Yuzuki をスレッドに追加しました");
+  });
+
   test("未対応の組み合わせは汎用フォールバック文言になる", () => {
     const entry = {
       category: "guild",

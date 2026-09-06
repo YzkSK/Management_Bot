@@ -150,6 +150,29 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "thread": {
+      switch (entry.action) {
+        case "create":
+          return `${executorName} がスレッドを作成しました`;
+        case "update":
+          return `${executorName} がスレッドを更新しました`;
+        case "delete":
+          return `${executorName} がスレッドを削除しました`;
+        case "archive":
+          return `${executorName} がスレッドをアーカイブしました`;
+        case "unarchive":
+          return `${executorName} がスレッドのアーカイブを解除しました`;
+        case "memberAdd":
+          return entry.userId
+            ? `${executorName} が ${userName(entry.userId, names)} をスレッドに追加しました`
+            : `${executorName} がスレッドにメンバーを追加しました`;
+        case "memberRemove":
+          return entry.userId
+            ? `${executorName} が ${userName(entry.userId, names)} をスレッドから削除しました`
+            : `${executorName} がスレッドからメンバーを削除しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
