@@ -29,11 +29,30 @@ const CHANGE_FIELD_LABELS: Record<string, string> = {
   rateLimitPerUser: "スロー モード",
   bitrate: "ビットレート",
   userLimit: "ユーザー上限",
+  icon: "アイコン",
+  banner: "バナー",
+  description: "説明",
+  verificationLevel: "認証レベル",
+  explicitContentFilter: "不適切なコンテンツフィルター",
+  defaultMessageNotifications: "デフォルトの通知設定",
+  afkChannelId: "AFKチャンネル",
+  afkTimeout: "AFKタイムアウト",
+  systemChannelId: "システムチャンネル",
+  rulesChannelId: "ルールチャンネル",
+  publicUpdatesChannelId: "公開アップデートチャンネル",
+  preferredLocale: "優先言語",
+  widgetEnabled: "ウィジェット有効",
+  widgetChannelId: "ウィジェットチャンネル",
 };
 
-/** changesのbefore/after値を表示用文字列に変換する。nullはtopic未設定等を表すため「未設定」と表示する。 */
-function formatChangeValue(value: string | number | boolean | null): string {
-  return value === null ? "未設定" : String(value);
+/** guild updateのchangesのうち、値がチャンネルIDであるフィールド。表示名解決の対象にする。 */
+const CHANNEL_REFERENCE_CHANGE_FIELDS = new Set(["afkChannelId", "systemChannelId", "rulesChannelId", "publicUpdatesChannelId", "widgetChannelId"]);
+
+/** changesのbefore/after値を表示用文字列に変換する。nullはtopic未設定等を表すため「未設定」と表示する。チャンネルIDフィールドは解決済み名称があれば使う。 */
+function formatChangeValue(field: string, value: string | number | boolean | null, channelNames: Record<string, string>): string {
+  if (value === null) return "未設定";
+  if (CHANNEL_REFERENCE_CHANGE_FIELDS.has(field) && typeof value === "string") return channelNames[value] ?? value;
+  return String(value);
 }
 
 const CONNECTION_STATUS_LABELS = {
@@ -87,11 +106,18 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              logsQuery.data.entries.flatMap(({ entry }) =>
-                Object.entries(entry).flatMap(([key, value]) =>
+              logsQuery.data.entries.flatMap(({ entry }) => {
+                const direct = Object.entries(entry).flatMap(([key, value]) =>
                   (key === "channelId" || key === "previousChannelId") && typeof value === "string" ? [value] : [],
-                ),
-              ),
+                );
+                const changes = "changes" in entry && entry.changes ? entry.changes : {};
+                const fromChanges = Object.entries(changes).flatMap(([field, change]) =>
+                  CHANNEL_REFERENCE_CHANGE_FIELDS.has(field)
+                    ? [change.before, change.after].filter((v): v is string => typeof v === "string")
+                    : [],
+                );
+                return [...direct, ...fromChanges];
+              }),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
@@ -259,9 +285,9 @@ export function LogListPage() {
                                 <span className="text-muted-foreground mr-2 text-xs">
                                   {CHANGE_FIELD_LABELS[field] ?? field}
                                 </span>
-                                <del className="text-muted-foreground">{formatChangeValue(change.before)}</del>
+                                <del className="text-muted-foreground">{formatChangeValue(field, change.before, names.channels)}</del>
                                 <span className="mx-1">→</span>
-                                <span>{formatChangeValue(change.after)}</span>
+                                <span>{formatChangeValue(field, change.after, names.channels)}</span>
                               </div>
                             ))}
                           </div>

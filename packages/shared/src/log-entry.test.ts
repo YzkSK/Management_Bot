@@ -240,4 +240,22 @@ describe("logEntrySchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  test("guild: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.guild,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("guild: changesにiconのnull(未設定)を含む場合も成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.guild,
+      action: "update",
+      changes: { icon: { before: null, after: "hash" } },
+    });
+    expect(result.success).toBe(true);
+  });
 });

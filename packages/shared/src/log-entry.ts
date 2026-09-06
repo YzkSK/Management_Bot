@@ -76,6 +76,11 @@ export const guildLogEntrySchema = z.object({
   ...base,
   category: z.literal("guild"),
   action: z.enum(["update"]),
+  /** action=updateのみ設定する変更フィールドごとのbefore/after。icon/afkChannelIdはnull(未設定)を取り得るため許容する。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+  changes: z
+    .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
+    .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
+    .optional(),
 });
 
 export const threadLogEntrySchema = z.object({
