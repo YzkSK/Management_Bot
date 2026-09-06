@@ -236,6 +236,74 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin がスレッドを作成しました");
   });
 
+  test("スレッド更新", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "update",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスレッドを更新しました");
+  });
+
+  test("スレッド削除", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスレッドを削除しました");
+  });
+
+  test("スレッドアーカイブ", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "archive",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスレッドをアーカイブしました");
+  });
+
+  test("スレッドアーカイブ解除", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "unarchive",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスレッドのアーカイブを解除しました");
+  });
+
   test("スレッドメンバー追加", () => {
     const entry = {
       category: "thread",
