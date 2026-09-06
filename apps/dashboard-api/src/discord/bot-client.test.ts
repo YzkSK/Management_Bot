@@ -165,6 +165,65 @@ describe("fetchBotGuildPermissions", () => {
   });
 });
 
+describe("/users/@me キャッシュ(issue #99)", () => {
+  function mockFetchCounting(responses: Record<string, { status: number; body?: unknown }>): { calls: number } {
+    const state = { calls: 0 };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      state.calls++;
+      const url = String(input);
+      for (const [path, response] of Object.entries(responses)) {
+        if (url.endsWith(path)) {
+          return jsonResponse(response.status, response.body);
+        }
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+    return state;
+  }
+
+  test("同一Botトークンでの複数回呼び出しで/users/@meは1回しか叩かない", async () => {
+    const botToken = "me-cache-token-1";
+    const fetchState = mockFetchCounting({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/channels": { status: 200, body: [] },
+      "/guilds/g1/roles": { status: 200, body: [] },
+      "/guilds/g1/members/bot1": { status: 200, body: { roles: [] } },
+    });
+
+    await fetchGuildChannels(botToken, "g1");
+    await fetchBotGuildPermissions(botToken, "g1");
+
+    // fetchGuildChannels: /users/@me, /channels, /roles, /members → 4回
+    // fetchBotGuildPermissions: /roles, /members のみ(/users/@meはキャッシュヒット) → 2回
+    expect(fetchState.calls).toBe(6);
+  });
+
+  test("/users/@me取得が失敗した場合はキャッシュせず、次回呼び出しで再試行する", async () => {
+    const botToken = "me-cache-token-2";
+    let meCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) {
+        meCalls++;
+        return meCalls === 1 ? jsonResponse(500) : jsonResponse(200, { id: "bot1" });
+      }
+      if (url.endsWith("/guilds/g1/roles")) {
+        return jsonResponse(200, []);
+      }
+      if (url.endsWith("/guilds/g1/members/bot1")) {
+        return jsonResponse(200, { roles: [] });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    await expect(fetchBotGuildPermissions(botToken, "g1")).rejects.toThrow();
+    const permissions = await fetchBotGuildPermissions(botToken, "g1");
+
+    expect(meCalls).toBe(2);
+    expect(permissions).toBe(0n);
+  });
+});
+
 describe("fetchGuildMemberNames", () => {
   test("nickがあればnickを使う", async () => {
     mockFetch({
