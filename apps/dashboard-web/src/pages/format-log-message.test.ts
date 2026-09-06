@@ -208,6 +208,37 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, noNames);
 
-    expect(message).toBe("招待: create");
+    expect(message).toBe("招待: 作成");
+  });
+
+  test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
+    const entry = {
+      category: "autoMod",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      ruleId: "r1",
+      userId: "u1",
+      action: "ruleCreate",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("AutoMod: ルール作成");
+  });
+
+  test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {
+    const entry = {
+      category: "auditLogCorrelation",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      auditLogEntryId: "a1",
+      actionType: "MEMBER_UPDATE",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("監査ログ相関: 更新");
   });
 });

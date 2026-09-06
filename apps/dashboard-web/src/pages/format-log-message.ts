@@ -2,6 +2,39 @@ import type { LogEntry } from "@management-bot/shared";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
+/** フォールバック文言専用のaction日本語ラベル。未知のactionはそのまま表示する。 */
+const ACTION_LABELS: Record<string, string> = {
+  create: "作成",
+  update: "更新",
+  delete: "削除",
+  bulkDelete: "一括削除",
+  pin: "ピン留め",
+  unpin: "ピン留め解除",
+  add: "追加",
+  remove: "削除",
+  join: "参加",
+  leave: "退出",
+  ban: "BAN",
+  unban: "BAN解除",
+  kick: "キック",
+  timeout: "タイムアウト",
+  timeoutRemove: "タイムアウト解除",
+  nicknameChange: "ニックネーム変更",
+  memberAdd: "メンバー追加",
+  memberRemove: "メンバー削除",
+  archive: "アーカイブ",
+  unarchive: "アーカイブ解除",
+  ruleCreate: "ルール作成",
+  ruleUpdate: "ルール更新",
+  ruleDelete: "ルール削除",
+  actionExecuted: "アクション実行",
+  end: "終了",
+  start: "開始",
+  complete: "完了",
+  cancel: "中止",
+  resolve: "解決",
+};
+
 interface NameResolvers {
   users: Record<string, string>;
   channels: Record<string, string>;
@@ -124,5 +157,8 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     }
   }
 
-  return `${CATEGORY_LABELS[entry.category]}: ${summary.action ?? "更新"}`;
+  const categoryLabel = CATEGORY_LABELS[entry.category];
+  const action = summary.action;
+  const actionLabel = action ? (ACTION_LABELS[action] ?? action) : "更新";
+  return `${categoryLabel}: ${actionLabel}`;
 }
