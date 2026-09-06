@@ -683,6 +683,52 @@ describe("formatLogMessage", () => {
     expect(message).toBe("#アンケート の投票が終了しました");
   });
 
+  test("イベント作成", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がイベントを作成しました");
+  });
+
+  test("イベント開始(実行者なし)", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      action: "start",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("イベントが開始しました");
+  });
+
+  test("イベント中止", () => {
+    const entry = {
+      category: "scheduledEvent",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      eventId: "e1",
+      action: "cancel",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("イベントが中止されました");
+  });
+
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {
     const entry = {
       category: "auditLogCorrelation",

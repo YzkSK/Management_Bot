@@ -241,6 +241,23 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "scheduledEvent": {
+      switch (entry.action) {
+        case "create":
+          return `${executorName} がイベントを作成しました`;
+        case "update":
+          return `${executorName} がイベントを更新しました`;
+        case "delete":
+          return `${executorName} がイベントを削除しました`;
+        case "start":
+          return "イベントが開始しました";
+        case "complete":
+          return "イベントが終了しました";
+        case "cancel":
+          return "イベントが中止されました";
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
