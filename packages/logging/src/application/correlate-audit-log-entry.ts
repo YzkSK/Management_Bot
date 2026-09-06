@@ -13,6 +13,11 @@ export interface AuditLogEntryInfo {
   guildId: string;
   action: string;
   executorId: string | null;
+  /**
+   * 相関時にpayload内の対象フィールド(CorrelationRule.field)と突き合わせるキー。
+   * 通常はDiscordのSnowflake IDだが、InviteCreate/InviteDeleteに限りDiscord API仕様上
+   * target_idが常にnullのため招待コード(文字列)が入る(toAuditLogEntryInfo参照)。
+   */
   targetId: string | null;
   createdAt: string;
   roleChanges?: { added: string[]; removed: string[] };

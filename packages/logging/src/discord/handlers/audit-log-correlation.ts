@@ -33,6 +33,21 @@ function extractMessageDeleteChannelId(entry: GuildAuditLogsEntry): string | und
   return typeof channelId === "string" ? channelId : undefined;
 }
 
+/**
+ * InviteCreate/InviteDeleteはDiscord APIの仕様上target_idが常にnullになる
+ * (招待はスナウフレークIDを持たずコード文字列のため)。discord.js(確認時点: v14.16.x)は
+ * この場合entry.targetにchangesから合成したInvite風オブジェクト(.codeを持つ)を積むため、
+ * そちらからコードを取得してtargetIdの代わりに使う(discord.js内部の変換結果への依存であり、
+ * 将来のバージョンで形が変わる可能性はある。code欠損時は素直にtargetId=nullへフォールバックする)。
+ */
+function extractInviteTargetId(entry: GuildAuditLogsEntry): string | null {
+  if (entry.action !== AuditLogEvent.InviteCreate && entry.action !== AuditLogEvent.InviteDelete) {
+    return entry.targetId;
+  }
+  const target = entry.target as { code?: unknown } | null | undefined;
+  return typeof target?.code === "string" && target.code.length > 0 ? target.code : entry.targetId;
+}
+
 /** AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。 */
 export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string): AuditLogEntryInfo {
   return {
@@ -40,7 +55,7 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
     guildId,
     action: AuditLogEvent[entry.action] ?? String(entry.action),
     executorId: entry.executorId,
-    targetId: entry.targetId,
+    targetId: extractInviteTargetId(entry),
     createdAt: entry.createdAt.toISOString(),
     roleChanges: extractRoleChanges(entry),
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),

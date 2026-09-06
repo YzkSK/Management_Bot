@@ -47,6 +47,18 @@ async function insertChannelLogEntry(
   return id;
 }
 
+async function insertInviteLogEntry(code: string, action: string, createdAt: Date): Promise<string> {
+  const id = randomUUID();
+  await db.insert(logEntries).values({
+    id,
+    guildId,
+    category: "invite",
+    payload: { category: "invite", guildId, createdAt: createdAt.toISOString(), channelId: "c1", code, action },
+    createdAt,
+  });
+  return id;
+}
+
 async function insertMemberLogEntry(userId: string, action: string, createdAt: Date): Promise<string> {
   const id = randomUUID();
   await db.insert(logEntries).values({
@@ -198,6 +210,40 @@ describe("correlateAuditLogEntry (実DB)", () => {
       .from(logEntries)
       .where(and(eq(logEntries.category, "integration"), eq(logEntries.guildId, guildId)));
     expect(row?.payload).toMatchObject({ integrationId: "integration-1", action: "create", executorId: "mod-1" });
+  });
+
+  test("InviteCreateはtargetId(招待コード)でinvite行にexecutorIdを追記する", async () => {
+    const logId = await insertInviteLogEntry("abc123", "create", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "InviteCreate",
+      executorId: "mod-1",
+      targetId: "abc123",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("InviteDeleteはtargetId(招待コード)でinvite行にexecutorIdを追記する", async () => {
+    const logId = await insertInviteLogEntry("abc123", "delete", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "InviteDelete",
+      executorId: "mod-1",
+      targetId: "abc123",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
   test("MemberKickは相関時にleave行のactionをkickへ書き換える", async () => {
