@@ -12,13 +12,30 @@ import { getCookie } from "hono/cookie";
 import { fetchBotGuildPermissions, fetchGuildChannels, fetchGuildMemberNames } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
+import { createTtlCache } from "./ttl-cache.js";
+
+/**
+ * セッションID単位で「ログインユーザーの所属guild一覧」を短命キャッシュする。同一リクエスト内の
+ * 複数procedure(getGuildMembership/listMyGuilds)はもちろん、直後の画面遷移・ポーリングをまたいだ
+ * 呼び出しもこのTTL内なら再フェッチしない(issue #99)。
+ */
+const USER_GUILDS_TTL_MS = 30_000;
+const userGuildsCache = createTtlCache<readonly DiscordUserGuild[] | null>(USER_GUILDS_TTL_MS);
+
+/**
+ * guildId単位でBotトークン側の問い合わせ(チャンネル一覧・実効権限)を短命キャッシュする。
+ * 設定画面表示のたびに同じguildへ何度も問い合わせないようにする(issue #99)。
+ */
+const GUILD_TTL_MS = 30_000;
+const guildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
+const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
-  return (guildId) => fetchGuildChannels(botToken, guildId);
+  return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
 }
 
 function createGetBotPermissions(botToken: string): (guildId: string) => Promise<bigint> {
-  return (guildId) => fetchBotGuildPermissions(botToken, guildId);
+  return (guildId) => botPermissionsCache(guildId, () => fetchBotGuildPermissions(botToken, guildId));
 }
 
 function createGetGuildMemberNames(
@@ -31,8 +48,7 @@ function createGetGuildMemberNames(
  * ログインユーザー自身のOAuth2アクセストークン(`identify guilds`スコープ)でDiscordの所属guild一覧を取得する。
  * セッション切れ・未ログインは空配列/nullに倒し、Discord側でトークンが失効している場合はUNAUTHORIZEDを投げて
  * フロントの再ログイン導線(AppのisUnauthorizedError)に乗せる。
- * ponytail: リクエストごとにDiscord APIへ問い合わせておりキャッシュしない。ログ一覧のポーリング等で
- * レート制限に触れるようならセッション単位の短命キャッシュを追加すること。
+ * 結果はセッションID単位でuserGuildsCacheに短命TTLキャッシュする(issue #99)。
  */
 export async function fetchCurrentUserGuilds(
   db: Db,
@@ -42,18 +58,20 @@ export async function fetchCurrentUserGuilds(
   if (!sessionId) {
     return null;
   }
-  const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
-  if (!accessToken) {
-    return null;
-  }
-  try {
-    return await fetchUserGuilds(accessToken);
-  } catch (error) {
-    if (error instanceof DiscordTokenInvalidError) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
+  return userGuildsCache(sessionId, async () => {
+    const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
+    if (!accessToken) {
+      return null;
     }
-    throw error;
-  }
+    try {
+      return await fetchUserGuilds(accessToken);
+    } catch (error) {
+      if (error instanceof DiscordTokenInvalidError) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+      throw error;
+    }
+  });
 }
 
 function createListMyGuilds(

@@ -51,13 +51,30 @@ async function discordGet<T>(botToken: string, path: string, schema: z.ZodType<T
 }
 
 /**
+ * `/users/@me`はBotトークンに対して不変(Bot自身のuser id)なので、トークンごとに一度取得した
+ * 結果を使い回す。fetchGuildChannels/fetchBotGuildPermissionsの直列往復を1本減らす
+ * (issue #99)。
+ */
+const meCache = new Map<string, Promise<z.infer<typeof meSchema> | "not_found">>();
+
+function getMe(botToken: string): Promise<z.infer<typeof meSchema> | "not_found"> {
+  let cached = meCache.get(botToken);
+  if (!cached) {
+    cached = discordGet(botToken, "/users/@me", meSchema);
+    cached.catch(() => meCache.delete(botToken));
+    meCache.set(botToken, cached);
+  }
+  return cached;
+}
+
+/**
  * Botトークンでguild直下の全チャンネルを取得し、Botが実際にメッセージを送信できるチャンネルだけに絞り込む。
  * (チャンネル種別に加え、guildロール・チャンネルのpermission overwriteから送信権限を計算する。)
  * guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
  */
 export async function fetchGuildChannels(botToken: string, guildId: string): Promise<readonly ChannelOption[]> {
   const [me, channels, roles] = await Promise.all([
-    discordGet(botToken, "/users/@me", meSchema),
+    getMe(botToken),
     discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)),
     discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleSchema)),
   ]);
@@ -92,7 +109,7 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
  */
 export async function fetchBotGuildPermissions(botToken: string, guildId: string): Promise<bigint> {
   const [me, roles] = await Promise.all([
-    discordGet(botToken, "/users/@me", meSchema),
+    getMe(botToken),
     discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleSchema)),
   ]);
   if (me === "not_found" || roles === "not_found") {
