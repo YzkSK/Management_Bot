@@ -175,6 +175,15 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "invite": {
+      switch (entry.action) {
+        case "create":
+          return `${executorName} が ${channelName(entry.channelId, names)} の招待リンクを作成しました`;
+        case "delete":
+          return `${executorName} が招待リンクを削除しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {

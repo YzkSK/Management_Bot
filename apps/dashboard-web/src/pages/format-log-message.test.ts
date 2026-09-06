@@ -373,18 +373,41 @@ describe("formatLogMessage", () => {
     expect(message).toBe("サーバー設定が更新されました");
   });
 
-  test("自然文未実装カテゴリは日本語ラベルでフォールバックする", () => {
+  test("招待リンク作成", () => {
     const entry = {
       category: "invite",
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
+      code: "abc123",
+      channelId: "c1",
+      executorId: "mod1",
       action: "create",
     } as unknown as LogEntry;
     const summary = summarizeLogEntry(entry);
 
-    const message = formatLogMessage(entry, summary, noNames);
+    const message = formatLogMessage(entry, summary, {
+      users: { mod1: "Admin" },
+      channels: { c1: "招待用" },
+    });
 
-    expect(message).toBe("招待: 作成");
+    expect(message).toBe("Admin が #招待用 の招待リンクを作成しました");
+  });
+
+  test("招待リンク削除", () => {
+    const entry = {
+      category: "invite",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      code: "abc123",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が招待リンクを削除しました");
   });
 
   test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
