@@ -122,8 +122,8 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .mutation(async ({ ctx, input }) => {
       if (input.channelId !== null) {
-        const options = await ctx.getGuildChannels(input.guildId);
-        if (!options.some((option) => option.id === input.channelId)) {
+        const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
+        if (!exists) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
         }
       }
@@ -140,8 +140,8 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .mutation(async ({ ctx, input }) => {
       if (input.channelId !== null) {
-        const options = await ctx.getGuildChannels(input.guildId);
-        if (!options.some((option) => option.id === input.channelId)) {
+        const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
+        if (!exists) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
         }
       }

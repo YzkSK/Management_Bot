@@ -34,6 +34,18 @@ function createGetGuildChannels(botToken: string): (guildId: string) => Promise<
   return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
 }
 
+/**
+ * チャンネルID設定のmutation検証専用。キャッシュ済みのgetGuildChannelsを使うと、
+ * Discord上で削除済み・送信不可になったチャンネルでも最大GUILD_TTL_MS秒はDBへ保存できてしまうため、
+ * 常に生fetchする(issue #99 codexレビュー対応)。
+ */
+function createVerifyGuildChannel(botToken: string): (guildId: string, channelId: string) => Promise<boolean> {
+  return async (guildId, channelId) => {
+    const options = await fetchGuildChannels(botToken, guildId);
+    return options.some((option) => option.id === channelId);
+  };
+}
+
 function createGetBotPermissions(botToken: string): (guildId: string) => Promise<bigint> {
   return (guildId) => botPermissionsCache(guildId, () => fetchBotGuildPermissions(botToken, guildId));
 }
@@ -132,6 +144,7 @@ export function createContext(
       discordClientId,
       getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
       getGuildChannels: createGetGuildChannels(botToken),
+      verifyGuildChannel: createVerifyGuildChannel(botToken),
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),

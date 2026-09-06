@@ -36,12 +36,18 @@ export interface DashboardAccessContext {
   getGuildMembership: (guildId: string, discordUserId: string) => Promise<GuildMembership | null>;
   /**
    * guildId直下の、botがメッセージ送信可能なテキストチャンネル一覧を返す。
-   * Dashboard UIでのセレクター表示・チャンネルID設定時の実在検証に使う
-   * (IDの直接入力を禁止するため)。送信不可(権限不足・アナウンス専用等)の
+   * Dashboard UIでのセレクター表示に使う。送信不可(権限不足・アナウンス専用等)の
    * チャンネルを含めると、設定自体は成功してもログ配信が以後毎回失敗するため
-   * 実装側で送信可否まで絞り込むこと。dashboard-api側でDiscord APIやキャッシュから供給する。
+   * 実装側で送信可否まで絞り込むこと。表示専用なのでdashboard-api側で短命キャッシュしてよい。
+   * チャンネルID設定時の実在検証には{@link verifyGuildChannel}を使うこと
+   * (キャッシュ経由だと削除済みチャンネルの検証をすり抜けうるため)。
    */
   getGuildChannels: (guildId: string) => Promise<readonly ChannelOption[]>;
+  /**
+   * guildId直下でchannelIdが実在し、botがメッセージ送信可能かをキャッシュを介さず確認する。
+   * チャンネルID設定のmutation(setChannelSetting等)の実在検証専用。dashboard-api側でDiscord APIから供給する。
+   */
+  verifyGuildChannel: (guildId: string, channelId: string) => Promise<boolean>;
   /**
    * 指定したdiscordユーザーIDごとの表示名(サーバーニックネーム優先)を解決する。
    * ダッシュボードのログ一覧でユーザーIDをそのまま見せず名前表示するために使う。
