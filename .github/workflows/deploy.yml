@@ -45,4 +45,4 @@ jobs:
           ssh \
             -i ~/.ssh/id_ed25519 \
             "$OCI_USER@$OCI_HOST" \
-            "sudo /usr/local/bin/deploy-management-bot '$DEPLOY_SHA'"
+            "/usr/local/bin/deploy-management-bot '$DEPLOY_SHA'"
