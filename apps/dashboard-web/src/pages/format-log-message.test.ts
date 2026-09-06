@@ -520,7 +520,24 @@ describe("formatLogMessage", () => {
     expect(message).toBe("不明なユーザー がスタンプを削除しました");
   });
 
-  test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
+  test("AutoModルール作成", () => {
+    const entry = {
+      category: "autoMod",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      ruleId: "r1",
+      userId: "u1",
+      executorId: "mod1",
+      action: "ruleCreate",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がAutoModルールを作成しました");
+  });
+
+  test("AutoModルール作成(実行者未相関): 不明なユーザーにフォールバックする", () => {
     const entry = {
       category: "autoMod",
       guildId: "g1",
@@ -531,9 +548,25 @@ describe("formatLogMessage", () => {
     } as unknown as LogEntry;
     const summary = summarizeLogEntry(entry);
 
-    const message = formatLogMessage(entry, summary, noNames);
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
-    expect(message).toBe("AutoMod: ルール作成");
+    expect(message).toBe("不明なユーザー がAutoModルールを作成しました");
+  });
+
+  test("AutoMod作動", () => {
+    const entry = {
+      category: "autoMod",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      ruleId: "r1",
+      userId: "u1",
+      action: "actionExecuted",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
+
+    expect(message).toBe("Yuzuki の発言に対してAutoModが作動しました");
   });
 
   test("actionを持たないカテゴリ(auditLogCorrelation)は「更新」にフォールバックする", () => {

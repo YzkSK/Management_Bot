@@ -206,6 +206,20 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       }
       break;
     }
+    case "autoMod": {
+      const ruleExecutorName = entry.executorId ? userName(entry.executorId, names) : "不明なユーザー";
+      switch (entry.action) {
+        case "ruleCreate":
+          return `${ruleExecutorName} がAutoModルールを作成しました`;
+        case "ruleUpdate":
+          return `${ruleExecutorName} がAutoModルールを更新しました`;
+        case "ruleDelete":
+          return `${ruleExecutorName} がAutoModルールを削除しました`;
+        case "actionExecuted":
+          return `${userName(entry.userId, names)} の発言に対してAutoModが作動しました`;
+      }
+      break;
+    }
     case "guild":
       return "サーバー設定が更新されました";
     case "moderationCase": {
