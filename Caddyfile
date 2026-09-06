@@ -1,0 +1,11 @@
+yzk-management-bot.duckdns.org {
+    @api path /auth/* /trpc/* /ws/*
+
+    handle @api {
+        reverse_proxy dashboard-api:3000
+    }
+
+    handle {
+        reverse_proxy dashboard-web:80
+    }
+}
