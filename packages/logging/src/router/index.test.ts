@@ -382,6 +382,28 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
     expect(afterUnset.find((r) => r.category === "message")?.channelId).toBeNull();
   });
 
+  test("setChannelSettingはgetGuildChannels(表示用キャッシュ)ではなくverifyGuildChannel(生fetch)で実在検証する", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      // getGuildChannelsは古いキャッシュを想定してc1を含むが、verifyGuildChannelは
+      // 最新状態(c1は削除済み)を返す。mutation検証がverifyGuildChannel経由であることを保証する。
+      getGuildChannels: channelsOf({ id: "c1", name: "general" }),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const thrown = await captureRejection(
+      caller.setChannelSetting({ guildId, category: "message", channelId: "c1" }),
+    );
+
+    expect((thrown as TRPCError).code).toBe("BAD_REQUEST");
+  });
+
   test("実在しないチャンネルIDを設定しようとするとBAD_REQUEST", async () => {
     await grantManageLoggingSettings();
     const caller = createCaller({

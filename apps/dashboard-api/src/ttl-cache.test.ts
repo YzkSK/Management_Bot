@@ -61,4 +61,28 @@ describe("createTtlCache", () => {
 
     expect(second).toBe(2);
   });
+
+  test("TTL経過後に新エントリを積んだ後、古いエントリの遅延失敗が新エントリを消さない", async () => {
+    const cache = createTtlCache<number>(1);
+    let rejectFirst: ((error: Error) => void) | undefined;
+    const first = cache(
+      "k",
+      () =>
+        new Promise<number>((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+    );
+
+    // TTL(1ms)を経過させ、新しいエントリで置き換える。
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = cache("k", async () => 2);
+    expect(await second).toBe(2);
+
+    // 1つ目の(古い)呼び出しが今頃失敗しても、2つ目のキャッシュ済みエントリを消してはいけない。
+    rejectFirst?.(new Error("stale failure"));
+    await expect(first).rejects.toThrow("stale failure");
+
+    const third = await cache("k", async () => 3);
+    expect(third).toBe(2); // 新エントリがまだ生きていればキャッシュヒットするはず
+  });
 });
