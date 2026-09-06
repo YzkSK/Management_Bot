@@ -233,13 +233,23 @@ export function LogListPage() {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-muted-foreground font-semibold tracking-wide uppercase">
-                              実行者ID
-                            </span>
-                            <span className="font-mono">{entry.executorId ?? "記録なし"}</span>
-                          </div>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          {summary.executorId !== null && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-muted-foreground font-semibold tracking-wide uppercase">
+                                実行者ID
+                              </span>
+                              <span className="font-mono">{summary.executorId}</span>
+                            </div>
+                          )}
+                          {summary.categorySubjectId !== null && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-muted-foreground font-semibold tracking-wide uppercase">
+                                対象ユーザーID
+                              </span>
+                              <span className="font-mono">{summary.categorySubjectId}</span>
+                            </div>
+                          )}
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground font-semibold tracking-wide uppercase">
                               ログID

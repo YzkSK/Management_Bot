@@ -20,6 +20,8 @@ describe("summarizeLogEntry", () => {
       category: "role",
       createdAt: "2026-09-04T00:00:00.000Z",
       subjectId: "u1",
+      executorId: "u1",
+      categorySubjectId: null,
       action: "delete",
       content: null,
       previousContent: null,
@@ -149,5 +151,7 @@ describe("summarizeLogEntry", () => {
     const summary = summarizeLogEntry(entry);
 
     expect(summary.subjectId).toBe("mod1");
+    expect(summary.executorId).toBe("mod1");
+    expect(summary.categorySubjectId).toBe("a1");
   });
 });

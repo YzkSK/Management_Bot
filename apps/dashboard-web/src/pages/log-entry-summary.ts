@@ -5,6 +5,10 @@ export interface LogEntrySummary {
   createdAt: string;
   /** 実行者(executorId、監査ログ相関で判明した場合)またはカテゴリ固有の主体(authorId/userId等)。どちらもなければnull。 */
   subjectId: string | null;
+  /** 監査ログ相関で判明した実行者ID。未判明ならnull。 */
+  executorId: string | null;
+  /** カテゴリ固有の主体(投稿者/対象ユーザー等、authorId/userId/targetUserId)。存在しないカテゴリではnull。 */
+  categorySubjectId: string | null;
   action: string | null;
   /** メッセージ本文等、そのまま読める形で表示したいテキスト。 */
   content: string | null;
@@ -19,7 +23,8 @@ const BASE_FIELDS = new Set(["category", "createdAt", "executorId", "guildId"]);
 /** カテゴリごとに形の異なるLogEntryを、一覧表示用の共通形式に変換する。 */
 export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
   const executorId = "executorId" in entry ? entry.executorId : undefined;
-  const subjectId = executorId ?? getLogEntrySubjectId(entry);
+  const categorySubjectId = getLogEntrySubjectId(entry);
+  const subjectId = executorId ?? categorySubjectId;
   const subjectField = executorId !== undefined ? "executorId" : getLogEntrySubjectField(entry);
   const details: Record<string, unknown> = {};
   let action: string | null = null;
@@ -46,6 +51,8 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     category: entry.category,
     createdAt: entry.createdAt,
     subjectId: subjectId ?? null,
+    executorId: executorId ?? null,
+    categorySubjectId: categorySubjectId ?? null,
     action,
     content,
     previousContent,
