@@ -27,6 +27,9 @@ const CONNECTION_STATUS_LABELS = {
 /** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
 const INVALIDATE_DEBOUNCE_MS = 300;
 
+/** formatLogMessageが参照しうる全ユーザーIDフィールド。新カテゴリ追加時はここにも追記する。 */
+const USER_ID_FIELDS = ["executorId", "authorId", "userId", "targetUserId", "moderatorId"] as const;
+
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [category, setCategory] = useState<LogCategory | "">("");
@@ -46,13 +49,16 @@ export function LogListPage() {
   const subjectIds = useMemo(
     () =>
       logsQuery.data
-        ? [
-            ...new Set(
-              logsQuery.data.entries
-                .map(({ entry }) => summarizeLogEntry(entry).subjectId)
-                .filter((id): id is string => id !== null),
+        ? Array.from(
+            new Set(
+              logsQuery.data.entries.flatMap(({ entry }) =>
+                USER_ID_FIELDS.flatMap((key) => {
+                  const value = entry[key as keyof typeof entry];
+                  return typeof value === "string" ? [value] : [];
+                }),
+              ),
             ),
-          ]
+          ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
     [logsQuery.data],
   );
@@ -184,12 +190,15 @@ export function LogListPage() {
                 const names = { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
                 const message = formatLogMessage(entry, summary, names);
                 const isExpanded = expandedIds.has(id);
+                const detailId = `log-detail-${id}`;
 
                 return (
                   <div key={id} className="rounded-lg border">
                     <button
                       type="button"
                       onClick={() => toggleExpanded(id)}
+                      aria-expanded={isExpanded}
+                      aria-controls={detailId}
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
                       <span
@@ -204,7 +213,7 @@ export function LogListPage() {
                     </button>
 
                     {isExpanded && (
-                      <div className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                      <div id={detailId} className="flex flex-col gap-3 border-t bg-muted/40 p-3">
                         {(summary.content !== null || summary.previousContent !== null) && (
                           <div className="rounded-md border bg-card p-3">
                             {summary.previousContent !== null && (
@@ -229,7 +238,7 @@ export function LogListPage() {
                             <span className="text-muted-foreground font-semibold tracking-wide uppercase">
                               実行者ID
                             </span>
-                            <span className="font-mono">{summary.subjectId ?? "-"}</span>
+                            <span className="font-mono">{entry.executorId ?? "記録なし"}</span>
                           </div>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-muted-foreground font-semibold tracking-wide uppercase">

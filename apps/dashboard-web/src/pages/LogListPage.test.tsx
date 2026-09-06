@@ -196,6 +196,48 @@ describe("LogListPage", () => {
     expect(html).toContain("u1 が自分のメッセージを削除しました");
   });
 
+  test("第三者によるメッセージ削除では実行者・投稿者の両方の名前を解決する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              executorId: "mod1",
+              action: "delete",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    // userIds: ["mod1", "u1"](実行者・投稿者の両方)でキャッシュしておき、queryKeyが一致した場合のみ
+    // 解決結果がヒットすることで、authorId(投稿者)もexecutorId(実行者)と同様に収集されることを検証する。
+    queryClient.setQueryData(
+      trpc.logging.resolveDisplayNames.queryOptions({
+        guildId: "g1",
+        userIds: ["mod1", "u1"],
+        channelIds: ["c1"],
+      }).queryKey,
+      { users: { mod1: "Admin", u1: "Yuzuki" }, channels: {} },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("Admin が Yuzuki のメッセージを削除しました");
+  });
+
   test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
