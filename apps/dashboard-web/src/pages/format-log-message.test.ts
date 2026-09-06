@@ -473,6 +473,53 @@ describe("formatLogMessage", () => {
     expect(message).toBe("不明なユーザー が絵文字を削除しました");
   });
 
+  test("スタンプ追加", () => {
+    const entry = {
+      category: "sticker",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      stickerId: "s1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスタンプを追加しました");
+  });
+
+  test("スタンプ更新", () => {
+    const entry = {
+      category: "sticker",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      stickerId: "s1",
+      executorId: "mod1",
+      action: "update",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin がスタンプを更新しました");
+  });
+
+  test("スタンプ削除(実行者未相関)", () => {
+    const entry = {
+      category: "sticker",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      stickerId: "s1",
+      action: "delete",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("不明なユーザー がスタンプを削除しました");
+  });
+
   test("自然文未実装カテゴリ固有のactionも日本語ラベルでフォールバックする", () => {
     const entry = {
       category: "autoMod",
