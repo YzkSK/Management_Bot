@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { isChannelSendable } from "./channel-permissions.ts";
+import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.ts";
 
 const VIEW_CHANNEL = 0x400n;
 const SEND_MESSAGES = 0x800n;
 const ADMINISTRATOR = 0x8n;
+const VIEW_AUDIT_LOG = 0x80n;
 
 function baseInput(overrides: Partial<Parameters<typeof isChannelSendable>[0]> = {}) {
   return {
@@ -93,5 +94,48 @@ describe("isChannelSendable", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("resolveGuildLevelPermissions", () => {
+  test("@everyoneとbotロールのpermissionsをOR合成する", () => {
+    const permissions = resolveGuildLevelPermissions({
+      guildId: "g1",
+      botRoleIds: ["r1"],
+      guildRoles: [
+        { id: "g1", permissions: VIEW_CHANNEL },
+        { id: "r1", permissions: VIEW_AUDIT_LOG },
+      ],
+    });
+
+    expect(permissions & VIEW_AUDIT_LOG).toBe(VIEW_AUDIT_LOG);
+    expect(permissions & VIEW_CHANNEL).toBe(VIEW_CHANNEL);
+  });
+
+  test("botが持たないロールの権限は含まれない", () => {
+    const permissions = resolveGuildLevelPermissions({
+      guildId: "g1",
+      botRoleIds: ["r1"],
+      guildRoles: [
+        { id: "g1", permissions: 0n },
+        { id: "r1", permissions: 0n },
+        { id: "r2", permissions: VIEW_AUDIT_LOG },
+      ],
+    });
+
+    expect(permissions & VIEW_AUDIT_LOG).toBe(0n);
+  });
+
+  test("ADMINISTRATORを持てば全権限ビットを持つとみなす", () => {
+    const permissions = resolveGuildLevelPermissions({
+      guildId: "g1",
+      botRoleIds: ["r1"],
+      guildRoles: [
+        { id: "g1", permissions: 0n },
+        { id: "r1", permissions: ADMINISTRATOR },
+      ],
+    });
+
+    expect(permissions & VIEW_AUDIT_LOG).toBe(VIEW_AUDIT_LOG);
   });
 });

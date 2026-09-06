@@ -9,12 +9,16 @@ import type { Db } from "@management-bot/db";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
-import { fetchGuildChannels, fetchGuildMemberNames } from "./discord/bot-client.js";
+import { fetchBotGuildPermissions, fetchGuildChannels, fetchGuildMemberNames } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => fetchGuildChannels(botToken, guildId);
+}
+
+function createGetBotPermissions(botToken: string): (guildId: string) => Promise<bigint> {
+  return (guildId) => fetchBotGuildPermissions(botToken, guildId);
 }
 
 function createGetGuildMemberNames(
@@ -100,15 +104,18 @@ export function createContext(
   db: Db,
   sessionSecret: string,
   botToken: string,
+  discordClientId: string,
 ): (opts: unknown, c: HonoContext) => Record<string, unknown> {
   return (_opts, c) => {
     const sessionId = getCookie(c, SESSION_COOKIE);
     const ctx: DashboardAccessContext = {
       db,
       sessionId,
+      discordClientId,
       getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
       getGuildChannels: createGetGuildChannels(botToken),
       getGuildMemberNames: createGetGuildMemberNames(botToken),
+      getBotPermissions: createGetBotPermissions(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
     };
     return ctx as unknown as Record<string, unknown>;

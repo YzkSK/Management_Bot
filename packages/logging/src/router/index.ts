@@ -1,5 +1,5 @@
 import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
-import { CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
+import { buildInviteUrl, CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -14,6 +14,7 @@ import {
   setRetentionSetting,
   setRetentionSettingForAllCategories,
 } from "../application/index.js";
+import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const listLogEntriesInput = z.object({
   guildId: z.string().min(1),
@@ -179,6 +180,26 @@ export const loggingRouter = router({
         channels: Object.fromEntries(
           [...channelNameById].filter(([id]) => wantedChannelIds.has(id)),
         ),
+      };
+    }),
+
+  /**
+   * integration/auditLogCorrelation(実行者事後補完・kick判定等)はguildAuditLogEntryCreate
+   * イベントに依存するが、Botに「監査ログを見る」権限(ViewAuditLog)がないと配信されない(issue #80)。
+   * 権限保有状況と、不足時にDashboardから案内する再認可URL(必要権限のみを含む)を返す。
+   */
+  getAuditLogPermissionStatus: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+    .query(async ({ ctx, input }) => {
+      const permissions = await ctx.getBotPermissions(input.guildId);
+      const hasViewAuditLog = (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
+
+      return {
+        hasViewAuditLog,
+        reauthorizeUrl: hasViewAuditLog
+          ? null
+          : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS),
       };
     }),
 });

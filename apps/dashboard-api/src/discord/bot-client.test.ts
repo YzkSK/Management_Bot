@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { fetchGuildChannels, fetchGuildMemberNames } from "./bot-client.ts";
+import { fetchBotGuildPermissions, fetchGuildChannels, fetchGuildMemberNames } from "./bot-client.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -116,6 +116,40 @@ describe("fetchGuildChannels", () => {
     });
 
     await expect(fetchGuildChannels("test-bot-token", "g1")).rejects.toThrow();
+  });
+});
+
+describe("fetchBotGuildPermissions", () => {
+  const VIEW_AUDIT_LOG = "128"; // 0x80
+
+  test("botロールのpermissionsをOR合成して返す", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": {
+        status: 200,
+        body: [
+          { id: "g1", permissions: "0" },
+          { id: "r1", permissions: VIEW_AUDIT_LOG },
+        ],
+      },
+      "/guilds/g1/members/bot1": { status: 200, body: { roles: ["r1"] } },
+    });
+
+    const permissions = await fetchBotGuildPermissions("test-bot-token", "g1");
+
+    expect(permissions & BigInt(VIEW_AUDIT_LOG)).toBe(BigInt(VIEW_AUDIT_LOG));
+  });
+
+  test("Bot未参加(403)/guild不明(404)は0nを返す", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": { status: 403 },
+      "/guilds/g1/members/bot1": { status: 200, body: { roles: [] } },
+    });
+
+    const permissions = await fetchBotGuildPermissions("test-bot-token", "g1");
+
+    expect(permissions).toBe(0n);
   });
 });
 

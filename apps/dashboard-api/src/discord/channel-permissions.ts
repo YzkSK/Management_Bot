@@ -17,6 +17,27 @@ export interface RolePermission {
 }
 
 /**
+ * guildロール(@everyone含む)のpermissionsをOR合成した、チャンネルoverwrite適用前の
+ * guildレベル実効権限。ViewAuditLog等、チャンネル単位のoverwriteが存在しない権限の判定に使う。
+ * ADMINISTRATORの場合は全権限を持つとみなし、全ビット1を返す。
+ */
+export function resolveGuildLevelPermissions(input: {
+  guildId: string;
+  botRoleIds: readonly string[];
+  guildRoles: readonly RolePermission[];
+}): bigint {
+  const roleById = new Map(input.guildRoles.map((role) => [role.id, role.permissions]));
+  const everyonePermissions = roleById.get(input.guildId) ?? 0n;
+  const botRolePermissions = input.botRoleIds.reduce((acc, roleId) => acc | (roleById.get(roleId) ?? 0n), 0n);
+  const permissions = everyonePermissions | botRolePermissions;
+
+  if ((permissions & ADMINISTRATOR) === ADMINISTRATOR) {
+    return (1n << 64n) - 1n;
+  }
+  return permissions;
+}
+
+/**
  * Botがそのチャンネルにメッセージを送信できるかを、Discordの権限解決順序
  * (base→@everyone overwrite→ロールoverwrite→メンバーoverwrite、ADMINISTRATORは無条件許可)で計算する。
  */
@@ -27,10 +48,7 @@ export function isChannelSendable(input: {
   guildRoles: readonly RolePermission[];
   overwrites: readonly PermissionOverwrite[];
 }): boolean {
-  const roleById = new Map(input.guildRoles.map((role) => [role.id, role.permissions]));
-  const everyonePermissions = roleById.get(input.guildId) ?? 0n;
-  const botRolePermissions = input.botRoleIds.reduce((acc, roleId) => acc | (roleById.get(roleId) ?? 0n), 0n);
-  let permissions = everyonePermissions | botRolePermissions;
+  let permissions = resolveGuildLevelPermissions(input);
 
   if ((permissions & ADMINISTRATOR) === ADMINISTRATOR) {
     return true;

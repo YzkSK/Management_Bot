@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ChannelOption } from "@management-bot/dashboard-access";
-import { isChannelSendable } from "./channel-permissions.js";
+import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 
@@ -82,6 +82,29 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
       }),
     )
     .map((channel) => ({ id: channel.id, name: channel.name }));
+}
+
+/**
+ * Botがそのguildで持つ実効権限(guildロールのpermissionsのOR合成、チャンネルoverwriteは含まない)を返す。
+ * ViewAuditLog等、チャンネル単位のoverwriteが存在しない権限の判定に使う
+ * (issue #80: integration/auditLogCorrelationがguildAuditLogEntryCreateイベントに依存するため)。
+ * Bot未参加/guild不明(403/404)の場合は0nを返す。
+ */
+export async function fetchBotGuildPermissions(botToken: string, guildId: string): Promise<bigint> {
+  const [me, roles] = await Promise.all([
+    discordGet(botToken, "/users/@me", meSchema),
+    discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleSchema)),
+  ]);
+  if (me === "not_found" || roles === "not_found") {
+    return 0n;
+  }
+
+  const member = await discordGet(botToken, `/guilds/${guildId}/members/${me.id}`, guildMemberSchema);
+  if (member === "not_found") {
+    return 0n;
+  }
+
+  return resolveGuildLevelPermissions({ guildId, botRoleIds: member.roles, guildRoles: roles });
 }
 
 /**

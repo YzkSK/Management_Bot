@@ -1,8 +1,8 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
+import { buildInviteUrl } from "@management-bot/shared";
 import { FEATURES } from "./features.js";
-import { buildInviteUrl } from "./invite-url.js";
 
 const botEnvSchema = envSchema.pick({
   DATABASE_URL: true,

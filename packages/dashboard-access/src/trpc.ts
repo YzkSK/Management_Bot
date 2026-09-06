@@ -22,6 +22,8 @@ export interface ManagedGuild {
 export interface DashboardAccessContext {
   db: Db;
   sessionId: string | undefined;
+  /** Bot招待/再認可URL生成に使うOAuth2クライアントID。dashboard-api側でenvから供給する。 */
+  discordClientId: string;
   /**
    * ログインユーザーが管理者権限(オーナーまたはMANAGE_GUILD)を持ち、かつbotが導入済みのguild一覧を返す。
    * Dashboardのサーバー選択画面で使う。dashboard-api側でDiscord APIから供給する。
@@ -46,6 +48,13 @@ export interface DashboardAccessContext {
    * 解決できなかったID(脱退済み等)はMapに含めない。dashboard-api側でDiscord APIから供給する。
    */
   getGuildMemberNames: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>;
+  /**
+   * guildIdにおけるBotの実効権限(guildロールのpermissionsのOR合成)ビットフィールドを返す。
+   * loggingのintegration/auditLogCorrelationが依存するguildAuditLogEntryCreateイベントは
+   * ViewAuditLog権限がないと配信されないため(issue #80)、この権限の有無を確認して
+   * Dashboardの再認可導線に使う。dashboard-api側でDiscord APIから供給する。
+   */
+  getBotPermissions: (guildId: string) => Promise<bigint>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();

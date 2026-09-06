@@ -19,6 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { loggingRouter } from "./index.js";
+import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -90,6 +91,8 @@ function memberNamesOf(names: Record<string, string>) {
     new Map(userIds.filter((id) => id in names).map((id) => [id, names[id] as string]));
 }
 
+const botPermissionsOf = (permissions = 0n) => async (): Promise<bigint> => permissions;
+
 describe("loggingRouter.listLogEntries", () => {
   test("VIEW_LOGSのみを持つ場合はcontentがマスクされる", async () => {
     await db.insert(capabilityGrants).values({
@@ -105,6 +108,8 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -127,6 +132,8 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -141,6 +148,8 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await expect(caller.listLogEntries({ guildId, limit: 50 })).rejects.toThrow();
@@ -178,6 +187,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await expect(caller.listRetentionSettings({ guildId })).rejects.toThrow();
@@ -190,6 +201,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(
@@ -213,6 +226,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await caller.setRetentionSetting({ guildId, category: "message", retentionDays: 30 });
@@ -229,6 +244,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 });
@@ -244,6 +261,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(caller.setRetentionSettingForAllCategories({ guildId, retentionDays: 60 }));
@@ -261,6 +280,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await expect(caller.listChannelSettings({ guildId })).rejects.toThrow();
@@ -273,6 +294,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await expect(caller.listChannelOptions({ guildId })).rejects.toThrow();
@@ -285,6 +308,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(
@@ -308,6 +333,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.listChannelOptions({ guildId });
@@ -323,6 +350,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await caller.setChannelSetting({ guildId, category: "message", channelId: "c1" });
@@ -342,6 +371,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(
@@ -365,6 +396,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
@@ -381,6 +414,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" });
@@ -397,6 +432,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(caller.setChannelSettingForAllCategories({ guildId, channelId: "c1" }));
@@ -413,6 +450,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const thrown = await captureRejection(
@@ -439,6 +478,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
@@ -460,6 +501,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.listLogEntries({ guildId, category: "auditLogCorrelation", limit: 50 });
@@ -481,6 +524,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const before = await caller.getDisplaySettings({ guildId });
@@ -507,6 +552,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const getThrown = await captureRejection(caller.getDisplaySettings({ guildId }));
@@ -537,6 +584,8 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({ u1: "解決された名前" }),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     const result = await caller.resolveDisplayNames({ guildId, userIds: ["u1"], channelIds: ["c1"] });
@@ -554,8 +603,75 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
       getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
     });
 
     await expect(caller.resolveDisplayNames({ guildId, userIds: [], channelIds: [] })).rejects.toThrow();
+  });
+});
+
+describe("loggingRouter.getAuditLogPermissionStatus", () => {
+  test("ViewAuditLog権限がある場合はhasViewAuditLog:trueかつreauthorizeUrl:null", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(LOGGING_REQUIRED_PERMISSIONS),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.getAuditLogPermissionStatus({ guildId });
+
+    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null });
+  });
+
+  test("ViewAuditLog権限がない場合は必要な権限のみを含む再認可URLを返す", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(0n),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.getAuditLogPermissionStatus({ guildId });
+
+    expect(result.hasViewAuditLog).toBe(false);
+    const url = new URL(result.reauthorizeUrl ?? "");
+    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+    expect(url.searchParams.get("permissions")).toBe(LOGGING_REQUIRED_PERMISSIONS.toString());
+  });
+
+  test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
+    });
+
+    await expect(caller.getAuditLogPermissionStatus({ guildId })).rejects.toThrow(TRPCError);
   });
 });

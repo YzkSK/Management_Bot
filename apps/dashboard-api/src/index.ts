@@ -44,7 +44,7 @@ app.use(
   "/trpc/*",
   trpcServer({
     router: appRouter,
-    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN),
+    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID),
   }),
 );
 
