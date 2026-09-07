@@ -63,7 +63,10 @@ function getMe(botToken: string): Promise<z.infer<typeof meSchema> | "not_found"
   let cached = meCache.get(botToken);
   if (!cached) {
     cached = discordGet(botToken, "/users/@me", meSchema);
-    cached.catch(() => meCache.delete(botToken));
+    cached.catch((error: unknown) => {
+      console.error("Failed to fetch /users/@me", error);
+      meCache.delete(botToken);
+    });
     meCache.set(botToken, cached);
   }
   return cached;
@@ -120,7 +123,10 @@ export async function fetchAllGuildChannelNames(
 ): Promise<readonly ChannelOption[]> {
   const [channels, activeThreads] = await Promise.all([
     discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)),
-    discordGet(botToken, `/guilds/${guildId}/threads/active`, activeThreadsSchema).catch(() => "not_found" as const),
+    discordGet(botToken, `/guilds/${guildId}/threads/active`, activeThreadsSchema).catch((error: unknown) => {
+      console.error(`Failed to fetch active threads for guild ${guildId}`, error);
+      return "not_found" as const;
+    }),
   ]);
   if (channels === "not_found") {
     return [];
@@ -156,7 +162,8 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
  * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
  * 解決する。並列にfetchするが、userIds件数はダッシュボードの1ページ(最大100件)内のユニークID数程度に
  * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない)。
- * 脱退済み等で404の場合はMapに含めない(呼び出し側でIDそのまま表示にフォールバックする)。
+ * 脱退済み等で404の場合や、個別リクエストが失敗(429/5xx等)した場合もMapに含めない
+ * (呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
  */
 export async function fetchGuildMemberNames(
   botToken: string,
@@ -169,7 +176,10 @@ export async function fetchGuildMemberNames(
         botToken,
         `/guilds/${guildId}/members/${userId}`,
         guildMemberWithUserSchema,
-      );
+      ).catch((error: unknown) => {
+        console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
+        return "not_found" as const;
+      });
       if (member === "not_found") return undefined;
       const name = member.nick || member.user.global_name || member.user.username;
       return [userId, name] as const;

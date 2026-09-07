@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
 import {
   fetchThreadStarterContent,
@@ -119,12 +119,19 @@ describe("fetchThreadStarterContent", () => {
     expect(await fetchThreadStarterContent(thread)).toBeUndefined();
   });
 
-  test("フォーラム投稿でも取得失敗(削除済み等)はundefined(ベストエフォート)", async () => {
+  test("フォーラム投稿でも取得失敗(削除済み等)はundefined(ベストエフォート)、失敗はログに残す", async () => {
+    const error = new Error("not found");
     const fetchStarterMessage = mock(async () => {
-      throw new Error("not found");
+      throw error;
     });
-    const thread = { ...fakeThread(), fetchStarterMessage, parent: { isThreadOnly: () => true } } as never;
+    const thread = { ...fakeThread({ id: "t1" }), fetchStarterMessage, parent: { isThreadOnly: () => true } } as never;
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
 
-    expect(await fetchThreadStarterContent(thread)).toBeUndefined();
+    try {
+      expect(await fetchThreadStarterContent(thread)).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith("Failed to fetch starter message for thread t1", error);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

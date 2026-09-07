@@ -75,7 +75,10 @@ export function toThreadMembershipLogEntries(
  */
 export async function fetchThreadStarterContent(thread: AnyThreadChannel): Promise<string | undefined> {
   if (!thread.parent?.isThreadOnly()) return undefined;
-  const message = await thread.fetchStarterMessage().catch(() => null);
+  const message = await thread.fetchStarterMessage().catch((error: unknown) => {
+    console.error(`Failed to fetch starter message for thread ${thread.id}`, error);
+    return null;
+  });
   return message?.content ?? undefined;
 }
 

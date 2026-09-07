@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
@@ -382,5 +382,26 @@ describe("fetchGuildMemberNames", () => {
 
     expect(result.get("u1")).toBe("user-u1");
     expect(result.get("u2")).toBe("user-u2");
+  });
+
+  test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 500 },
+      "/guilds/g1/members/u2": {
+        status: 200,
+        body: { nick: null, user: { username: "user-u2", global_name: null } },
+      },
+    });
+
+    try {
+      const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1", "u2"]);
+
+      expect(result.has("u1")).toBe(false);
+      expect(result.get("u2")).toBe("user-u2");
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
