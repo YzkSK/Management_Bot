@@ -37,10 +37,15 @@ function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
   excludeBotAuthor = true,
-): { guildId: string; channelId: string; authorId: string } | undefined {
+): { guildId: string; channelId: string; authorId: string; actorIsBot: boolean } | undefined {
   if (!message.guildId || !message.author) return undefined;
   if (excludeBotAuthor && (!botUserId || message.author.id === botUserId)) return undefined;
-  return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
+  return {
+    guildId: message.guildId,
+    channelId: message.channelId,
+    authorId: message.author.id,
+    actorIsBot: message.author.bot,
+  };
 }
 
 export function toMessageCreateLogEntry(

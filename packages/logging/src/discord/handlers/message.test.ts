@@ -15,7 +15,7 @@ function fakeMessage(
   overrides: Partial<{
     id: string;
     guildId: string | null;
-    author: { id: string } | null;
+    author: { id: string; bot?: boolean } | null;
     channelId: string;
     content: string;
     partial: boolean;
@@ -26,7 +26,7 @@ function fakeMessage(
   return {
     id: "m1",
     guildId: "g1",
-    author: { id: "u1" },
+    author: { id: "u1", bot: false },
     channelId: "c1",
     content: "hello",
     partial: false,
@@ -47,6 +47,7 @@ describe("toMessageCreateLogEntry", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       action: "create",
       content: "hello",
+      actorIsBot: false,
     });
   });
 
@@ -74,9 +75,10 @@ describe("toMessageCreateLogEntry", () => {
     expect(toMessageCreateLogEntry(fakeMessage({ author: { id: BOT_USER_ID } }), BOT_USER_ID)).toBeUndefined();
   });
 
-  test("他Botの発言は除外しない(モデレーション上有用なため自Bot以外は記録する)", () => {
-    const entry = toMessageCreateLogEntry(fakeMessage({ author: { id: "other-bot" } }), BOT_USER_ID);
+  test("他Botの発言は除外しない(モデレーション上有用なため自Bot以外は記録する)が、actorIsBot=trueとして記録する", () => {
+    const entry = toMessageCreateLogEntry(fakeMessage({ author: { id: "other-bot", bot: true } }), BOT_USER_ID);
     expect(entry?.action).toBe("create");
+    expect(entry?.actorIsBot).toBe(true);
   });
 
   test("botUserId未確定(readyイベント前)ならfail-closedで何も記録しない(fail-openだと自Bot発言のフィルタが機能しなくなる)", () => {

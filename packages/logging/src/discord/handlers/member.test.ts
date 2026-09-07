@@ -9,18 +9,27 @@ import {
   toMemberUpdateLogEntries,
 } from "./member.js";
 
-function fakeMember(overrides: Partial<{ id: string; nickname: string | null; communicationDisabledUntilTimestamp: number | null }> = {}) {
+function fakeMember(
+  overrides: Partial<{
+    id: string;
+    nickname: string | null;
+    communicationDisabledUntilTimestamp: number | null;
+    bot: boolean;
+  }> = {},
+) {
+  const { bot = false, ...rest } = overrides;
   return {
     id: "u1",
     guild: { id: "g1" },
     nickname: null,
     communicationDisabledUntilTimestamp: null,
-    ...overrides,
+    user: { bot },
+    ...rest,
   } as never;
 }
 
-function fakeBan() {
-  return { guild: { id: "g1" }, user: { id: "u1" } } as never;
+function fakeBan(bot = false) {
+  return { guild: { id: "g1" }, user: { id: "u1", bot } } as never;
 }
 
 describe("member category mappers", () => {
@@ -28,6 +37,15 @@ describe("member category mappers", () => {
   test("leave", () => expect(toMemberLeaveLogEntry(fakeMember()).action).toBe("leave"));
   test("ban", () => expect(toMemberBanLogEntry(fakeBan()).action).toBe("ban"));
   test("unban", () => expect(toMemberUnbanLogEntry(fakeBan()).action).toBe("unban"));
+
+  test("Botアカウントのjoinはactor" + "IsBot=trueとして記録する(除外はしない)", () => {
+    expect(toMemberJoinLogEntry(fakeMember({ bot: true })).actorIsBot).toBe(true);
+  });
+
+  test("ban/unbanのuserIdは実行者ではなく対象のため、対象がBotでもactor" + "IsBotは設定しない", () => {
+    expect(toMemberBanLogEntry(fakeBan(true)).actorIsBot).toBeUndefined();
+    expect(toMemberUnbanLogEntry(fakeBan(true)).actorIsBot).toBeUndefined();
+  });
 });
 
 describe("toMemberUpdateLogEntries", () => {

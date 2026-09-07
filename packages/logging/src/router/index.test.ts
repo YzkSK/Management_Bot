@@ -603,7 +603,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
     const before = await caller.getDisplaySettings({ guildId });
     expect(before.hideAuditLogCorrelation).toBe(true);
 
-    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false });
+    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false, hideBotEvents: true });
     const after = await caller.getDisplaySettings({ guildId });
     expect(after.hideAuditLogCorrelation).toBe(false);
 
@@ -612,9 +612,54 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       ["auditLogCorrelation", "message"].sort(),
     );
 
-    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: true });
+    await caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: true, hideBotEvents: true });
     const hiddenAgain = await caller.listLogEntries({ guildId, limit: 50 });
     expect(hiddenAgain.entries.map(({ entry }) => entry.category)).toEqual(["message"]);
+  });
+
+  test("hideBotEvents=true(デフォルト)の場合、authorIsBot=trueの行を除外し、falseにすると表示される", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS | CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    await db.insert(logEntries).values({
+      id: randomUUID(),
+      guildId,
+      category: "message",
+      authorIsBot: true,
+      payload: {
+        category: "message",
+        guildId,
+        createdAt: "2026-08-31T00:00:02.000Z",
+        channelId: "c1",
+        authorId: "bot1",
+        action: "create",
+        content: "bot message",
+        actorIsBot: true,
+      },
+      createdAt: new Date("2026-08-31T00:00:02.000Z"),
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getAllGuildChannels: channelsOf(),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const hidden = await caller.listLogEntries({ guildId, limit: 50 });
+    expect(hidden.entries.every(({ entry }) => (entry as { authorId?: string }).authorId !== "bot1")).toBe(true);
+
+    await caller.setDisplaySetting({ guildId, hideBotEvents: false });
+    const shown = await caller.listLogEntries({ guildId, limit: 50 });
+    expect(shown.entries.some(({ entry }) => (entry as { authorId?: string }).authorId === "bot1")).toBe(true);
   });
 
   test("MANAGE_LOGGING_SETTINGSを持たない場合はFORBIDDEN(getDisplaySettings/setDisplaySetting)", async () => {
@@ -634,7 +679,9 @@ describe("loggingRouter.listLogEntries + display settings", () => {
     expect(getThrown).toBeInstanceOf(TRPCError);
     expect((getThrown as TRPCError).code).toBe("FORBIDDEN");
 
-    const setThrown = await captureRejection(caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false }));
+    const setThrown = await captureRejection(
+      caller.setDisplaySetting({ guildId, hideAuditLogCorrelation: false, hideBotEvents: false }),
+    );
     expect(setThrown).toBeInstanceOf(TRPCError);
     expect((setThrown as TRPCError).code).toBe("FORBIDDEN");
 

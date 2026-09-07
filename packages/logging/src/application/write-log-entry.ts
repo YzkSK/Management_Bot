@@ -76,6 +76,7 @@ export async function writeLogEntry(
       id,
       guildId: entry.guildId,
       category: entry.category,
+      authorIsBot: entry.actorIsBot ?? false,
       payload: entry,
       createdAt: new Date(entry.createdAt),
     })

@@ -27,6 +27,8 @@ export interface ListLogEntriesInput {
   cursor?: string;
   /** これらのカテゴリは結果から除外する(categoryフィルタと併用可)。 */
   excludeCategories?: readonly LogCategory[];
+  /** trueの場合、authorIsBot=trueの行を結果から除外する。 */
+  excludeBotEvents?: boolean;
 }
 
 export interface ListLogEntriesResult {
@@ -47,6 +49,9 @@ export async function listLogEntries(
   if (input.category) conditions.push(eq(logEntries.category, input.category));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
+  }
+  if (input.excludeBotEvents) {
+    conditions.push(eq(logEntries.authorIsBot, false));
   }
   if (input.cursor) {
     const cursor = decodeCursor(input.cursor);

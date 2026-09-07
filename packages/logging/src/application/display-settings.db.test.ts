@@ -21,21 +21,34 @@ beforeEach(async () => {
 });
 
 describe("display-settings", () => {
-  test("未設定のguildはhideAuditLogCorrelation=trueを返す(デフォルトON)", async () => {
+  test("未設定のguildはhideAuditLogCorrelation=true, hideBotEvents=trueを返す(デフォルトON)", async () => {
     const settings = await getDisplaySettings(db, guildId);
     expect(settings.hideAuditLogCorrelation).toBe(true);
+    expect(settings.hideBotEvents).toBe(true);
   });
 
   test("setDisplaySettingでfalseに変更できる", async () => {
-    await setDisplaySetting(db, guildId, false);
+    await setDisplaySetting(db, guildId, { hideAuditLogCorrelation: false, hideBotEvents: false });
     const settings = await getDisplaySettings(db, guildId);
     expect(settings.hideAuditLogCorrelation).toBe(false);
+    expect(settings.hideBotEvents).toBe(false);
   });
 
   test("falseに変更後trueに戻せる", async () => {
-    await setDisplaySetting(db, guildId, false);
-    await setDisplaySetting(db, guildId, true);
+    await setDisplaySetting(db, guildId, { hideAuditLogCorrelation: false, hideBotEvents: false });
+    await setDisplaySetting(db, guildId, { hideAuditLogCorrelation: true, hideBotEvents: true });
     const settings = await getDisplaySettings(db, guildId);
     expect(settings.hideAuditLogCorrelation).toBe(true);
+    expect(settings.hideBotEvents).toBe(true);
+  });
+
+  test("片方のみのpatchはもう片方の既存値を変更しない(部分更新)", async () => {
+    await setDisplaySetting(db, guildId, { hideAuditLogCorrelation: false, hideBotEvents: false });
+
+    await setDisplaySetting(db, guildId, { hideAuditLogCorrelation: true });
+    const settings = await getDisplaySettings(db, guildId);
+
+    expect(settings.hideAuditLogCorrelation).toBe(true);
+    expect(settings.hideBotEvents).toBe(false);
   });
 });

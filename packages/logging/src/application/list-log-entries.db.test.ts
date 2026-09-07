@@ -38,11 +38,12 @@ function memberEntry(overrides: Partial<LogEntry> = {}): LogEntry {
   } as LogEntry;
 }
 
-async function insert(entry: LogEntry, createdAt: string): Promise<void> {
+async function insert(entry: LogEntry, createdAt: string, authorIsBot = false): Promise<void> {
   await db.insert(logEntries).values({
     id: randomUUID(),
     guildId: entry.guildId,
     category: entry.category,
+    authorIsBot,
     payload: entry,
     createdAt: new Date(createdAt),
   });
@@ -92,6 +93,15 @@ describe("listLogEntries", () => {
     });
 
     expect(result.entries.every((e) => e.entry.category !== "auditLogCorrelation")).toBe(true);
+  });
+
+  test("excludeBotEventsを指定するとauthorIsBot=trueの行は結果に含まれない", async () => {
+    await insert(memberEntry({ userId: "human" }), "2026-08-31T00:00:00.000Z", false);
+    await insert(memberEntry({ userId: "bot" }), "2026-08-31T00:00:01.000Z", true);
+
+    const result = await listLogEntries(db, { guildId, limit: 50, excludeBotEvents: true });
+
+    expect(result.entries.map((e) => (e.entry as { userId: string }).userId)).toEqual(["human"]);
   });
 
   test("createdAt降順で返し、まだ後続がある場合のみnextCursorを返す", async () => {

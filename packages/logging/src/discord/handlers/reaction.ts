@@ -31,6 +31,7 @@ function toReactionLogEntry(
     userId: user.id,
     emoji: reaction.emoji.toString(),
     action,
+    actorIsBot: user.bot,
   };
 }
 

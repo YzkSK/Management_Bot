@@ -12,6 +12,7 @@ export function toMemberJoinLogEntry(member: GuildMember): LogEntry {
     createdAt: new Date().toISOString(),
     userId: member.id,
     action: "join",
+    actorIsBot: member.user.bot,
   };
 }
 
@@ -27,9 +28,15 @@ export function toMemberLeaveLogEntry(member: GuildMember | PartialGuildMember):
     createdAt: new Date().toISOString(),
     userId: member.id,
     action: "leave",
+    actorIsBot: member.user.bot,
   };
 }
 
+/**
+ * ban/unbanのuserIdはBAN対象(実行者ではない)。actorIsBotは「イベントの実行者」を表すため、
+ * ここでは対象アカウントのbot判定を誤って実行者として扱わないよう設定しない(codexレビュー指摘)。
+ * 実行者の特定は#52の監査ログ相関に委ねる。
+ */
 export function toMemberBanLogEntry(ban: GuildBan): LogEntry {
   return {
     category: "member",
@@ -54,6 +61,7 @@ export function toMemberUnbanLogEntry(ban: GuildBan): LogEntry {
  * 1回のguildMemberUpdateでニックネーム変更とタイムアウト付与/解除が同時に起こり得るため、複数エントリを返す。
  * 期限切れによる自動解除と手動解除はdiscord.jsのイベントだけでは区別できないため、どちらもtimeoutRemoveとして
  * 一律記録する(#81)。区別が必要な場合は#52の監査ログ相関(実行者の有無)に委ねる。
+ * userIdは変更対象(実行者ではない)のため、ban/unban同様actorIsBotは設定しない(codexレビュー指摘)。
  */
 export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMember, newMember: GuildMember): LogEntry[] {
   const createdAt = new Date().toISOString();

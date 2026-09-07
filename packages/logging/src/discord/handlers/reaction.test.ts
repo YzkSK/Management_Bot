@@ -9,8 +9,8 @@ function fakeReaction(emojiDisplay = "😀") {
   } as never;
 }
 
-function fakeUser(id = "u1", partial = false) {
-  return { id, partial } as never;
+function fakeUser(id = "u1", partial = false, bot = false) {
+  return { id, partial, bot } as never;
 }
 
 describe("reaction category mappers", () => {
@@ -37,6 +37,11 @@ describe("reaction category mappers", () => {
   test("userがpartial(未キャッシュ)でもuserIdだけでログを作成する", () => {
     const entry = toReactionAddLogEntry(fakeReaction(), fakeUser("u1", true));
     expect((entry as { userId: string }).userId).toBe("u1");
+  });
+
+  test("Botユーザーのリアクションはactor" + "IsBot=trueとして記録する(除外はしない)", () => {
+    const entry = toReactionAddLogEntry(fakeReaction(), fakeUser("bot1", false, true));
+    expect(entry?.actorIsBot).toBe(true);
   });
 });
 

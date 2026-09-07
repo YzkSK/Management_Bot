@@ -52,4 +52,24 @@ describe("writeLogEntry (実DB, onConflictDoNothingの実挙動を検証)", () =
 
     expect(sendToChannel).toHaveBeenCalledTimes(1);
   });
+
+  test("entry.actorIsBotがauthor_is_botカラムに反映される", async () => {
+    const sendToChannel = mock(() => Promise.resolve());
+    const id = randomUUID();
+
+    await writeLogEntry({ db, sendToChannel }, { ...memberJoinEntry, actorIsBot: true }, id);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, id));
+    expect(row?.authorIsBot).toBe(true);
+  });
+
+  test("entry.actorIsBot未設定はauthor_is_bot=falseになる", async () => {
+    const sendToChannel = mock(() => Promise.resolve());
+    const id = randomUUID();
+
+    await writeLogEntry({ db, sendToChannel }, memberJoinEntry, id);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, id));
+    expect(row?.authorIsBot).toBe(false);
+  });
 });
