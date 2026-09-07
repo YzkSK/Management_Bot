@@ -187,13 +187,21 @@ describe("fetchAllGuildChannelNames", () => {
     expect(result).toEqual([]);
   });
 
-  test("5xxはErrorを投げる", async () => {
+  test("channelsが5xxでも空配列にdegradeする(issue #157: 一時的なAPI障害でresolveDisplayNames全体を500にしない)", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     mockFetch({
       "/guilds/g1/channels": { status: 500 },
       "/guilds/g1/threads/active": { status: 200, body: { threads: [] } },
     });
 
-    await expect(fetchAllGuildChannelNames("test-bot-token", "g1")).rejects.toThrow();
+    try {
+      const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+      expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test("threads/activeが5xxでもchannelsが成功していればチャンネル名は返す(スレッド取得失敗は巻き込まない)", async () => {

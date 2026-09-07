@@ -114,15 +114,18 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
  * (issue #155: threadログで「スレッド」固定文言ではなくスレッド名を表示するため)。
  * アーカイブ済みスレッドはこのエンドポイントに含まれず、IDのままフォールバック表示される。
  * guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
- * スレッド取得の失敗(5xx等)はチャンネル名解決自体を巻き込まないよう、スレッドなし(空配列)にdegradeする
- * (codexレビュー指摘)。
+ * チャンネル本体・スレッドいずれの取得失敗(5xx等)も表示名解決全体を巻き込まないよう、
+ * 空配列にdegradeする(issue #157: resolveDisplayNamesが一時的なDiscord API障害で500になる問題)。
  */
 export async function fetchAllGuildChannelNames(
   botToken: string,
   guildId: string,
 ): Promise<readonly ChannelOption[]> {
   const [channels, activeThreads] = await Promise.all([
-    discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)),
+    discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)).catch((error: unknown) => {
+      console.error(`Failed to fetch channels for guild ${guildId}`, error);
+      return "not_found" as const;
+    }),
     discordGet(botToken, `/guilds/${guildId}/threads/active`, activeThreadsSchema).catch((error: unknown) => {
       console.error(`Failed to fetch active threads for guild ${guildId}`, error);
       return "not_found" as const;
