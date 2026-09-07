@@ -350,9 +350,11 @@ describe("429リトライ(discordGet共通)", () => {
 
   test("429がリトライ上限を超えて続く場合はエラーになりMapに含めない", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    let calls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/guilds/g1/members/u1")) {
+        calls++;
         return new Response(JSON.stringify({ message: "rate limited" }), {
           status: 429,
           headers: { "Retry-After": "0" },
@@ -365,6 +367,8 @@ describe("429リトライ(discordGet共通)", () => {
       const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
 
       expect(result.has("u1")).toBe(false);
+      // 初回1回 + MAX_RATE_LIMIT_RETRIES(5)回のリトライ = 6回
+      expect(calls).toBe(6);
     } finally {
       errorSpy.mockRestore();
     }
@@ -505,7 +509,7 @@ describe("fetchGuildMemberNames", () => {
     const result = await fetchGuildMemberNames("test-bot-token", "g1", userIds);
 
     expect(result.size).toBe(25);
-    expect(maxInFlight).toBeLessThanOrEqual(5);
+    expect(maxInFlight).toBe(5);
   });
 
   test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {
