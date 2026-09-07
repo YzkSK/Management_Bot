@@ -42,6 +42,9 @@ export function toMessageCreateLogEntry(
   // ユーザーによる投稿ではないため対象外にする。ThreadCreatedはthreadCreateログと重複し、
   // ピン通知はtoMessagePinLogEntryで別途action:"pin"として記録される。
   if (message.system) return undefined;
+  // フォーラム/メディアチャンネルの新規投稿はスレッド自体がスターターメッセージを兼ね、
+  // そのメッセージIDはスレッドIDと一致する。threadCreateログと重複するため対象外にする。
+  if (message.id === message.channelId) return undefined;
   const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {
