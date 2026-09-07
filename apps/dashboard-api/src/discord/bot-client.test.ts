@@ -487,6 +487,27 @@ describe("fetchGuildMemberNames", () => {
     expect(result.get("u2")).toBe("user-u2");
   });
 
+  test("同時実行数を制限する(MEMBER_LOOKUP_CONCURRENCYを超えて一括発火しない)", async () => {
+    const userIds = Array.from({ length: 25 }, (_, i) => `u${i}`);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const match = /\/guilds\/g1\/members\/(u\d+)$/.exec(url);
+      if (!match) throw new Error(`unexpected request: ${url}`);
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return jsonResponse(200, { nick: null, user: { username: match[1], global_name: null } });
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", userIds);
+
+    expect(result.size).toBe(25);
+    expect(maxInFlight).toBeLessThanOrEqual(10);
+  });
+
   test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     mockFetch({

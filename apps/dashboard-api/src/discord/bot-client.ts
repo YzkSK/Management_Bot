@@ -178,9 +178,27 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
 }
 
 /**
+ * Discordのグローバルレート制限(bot全体で概ね50 req/秒)に対し、ログ1ページ(最大100件)分の
+ * ユニークユーザーIDを一度に完全並列で叩くと429が多発するため、同時実行数を絞って処理する
+ * (issue #165)。
+ */
+const MEMBER_LOOKUP_CONCURRENCY = 10;
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  limit: number,
+  fn: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < values.length; i += limit) {
+    results.push(...(await Promise.all(values.slice(i, i + limit).map(fn))));
+  }
+  return results;
+}
+
+/**
  * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
- * 解決する。並列にfetchするが、userIds件数はダッシュボードの1ページ(最大100件)内のユニークID数程度に
- * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない。429自体はdiscordGet共通でリトライする)。
+ * 解決する。429自体はdiscordGet共通でリトライし、同時実行数もMEMBER_LOOKUP_CONCURRENCYで絞る。
  * guild memberが404(脱退済み等)の場合は`/users/{id}`にフォールバックし、ニックネームなしでglobal_name/usernameを解決する
  * (issue #165)。個別リクエストが失敗(5xx等)した場合や、脱退済みかつユーザー自体も404(アカウント削除済み等)の場合は
  * Mapに含めない(呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
@@ -190,29 +208,27 @@ export async function fetchGuildMemberNames(
   guildId: string,
   userIds: readonly string[],
 ): Promise<Map<string, string>> {
-  const entries = await Promise.all(
-    userIds.map(async (userId) => {
-      let member: z.infer<typeof guildMemberWithUserSchema> | "not_found";
+  const entries = await mapWithConcurrency(userIds, MEMBER_LOOKUP_CONCURRENCY, async (userId) => {
+    let member: z.infer<typeof guildMemberWithUserSchema> | "not_found";
+    try {
+      member = await discordGet(botToken, `/guilds/${guildId}/members/${userId}`, guildMemberWithUserSchema);
+    } catch (error) {
+      console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
+      return undefined;
+    }
+    if (member === "not_found") {
+      let user: z.infer<typeof userSchema> | "not_found";
       try {
-        member = await discordGet(botToken, `/guilds/${guildId}/members/${userId}`, guildMemberWithUserSchema);
+        user = await discordGet(botToken, `/users/${userId}`, userSchema);
       } catch (error) {
-        console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
+        console.error(`Failed to fetch user ${userId}`, error);
         return undefined;
       }
-      if (member === "not_found") {
-        let user: z.infer<typeof userSchema> | "not_found";
-        try {
-          user = await discordGet(botToken, `/users/${userId}`, userSchema);
-        } catch (error) {
-          console.error(`Failed to fetch user ${userId}`, error);
-          return undefined;
-        }
-        if (user === "not_found") return undefined;
-        return [userId, user.global_name || user.username] as const;
-      }
-      const name = member.nick || member.user.global_name || member.user.username;
-      return [userId, name] as const;
-    }),
-  );
+      if (user === "not_found") return undefined;
+      return [userId, user.global_name || user.username] as const;
+    }
+    const name = member.nick || member.user.global_name || member.user.username;
+    return [userId, name] as const;
+  });
   return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
 }
