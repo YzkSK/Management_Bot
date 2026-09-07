@@ -3,6 +3,8 @@ import type {
   DashboardAccessContext,
   GuildMembership,
   ManagedGuild,
+  MemberPage,
+  RoleOption,
 } from "@management-bot/dashboard-access";
 import { getSessionAccessToken, listMyGuilds } from "@management-bot/dashboard-access";
 import type { Db } from "@management-bot/db";
@@ -14,6 +16,8 @@ import {
   fetchBotGuildPermissions,
   fetchGuildChannels,
   fetchGuildMemberNames,
+  fetchGuildMembersPage,
+  fetchGuildRoles,
 } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
@@ -35,6 +39,9 @@ const GUILD_TTL_MS = 30_000;
 const guildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const allGuildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
+const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
+/** キーは`${guildId}:${after}`(ページ単位)。 */
+const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
@@ -58,6 +65,17 @@ function createVerifyGuildChannel(botToken: string): (guildId: string, channelId
 
 function createGetBotPermissions(botToken: string): (guildId: string) => Promise<bigint> {
   return (guildId) => botPermissionsCache(guildId, () => fetchBotGuildPermissions(botToken, guildId));
+}
+
+function createGetGuildRoles(botToken: string): (guildId: string) => Promise<readonly RoleOption[]> {
+  return (guildId) => guildRolesCache(guildId, () => fetchGuildRoles(botToken, guildId));
+}
+
+function createGetGuildMembersPage(
+  botToken: string,
+): (guildId: string, after?: string) => Promise<MemberPage> {
+  return (guildId, after = "0") =>
+    guildMembersPageCache(`${guildId}:${after}`, () => fetchGuildMembersPage(botToken, guildId, after));
 }
 
 function createGetGuildMemberNames(
@@ -158,6 +176,8 @@ export function createContext(
       verifyGuildChannel: createVerifyGuildChannel(botToken),
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
+      getGuildRoles: createGetGuildRoles(botToken),
+      getGuildMembersPage: createGetGuildMembersPage(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
     };
     return ctx as unknown as Record<string, unknown>;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ChannelOption } from "@management-bot/dashboard-access";
+import type { ChannelOption, MemberOption, RoleOption } from "@management-bot/dashboard-access";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -25,9 +25,14 @@ const guildChannelSchema = z.object({
 
 const activeThreadsSchema = z.object({ threads: z.array(guildChannelSchema) });
 
-const guildRoleSchema = z.object({ id: z.string(), permissions: bigintString });
+const guildRoleSchema = z.object({ id: z.string(), name: z.string(), permissions: bigintString });
 
 const guildMemberSchema = z.object({ roles: z.array(z.string()) });
+
+const guildMemberListEntrySchema = z.object({
+  user: z.object({ id: z.string(), username: z.string(), global_name: z.string().nullable().optional() }),
+  nick: z.string().nullable().optional(),
+});
 
 const meSchema = z.object({ id: z.string() });
 
@@ -51,11 +56,35 @@ const userSchema = z.object({
  */
 const MAX_RATE_LIMIT_RETRIES = 5;
 
-async function discordGet<T>(botToken: string, path: string, schema: z.ZodType<T>): Promise<T | "not_found"> {
+/**
+ * 403(権限不足)をguild未参加相当の`not_found`として扱うか、専用エラーとして投げるか。
+ * `throw`はguild自体は見つかっているのに特定の操作だけ拒否される場合に使う
+ * (issue #198: `/guilds/{id}/members`はGUILD_MEMBERS Privileged Intent未設定でも403になり、
+ * 「メンバー0人」と誤認させないため区別する)。
+ */
+type ForbiddenHandling = "treat-as-not-found" | "throw";
+
+/** 403を`throw`扱いにしたdiscordGetが投げる、Bot権限・Intent不足を示すエラー。 */
+export class DiscordAccessForbiddenError extends Error {
+  constructor(path: string) {
+    super(`Discord API access forbidden (${path}): check bot permissions/privileged intents`);
+    this.name = "DiscordAccessForbiddenError";
+  }
+}
+
+async function discordGet<T>(
+  botToken: string,
+  path: string,
+  schema: z.ZodType<T>,
+  onForbidden: ForbiddenHandling = "treat-as-not-found",
+): Promise<T | "not_found"> {
   for (let attempt = 0; ; attempt++) {
     const response = await fetch(`${DISCORD_API_BASE}${path}`, {
       headers: { Authorization: `Bot ${botToken}` },
     });
+    if (response.status === 403 && onForbidden === "throw") {
+      throw new DiscordAccessForbiddenError(path);
+    }
     if (response.status === 403 || response.status === 404) {
       return "not_found";
     }
@@ -179,6 +208,58 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
   }
 
   return resolveGuildLevelPermissions({ guildId, botRoleIds: member.roles, guildRoles: roles });
+}
+
+/**
+ * guild直下の全ロールのid/nameを返す。capability付与画面のロールセレクター用
+ * (issue #198)。guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
+ * (Discordのguildあたりロール数上限は250件であり、チャンネル一覧同様ページングは不要。)
+ */
+export async function fetchGuildRoles(botToken: string, guildId: string): Promise<readonly RoleOption[]> {
+  const roles = await discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleSchema));
+  if (roles === "not_found") {
+    return [];
+  }
+  return roles.map((role) => ({ id: role.id, name: role.name }));
+}
+
+/** 1ページあたりに取得するguildメンバー数(Discord APIの`/guilds/{id}/members`が許容する最大値)。 */
+const MEMBER_LIST_PAGE_SIZE = 1000;
+
+export interface MemberPage {
+  members: readonly MemberOption[];
+  /** 次ページ取得用のuser id(昇順カーソル)。undefinedなら最終ページ。 */
+  nextAfter: string | undefined;
+}
+
+/**
+ * guild直下のメンバーをuser id昇順で1ページ分(最大MEMBER_LIST_PAGE_SIZE件)取得する。
+ * capability付与画面のユーザーセレクター用(issue #198)。大規模guildで全件を一度にメモリへ
+ * 積まないよう、呼び出し側がnextAfterで明示的にページ送りする設計にしている。
+ * guild不明(404)の場合は空ページを返す。GUILD_MEMBERS Privileged Intent未設定による403は
+ * 「メンバー0人」と誤認させないためDiscordAccessForbiddenErrorとして投げる。
+ */
+export async function fetchGuildMembersPage(
+  botToken: string,
+  guildId: string,
+  after = "0",
+): Promise<MemberPage> {
+  const page = await discordGet(
+    botToken,
+    `/guilds/${guildId}/members?limit=${MEMBER_LIST_PAGE_SIZE}&after=${after}`,
+    z.array(guildMemberListEntrySchema),
+    "throw",
+  );
+  if (page === "not_found") {
+    return { members: [], nextAfter: undefined };
+  }
+  return {
+    members: page.map((member) => ({
+      id: member.user.id,
+      name: member.nick || member.user.global_name || member.user.username,
+    })),
+    nextAfter: page.length === MEMBER_LIST_PAGE_SIZE ? page[page.length - 1]!.user.id : undefined,
+  };
 }
 
 /**

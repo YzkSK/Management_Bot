@@ -21,5 +21,8 @@ export {
   type DashboardAccessContext,
   type GuildMembership,
   type ChannelOption,
+  type RoleOption,
+  type MemberOption,
+  type MemberPage,
   type ManagedGuild,
 } from "./trpc.js";

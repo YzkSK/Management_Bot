@@ -14,6 +14,22 @@ export interface ChannelOption {
   name: string;
 }
 
+export interface RoleOption {
+  id: string;
+  name: string;
+}
+
+export interface MemberOption {
+  id: string;
+  name: string;
+}
+
+export interface MemberPage {
+  members: readonly MemberOption[];
+  /** 次ページ取得用のuser id(昇順カーソル)。undefinedなら最終ページ。 */
+  nextAfter: string | undefined;
+}
+
 export interface ManagedGuild {
   id: string;
   name: string;
@@ -67,6 +83,19 @@ export interface DashboardAccessContext {
    * Dashboardの再認可導線に使う。dashboard-api側でDiscord APIから供給する。
    */
   getBotPermissions: (guildId: string) => Promise<bigint>;
+  /**
+   * guildId直下の全ロールのid/nameを返す。capability付与画面のロールセレクターに使う
+   * (issue #198)。`@everyone`ロール(id===guildId)も含む。表示専用なのでdashboard-api側で
+   * 短命キャッシュしてよい。
+   */
+  getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
+  /**
+   * guildId直下のメンバーをuser id昇順で1ページ分取得する。capability付与画面のユーザー
+   * セレクターに使う(issue #198)。大規模guildで全件を一度に返さないよう、afterで明示的に
+   * ページ送りする(省略時は先頭ページ)。GUILD_MEMBERS Privileged Intent未設定の場合は
+   * DiscordAccessForbiddenErrorが投げられうる。
+   */
+  getGuildMembersPage: (guildId: string, after?: string) => Promise<MemberPage>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();

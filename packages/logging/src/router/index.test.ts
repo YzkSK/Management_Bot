@@ -14,6 +14,8 @@ import {
   createCallerFactory,
   type ChannelOption,
   type GuildMembership,
+  type MemberPage,
+  type RoleOption,
 } from "@management-bot/dashboard-access";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
@@ -100,6 +102,10 @@ function memberNamesOf(names: Record<string, string>) {
 
 const botPermissionsOf = (permissions = 0n) => async (): Promise<bigint> => permissions;
 
+const rolesOf = () => async (): Promise<RoleOption[]> => [];
+
+const membersPageOf = () => async (): Promise<MemberPage> => ({ members: [], nextAfter: undefined });
+
 describe("loggingRouter.listLogEntries", () => {
   test("VIEW_LOGSのみを持つ場合はcontentがマスクされる", async () => {
     await db.insert(capabilityGrants).values({
@@ -118,6 +124,8 @@ describe("loggingRouter.listLogEntries", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -144,6 +152,8 @@ describe("loggingRouter.listLogEntries", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -162,6 +172,8 @@ describe("loggingRouter.listLogEntries", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -203,6 +215,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -219,6 +233,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -246,6 +262,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -266,6 +284,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -285,6 +305,8 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -306,6 +328,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -322,6 +346,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -338,6 +364,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -365,6 +393,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -384,6 +414,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -409,6 +441,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -430,6 +464,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -457,6 +493,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -477,6 +515,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -497,6 +537,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -517,6 +559,8 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -547,6 +591,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -572,6 +618,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -597,6 +645,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -651,6 +701,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -672,6 +724,8 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -708,6 +762,8 @@ describe("loggingRouter.resolveDisplayNames", () => {
       verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
       getGuildMemberNames: memberNamesOf({ u1: "解決された名前" }),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -729,6 +785,8 @@ describe("loggingRouter.resolveDisplayNames", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -754,6 +812,8 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(LOGGING_REQUIRED_PERMISSIONS),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -779,6 +839,8 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(PermissionFlagsBits.Administrator),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -804,6 +866,8 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(0n),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
@@ -827,6 +891,8 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       verifyGuildChannel: verifyGuildChannelOf(),
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
