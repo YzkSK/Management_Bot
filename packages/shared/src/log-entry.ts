@@ -12,6 +12,12 @@ const base = {
    * 実行者を取得できないカテゴリが大半のため、初回書き込み時は未設定(undefined)が正常系。
    */
   executorId: nonEmptyString.optional(),
+  /**
+   * イベントの主体(message.authorId/reaction.userId/member.userId等)がBotアカウントかどうか。
+   * 監査ログ相関と同様、ダッシュボードのデフォルト表示から隔離するためのフラグ。
+   * 主体を持たないカテゴリ(role/channel/guild等)や、判定情報を持たないハンドラでは未設定のまま。
+   */
+  actorIsBot: z.boolean().optional(),
 };
 
 export const messageLogEntrySchema = z.object({
