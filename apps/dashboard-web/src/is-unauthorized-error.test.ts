@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { TRPCClientError } from "@trpc/client";
-import { isUnauthorizedError } from "./App.js";
+import { isUnauthorizedError } from "./is-unauthorized-error.js";
 
 describe("isUnauthorizedError", () => {
   test("TRPCのUNAUTHORIZEDエラーをtrueと判定する", () => {
