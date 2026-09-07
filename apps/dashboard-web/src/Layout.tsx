@@ -4,14 +4,15 @@ import { Sidebar } from "./Sidebar.js";
 import { Footer } from "./Footer.js";
 
 interface LayoutProps {
-  discordUserId: string;
+  discordUsername: string;
+  onLogout: () => void;
 }
 
-export function Layout({ discordUserId }: LayoutProps) {
+export function Layout({ discordUsername, onLogout }: LayoutProps) {
   const { guildId } = useParams<{ guildId?: string }>();
   return (
     <div className="flex min-h-screen flex-col">
-      <Header discordUserId={discordUserId} />
+      <Header discordUsername={discordUsername} onLogout={onLogout} />
       <div className="flex flex-1">
         <Sidebar guildId={guildId} />
         <main className="flex-1 p-4">

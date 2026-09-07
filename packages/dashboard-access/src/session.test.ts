@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, sessions, type Db } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { getSessionAccessToken, validateSession } from "./session.ts";
+import { deleteSession, getSessionAccessToken, validateSession } from "./session.ts";
 import { encryptToken } from "./token-crypto.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -24,6 +24,7 @@ async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferIn
   await db.insert(sessions).values({
     id: sessionId,
     discordUserId: "user-1",
+    discordUsername: "yuzuki_nom1",
     encryptedAccessToken: "test-access-token",
     encryptedRefreshToken: "test-refresh-token",
     expiresAt: new Date(Date.now() + 60_000),
@@ -32,13 +33,13 @@ async function insertSession(db: Db, overrides: Partial<typeof sessions.$inferIn
 }
 
 describe("validateSession", () => {
-  test("有効なセッションIDならdiscordUserId・expiresAtを返す", async () => {
+  test("有効なセッションIDならdiscordUserId・discordUsername・expiresAtを返す", async () => {
     const expiresAt = new Date(Date.now() + 60_000);
     await insertSession(db, { expiresAt });
 
     const result = await validateSession(db, sessionId);
 
-    expect(result).toEqual({ discordUserId: "user-1", expiresAt });
+    expect(result).toEqual({ discordUserId: "user-1", discordUsername: "yuzuki_nom1", expiresAt });
   });
 
   test("存在しないセッションIDはnullを返す", async () => {
@@ -53,6 +54,20 @@ describe("validateSession", () => {
     const result = await validateSession(db, sessionId);
 
     expect(result).toBeNull();
+  });
+});
+
+describe("deleteSession", () => {
+  test("セッション行を削除する", async () => {
+    await insertSession(db);
+
+    await deleteSession(db, sessionId);
+
+    expect(await validateSession(db, sessionId)).toBeNull();
+  });
+
+  test("存在しないセッションIDでもエラーにならない", async () => {
+    await expect(deleteSession(db, "nonexistent")).resolves.toBeUndefined();
   });
 });
 

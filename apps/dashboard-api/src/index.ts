@@ -26,6 +26,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const app = new Hono();
 
 app.use("/trpc/*", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
+app.use("/auth/logout", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
 
 app.route(
   "/auth",

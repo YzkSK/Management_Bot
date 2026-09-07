@@ -6,7 +6,10 @@ import { moderationRouter } from "@management-bot/moderation";
 import { guildSettingsRouter } from "./routers/guild-settings.js";
 
 export const appRouter = router({
-  me: protectedProcedure.query(({ ctx }) => ({ discordUserId: ctx.discordUserId })),
+  me: protectedProcedure.query(({ ctx }) => ({
+    discordUserId: ctx.discordUserId,
+    discordUsername: ctx.discordUsername,
+  })),
   guildSettings: guildSettingsRouter,
   activity: activityRouter,
   logging: loggingRouter,

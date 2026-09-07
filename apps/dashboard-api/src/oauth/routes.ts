@@ -1,8 +1,8 @@
 import type { Db } from "@management-bot/db";
-import { createSession } from "@management-bot/dashboard-access";
+import { createSession, deleteSession } from "@management-bot/dashboard-access";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { buildAuthorizeUrl, exchangeCodeForToken, fetchDiscordUserId } from "./discord-client.js";
+import { buildAuthorizeUrl, exchangeCodeForToken, fetchDiscordUser } from "./discord-client.js";
 import { signState, verifyState } from "./state.js";
 
 const STATE_COOKIE = "oauth_state";
@@ -57,10 +57,11 @@ export function createOAuthRoutes(config: OAuthRoutesConfig): Hono {
       clientSecret: config.discordClientSecret,
       redirectUri: config.discordRedirectUri,
     });
-    const discordUserId = await fetchDiscordUserId(token.access_token);
+    const discordUser = await fetchDiscordUser(token.access_token);
 
     const sessionId = await createSession(config.db, {
-      discordUserId,
+      discordUserId: discordUser.id,
+      discordUsername: discordUser.username,
       accessToken: token.access_token,
       refreshToken: token.refresh_token,
       expiresAt: new Date(Date.now() + token.expires_in * 1000),
@@ -76,6 +77,15 @@ export function createOAuthRoutes(config: OAuthRoutesConfig): Hono {
     });
 
     return c.redirect(config.successRedirectUrl);
+  });
+
+  app.post("/logout", async (c) => {
+    const sessionId = getCookie(c, SESSION_COOKIE);
+    if (sessionId) {
+      await deleteSession(config.db, sessionId);
+    }
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    return c.body(null, 204);
   });
 
   return app;
