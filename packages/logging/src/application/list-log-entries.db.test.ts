@@ -179,7 +179,23 @@ describe("maskSensitiveFields", () => {
     expect((masked as { content?: string }).content).toBeUndefined();
   });
 
-  test("message以外のカテゴリはそのまま返す", () => {
+  test("threadカテゴリのcontent(スターターメッセージ本文)も取り除く", () => {
+    const entry: LogEntry = {
+      category: "thread",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      action: "create",
+      content: "secret starter message",
+    };
+
+    const masked = maskSensitiveFields(entry);
+
+    expect((masked as { content?: string }).content).toBeUndefined();
+  });
+
+  test("message/thread以外のカテゴリはそのまま返す", () => {
     const entry = memberEntry();
 
     expect(maskSensitiveFields(entry)).toEqual(entry);

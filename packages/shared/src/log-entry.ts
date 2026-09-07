@@ -91,6 +91,13 @@ export const threadLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "archive", "unarchive", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。それ以外(スレッド自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** 通常はaction=createのみ設定する、フォーラム/メディア投稿のスターターメッセージ本文。 */
+  content: z.string().optional(),
+  /**
+   * イベント発生時点のスレッド名のスナップショット。Discord REST APIのアクティブスレッド一覧は
+   * アーカイブ・削除済みスレッドを含まないため、表示名解決をAPI頼みにせずログ側に保持する。
+   */
+  threadName: nonEmptyString.optional(),
 });
 
 export const inviteLogEntrySchema = z.object({

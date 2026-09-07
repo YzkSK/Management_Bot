@@ -280,4 +280,44 @@ describe("LogListPage", () => {
     expect(html).toContain("Sora");
     expect(html).not.toContain(">u1<");
   });
+
+  test("threadName未設定(移行前)のスレッドログはthreadIdをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "thread",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              threadId: "t1",
+              channelId: "c1",
+              executorId: "mod1",
+              action: "create",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    queryClient.setQueryData(
+      trpc.logging.resolveDisplayNames.queryOptions({
+        guildId: "g1",
+        userIds: ["mod1"],
+        channelIds: ["c1", "t1"],
+      }).queryKey,
+      { users: { mod1: "Admin" }, channels: { t1: "質問スレ" } },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("Admin が #質問スレ を作成しました");
+  });
 });

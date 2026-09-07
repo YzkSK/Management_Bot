@@ -191,26 +191,33 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "thread": {
+      // threadNameはログ作成時点のスナップショット(常に存在)を優先し、
+      // 移行前の既存ログ(threadName未設定)のみDiscord REST APIの名前解決にフォールバックする。
+      const threadLabel = entry.threadName ? `#${entry.threadName}` : channelName(entry.threadId, names);
       switch (entry.action) {
         case "create":
-          return `${executorName} がスレッドを作成しました`;
+          return `${executorName} が ${threadLabel} を作成しました`;
         case "update":
-          return `${executorName} がスレッドを更新しました`;
+          return `${executorName} が ${threadLabel} を更新しました`;
         case "delete":
-          return `${executorName} がスレッドを削除しました`;
+          return `${executorName} が ${threadLabel} を削除しました`;
         case "archive":
-          return `${executorName} がスレッドをアーカイブしました`;
+          return `${executorName} が ${threadLabel} をアーカイブしました`;
         case "unarchive":
-          return `${executorName} がスレッドのアーカイブを解除しました`;
+          return `${executorName} が ${threadLabel} のアーカイブを解除しました`;
         case "memberAdd": {
-          if (!entry.userId) return `${executorName} がスレッドにメンバーを追加しました`;
+          if (!entry.userId) return `${executorName} が ${threadLabel} にメンバーを追加しました`;
           const targetName = userName(entry.userId, names);
-          return entry.executorId ? `${executorName} が ${targetName} をスレッドに追加しました` : `${targetName} がスレッドに参加しました`;
+          return entry.executorId
+            ? `${executorName} が ${targetName} を ${threadLabel} に追加しました`
+            : `${targetName} が ${threadLabel} に参加しました`;
         }
         case "memberRemove": {
-          if (!entry.userId) return `${executorName} がスレッドからメンバーを削除しました`;
+          if (!entry.userId) return `${executorName} が ${threadLabel} からメンバーを削除しました`;
           const targetName = userName(entry.userId, names);
-          return entry.executorId ? `${executorName} が ${targetName} をスレッドから削除しました` : `${targetName} がスレッドから退出しました`;
+          return entry.executorId
+            ? `${executorName} が ${targetName} を ${threadLabel} から削除しました`
+            : `${targetName} が ${threadLabel} から退出しました`;
         }
       }
       break;

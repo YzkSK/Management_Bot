@@ -109,7 +109,9 @@ export function LogListPage() {
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) => {
                 const direct = Object.entries(entry).flatMap(([key, value]) =>
-                  (key === "channelId" || key === "previousChannelId") && typeof value === "string" ? [value] : [],
+                  (key === "channelId" || key === "previousChannelId" || key === "threadId") && typeof value === "string"
+                    ? [value]
+                    : [],
                 );
                 const changes = "changes" in entry && entry.changes ? entry.changes : {};
                 const fromChanges = Object.entries(changes).flatMap(([field, change]) =>

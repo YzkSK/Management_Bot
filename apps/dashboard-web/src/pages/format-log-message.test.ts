@@ -343,6 +343,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       action: "create",
@@ -351,7 +352,24 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("Admin がスレッドを作成しました");
+    expect(message).toBe("Admin が #質問スレ を作成しました");
+  });
+
+  test("スレッド作成(threadName未設定、移行前の既存ログ): チャンネル名解決経由の#threadIdをフォールバック表示する", () => {
+    const entry = {
+      category: "thread",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      threadId: "t1",
+      channelId: "c1",
+      executorId: "mod1",
+      action: "create",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
+
+    expect(message).toBe("Admin が #t1 を作成しました");
   });
 
   test("スレッド更新", () => {
@@ -360,6 +378,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       action: "update",
@@ -368,7 +387,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("Admin がスレッドを更新しました");
+    expect(message).toBe("Admin が #質問スレ を更新しました");
   });
 
   test("スレッド削除", () => {
@@ -377,6 +396,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       action: "delete",
@@ -385,7 +405,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("Admin がスレッドを削除しました");
+    expect(message).toBe("Admin が #質問スレ を削除しました");
   });
 
   test("スレッドアーカイブ", () => {
@@ -394,6 +414,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       action: "archive",
@@ -402,7 +423,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("Admin がスレッドをアーカイブしました");
+    expect(message).toBe("Admin が #質問スレ をアーカイブしました");
   });
 
   test("スレッドアーカイブ解除", () => {
@@ -411,6 +432,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       action: "unarchive",
@@ -419,7 +441,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { mod1: "Admin" }, channels: {} });
 
-    expect(message).toBe("Admin がスレッドのアーカイブを解除しました");
+    expect(message).toBe("Admin が #質問スレ のアーカイブを解除しました");
   });
 
   test("スレッドメンバー追加", () => {
@@ -428,6 +450,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       executorId: "mod1",
       userId: "u1",
@@ -440,7 +463,7 @@ describe("formatLogMessage", () => {
       channels: {},
     });
 
-    expect(message).toBe("Admin が Yuzuki をスレッドに追加しました");
+    expect(message).toBe("Admin が Yuzuki を #質問スレ に追加しました");
   });
 
   test("スレッドメンバー追加(実行者未相関): 対象者自身の参加として表示する", () => {
@@ -449,6 +472,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       userId: "u1",
       action: "memberAdd",
@@ -457,7 +481,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
-    expect(message).toBe("Yuzuki がスレッドに参加しました");
+    expect(message).toBe("Yuzuki が #質問スレ に参加しました");
   });
 
   test("スレッドメンバー削除(実行者未相関): 対象者自身の退出として表示する", () => {
@@ -466,6 +490,7 @@ describe("formatLogMessage", () => {
       guildId: "g1",
       createdAt: "2026-09-04T00:00:00.000Z",
       threadId: "t1",
+      threadName: "質問スレ",
       channelId: "c1",
       userId: "u1",
       action: "memberRemove",
@@ -474,7 +499,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
-    expect(message).toBe("Yuzuki がスレッドから退出しました");
+    expect(message).toBe("Yuzuki が #質問スレ から退出しました");
   });
 
   test("未対応の組み合わせは汎用フォールバック文言になる", () => {

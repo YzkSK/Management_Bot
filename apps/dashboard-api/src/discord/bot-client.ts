@@ -23,6 +23,8 @@ const guildChannelSchema = z.object({
   permission_overwrites: z.array(overwriteSchema).default([]),
 });
 
+const activeThreadsSchema = z.object({ threads: z.array(guildChannelSchema) });
+
 const guildRoleSchema = z.object({ id: z.string(), permissions: bigintString });
 
 const guildMemberSchema = z.object({ roles: z.array(z.string()) });
@@ -102,20 +104,29 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
 }
 
 /**
- * guild直下の全チャンネル(種別・送信可否を問わない)のid/nameを返す。表示名解決専用
+ * guild直下の全チャンネル(種別・送信可否を問わない)とアクティブなスレッドのid/nameを返す。表示名解決専用
  * (issue #144: fetchGuildChannelsはテキスト送信可能チャンネルのみに絞るため、ボイスチャンネル等の
  * ログでチャンネル名が解決できずIDのまま表示されてしまう問題への対応)。
+ * スレッドは`/guilds/{id}/channels`に含まれないため`/guilds/{id}/threads/active`を別途取得する
+ * (issue #155: threadログで「スレッド」固定文言ではなくスレッド名を表示するため)。
+ * アーカイブ済みスレッドはこのエンドポイントに含まれず、IDのままフォールバック表示される。
  * guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
+ * スレッド取得の失敗(5xx等)はチャンネル名解決自体を巻き込まないよう、スレッドなし(空配列)にdegradeする
+ * (codexレビュー指摘)。
  */
 export async function fetchAllGuildChannelNames(
   botToken: string,
   guildId: string,
 ): Promise<readonly ChannelOption[]> {
-  const channels = await discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema));
+  const [channels, activeThreads] = await Promise.all([
+    discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)),
+    discordGet(botToken, `/guilds/${guildId}/threads/active`, activeThreadsSchema).catch(() => "not_found" as const),
+  ]);
   if (channels === "not_found") {
     return [];
   }
-  return channels.map((channel) => ({ id: channel.id, name: channel.name }));
+  const threads = activeThreads === "not_found" ? [] : activeThreads.threads;
+  return [...channels, ...threads].map((channel) => ({ id: channel.id, name: channel.name }));
 }
 
 /**

@@ -134,6 +134,7 @@ describe("fetchAllGuildChannelNames", () => {
           { id: "c2", name: "voice", type: 2, permission_overwrites: [] },
         ],
       },
+      "/guilds/g1/threads/active": { status: 200, body: { threads: [] } },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -144,9 +145,30 @@ describe("fetchAllGuildChannelNames", () => {
     ]);
   });
 
+  test("アクティブスレッドも含める(スレッド名表示用)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [{ id: "c1", name: "general", type: 0, permission_overwrites: [] }],
+      },
+      "/guilds/g1/threads/active": {
+        status: 200,
+        body: { threads: [{ id: "t1", name: "質問スレ", type: 11, permission_overwrites: [] }] },
+      },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([
+      { id: "c1", name: "general" },
+      { id: "t1", name: "質問スレ" },
+    ]);
+  });
+
   test("guild不明(404)は空配列を返す", async () => {
     mockFetch({
       "/guilds/g1/channels": { status: 404 },
+      "/guilds/g1/threads/active": { status: 404 },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -157,6 +179,7 @@ describe("fetchAllGuildChannelNames", () => {
   test("Bot未参加(403)は空配列を返す", async () => {
     mockFetch({
       "/guilds/g1/channels": { status: 403 },
+      "/guilds/g1/threads/active": { status: 403 },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -167,9 +190,24 @@ describe("fetchAllGuildChannelNames", () => {
   test("5xxはErrorを投げる", async () => {
     mockFetch({
       "/guilds/g1/channels": { status: 500 },
+      "/guilds/g1/threads/active": { status: 200, body: { threads: [] } },
     });
 
     await expect(fetchAllGuildChannelNames("test-bot-token", "g1")).rejects.toThrow();
+  });
+
+  test("threads/activeが5xxでもchannelsが成功していればチャンネル名は返す(スレッド取得失敗は巻き込まない)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [{ id: "c1", name: "general", type: 0, permission_overwrites: [] }],
+      },
+      "/guilds/g1/threads/active": { status: 500 },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([{ id: "c1", name: "general" }]);
   });
 });
 
