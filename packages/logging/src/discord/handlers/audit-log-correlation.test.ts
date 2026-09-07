@@ -10,7 +10,7 @@ function fakeAuditLogEntry(
     executorId: string | null;
     targetId: string | null;
     target: unknown;
-    changes: { key: string; new?: { id: string; name: string }[] }[];
+    changes: { key: string; new?: { id: string; name: string }[] | boolean }[];
     extra: unknown;
   }> = {},
 ) {
@@ -122,6 +122,73 @@ describe("toAuditLogEntryInfo", () => {
       "g1",
     );
     expect(info.targetId).toBe("c1");
+  });
+
+  test("MemberDisconnectはextra.countをvoiceDisconnectOrMoveとして抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MemberDisconnect, extra: { count: 1 } }),
+      "g1",
+    );
+    expect(info.voiceDisconnectOrMove).toEqual({ count: 1, moveChannelId: undefined });
+  });
+
+  test("MemberMoveはextra.countとextra.channel.id(移動先)をvoiceDisconnectOrMoveとして抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MemberMove, extra: { count: 1, channel: { id: "c2" } } }),
+      "g1",
+    );
+    expect(info.voiceDisconnectOrMove).toEqual({ count: 1, moveChannelId: "c2" });
+  });
+
+  test("MemberUpdateはchangesのmute/deafをmemberUpdateVoiceStateChangesとして抽出する(mute/deafのみ→hasOtherChanges=false)", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({
+        action: AuditLogEvent.MemberUpdate,
+        changes: [
+          { key: "mute", new: true },
+          { key: "deaf", new: false },
+        ],
+      }),
+      "g1",
+    );
+    expect(info.memberUpdateVoiceStateChanges).toEqual({ mute: true, deaf: false, hasOtherChanges: false });
+  });
+
+  test("MemberUpdateでmute/deafと同時にnickname等の変更がある場合はhasOtherChanges=trueになる", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({
+        action: AuditLogEvent.MemberUpdate,
+        changes: [
+          { key: "mute", new: true },
+          { key: "nick", new: undefined },
+        ],
+      }),
+      "g1",
+    );
+    expect(info.memberUpdateVoiceStateChanges).toEqual({ mute: true, deaf: undefined, hasOtherChanges: true });
+  });
+
+  test("MemberUpdateでmute/deaf以外の変更(nicknameChange等)のみの場合はmemberUpdateVoiceStateChangesがundefinedになる", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MemberUpdate, changes: [{ key: "nick", new: undefined }] }),
+      "g1",
+    );
+    expect(info.memberUpdateVoiceStateChanges).toBeUndefined();
+  });
+
+  test("MemberUpdate以外はmemberUpdateVoiceStateChangesがundefinedになる", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
+    expect(info.memberUpdateVoiceStateChanges).toBeUndefined();
+  });
+
+  test("MemberDisconnect/MemberMove以外はvoiceDisconnectOrMoveがundefinedになる", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
+    expect(info.voiceDisconnectOrMove).toBeUndefined();
+  });
+
+  test("MemberDisconnectでextra.countが数値でない場合はundefinedを返す", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MemberDisconnect, extra: null }), "g1");
+    expect(info.voiceDisconnectOrMove).toBeUndefined();
   });
 
   test("MessageDeleteでextraがnull/channel欠損でも例外を投げずundefinedを返す(監査ログのoptional infoは仕様上欠損し得るため)", () => {

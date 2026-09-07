@@ -134,6 +134,124 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Sora が #雑談 から退出しました");
   });
 
+  test("ボイス退出(モデレーターによる強制切断、実行者判明)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      executorId: "u2",
+      channelId: "c1",
+      action: "leave",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora", u2: "Mod" }, channels: { c1: "雑談" } });
+
+    expect(message).toBe("Mod が Sora を #雑談 から切断させました");
+  });
+
+  test("ボイス移動(モデレーターによる強制移動、実行者判明)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      executorId: "u2",
+      channelId: "c2",
+      previousChannelId: "c1",
+      action: "move",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "Sora", u2: "Mod" },
+      channels: { c1: "雑談", c2: "ゲーム部屋" },
+    });
+
+    expect(message).toBe("Mod が Sora を #雑談 から #ゲーム部屋 に移動させました");
+  });
+
+  test("ボイス状態変化(ミュート+画面共有)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        selfMute: { before: false, after: true },
+        streaming: { before: false, after: true },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora" }, channels: {} });
+
+    expect(message).toBe("Sora がミュートしました、画面共有を開始しました");
+  });
+
+  test("ボイス状態変化(モデレーターによるサーバーミュート、実行者判明)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      executorId: "u2",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        serverMute: { before: false, after: true },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora", u2: "Mod" }, channels: {} });
+
+    expect(message).toBe("Mod が Sora をサーバーミュートしました");
+  });
+
+  test("ボイス状態変化(サーバーミュート、実行者未判明)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        serverMute: { before: false, after: true },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora" }, channels: {} });
+
+    expect(message).toBe("Sora がサーバーミュートしました");
+  });
+
+  test("ボイス状態変化(サーバーミュート+画面共有の混在、モデレーター操作のみexecutorName主語にする)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      executorId: "u2",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        serverMute: { before: false, after: true },
+        streaming: { before: false, after: true },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora", u2: "Mod" }, channels: {} });
+
+    expect(message).toBe("Mod が Sora をサーバーミュートしました、Sora が画面共有を開始しました");
+  });
+
   test("メンバー参加", () => {
     const entry = {
       category: "member",

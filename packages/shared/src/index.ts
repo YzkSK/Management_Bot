@@ -45,10 +45,12 @@ export {
   auditLogCorrelationEntrySchema,
   moderationCaseLogEntrySchema,
   voiceLogEntrySchema,
+  VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
   type LogEntry,
+  type VoiceStateFlagName,
 } from "./log-entry.js";
 export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
 export { buildInviteUrl } from "./invite-url.js";

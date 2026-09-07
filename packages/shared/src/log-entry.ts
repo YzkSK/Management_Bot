@@ -180,11 +180,25 @@ const voiceBase = {
   channelId: nonEmptyString,
 };
 
+/** voice: action=updateのchangesキー。discord.jsのVoiceStateのフラグ名と一致させる。 */
+export const VOICE_STATE_FLAG_NAMES = ["selfMute", "selfDeaf", "serverMute", "serverDeaf", "streaming"] as const;
+export type VoiceStateFlagName = (typeof VOICE_STATE_FLAG_NAMES)[number];
+
+const voiceStateFlag = z.object({ before: z.boolean(), after: z.boolean() });
+
 /** previousChannelId(移動元)はaction=moveの場合のみ必須にする(join/leaveでは持たせない)。 */
 export const voiceLogEntrySchema = z.discriminatedUnion("action", [
   z.object({ ...voiceBase, action: z.literal("join") }),
   z.object({ ...voiceBase, action: z.literal("leave") }),
   z.object({ ...voiceBase, action: z.literal("move"), previousChannelId: nonEmptyString }),
+  z.object({
+    ...voiceBase,
+    action: z.literal("update"),
+    /** VOICE_STATE_FLAG_NAMESのうち変化したフラグのみ設定する。差分なしは書き込み自体を行わないため、空オブジェクトは許容しない。 */
+    changes: z
+      .partialRecord(z.enum(VOICE_STATE_FLAG_NAMES), voiceStateFlag)
+      .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" }),
+  }),
 ]);
 
 export const LOG_ENTRY_SCHEMAS = {

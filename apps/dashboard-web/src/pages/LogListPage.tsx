@@ -279,7 +279,7 @@ export function LogListPage() {
                           </div>
                         )}
 
-                        {summary.changes !== null && (
+                        {summary.changes !== null && entry.category !== "voice" && (
                           <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
                             {Object.entries(summary.changes).map(([field, change]) => {
                               const permissionsDiff =
