@@ -505,7 +505,7 @@ describe("fetchGuildMemberNames", () => {
     const result = await fetchGuildMemberNames("test-bot-token", "g1", userIds);
 
     expect(result.size).toBe(25);
-    expect(maxInFlight).toBeLessThanOrEqual(10);
+    expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 
   test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {

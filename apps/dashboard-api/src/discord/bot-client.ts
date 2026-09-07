@@ -44,8 +44,11 @@ const userSchema = z.object({
   global_name: z.string().nullable().optional(),
 });
 
-/** 429リトライの上限回数。Discordのグローバルレート制限は短時間で解消するため、上限到達時はエラーとして扱う。 */
-const MAX_RATE_LIMIT_RETRIES = 3;
+/**
+ * 429リトライの上限回数。ログ一覧のユーザー名解決はリクエストがバースト的に集中しやすく、
+ * 3回では吸収しきれず解決漏れが発生していたため5回に増やした(issue #165)。
+ */
+const MAX_RATE_LIMIT_RETRIES = 5;
 
 async function discordGet<T>(botToken: string, path: string, schema: z.ZodType<T>): Promise<T | "not_found"> {
   for (let attempt = 0; ; attempt++) {
@@ -182,7 +185,7 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
  * ユニークユーザーIDを一度に完全並列で叩くと429が多発するため、同時実行数を絞って処理する
  * (issue #165)。
  */
-const MEMBER_LOOKUP_CONCURRENCY = 10;
+const MEMBER_LOOKUP_CONCURRENCY = 5;
 
 async function mapWithConcurrency<T, R>(
   values: readonly T[],
