@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const NO_CHANNEL = "__none__";
@@ -317,28 +318,26 @@ export function SettingsPage() {
             {displaySettingsQuery.data && (
               <>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={!displaySettingsQuery.data.hideAuditLogCorrelation}
                     disabled={displaySettingsMutation.isPending}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       displaySettingsMutation.mutate({
                         guildId,
-                        hideAuditLogCorrelation: !e.target.checked,
+                        hideAuditLogCorrelation: !checked,
                       })
                     }
                   />
                   ログ一覧に「監査ログ相関」カテゴリを表示する
                 </label>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={!displaySettingsQuery.data.hideBotEvents}
                     disabled={displaySettingsMutation.isPending}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       displaySettingsMutation.mutate({
                         guildId,
-                        hideBotEvents: !e.target.checked,
+                        hideBotEvents: !checked,
                       })
                     }
                   />

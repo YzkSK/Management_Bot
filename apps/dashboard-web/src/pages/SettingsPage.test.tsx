@@ -130,12 +130,12 @@ describe("SettingsPage", () => {
     const html = renderPage("g1", queryClient);
 
     expect(html).toContain("ログ一覧に「監査ログ相関」カテゴリを表示する");
-    const checkboxIndex = html.indexOf('type="checkbox"');
-    const checkboxTagEnd = html.indexOf(">", checkboxIndex);
-    expect(html.slice(checkboxIndex, checkboxTagEnd)).not.toContain("checked");
+    const switchIndex = html.indexOf('role="switch"');
+    const switchTagEnd = html.indexOf(">", switchIndex);
+    expect(html.slice(switchIndex, switchTagEnd)).toContain('aria-checked="false"');
   });
 
-  test("hideAuditLogCorrelationがfalse(表示中)のときチェックボックスはchecked状態になる", () => {
+  test("hideAuditLogCorrelationがfalse(表示中)のときスイッチはchecked状態になる", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", retentionDays: 30 },
@@ -153,12 +153,12 @@ describe("SettingsPage", () => {
 
     const html = renderPage("g1", queryClient);
 
-    const checkboxIndex = html.indexOf('type="checkbox"');
-    const checkboxTagEnd = html.indexOf(">", checkboxIndex);
-    expect(html.slice(checkboxIndex, checkboxTagEnd)).toContain("checked");
+    const switchIndex = html.indexOf('role="switch"');
+    const switchTagEnd = html.indexOf(">", switchIndex);
+    expect(html.slice(switchIndex, switchTagEnd)).toContain('aria-checked="true"');
   });
 
-  test("Botイベントを一覧に表示するチェックボックスが表示され、初期状態はオフ(非表示がデフォルト)", () => {
+  test("Botイベントを一覧に表示するスイッチが表示され、初期状態はオフ(非表示がデフォルト)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", retentionDays: 30 },
@@ -177,8 +177,8 @@ describe("SettingsPage", () => {
     const html = renderPage("g1", queryClient);
 
     expect(html).toContain("ログ一覧にBotによるイベントを表示する");
-    const checkboxes = html.split('type="checkbox"');
-    const secondCheckboxTag = checkboxes[1]?.slice(0, checkboxes[1].indexOf(">"));
-    expect(secondCheckboxTag).not.toContain("checked");
+    const switches = html.split('role="switch"');
+    const secondSwitchTag = switches[2]?.slice(0, switches[2].indexOf(">"));
+    expect(secondSwitchTag).toContain('aria-checked="false"');
   });
 });
