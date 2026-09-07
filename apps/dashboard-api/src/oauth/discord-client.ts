@@ -12,7 +12,13 @@ export type DiscordTokenResponse = z.infer<typeof tokenResponseSchema>;
 
 const userResponseSchema = z.object({
   id: z.string(),
+  username: z.string(),
 });
+
+export interface DiscordUser {
+  id: string;
+  username: string;
+}
 
 export interface ExchangeCodeInput {
   code: string;
@@ -41,15 +47,14 @@ export async function exchangeCodeForToken(input: ExchangeCodeInput): Promise<Di
   return tokenResponseSchema.parse(await response.json());
 }
 
-export async function fetchDiscordUserId(accessToken: string): Promise<string> {
+export async function fetchDiscordUser(accessToken: string): Promise<DiscordUser> {
   const response = await fetch(`${DISCORD_API_BASE}/users/@me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
     throw new Error(`Discord user fetch failed: ${response.status}`);
   }
-  const user = userResponseSchema.parse(await response.json());
-  return user.id;
+  return userResponseSchema.parse(await response.json());
 }
 
 /** アクセストークンがDiscord側で失効・取り消し済み(401/403)。呼び出し元は再ログイン導線に倒すこと。 */

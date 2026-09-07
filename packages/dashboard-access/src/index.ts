@@ -1,6 +1,7 @@
 export {
   validateSession,
   createSession,
+  deleteSession,
   getSessionAccessToken,
   type ValidatedSession,
   type CreateSessionInput,

@@ -40,6 +40,7 @@ beforeEach(async () => {
   await db.insert(sessions).values({
     id: "session-1",
     discordUserId: "user-1",
+    discordUsername: "user-1-name",
     encryptedAccessToken: "test-access-token",
     encryptedRefreshToken: "test-refresh-token",
     expiresAt: new Date(Date.now() + 60_000),

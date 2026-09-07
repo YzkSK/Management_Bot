@@ -77,6 +77,7 @@ export const createCallerFactory = t.createCallerFactory;
 
 interface AuthenticatedContext extends DashboardAccessContext {
   discordUserId: string;
+  discordUsername: string;
 }
 
 export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
@@ -84,7 +85,11 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  const authenticatedCtx: AuthenticatedContext = { ...ctx, discordUserId: session.discordUserId };
+  const authenticatedCtx: AuthenticatedContext = {
+    ...ctx,
+    discordUserId: session.discordUserId,
+    discordUsername: session.discordUsername,
+  };
   return next({ ctx: authenticatedCtx });
 });
 

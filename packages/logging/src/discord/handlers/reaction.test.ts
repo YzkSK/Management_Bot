@@ -34,8 +34,9 @@ describe("reaction category mappers", () => {
     expect(toReactionAddLogEntry(reaction, fakeUser())).toBeUndefined();
   });
 
-  test("userがpartial(未キャッシュ)の場合はundefined", () => {
-    expect(toReactionAddLogEntry(fakeReaction(), fakeUser("u1", true))).toBeUndefined();
+  test("userがpartial(未キャッシュ)でもuserIdだけでログを作成する", () => {
+    const entry = toReactionAddLogEntry(fakeReaction(), fakeUser("u1", true));
+    expect((entry as { userId: string }).userId).toBe("u1");
   });
 });
 

@@ -324,6 +324,57 @@ describe("/users/@me キャッシュ(issue #99)", () => {
   });
 });
 
+describe("429リトライ(discordGet共通)", () => {
+  test("429はRetry-Afterに従って待ってから再試行し、最終的に成功を返す", async () => {
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        calls++;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ message: "rate limited" }), {
+            status: 429,
+            headers: { "Retry-After": "0" },
+          });
+        }
+        return jsonResponse(200, { nick: null, user: { username: "user1", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(calls).toBe(2);
+    expect(result.get("u1")).toBe("user1");
+  });
+
+  test("429がリトライ上限を超えて続く場合はエラーになりMapに含めない", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        calls++;
+        return new Response(JSON.stringify({ message: "rate limited" }), {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+      expect(result.has("u1")).toBe(false);
+      // 初回1回 + MAX_RATE_LIMIT_RETRIES(5)回のリトライ = 6回
+      expect(calls).toBe(6);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
+
 describe("fetchGuildMemberNames", () => {
   test("nickがあればnickを使う", async () => {
     mockFetch({
@@ -364,14 +415,62 @@ describe("fetchGuildMemberNames", () => {
     expect(result.get("u1")).toBe("user1");
   });
 
-  test("404(脱退済み等)はMapに含めない", async () => {
+  test("404(脱退済み等)は/users/{id}にフォールバックしglobal_name > usernameで解決する", async () => {
     mockFetch({
       "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 200, body: { username: "leftuser", global_name: "Left User" } },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("Left User");
+  });
+
+  test("404かつ/users/{id}もglobal_nameがなければusernameを使う", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 200, body: { username: "leftuser", global_name: null } },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("leftuser");
+  });
+
+  test("404かつ/users/{id}も404(アカウント削除済み等)ならMapに含めない", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 404 },
     });
 
     const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
 
     expect(result.has("u1")).toBe(false);
+  });
+
+  test("guild memberが5xxの場合は/users/{id}へフォールバックせずMapに含めない", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    let usersCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        return jsonResponse(500);
+      }
+      if (url.endsWith("/users/u1")) {
+        usersCalled = true;
+        return jsonResponse(200, { username: "should-not-be-called", global_name: null });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+      expect(result.has("u1")).toBe(false);
+      expect(usersCalled).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test("複数IDを並列解決する", async () => {
@@ -390,6 +489,27 @@ describe("fetchGuildMemberNames", () => {
 
     expect(result.get("u1")).toBe("user-u1");
     expect(result.get("u2")).toBe("user-u2");
+  });
+
+  test("同時実行数を制限する(MEMBER_LOOKUP_CONCURRENCYを超えて一括発火しない)", async () => {
+    const userIds = Array.from({ length: 25 }, (_, i) => `u${i}`);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const match = /\/guilds\/g1\/members\/(u\d+)$/.exec(url);
+      if (!match) throw new Error(`unexpected request: ${url}`);
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return jsonResponse(200, { nick: null, user: { username: match[1], global_name: null } });
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", userIds);
+
+    expect(result.size).toBe(25);
+    expect(maxInFlight).toBe(5);
   });
 
   test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {

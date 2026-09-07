@@ -5,6 +5,7 @@ import { decryptToken, encryptToken } from "./token-crypto.js";
 
 export interface ValidatedSession {
   discordUserId: string;
+  discordUsername: string;
   expiresAt: Date;
 }
 
@@ -13,12 +14,21 @@ export async function validateSession(
   sessionId: string,
 ): Promise<ValidatedSession | null> {
   const [row] = await db
-    .select({ discordUserId: sessions.discordUserId, expiresAt: sessions.expiresAt })
+    .select({
+      discordUserId: sessions.discordUserId,
+      discordUsername: sessions.discordUsername,
+      expiresAt: sessions.expiresAt,
+    })
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
     .limit(1);
 
   return row ?? null;
+}
+
+/** ログアウト時にセッション行を削除する。存在しないIDでも成功扱い(冪等)。 */
+export async function deleteSession(db: Db, sessionId: string): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
 }
 
 /** セッションに紐づくDiscordのOAuth2アクセストークンを復号して返す。Discord API(ユーザー権限)呼び出し用。 */
@@ -38,6 +48,7 @@ export async function getSessionAccessToken(
 
 export interface CreateSessionInput {
   discordUserId: string;
+  discordUsername: string;
   accessToken: string;
   refreshToken: string;
   /** アクセストークンの有効期限(Discord OAuth2レスポンスの`expires_in`から算出)。 */
@@ -51,6 +62,7 @@ export async function createSession(db: Db, input: CreateSessionInput): Promise<
   await db.insert(sessions).values({
     id: sessionId,
     discordUserId: input.discordUserId,
+    discordUsername: input.discordUsername,
     encryptedAccessToken: encryptToken(input.accessToken, input.sessionSecret),
     encryptedRefreshToken: encryptToken(input.refreshToken, input.sessionSecret),
     expiresAt: input.expiresAt,

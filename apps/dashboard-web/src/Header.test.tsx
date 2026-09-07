@@ -3,9 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Header } from "./Header.js";
 
 describe("Header", () => {
-  test("discordUserIdを描画する", () => {
-    const html = renderToStaticMarkup(<Header discordUserId="123456789" />);
-    expect(html).toContain("123456789");
+  test("discordUsernameとログアウトボタンを描画する", () => {
+    const html = renderToStaticMarkup(<Header discordUsername="yuzuki_nom1" onLogout={() => {}} />);
+    expect(html).toContain("yuzuki_nom1");
     expect(html).toContain("Management Bot Dashboard");
+    expect(html).toContain("ログアウト");
   });
 });

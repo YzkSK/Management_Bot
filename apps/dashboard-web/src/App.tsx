@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { isUnauthorizedError } from "./is-unauthorized-error.js";
-import { trpc } from "./trpc.js";
+import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
@@ -29,13 +29,28 @@ export function App() {
     );
   }
 
+  const handleLogout = async () => {
+    const response = await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    if (!response.ok) {
+      window.alert("ログアウトに失敗しました。時間をおいて再度お試しください。");
+      return;
+    }
+    window.location.href = `${API_URL}/auth/login`;
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout discordUserId={me.data.discordUserId} />}>
+        <Route
+          path="/"
+          element={<Layout discordUsername={me.data.discordUsername} onLogout={handleLogout} />}
+        >
           <Route index element={<GuildListPage />} />
         </Route>
-        <Route path="/guilds/:guildId" element={<Layout discordUserId={me.data.discordUserId} />}>
+        <Route
+          path="/guilds/:guildId"
+          element={<Layout discordUsername={me.data.discordUsername} onLogout={handleLogout} />}
+        >
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
         </Route>

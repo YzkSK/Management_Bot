@@ -8,8 +8,10 @@ import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 type ReactionAction = Extract<LogEntry, { category: "reaction" }>["action"];
 
 /**
- * reaction/userがpartial(未キャッシュ、fetchPartials未設定時)の場合、message.guildId等の
- * 必須フィールドを埋められないことがあるためログ化をスキップする(message.tsの方針を踏襲)。
+ * reactionがpartial(未キャッシュ)でもmessage.guildId等の必須フィールドはBotClientの
+ * partials設定(Partials.Reaction/Message)により利用できるため、そこはガードのみで足りる。
+ * userがpartialでもuser.idはDiscordから常に取得できるため、partialを理由にスキップしない
+ * (以前はuser.partialでスキップしており、キャッシュ切れユーザーのログが欠落する原因だった)。
  * Bot自身のリアクションは記録対象から除外しない(他カテゴリと異なりBotの反応自体が
  * モデレーション上有用、かつリアクションはchannel.sendを発火させないため無限連鎖の懸念もない)。
  */
@@ -19,7 +21,7 @@ function toReactionLogEntry(
   action: ReactionAction,
 ): LogEntry | undefined {
   const { message } = reaction;
-  if (!message.guildId || user.partial) return undefined;
+  if (!message.guildId) return undefined;
   return {
     category: "reaction",
     guildId: message.guildId,

@@ -25,6 +25,7 @@ async function insertSession(sessionId: string): Promise<void> {
   await db.insert(sessions).values({
     id: sessionId,
     discordUserId: "user-1",
+    discordUsername: "user-1-name",
     encryptedAccessToken: encryptToken("test-access-token", sessionSecret),
     encryptedRefreshToken: encryptToken("test-refresh-token", sessionSecret),
     expiresAt: new Date(Date.now() + 60_000),

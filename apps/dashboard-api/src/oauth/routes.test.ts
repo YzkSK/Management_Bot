@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Db } from "@management-bot/db";
-import { createOAuthRoutes } from "./routes.js";
+
+let mockDeleteSession: (sessionId: string) => Promise<void> = async () => {};
+
+mock.module("@management-bot/dashboard-access", () => ({
+  createSession: async () => "new-session-id",
+  deleteSession: (_db: Db, sessionId: string) => mockDeleteSession(sessionId),
+}));
+
+const { createOAuthRoutes } = await import("./routes.js");
 
 const baseConfig = {
   db: {} as Db,
@@ -53,5 +61,39 @@ describe("GET /callback", () => {
     const res = await app.request("/callback?code=abc&state=whatever");
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /logout", () => {
+  test("clears the session cookie and deletes the session row", async () => {
+    let deletedSessionId: string | undefined;
+    mockDeleteSession = async (sessionId) => {
+      deletedSessionId = sessionId;
+    };
+
+    const app = createOAuthRoutes(baseConfig);
+    const res = await app.request("/logout", {
+      method: "POST",
+      headers: { cookie: "session_id=session-abc" },
+    });
+
+    expect(res.status).toBe(204);
+    expect(deletedSessionId).toBe("session-abc");
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("session_id=;");
+  });
+
+  test("succeeds even without an existing session cookie", async () => {
+    let deleteCalled = false;
+    mockDeleteSession = async () => {
+      deleteCalled = true;
+    };
+
+    const app = createOAuthRoutes(baseConfig);
+    const res = await app.request("/logout", { method: "POST" });
+
+    expect(deleteCalled).toBe(false);
+
+    expect(res.status).toBe(204);
   });
 });

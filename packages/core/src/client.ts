@@ -1,6 +1,6 @@
 import type { Db } from "@management-bot/db";
 import { SapphireClient } from "@sapphire/framework";
-import { GatewayIntentBits } from "discord.js";
+import { GatewayIntentBits, Partials } from "discord.js";
 import type { DomainEventBus } from "./domain-events-bus.js";
 import type { FeatureModule } from "./feature-module.js";
 
@@ -33,6 +33,14 @@ export class BotClient extends SapphireClient {
         GatewayIntentBits.AutoModerationConfiguration,
         GatewayIntentBits.AutoModerationExecution,
       ],
+      /**
+       * キャッシュに無いメッセージ/リアクション(Bot再起動直後、古いメッセージへの操作等)は、
+       * Partials未指定だとdiscord.jsが対応するgatewayイベント自体を発火させない
+       * (messageReactionAdd/Removeが届かず、reaction.tsのログが丸ごと欠落する)。
+       * User側はpartials不要でもuser.idは常に取得できるため対象に含めない(範囲を絞る)。
+       * https://discordjs.guide/legacy/popular-topics/partials
+       */
+      partials: [Partials.Message, Partials.Reaction],
       loadMessageCommandListeners: false,
     });
   }
