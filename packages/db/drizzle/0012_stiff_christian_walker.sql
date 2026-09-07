@@ -1,0 +1,1 @@
+CREATE INDEX "log_entries_visible_guild_created_at_id_idx" ON "log_entries" USING btree ("guild_id","created_at","id") WHERE "log_entries"."author_is_bot" = false;

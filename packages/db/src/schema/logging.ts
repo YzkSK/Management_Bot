@@ -18,6 +18,8 @@ export const logEntries = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
     category: text("category").notNull(),
+    /** payload.actorIsBotの複製。jsonb内条件でのフィルタを避けるためカラム化する(hideBotEvents用)。 */
+    authorIsBot: boolean("author_is_bot").notNull().default(false),
     payload: jsonb("payload").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -33,6 +35,14 @@ export const logEntries = pgTable(
       table.createdAt,
       table.id,
     ),
+    /**
+     * hideBotEvents=true(デフォルト)時のlistLogEntriesはauthor_is_bot=falseで絞った上で
+     * created_at,id降順ページングを行う。上記の非部分インデックスだけだとBotログが多いguildで
+     * フィルタ走査が発生するため、デフォルト系の絞り込みに合わせた部分インデックスを別途持つ(codexレビュー指摘)。
+     */
+    index("log_entries_visible_guild_created_at_id_idx")
+      .on(table.guildId, table.createdAt, table.id)
+      .where(sql`${table.authorIsBot} = false`),
   ],
 );
 
@@ -73,4 +83,6 @@ export const logDisplaySettings = pgTable("log_display_settings", {
     .references(() => guilds.id, { onDelete: "cascade" }),
   /** trueの場合、auditLogCorrelationカテゴリの生ログをダッシュボードの一覧表示から除外する。 */
   hideAuditLogCorrelation: boolean("hide_audit_log_correlation").notNull().default(true),
+  /** trueの場合、Botアカウントが主体のログ(authorIsBot=true)をダッシュボードの一覧表示から除外する。 */
+  hideBotEvents: boolean("hide_bot_events").notNull().default(true),
 });
