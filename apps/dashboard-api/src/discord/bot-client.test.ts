@@ -324,6 +324,31 @@ describe("/users/@me キャッシュ(issue #99)", () => {
   });
 });
 
+describe("429リトライ(discordGet共通)", () => {
+  test("429はRetry-Afterに従って待ってから再試行し、最終的に成功を返す", async () => {
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        calls++;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ message: "rate limited" }), {
+            status: 429,
+            headers: { "Retry-After": "0" },
+          });
+        }
+        return jsonResponse(200, { nick: null, user: { username: "user1", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(calls).toBe(2);
+    expect(result.get("u1")).toBe("user1");
+  });
+});
+
 describe("fetchGuildMemberNames", () => {
   test("nickがあればnickを使う", async () => {
     mockFetch({
@@ -364,9 +389,32 @@ describe("fetchGuildMemberNames", () => {
     expect(result.get("u1")).toBe("user1");
   });
 
-  test("404(脱退済み等)はMapに含めない", async () => {
+  test("404(脱退済み等)は/users/{id}にフォールバックしglobal_name > usernameで解決する", async () => {
     mockFetch({
       "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 200, body: { username: "leftuser", global_name: "Left User" } },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("Left User");
+  });
+
+  test("404かつ/users/{id}もglobal_nameがなければusernameを使う", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 200, body: { username: "leftuser", global_name: null } },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("leftuser");
+  });
+
+  test("404かつ/users/{id}も404(アカウント削除済み等)ならMapに含めない", async () => {
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 404 },
+      "/users/u1": { status: 404 },
     });
 
     const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);

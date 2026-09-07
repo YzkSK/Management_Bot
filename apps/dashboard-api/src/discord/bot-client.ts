@@ -39,17 +39,33 @@ const guildMemberWithUserSchema = z.object({
   }),
 });
 
+const userSchema = z.object({
+  username: z.string(),
+  global_name: z.string().nullable().optional(),
+});
+
+/** 429リトライの上限回数。Discordのグローバルレート制限は短時間で解消するため、上限到達時はエラーとして扱う。 */
+const MAX_RATE_LIMIT_RETRIES = 3;
+
 async function discordGet<T>(botToken: string, path: string, schema: z.ZodType<T>): Promise<T | "not_found"> {
-  const response = await fetch(`${DISCORD_API_BASE}${path}`, {
-    headers: { Authorization: `Bot ${botToken}` },
-  });
-  if (response.status === 403 || response.status === 404) {
-    return "not_found";
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${DISCORD_API_BASE}${path}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    if (response.status === 403 || response.status === 404) {
+      return "not_found";
+    }
+    if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+      const retryAfterSeconds = Number(response.headers.get("Retry-After"));
+      const delayMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 1000;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      continue;
+    }
+    if (!response.ok) {
+      throw new Error(`Discord API request failed (${path}): ${response.status}`);
+    }
+    return schema.parse(await response.json());
   }
-  if (!response.ok) {
-    throw new Error(`Discord API request failed (${path}): ${response.status}`);
-  }
-  return schema.parse(await response.json());
 }
 
 /**
@@ -164,9 +180,10 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
 /**
  * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
  * 解決する。並列にfetchするが、userIds件数はダッシュボードの1ページ(最大100件)内のユニークID数程度に
- * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない)。
- * 脱退済み等で404の場合や、個別リクエストが失敗(429/5xx等)した場合もMapに含めない
- * (呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
+ * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない。429自体はdiscordGet共通でリトライする)。
+ * guild memberが404(脱退済み等)の場合は`/users/{id}`にフォールバックし、ニックネームなしでglobal_name/usernameを解決する
+ * (issue #165)。個別リクエストが失敗(5xx等)した場合や、脱退済みかつユーザー自体も404(アカウント削除済み等)の場合は
+ * Mapに含めない(呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
  */
 export async function fetchGuildMemberNames(
   botToken: string,
@@ -183,7 +200,14 @@ export async function fetchGuildMemberNames(
         console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
         return "not_found" as const;
       });
-      if (member === "not_found") return undefined;
+      if (member === "not_found") {
+        const user = await discordGet(botToken, `/users/${userId}`, userSchema).catch((error: unknown) => {
+          console.error(`Failed to fetch user ${userId}`, error);
+          return "not_found" as const;
+        });
+        if (user === "not_found") return undefined;
+        return [userId, user.global_name || user.username] as const;
+      }
       const name = member.nick || member.user.global_name || member.user.username;
       return [userId, name] as const;
     }),
