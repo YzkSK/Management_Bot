@@ -192,19 +192,21 @@ export async function fetchGuildMemberNames(
 ): Promise<Map<string, string>> {
   const entries = await Promise.all(
     userIds.map(async (userId) => {
-      const member = await discordGet(
-        botToken,
-        `/guilds/${guildId}/members/${userId}`,
-        guildMemberWithUserSchema,
-      ).catch((error: unknown) => {
+      let member: z.infer<typeof guildMemberWithUserSchema> | "not_found";
+      try {
+        member = await discordGet(botToken, `/guilds/${guildId}/members/${userId}`, guildMemberWithUserSchema);
+      } catch (error) {
         console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
-        return "not_found" as const;
-      });
+        return undefined;
+      }
       if (member === "not_found") {
-        const user = await discordGet(botToken, `/users/${userId}`, userSchema).catch((error: unknown) => {
+        let user: z.infer<typeof userSchema> | "not_found";
+        try {
+          user = await discordGet(botToken, `/users/${userId}`, userSchema);
+        } catch (error) {
           console.error(`Failed to fetch user ${userId}`, error);
-          return "not_found" as const;
-        });
+          return undefined;
+        }
         if (user === "not_found") return undefined;
         return [userId, user.global_name || user.username] as const;
       }
