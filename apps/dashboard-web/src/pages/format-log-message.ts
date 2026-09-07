@@ -1,4 +1,4 @@
-import type { LogEntry } from "@management-bot/shared";
+import type { LogEntry, VoiceStateFlagName } from "@management-bot/shared";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
@@ -34,6 +34,17 @@ const ACTION_LABELS: Record<string, string> = {
   cancel: "中止",
   resolve: "解決",
 };
+
+/** voice: action=updateのchangesキー(selfMute等)を日本語の状態変化表現に変換する。selfMute/selfDeaf/streamingは本人の操作、serverMute/serverDeafはモデレーターによる操作。 */
+const VOICE_FLAG_LABELS = {
+  selfMute: { on: "ミュートしました", off: "ミュートを解除しました" },
+  selfDeaf: { on: "スピーカーミュートしました", off: "スピーカーミュートを解除しました" },
+  serverMute: { on: "サーバーミュートしました", off: "サーバーミュートを解除しました" },
+  serverDeaf: { on: "サーバースピーカーミュートしました", off: "サーバースピーカーミュートを解除しました" },
+  streaming: { on: "画面共有を開始しました", off: "画面共有を終了しました" },
+} satisfies Record<VoiceStateFlagName, { on: string; off: string }>;
+
+const VOICE_MODERATOR_FLAGS = new Set<VoiceStateFlagName>(["serverMute", "serverDeaf"]);
 
 interface NameResolvers {
   users: Record<string, string>;
@@ -80,10 +91,39 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       switch (entry.action) {
         case "join":
           return `${targetName} が ${channelName(entry.channelId, names)} に参加しました`;
-        case "leave":
-          return `${targetName} が ${channelName(entry.channelId, names)} から退出しました`;
-        case "move":
-          return `${targetName} が ${channelName(entry.previousChannelId, names)} から ${channelName(entry.channelId, names)} に移動しました`;
+        case "leave": {
+          const channel = channelName(entry.channelId, names);
+          const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
+          return hasExecutor
+            ? `${executorName} が ${targetName} を ${channel} から切断させました`
+            : `${targetName} が ${channel} から退出しました`;
+        }
+        case "move": {
+          const from = channelName(entry.previousChannelId, names);
+          const to = channelName(entry.channelId, names);
+          const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
+          return hasExecutor
+            ? `${executorName} が ${targetName} を ${from} から ${to} に移動させました`
+            : `${targetName} が ${from} から ${to} に移動しました`;
+        }
+        case "update": {
+          const changeEntries = Object.entries(entry.changes) as [VoiceStateFlagName, { after: boolean }][];
+          const describe = (items: typeof changeEntries) =>
+            items.map(([flag, { after }]) => (after ? VOICE_FLAG_LABELS[flag].on : VOICE_FLAG_LABELS[flag].off)).join("、");
+          // serverMute/serverDeaf(モデレーター操作)とそれ以外(本人操作)は主語が異なるため文を分ける。
+          // 1回のupdateに両方が混在しても、モデレーター操作のみをexecutorName主語にする(codexレビュー指摘)。
+          const moderatorEntries = changeEntries.filter(([flag]) => VOICE_MODERATOR_FLAGS.has(flag));
+          const selfEntries = changeEntries.filter(([flag]) => !VOICE_MODERATOR_FLAGS.has(flag));
+          const sentences = [
+            moderatorEntries.length > 0 && entry.executorId
+              ? `${executorName} が ${targetName} を${describe(moderatorEntries)}`
+              : moderatorEntries.length > 0
+                ? `${targetName} が${describe(moderatorEntries)}`
+                : null,
+            selfEntries.length > 0 ? `${targetName} が${describe(selfEntries)}` : null,
+          ].filter((s): s is string => s !== null);
+          return sentences.join("、");
+        }
       }
       break;
     }
@@ -151,26 +191,33 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "thread": {
+      // threadNameはログ作成時点のスナップショット(常に存在)を優先し、
+      // 移行前の既存ログ(threadName未設定)のみDiscord REST APIの名前解決にフォールバックする。
+      const threadLabel = entry.threadName ? `#${entry.threadName}` : channelName(entry.threadId, names);
       switch (entry.action) {
         case "create":
-          return `${executorName} がスレッドを作成しました`;
+          return `${executorName} が ${threadLabel} を作成しました`;
         case "update":
-          return `${executorName} がスレッドを更新しました`;
+          return `${executorName} が ${threadLabel} を更新しました`;
         case "delete":
-          return `${executorName} がスレッドを削除しました`;
+          return `${executorName} が ${threadLabel} を削除しました`;
         case "archive":
-          return `${executorName} がスレッドをアーカイブしました`;
+          return `${executorName} が ${threadLabel} をアーカイブしました`;
         case "unarchive":
-          return `${executorName} がスレッドのアーカイブを解除しました`;
+          return `${executorName} が ${threadLabel} のアーカイブを解除しました`;
         case "memberAdd": {
-          if (!entry.userId) return `${executorName} がスレッドにメンバーを追加しました`;
+          if (!entry.userId) return `${executorName} が ${threadLabel} にメンバーを追加しました`;
           const targetName = userName(entry.userId, names);
-          return entry.executorId ? `${executorName} が ${targetName} をスレッドに追加しました` : `${targetName} がスレッドに参加しました`;
+          return entry.executorId
+            ? `${executorName} が ${targetName} を ${threadLabel} に追加しました`
+            : `${targetName} が ${threadLabel} に参加しました`;
         }
         case "memberRemove": {
-          if (!entry.userId) return `${executorName} がスレッドからメンバーを削除しました`;
+          if (!entry.userId) return `${executorName} が ${threadLabel} からメンバーを削除しました`;
           const targetName = userName(entry.userId, names);
-          return entry.executorId ? `${executorName} が ${targetName} をスレッドから削除しました` : `${targetName} がスレッドから退出しました`;
+          return entry.executorId
+            ? `${executorName} が ${targetName} を ${threadLabel} から削除しました`
+            : `${targetName} が ${threadLabel} から退出しました`;
         }
       }
       break;

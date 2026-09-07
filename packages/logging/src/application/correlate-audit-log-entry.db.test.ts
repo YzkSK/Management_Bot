@@ -71,6 +71,37 @@ async function insertMemberLogEntry(userId: string, action: string, createdAt: D
   return id;
 }
 
+/**
+ * action=moveの場合はvoiceLogEntrySchema上previousChannelIdが必須、action=updateの場合はchangesが
+ * 必須のため、overridesで指定する。
+ */
+async function insertVoiceLogEntry(
+  userId: string,
+  channelId: string,
+  action: string,
+  createdAt: Date,
+  overrides: { previousChannelId?: string; changes?: Record<string, { before: boolean; after: boolean }> } = {},
+): Promise<string> {
+  const id = randomUUID();
+  await db.insert(logEntries).values({
+    id,
+    guildId,
+    category: "voice",
+    payload: {
+      category: "voice",
+      guildId,
+      createdAt: createdAt.toISOString(),
+      userId,
+      channelId,
+      action,
+      ...(overrides.previousChannelId ? { previousChannelId: overrides.previousChannelId } : {}),
+      ...(overrides.changes ? { changes: overrides.changes } : {}),
+    },
+    createdAt,
+  });
+  return id;
+}
+
 async function insertRoleLogEntry(roleId: string, userId: string, action: string, createdAt: Date): Promise<string> {
   const id = randomUUID();
   await db.insert(logEntries).values({
@@ -261,6 +292,219 @@ describe("correlateAuditLogEntry (実DB)", () => {
 
     const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
     expect(row?.payload).toMatchObject({ executorId: "mod-1", action: "kick" });
+  });
+
+  test("MemberDisconnectはcount=1の場合のみvoiceのleave行に相関する", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c1", "leave", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberDisconnect",
+      executorId: "mod-1",
+      targetId: null,
+      createdAt: "2026-08-31T00:00:05.000Z",
+      voiceDisconnectOrMove: { count: 1 },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberDisconnectはcount!==1の場合は相関しない(複数人同時切断で対象を特定できないため)", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c1", "leave", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberDisconnect",
+      executorId: "mod-1",
+      targetId: null,
+      createdAt: "2026-08-31T00:00:05.000Z",
+      voiceDisconnectOrMove: { count: 2 },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("MemberDisconnectはcount=1でも同時間窓に候補が2件あれば誤相関を避けるためどちらにも相関しない", async () => {
+    const logId1 = await insertVoiceLogEntry("u1", "c1", "leave", new Date("2026-08-31T00:00:00.000Z"));
+    const logId2 = await insertVoiceLogEntry("u2", "c1", "leave", new Date("2026-08-31T00:00:01.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberDisconnect",
+      executorId: "mod-1",
+      targetId: null,
+      createdAt: "2026-08-31T00:00:05.000Z",
+      voiceDisconnectOrMove: { count: 1 },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row1] = await db.select().from(logEntries).where(eq(logEntries.id, logId1));
+    const [row2] = await db.select().from(logEntries).where(eq(logEntries.id, logId2));
+    expect(row1?.payload).not.toHaveProperty("executorId");
+    expect(row2?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("MemberMoveはcount=1かつ移動先channelIdが一致するvoiceのmove行に相関する", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c2", "move", new Date("2026-08-31T00:00:00.000Z"), { previousChannelId: "c1" });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberMove",
+      executorId: "mod-1",
+      targetId: null,
+      createdAt: "2026-08-31T00:00:05.000Z",
+      voiceDisconnectOrMove: { count: 1, moveChannelId: "c2" },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberUpdateのmute変更はuserId一致するvoiceのupdate(serverMuteを含むchanges)行に相関する", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c1", "update", new Date("2026-08-31T00:00:00.000Z"), {
+      changes: { serverMute: { before: false, after: true } },
+    });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { mute: true, hasOtherChanges: false },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberUpdateのdeaf変更はserverDeafを含むchanges行に相関する", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c1", "update", new Date("2026-08-31T00:00:00.000Z"), {
+      changes: { serverDeaf: { before: false, after: true } },
+    });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { deaf: true, hasOtherChanges: false },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberUpdateはuserIdが一致しないvoice update行には相関しない", async () => {
+    const logId = await insertVoiceLogEntry("u2", "c1", "update", new Date("2026-08-31T00:00:00.000Z"), {
+      changes: { serverMute: { before: false, after: true } },
+    });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { mute: true, hasOtherChanges: false },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("MemberUpdateはmute解除(false)の監査ログの場合、逆方向(after:true)のvoice update行には相関しない(誤相関防止)", async () => {
+    const logId = await insertVoiceLogEntry("u1", "c1", "update", new Date("2026-08-31T00:00:00.000Z"), {
+      changes: { serverMute: { before: false, after: true } },
+    });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { mute: false, hasOtherChanges: false },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("MemberUpdateはnicknameChange等mute/deaf以外の変更のみの場合は既存のmemberルールに沿って相関する(voice側は対象外)", async () => {
+    const memberLogId = await insertMemberLogEntry("u1", "nicknameChange", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, memberLogId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1" });
+  });
+
+  test("MemberUpdateがmuteのみ(hasOtherChanges=false)の場合、同時刻のnicknameChange行には誤相関しない", async () => {
+    const memberLogId = await insertMemberLogEntry("u1", "nicknameChange", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { mute: true, hasOtherChanges: false },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, memberLogId));
+    expect(row?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("MemberUpdateがmute+nickname同時変更(hasOtherChanges=true)の場合、voiceとmember両方に相関する", async () => {
+    const voiceLogId = await insertVoiceLogEntry("u1", "c1", "update", new Date("2026-08-31T00:00:00.000Z"), {
+      changes: { serverMute: { before: false, after: true } },
+    });
+    const memberLogId = await insertMemberLogEntry("u1", "nicknameChange", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberUpdateVoiceStateChanges: { mute: true, hasOtherChanges: true },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [voiceRow] = await db.select().from(logEntries).where(eq(logEntries.id, voiceLogId));
+    const [memberRow] = await db.select().from(logEntries).where(eq(logEntries.id, memberLogId));
+    expect(voiceRow?.payload).toMatchObject({ executorId: "mod-1" });
+    expect(memberRow?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
   test("ThreadUpdateはarchiveアクションの行にも相関する(候補action群のいずれかに一致すればよい)", async () => {

@@ -23,6 +23,8 @@ const guildChannelSchema = z.object({
   permission_overwrites: z.array(overwriteSchema).default([]),
 });
 
+const activeThreadsSchema = z.object({ threads: z.array(guildChannelSchema) });
+
 const guildRoleSchema = z.object({ id: z.string(), permissions: bigintString });
 
 const guildMemberSchema = z.object({ roles: z.array(z.string()) });
@@ -61,7 +63,10 @@ function getMe(botToken: string): Promise<z.infer<typeof meSchema> | "not_found"
   let cached = meCache.get(botToken);
   if (!cached) {
     cached = discordGet(botToken, "/users/@me", meSchema);
-    cached.catch(() => meCache.delete(botToken));
+    cached.catch((error: unknown) => {
+      console.error("Failed to fetch /users/@me", error);
+      meCache.delete(botToken);
+    });
     meCache.set(botToken, cached);
   }
   return cached;
@@ -102,20 +107,35 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
 }
 
 /**
- * guild直下の全チャンネル(種別・送信可否を問わない)のid/nameを返す。表示名解決専用
+ * guild直下の全チャンネル(種別・送信可否を問わない)とアクティブなスレッドのid/nameを返す。表示名解決専用
  * (issue #144: fetchGuildChannelsはテキスト送信可能チャンネルのみに絞るため、ボイスチャンネル等の
  * ログでチャンネル名が解決できずIDのまま表示されてしまう問題への対応)。
+ * スレッドは`/guilds/{id}/channels`に含まれないため`/guilds/{id}/threads/active`を別途取得する
+ * (issue #155: threadログで「スレッド」固定文言ではなくスレッド名を表示するため)。
+ * アーカイブ済みスレッドはこのエンドポイントに含まれず、IDのままフォールバック表示される。
  * guildが見つからない/Botが未参加(403/404)の場合は空配列を返す。
+ * チャンネル本体・スレッドいずれの取得失敗(5xx等)も表示名解決全体を巻き込まないよう、
+ * 空配列にdegradeする(issue #157: resolveDisplayNamesが一時的なDiscord API障害で500になる問題)。
  */
 export async function fetchAllGuildChannelNames(
   botToken: string,
   guildId: string,
 ): Promise<readonly ChannelOption[]> {
-  const channels = await discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema));
+  const [channels, activeThreads] = await Promise.all([
+    discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema)).catch((error: unknown) => {
+      console.error(`Failed to fetch channels for guild ${guildId}`, error);
+      return "not_found" as const;
+    }),
+    discordGet(botToken, `/guilds/${guildId}/threads/active`, activeThreadsSchema).catch((error: unknown) => {
+      console.error(`Failed to fetch active threads for guild ${guildId}`, error);
+      return "not_found" as const;
+    }),
+  ]);
   if (channels === "not_found") {
     return [];
   }
-  return channels.map((channel) => ({ id: channel.id, name: channel.name }));
+  const threads = activeThreads === "not_found" ? [] : activeThreads.threads;
+  return [...channels, ...threads].map((channel) => ({ id: channel.id, name: channel.name }));
 }
 
 /**
@@ -145,7 +165,8 @@ export async function fetchBotGuildPermissions(botToken: string, guildId: string
  * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
  * 解決する。並列にfetchするが、userIds件数はダッシュボードの1ページ(最大100件)内のユニークID数程度に
  * 収まる前提(ponytail: 大量呼び出しへのレート制限対策は現時点で行わない)。
- * 脱退済み等で404の場合はMapに含めない(呼び出し側でIDそのまま表示にフォールバックする)。
+ * 脱退済み等で404の場合や、個別リクエストが失敗(429/5xx等)した場合もMapに含めない
+ * (呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
  */
 export async function fetchGuildMemberNames(
   botToken: string,
@@ -158,7 +179,10 @@ export async function fetchGuildMemberNames(
         botToken,
         `/guilds/${guildId}/members/${userId}`,
         guildMemberWithUserSchema,
-      );
+      ).catch((error: unknown) => {
+        console.error(`Failed to fetch guild member ${userId} in guild ${guildId}`, error);
+        return "not_found" as const;
+      });
       if (member === "not_found") return undefined;
       const name = member.nick || member.user.global_name || member.user.username;
       return [userId, name] as const;

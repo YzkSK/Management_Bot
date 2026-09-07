@@ -1,6 +1,7 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
 import {
+  fetchThreadStarterContent,
   registerThreadHandlers,
   toThreadCreateLogEntry,
   toThreadDeleteLogEntry,
@@ -8,8 +9,10 @@ import {
   toThreadUpdateLogEntry,
 } from "./thread.js";
 
-function fakeThread(overrides: Partial<{ id: string; guildId: string; parentId: string | null; archived: boolean | null }> = {}) {
-  return { id: "t1", guildId: "g1", parentId: "c1", archived: false, ...overrides } as never;
+function fakeThread(
+  overrides: Partial<{ id: string; guildId: string; parentId: string | null; archived: boolean | null; name: string }> = {},
+) {
+  return { id: "t1", guildId: "g1", parentId: "c1", archived: false, name: "質問スレ", ...overrides } as never;
 }
 
 function fakeCollection(ids: string[]) {
@@ -23,6 +26,18 @@ describe("thread category mappers", () => {
 
   test("create: 親チャンネル不明ならundefined", () => {
     expect(toThreadCreateLogEntry(fakeThread({ parentId: null }))).toBeUndefined();
+  });
+
+  test("create: contentを渡すとエントリに含まれる(フォーラム投稿のスターターメッセージ本文)", () => {
+    expect(toThreadCreateLogEntry(fakeThread(), "質問内容です")?.content).toBe("質問内容です");
+  });
+
+  test("create: contentを渡さなければundefined(通常スレッド)", () => {
+    expect(toThreadCreateLogEntry(fakeThread())?.content).toBeUndefined();
+  });
+
+  test("create: threadNameにイベント発生時点のスレッド名を記録する(アーカイブ後もAPIに依存せず表示するため)", () => {
+    expect(toThreadCreateLogEntry(fakeThread({ name: "雑談" }))?.threadName).toBe("雑談");
   });
 
   test("delete", () => {
@@ -78,5 +93,45 @@ describe("registerThreadHandlers", () => {
     expect(on.mock.calls.map((call) => call[0])).toEqual(
       expect.arrayContaining(["threadCreate", "threadDelete", "threadUpdate", "threadMembersUpdate"]),
     );
+  });
+});
+
+describe("fetchThreadStarterContent", () => {
+  test("フォーラム投稿(isThreadOnlyな親)はスターターメッセージ本文を返す", async () => {
+    const fetchStarterMessage = mock(async () => ({ content: "投稿本文です" }));
+    const thread = { ...fakeThread(), fetchStarterMessage, parent: { isThreadOnly: () => true } } as never;
+
+    expect(await fetchThreadStarterContent(thread)).toBe("投稿本文です");
+    expect(fetchStarterMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("通常スレッド(isThreadOnlyでない親)はスターターメッセージを取得せずundefined", async () => {
+    const fetchStarterMessage = mock(async () => ({ content: "元メッセージ" }));
+    const thread = { ...fakeThread(), fetchStarterMessage, parent: { isThreadOnly: () => false } } as never;
+
+    expect(await fetchThreadStarterContent(thread)).toBeUndefined();
+    expect(fetchStarterMessage).not.toHaveBeenCalled();
+  });
+
+  test("親が未解決(parent: null)ならundefined", async () => {
+    const thread = { ...fakeThread(), parent: null } as never;
+
+    expect(await fetchThreadStarterContent(thread)).toBeUndefined();
+  });
+
+  test("フォーラム投稿でも取得失敗(削除済み等)はundefined(ベストエフォート)、失敗はログに残す", async () => {
+    const error = new Error("not found");
+    const fetchStarterMessage = mock(async () => {
+      throw error;
+    });
+    const thread = { ...fakeThread({ id: "t1" }), fetchStarterMessage, parent: { isThreadOnly: () => true } } as never;
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(await fetchThreadStarterContent(thread)).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith("Failed to fetch starter message for thread t1", error);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

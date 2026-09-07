@@ -34,6 +34,43 @@ function extractMessageDeleteChannelId(entry: GuildAuditLogsEntry): string | und
 }
 
 /**
+ * MemberUpdateのchangesのうち、サーバーミュート(mute)・サーバースピーカーミュート(deaf)の
+ * 変更後の値を取得する。Discord APIのAuditLogChangeKeyはGuildMemberのフィールド名(mute/deaf)を
+ * そのまま使うため、shared側のVOICE_STATE_FLAG_NAMES(serverMute/serverDeaf)とは名前が異なる
+ * (呼び出し元のcorrelate-audit-log-entry.ts側でserverMute/serverDeafへ変換する)。
+ * MemberUpdateはニックネーム変更・タイムアウト等も含む共通actionのため、mute/deafどちらも
+ * 変更されていない場合はundefinedを返す(相関自体をスキップさせる)。
+ */
+function extractMemberUpdateVoiceStateChanges(
+  entry: GuildAuditLogsEntry,
+): { mute?: boolean; deaf?: boolean; hasOtherChanges: boolean } | undefined {
+  if (entry.action !== AuditLogEvent.MemberUpdate) return undefined;
+  let mute: boolean | undefined;
+  let deaf: boolean | undefined;
+  let hasOtherChanges = false;
+  for (const change of entry.changes) {
+    if (change.key === "mute" && typeof change.new === "boolean") mute = change.new;
+    else if (change.key === "deaf" && typeof change.new === "boolean") deaf = change.new;
+    else hasOtherChanges = true;
+  }
+  return mute !== undefined || deaf !== undefined ? { mute, deaf, hasOtherChanges } : undefined;
+}
+
+/**
+ * MemberDisconnect/MemberMoveのextra.countとextra.channel.id(MemberMoveの移動先)を取得する。
+ * それ以外のactionではundefined。Discord APIのaudit log optional infoは仕様上欠損し得るため、
+ * 期待した形でない場合もエラーにせずundefinedを返す。
+ */
+function extractVoiceDisconnectOrMove(entry: GuildAuditLogsEntry): { count: number; moveChannelId?: string } | undefined {
+  if (entry.action !== AuditLogEvent.MemberDisconnect && entry.action !== AuditLogEvent.MemberMove) return undefined;
+  const extra = entry.extra as { count?: unknown; channel?: { id?: unknown } } | null | undefined;
+  const count = extra?.count;
+  if (typeof count !== "number") return undefined;
+  const channelId = extra?.channel?.id;
+  return { count, moveChannelId: typeof channelId === "string" ? channelId : undefined };
+}
+
+/**
  * InviteCreate/InviteDeleteはDiscord APIの仕様上target_idが常にnullになる
  * (招待はスナウフレークIDを持たずコード文字列のため)。discord.js(確認時点: v14.16.x)は
  * この場合entry.targetにchangesから合成したInvite風オブジェクト(.codeを持つ)を積むため、
@@ -59,6 +96,8 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
     createdAt: entry.createdAt.toISOString(),
     roleChanges: extractRoleChanges(entry),
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),
+    voiceDisconnectOrMove: extractVoiceDisconnectOrMove(entry),
+    memberUpdateVoiceStateChanges: extractMemberUpdateVoiceStateChanges(entry),
   };
 }
 

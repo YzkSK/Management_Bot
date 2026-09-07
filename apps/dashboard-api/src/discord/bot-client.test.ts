@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
@@ -134,6 +134,7 @@ describe("fetchAllGuildChannelNames", () => {
           { id: "c2", name: "voice", type: 2, permission_overwrites: [] },
         ],
       },
+      "/guilds/g1/threads/active": { status: 200, body: { threads: [] } },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -144,9 +145,30 @@ describe("fetchAllGuildChannelNames", () => {
     ]);
   });
 
+  test("アクティブスレッドも含める(スレッド名表示用)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [{ id: "c1", name: "general", type: 0, permission_overwrites: [] }],
+      },
+      "/guilds/g1/threads/active": {
+        status: 200,
+        body: { threads: [{ id: "t1", name: "質問スレ", type: 11, permission_overwrites: [] }] },
+      },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([
+      { id: "c1", name: "general" },
+      { id: "t1", name: "質問スレ" },
+    ]);
+  });
+
   test("guild不明(404)は空配列を返す", async () => {
     mockFetch({
       "/guilds/g1/channels": { status: 404 },
+      "/guilds/g1/threads/active": { status: 404 },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -157,6 +179,7 @@ describe("fetchAllGuildChannelNames", () => {
   test("Bot未参加(403)は空配列を返す", async () => {
     mockFetch({
       "/guilds/g1/channels": { status: 403 },
+      "/guilds/g1/threads/active": { status: 403 },
     });
 
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
@@ -164,12 +187,35 @@ describe("fetchAllGuildChannelNames", () => {
     expect(result).toEqual([]);
   });
 
-  test("5xxはErrorを投げる", async () => {
+  test("channelsが5xxでも空配列にdegradeする(issue #157: 一時的なAPI障害でresolveDisplayNames全体を500にしない)", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     mockFetch({
       "/guilds/g1/channels": { status: 500 },
+      "/guilds/g1/threads/active": { status: 200, body: { threads: [] } },
     });
 
-    await expect(fetchAllGuildChannelNames("test-bot-token", "g1")).rejects.toThrow();
+    try {
+      const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+      expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  test("threads/activeが5xxでもchannelsが成功していればチャンネル名は返す(スレッド取得失敗は巻き込まない)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [{ id: "c1", name: "general", type: 0, permission_overwrites: [] }],
+      },
+      "/guilds/g1/threads/active": { status: 500 },
+    });
+
+    const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
+
+    expect(result).toEqual([{ id: "c1", name: "general" }]);
   });
 });
 
@@ -344,5 +390,26 @@ describe("fetchGuildMemberNames", () => {
 
     expect(result.get("u1")).toBe("user-u1");
     expect(result.get("u2")).toBe("user-u2");
+  });
+
+  test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    mockFetch({
+      "/guilds/g1/members/u1": { status: 500 },
+      "/guilds/g1/members/u2": {
+        status: 200,
+        body: { nick: null, user: { username: "user-u2", global_name: null } },
+      },
+    });
+
+    try {
+      const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1", "u2"]);
+
+      expect(result.has("u1")).toBe(false);
+      expect(result.get("u2")).toBe("user-u2");
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

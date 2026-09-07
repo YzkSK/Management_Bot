@@ -223,6 +223,33 @@ describe("logEntrySchema", () => {
     expect(result.success).toBe(true);
   });
 
+  test("voice: action=updateでchangesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.voice,
+      action: "update",
+      changes: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("voice: action=updateでselfMute/streamingのbefore/afterがある場合は成功する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.voice,
+      action: "update",
+      changes: { selfMute: { before: false, after: true }, streaming: { before: false, after: true } },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("voice: action=updateでchangesに未知のフラグ名が含まれる場合は失敗する", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.voice,
+      action: "update",
+      changes: { unknownFlag: { before: false, after: true } },
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("channel: changesが空オブジェクトの場合は失敗する(差分なしのupdateを表現させない)", () => {
     const result = logEntrySchema.safeParse({
       ...validByCategory.channel,

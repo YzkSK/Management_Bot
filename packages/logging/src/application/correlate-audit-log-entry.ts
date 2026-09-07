@@ -23,6 +23,22 @@ export interface AuditLogEntryInfo {
   roleChanges?: { added: string[]; removed: string[] };
   /** MessageDelete限定。監査ログのextra.channel.idから取得する(targetId=投稿者IDのみでは対象チャンネルを特定できないため)。 */
   messageDeleteChannelId?: string;
+  /**
+   * MemberDisconnect/MemberMove限定。Discord API仕様上target_idが常にnullで、
+   * 影響を受けた人数(extra.count)しか分からず対象ユーザーを特定できない。
+   * count===1の場合のみベストエフォートで相関する(誤相関の可能性は残るが、
+   * 複数人同時操作時は相関しないことでリスクを抑える)。
+   */
+  voiceDisconnectOrMove?: { count: number; moveChannelId?: string };
+  /**
+   * MemberUpdate限定。changesにmute(サーバーミュート)/deaf(サーバースピーカーミュート)が
+   * 含まれる場合のみ設定する(nicknameChange/timeout等、他の変更のみの場合はundefined)。
+   * targetId(=対象ユーザーID)と組み合わせてvoice update行(serverMute/serverDeaf)に相関する。
+   * hasOtherChangesは同じ監査ログにmute/deaf以外の変更(nickname等)も含まれるかどうか。
+   * falseの場合、既存のmember側ルール(nicknameChange/timeout等)への相関はスキップする
+   * (mute/deafのみの監査ログを無関係なmemberログの実行者として誤帰属させないため)。
+   */
+  memberUpdateVoiceStateChanges?: { mute?: boolean; deaf?: boolean; hasOtherChanges: boolean };
 }
 
 interface CorrelationRule {
@@ -129,6 +145,12 @@ interface MatchCriteria {
   windowStart: Date;
   windowEnd: Date;
   extraConditions: SQL[];
+  /**
+   * trueの場合、時間窓・条件に一致する未相関行が複数あれば相関せずundefinedを返す
+   * (「最も近い1件」を選ばない)。対象ユーザーIDで絞り込めないMemberDisconnect/MemberMove用。
+   * 対象IDで一意に絞れる通常のルールでは、同時刻に無関係な複数行が並ぶことは想定しないためfalse(デフォルト)のままでよい。
+   */
+  requireUnique?: boolean;
 }
 
 interface CorrelationJob {
@@ -157,7 +179,7 @@ function actionIn(candidates: readonly string[]): SQL {
  * リトライで、同じ行を選び直さないために使う(coderabbitレビュー指摘)。
  */
 async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: readonly string[]): Promise<{ id: string } | undefined> {
-  const [match] = await db
+  const matches = await db
     .select({ id: logEntries.id })
     .from(logEntries)
     .where(
@@ -172,8 +194,9 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: r
       ),
     )
     .orderBy(sql`abs(extract(epoch from (${logEntries.createdAt} - ${criteria.auditAt.toISOString()}::timestamptz)))`)
-    .limit(1);
-  return match;
+    .limit(criteria.requireUnique ? 2 : 1);
+  if (criteria.requireUnique) return matches.length === 1 ? matches[0] : undefined;
+  return matches[0];
 }
 
 /**
@@ -330,6 +353,77 @@ export async function correlateAuditLogEntry(
       retryDelayMs,
     );
     return;
+  }
+
+  if (entry.action === "MemberDisconnect" || entry.action === "MemberMove") {
+    if (entry.voiceDisconnectOrMove?.count !== 1) return;
+    const logAction = entry.action === "MemberDisconnect" ? "leave" : "move";
+    const moveChannelId = entry.voiceDisconnectOrMove.moveChannelId;
+    if (logAction === "move" && !moveChannelId) return;
+    await correlateJobs(
+      deps.db,
+      entry.executorId,
+      [
+        {
+          criteria: {
+            guildId: entry.guildId,
+            category: "voice",
+            auditAt,
+            windowStart,
+            windowEnd,
+            extraConditions: [
+              sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+              ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
+            ],
+            /**
+             * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
+             * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
+             */
+            requireUnique: true,
+          },
+        },
+      ],
+      retryDelayMs,
+    );
+    return;
+  }
+
+  if (entry.action === "MemberUpdate" && entry.targetId && entry.memberUpdateVoiceStateChanges) {
+    const { mute, deaf } = entry.memberUpdateVoiceStateChanges;
+    /**
+     * キーの存在だけでなくafter値まで一致させる(codexレビュー指摘)。存在チェックのみだと、
+     * 例えばmute解除(mute: false)の監査ログが同時間窓のミュート付与(serverMute after: true)行を
+     * 誤って拾い得る。mute/deafは別々のvoice update行(discord.jsのvoiceStateUpdateイベントが
+     * 分かれて発火し得る)を指す可能性があるため、フラグごとに個別ジョブにする。
+     */
+    const flagJob = (flag: "serverMute" | "serverDeaf", after: boolean): CorrelationJob => ({
+      criteria: {
+        guildId: entry.guildId,
+        category: "voice",
+        auditAt,
+        windowStart,
+        windowEnd,
+        extraConditions: [
+          sql`${logEntries.payload} ->> 'action' = 'update'`,
+          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+          sql`${logEntries.payload} -> 'changes' -> ${flag} ->> 'after' = ${String(after)}`,
+        ],
+      },
+    });
+    const jobs = [
+      ...(mute !== undefined ? [flagJob("serverMute", mute)] : []),
+      ...(deaf !== undefined ? [flagJob("serverDeaf", deaf)] : []),
+    ];
+    if (jobs.length > 0) {
+      await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+    }
+    /**
+     * MemberUpdateの1回の監査ログがmute/deaf「のみ」を表す場合、通常のmember側ルール
+     * (nicknameChange/timeout等)への相関は誤帰属になるためスキップする(codexレビュー指摘)。
+     * mute/deafと同時に他フィールドも変わった場合はhasOtherChangesがtrueになり、続けて
+     * 下のCORRELATION_RULES処理でmember側にも相関する。
+     */
+    if (!entry.memberUpdateVoiceStateChanges.hasOtherChanges) return;
   }
 
   const rule = CORRELATION_RULES[entry.action];

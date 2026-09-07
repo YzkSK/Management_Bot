@@ -24,6 +24,15 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  * ログ送信メッセージがピン留めされて無限連鎖する経路もないため、自Bot投稿の除外は不要
  * (むしろBotの告知等を管理者がピン留めした操作を記録できなくなってしまう、codexレビュー指摘)。
  */
+/**
+ * フォーラム/メディアチャンネルの新規投稿はスレッド自体がスターターメッセージを兼ね、
+ * そのメッセージIDはスレッドID(channelId)と一致する。既存チャンネルのメッセージを元に
+ * 作成したスレッドの最初のメッセージは元のメッセージIDのままなので一致しない。
+ */
+function isThreadStarterMessage(message: AnyMessage): boolean {
+  return message.id === message.channelId;
+}
+
 function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
@@ -42,6 +51,8 @@ export function toMessageCreateLogEntry(
   // ユーザーによる投稿ではないため対象外にする。ThreadCreatedはthreadCreateログと重複し、
   // ピン通知はtoMessagePinLogEntryで別途action:"pin"として記録される。
   if (message.system) return undefined;
+  // スレッドのスターターメッセージ(フォーラム/メディア投稿)はthreadCreateログと重複するため対象外。
+  if (isThreadStarterMessage(message)) return undefined;
   const base = baseFields(message, botUserId);
   if (!base) return undefined;
   return {

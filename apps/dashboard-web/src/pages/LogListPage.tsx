@@ -109,7 +109,9 @@ export function LogListPage() {
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) => {
                 const direct = Object.entries(entry).flatMap(([key, value]) =>
-                  (key === "channelId" || key === "previousChannelId") && typeof value === "string" ? [value] : [],
+                  (key === "channelId" || key === "previousChannelId" || key === "threadId") && typeof value === "string"
+                    ? [value]
+                    : [],
                 );
                 const changes = "changes" in entry && entry.changes ? entry.changes : {};
                 const fromChanges = Object.entries(changes).flatMap(([field, change]) =>
@@ -279,7 +281,7 @@ export function LogListPage() {
                           </div>
                         )}
 
-                        {summary.changes !== null && (
+                        {summary.changes !== null && entry.category !== "voice" && (
                           <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
                             {Object.entries(summary.changes).map(([field, change]) => {
                               const permissionsDiff =

@@ -58,6 +58,10 @@ describe("toMessageCreateLogEntry", () => {
     expect(toMessageCreateLogEntry(fakeMessage({ system: false }), BOT_USER_ID)?.action).toBe("create");
   });
 
+  test("フォーラム投稿のスターターメッセージ(messageId===channelId)はundefinedを返す(threadCreateログと重複するため)", () => {
+    expect(toMessageCreateLogEntry(fakeMessage({ id: "t1", channelId: "t1" }), BOT_USER_ID)).toBeUndefined();
+  });
+
   test("DMメッセージ(guildIdなし)はundefinedを返す", () => {
     expect(toMessageCreateLogEntry(fakeMessage({ guildId: null }), BOT_USER_ID)).toBeUndefined();
   });

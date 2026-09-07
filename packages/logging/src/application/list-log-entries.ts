@@ -82,7 +82,7 @@ export async function listLogEntries(
  * VIEW_LOGSのみでは要約(誰が・いつ・何をしたか)のみ見える想定。
  */
 export function maskSensitiveFields(entry: LogEntry): LogEntry {
-  if (entry.category === "message" && entry.content !== undefined) {
+  if ((entry.category === "message" || entry.category === "thread") && entry.content !== undefined) {
     return { ...entry, content: undefined };
   }
   return entry;

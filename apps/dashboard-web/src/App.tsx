@@ -1,33 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
-import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { API_URL, trpc } from "./trpc.js";
+import { isUnauthorizedError } from "./is-unauthorized-error.js";
+import { trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-export function isUnauthorizedError(error: unknown): boolean {
-  return error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED";
-}
-
 export function App() {
   const me = useQuery(trpc.me.queryOptions());
-  const isUnauthorized = isUnauthorizedError(me.error);
-
-  useEffect(() => {
-    if (isUnauthorized) {
-      window.location.href = `${API_URL}/auth/login`;
-    }
-  }, [isUnauthorized]);
 
   if (me.isPending) {
     return <div className="p-4 text-sm">読み込み中...</div>;
   }
 
-  if (isUnauthorized) {
+  if (isUnauthorizedError(me.error)) {
     return <div className="p-4 text-sm">ログインへリダイレクト中...</div>;
   }
 
