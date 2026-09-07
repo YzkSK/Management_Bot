@@ -315,20 +315,36 @@ export function SettingsPage() {
               onPendingChange={setBulkChannelPending}
             />
             {displaySettingsQuery.data && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={!displaySettingsQuery.data.hideAuditLogCorrelation}
-                  disabled={displaySettingsMutation.isPending}
-                  onChange={(e) =>
-                    displaySettingsMutation.mutate({
-                      guildId,
-                      hideAuditLogCorrelation: !e.target.checked,
-                    })
-                  }
-                />
-                ログ一覧に「監査ログ相関」カテゴリを表示する
-              </label>
+              <>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!displaySettingsQuery.data.hideAuditLogCorrelation}
+                    disabled={displaySettingsMutation.isPending}
+                    onChange={(e) =>
+                      displaySettingsMutation.mutate({
+                        guildId,
+                        hideAuditLogCorrelation: !e.target.checked,
+                      })
+                    }
+                  />
+                  ログ一覧に「監査ログ相関」カテゴリを表示する
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!displaySettingsQuery.data.hideBotEvents}
+                    disabled={displaySettingsMutation.isPending}
+                    onChange={(e) =>
+                      displaySettingsMutation.mutate({
+                        guildId,
+                        hideBotEvents: !e.target.checked,
+                      })
+                    }
+                  />
+                  ログ一覧にBotによるイベントを表示する
+                </label>
+              </>
             )}
           </div>
 

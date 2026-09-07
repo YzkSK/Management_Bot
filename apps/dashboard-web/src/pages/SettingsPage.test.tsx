@@ -124,6 +124,7 @@ describe("SettingsPage", () => {
     ]);
     queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
       hideAuditLogCorrelation: true,
+      hideBotEvents: true,
     });
 
     const html = renderPage("g1", queryClient);
@@ -147,6 +148,7 @@ describe("SettingsPage", () => {
     ]);
     queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
       hideAuditLogCorrelation: false,
+      hideBotEvents: true,
     });
 
     const html = renderPage("g1", queryClient);
@@ -154,5 +156,29 @@ describe("SettingsPage", () => {
     const checkboxIndex = html.indexOf('type="checkbox"');
     const checkboxTagEnd = html.indexOf(">", checkboxIndex);
     expect(html.slice(checkboxIndex, checkboxTagEnd)).toContain("checked");
+  });
+
+  test("Botイベントを一覧に表示するチェックボックスが表示され、初期状態はオフ(非表示がデフォルト)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", retentionDays: 30 },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", channelId: "c1" },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
+      { id: "c1", name: "general" },
+    ]);
+    queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
+      hideAuditLogCorrelation: true,
+      hideBotEvents: true,
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("ログ一覧にBotによるイベントを表示する");
+    const checkboxes = html.split('type="checkbox"');
+    const secondCheckboxTag = checkboxes[1]?.slice(0, checkboxes[1].indexOf(">"));
+    expect(secondCheckboxTag).not.toContain("checked");
   });
 });
