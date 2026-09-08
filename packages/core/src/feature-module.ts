@@ -7,6 +7,12 @@ import type { DomainEventBus } from "./domain-events-bus.js";
 export interface FeatureModuleContext {
   client: BotClient;
   db: Db;
+  /**
+   * drizzleプール(db)とは別にLISTEN/NOTIFY用の生接続を張りたい機能向け。
+   * dashboard-api(別プロセス)でのDB変更をリアルタイムに検知する用途のみに使うこと
+   * (通常のクエリはdbを使う。packages/db listenForLogChannelSettingChanges参照)。
+   */
+  databaseUrl: string;
   /** 機能間連携用。他機能への直接importではなくdomain-events経由で疎結合にする(CLAUDE.md参照)。 */
   eventBus: DomainEventBus;
 }

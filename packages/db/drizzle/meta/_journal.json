@@ -92,6 +92,13 @@
       "when": 1788781851580,
       "tag": "0012_stiff_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788850513407,
+      "tag": "0013_log-channel-settings-notify-trigger",
+      "breakpoints": true
     }
   ]
 }

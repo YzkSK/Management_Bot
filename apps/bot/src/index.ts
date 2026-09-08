@@ -33,6 +33,7 @@ try {
   await syncFeatureMetadata(db);
   await client.registerFeatures(FEATURES, {
     db,
+    databaseUrl: env.DATABASE_URL,
     eventBusFor: (feature) => eventBuses.get(feature.key)!,
   });
 

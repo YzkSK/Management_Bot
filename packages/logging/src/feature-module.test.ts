@@ -16,7 +16,12 @@ describe("loggingFeatureModule", () => {
 
     await expect(
       Promise.resolve(
-        loggingFeatureModule.registerDiscordHandlers({ client, db: {} as Db, eventBus }),
+        loggingFeatureModule.registerDiscordHandlers({
+          client,
+          db: {} as Db,
+          databaseUrl: "postgres://invalid-test-host/db",
+          eventBus,
+        }),
       ),
     ).resolves.toBeUndefined();
   });

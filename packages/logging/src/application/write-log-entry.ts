@@ -12,7 +12,11 @@ export interface ChannelMessage {
 
 export type ChannelSender = (channelId: string, message: ChannelMessage) => Promise<void>;
 
-export type GetChannelId = (guildId: string, category: LogEntry["category"]) => Promise<string | null>;
+export interface GetChannelId {
+  (guildId: string, category: LogEntry["category"]): Promise<string | null>;
+  /** guild×categoryのキャッシュエントリを即座に破棄する。DB非依存(直接SELECT)実装では何もしない。 */
+  invalidate?(guildId: string, category: LogEntry["category"]): void;
+}
 
 export interface WriteLogEntryDeps {
   db: Db;
@@ -45,7 +49,10 @@ async function selectChannelId(db: Db, guildId: string, category: LogEntry["cate
  */
 export function createChannelSettingResolver(db: Db, ttlMs = 5_000): GetChannelId {
   const cache = createTtlCache<string | null>(ttlMs);
-  return (guildId, category) => cache(`${guildId}:${category}`, () => selectChannelId(db, guildId, category));
+  const resolver: GetChannelId = (guildId, category) =>
+    cache(`${guildId}:${category}`, () => selectChannelId(db, guildId, category));
+  resolver.invalidate = (guildId, category) => cache.invalidate(`${guildId}:${category}`);
+  return resolver;
 }
 
 function formatValue(value: unknown): string {

@@ -1,4 +1,6 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import { listenForLogChannelSettingChanges } from "@management-bot/db";
+import { LOG_CATEGORIES } from "@management-bot/shared";
 import { createChannelSettingResolver, handleModerationEvent } from "../application/index.js";
 import { registerMessageHandlers } from "./handlers/message.js";
 import { registerReactionHandlers } from "./handlers/reaction.js";
@@ -35,6 +37,18 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   // guild×categoryの出力先チャンネル設定は全ハンドラで共通のTTLキャッシュを共有する
   // (ハンドラごとに別インスタンスを作ると重複問い合わせが解消されないため、ここで1つだけ生成する)。
   const getChannelId = createChannelSettingResolver(ctx.db);
+  // dashboard-api(別プロセス)でのchannel設定変更をTTL満了前に反映するため、
+  // DBトリガー(migrations/0013)のpg_notifyをLISTENしてキャッシュを即時invalidateする。
+  // 購読自体の失敗はログ出力のみに留め、TTL経由の最終的な反映(createChannelSettingResolver
+  // のデフォルト5秒)にフォールバックさせる(bot起動をブロックしない)。
+  const channelSettingNotifications = listenForLogChannelSettingChanges(ctx.databaseUrl, ({ guildId, category }) => {
+    if (!(LOG_CATEGORIES as readonly string[]).includes(category)) return;
+    getChannelId.invalidate?.(guildId, category as (typeof LOG_CATEGORIES)[number]);
+  });
+  channelSettingNotifications.ready.catch((error: unknown) => {
+    console.error("Failed to listen for log_channel_settings changes (cache invalidation disabled)", error);
+  });
+
   await ctx.eventBus.subscribe(
     "moderation.action.recorded",
     handleModerationEvent({ db: ctx.db, sendToChannel, getChannelId }),

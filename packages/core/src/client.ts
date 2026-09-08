@@ -47,7 +47,7 @@ export class BotClient extends SapphireClient {
 
   async registerFeatures(
     features: readonly FeatureModule[],
-    deps: { db: Db; eventBusFor: (feature: FeatureModule) => DomainEventBus },
+    deps: { db: Db; databaseUrl: string; eventBusFor: (feature: FeatureModule) => DomainEventBus },
   ): Promise<void> {
     const seen = new Set<string>();
     for (const feature of features) {
@@ -59,7 +59,12 @@ export class BotClient extends SapphireClient {
 
     for (const feature of features) {
       try {
-        await feature.registerDiscordHandlers({ client: this, db: deps.db, eventBus: deps.eventBusFor(feature) });
+        await feature.registerDiscordHandlers({
+          client: this,
+          db: deps.db,
+          databaseUrl: deps.databaseUrl,
+          eventBus: deps.eventBusFor(feature),
+        });
       } catch (error) {
         throw new Error(`Failed to register feature "${feature.key}"`, { cause: error });
       }
