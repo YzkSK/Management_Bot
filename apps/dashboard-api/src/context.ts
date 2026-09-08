@@ -72,8 +72,10 @@ const guildMembershipCache = createTtlCache<GuildMembership | null>(GUILD_MEMBER
  * (=1 HTTPリクエスト=1 tRPCバッチ)ごとに新しいキャッシュを生成し、同一バッチ内のin-flight
  * 重複排除のみを行う(バッチをまたいでは共有しない)。
  */
-function createResolveEffectiveCapabilities(
+export function createResolveEffectiveCapabilities(
   db: Db,
+  resolve: (input: ResolveEffectiveCapabilitiesInput) => Promise<number> = (input) =>
+    resolveEffectiveCapabilities(db, input),
 ): (input: ResolveEffectiveCapabilitiesInput) => Promise<number> {
   const inFlight = new Map<string, Promise<number>>();
   return (input) => {
@@ -82,7 +84,12 @@ function createResolveEffectiveCapabilities(
     if (cached) {
       return cached;
     }
-    const value = resolveEffectiveCapabilities(db, input);
+    // 完了後(成功・失敗いずれも)はMapから外す。in-flightの重複排除のみが目的で、
+    // 完了済みの結果や例外を再利用する結果キャッシュにはしない(同一バッチ内の後続
+    // procedureが一時的なDBエラーを再試行できるようにするため)。
+    const value = resolve(input).finally(() => {
+      inFlight.delete(key);
+    });
     inFlight.set(key, value);
     return value;
   };
