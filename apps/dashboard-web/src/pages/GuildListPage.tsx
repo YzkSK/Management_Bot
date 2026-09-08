@@ -22,7 +22,7 @@ export function GuildListPage() {
   if (guildsQuery.data.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        管理できるサーバーが見つかりませんでした。Botがサーバーに導入されているか、管理者権限をお持ちかご確認ください。
+        表示できるサーバーが見つかりませんでした。Botがサーバーに導入されているかご確認ください。
       </p>
     );
   }
@@ -34,7 +34,17 @@ export function GuildListPage() {
         {guildsQuery.data.map((guild) => (
           <li key={guild.id}>
             <Button asChild variant="outline" className="w-full justify-start">
-              <Link to={`/guilds/${guild.id}/logs`}>{guild.name}</Link>
+              <Link to={`/guilds/${guild.id}/logs`}>
+                {guild.name}
+                {!guild.isManaged && (
+                  <span
+                    className="ml-auto text-xs text-muted-foreground"
+                    title="Discord上でオーナーまたは「サーバー管理」権限がないため、閲覧権限のある機能のみ利用できます。"
+                  >
+                    管理者権限がありません
+                  </span>
+                )}
+              </Link>
             </Button>
           </li>
         ))}

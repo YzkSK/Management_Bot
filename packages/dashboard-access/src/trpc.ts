@@ -36,6 +36,14 @@ export interface MemberPage {
 export interface ManagedGuild {
   id: string;
   name: string;
+  /**
+   * ログインユーザーがオーナーまたはDiscordのMANAGE_GUILD権限を持つか(issue #199)。
+   * ダッシュボード側のcapability(VIEW_LOGS等)は@everyoneにも既定付与されうるため、
+   * falseでも機能自体は利用できる場合がある。Dashboard UIでは「管理者権限がありません」
+   * 等の補助ラベル表示にのみ使い、リンクの選択不可化には使わないこと
+   * (閲覧可否は各procedure側のrequireCapabilityがFORBIDDENで最終的に強制する)。
+   */
+  isManaged: boolean;
 }
 
 export interface DashboardAccessContext {
@@ -44,7 +52,8 @@ export interface DashboardAccessContext {
   /** Bot招待/再認可URL生成に使うOAuth2クライアントID。dashboard-api側でenvから供給する。 */
   discordClientId: string;
   /**
-   * ログインユーザーが管理者権限(オーナーまたはMANAGE_GUILD)を持ち、かつbotが導入済みのguild一覧を返す。
+   * ログインユーザーが所属し、かつbotが導入済みのguild一覧を返す(issue #199)。
+   * 管理者権限(オーナーまたはMANAGE_GUILD)を持たないguildも`isManaged: false`で含まれる。
    * Dashboardのサーバー選択画面で使う。dashboard-api側でDiscord APIから供給する。
    */
   listMyGuilds: () => Promise<readonly ManagedGuild[]>;

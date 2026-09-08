@@ -45,13 +45,20 @@ describe("isManagedGuild", () => {
 });
 
 describe("listMyGuilds", () => {
-  test("bot導入済みかつ管理者権限を持つguildのみ返す", async () => {
+  test("bot導入済みのguildは管理者権限の有無を問わず返す(isManagedで区別)", async () => {
     const result = await listMyGuilds(db, [
       { id: "bot-installed-1", owner: true, permissions: "0" },
-      { id: "not-managed", owner: false, permissions: "0" },
+      { id: "bot-installed-2", owner: false, permissions: "0" },
+      { id: "not-installed", owner: false, permissions: "0" },
     ]);
 
-    expect(result).toEqual([{ id: "bot-installed-1", name: "bot導入済み1" }]);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { id: "bot-installed-1", name: "bot導入済み1", isManaged: true },
+        { id: "bot-installed-2", name: "bot導入済み2", isManaged: false },
+      ]),
+    );
+    expect(result).toHaveLength(2);
   });
 
   test("管理者権限を持っていてもbot未導入のguildは含めない", async () => {
@@ -60,8 +67,8 @@ describe("listMyGuilds", () => {
     expect(result).toEqual([]);
   });
 
-  test("管理者権限を持つguildが1件もなければDBに問い合わせず空配列を返す", async () => {
-    const result = await listMyGuilds(db, [{ id: "bot-installed-1", owner: false, permissions: "0" }]);
+  test("所属guildが1件もなければDBに問い合わせず空配列を返す", async () => {
+    const result = await listMyGuilds(db, []);
 
     expect(result).toEqual([]);
   });
