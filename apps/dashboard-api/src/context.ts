@@ -46,6 +46,17 @@ const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
 const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
 
+/**
+ * requireCapabilityミドルウェアはprocedureごとにgetGuildMembershipを呼ぶため、
+ * 1画面が複数procedureを呼ぶ場合(例: AccessPageはlistCapabilityGrants/getMyCapabilities/
+ * listRoleOptions/listMemberOptions/resolveTargetUserNamesの最低5つ)、同一リクエストバッチ内で
+ * 同じguildId+discordUserIdへのBot API問い合わせ(/guilds/{id}/members/{userId})が直列に
+ * 重複発生し表示が遅くなる。認可のリアルタイム性(capability剥奪直後の反映)を大きく損なわない
+ * 数秒程度の短命TTLで、同一バッチ内の重複排除のみを目的にキャッシュする。
+ */
+const GUILD_MEMBERSHIP_TTL_MS = 5_000;
+const guildMembershipCache = createTtlCache<GuildMembership | null>(GUILD_MEMBERSHIP_TTL_MS);
+
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
 }
@@ -167,14 +178,16 @@ export async function resolveGuildMembership(
   return { isOwner: membership.owner, roleIds: [guildId, ...memberRoleIds] };
 }
 
-function createGetGuildMembership(
+export function createGetGuildMembership(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
   botToken: string,
 ): (guildId: string, discordUserId: string) => Promise<GuildMembership | null> {
   return (guildId, discordUserId) =>
-    resolveGuildMembership(db, sessionId, sessionSecret, botToken, guildId, discordUserId);
+    guildMembershipCache(`${guildId}:${discordUserId}`, () =>
+      resolveGuildMembership(db, sessionId, sessionSecret, botToken, guildId, discordUserId),
+    );
 }
 
 /**
