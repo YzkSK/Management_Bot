@@ -57,6 +57,7 @@ function buildContext(
      * デフォルトはgetGuildRolesに委譲しない)。
      */
     verifyGuildRole?: (guildId: string, roleId: string) => Promise<boolean>;
+    getGuildMemberNames?: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   } = {},
 ) {
   return {
@@ -67,7 +68,7 @@ function buildContext(
     getGuildChannels: async () => [],
     getAllGuildChannels: async () => [],
     verifyGuildChannel: async () => false,
-    getGuildMemberNames: async () => new Map<string, string>(),
+    getGuildMemberNames: overrides.getGuildMemberNames ?? (async () => new Map<string, string>()),
     getBotPermissions: async () => 0n,
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
     verifyGuildRole: overrides.verifyGuildRole ?? (async () => true),
@@ -109,6 +110,35 @@ describe("capabilityGrantsRouter.listCapabilityGrants", () => {
     const result = await caller.listCapabilityGrants({ guildId });
 
     expect(result).toHaveLength(2);
+  });
+});
+
+describe("capabilityGrantsRouter.getMyCapabilities", () => {
+  test("直接付与のcapabilitiesを返す", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS);
+    const caller = createCaller(buildContext());
+
+    const result = await caller.getMyCapabilities({ guildId });
+
+    expect(result.capabilities).toBe(CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS);
+  });
+
+  test("role経由(@everyone含む)のcapabilitiesもORで反映する", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    await grant("role", guildId, CAPABILITIES.VIEW_LOGS);
+    const caller = createCaller(
+      buildContext({ getGuildMembership: async () => ({ isOwner: false, roleIds: [guildId] }) }),
+    );
+
+    const result = await caller.getMyCapabilities({ guildId });
+
+    expect(result.capabilities).toBe(CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS);
+  });
+
+  test("MANAGE_ACCESSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+
+    await expect(caller.getMyCapabilities({ guildId })).rejects.toThrow();
   });
 });
 
@@ -348,5 +378,42 @@ describe("capabilityGrantsRouter.listRoleOptions / listMemberOptions", () => {
     const caller = createCaller(buildContext());
 
     await expect(caller.listMemberOptions({ guildId })).rejects.toThrow();
+  });
+});
+
+describe("capabilityGrantsRouter.resolveTargetUserNames", () => {
+  test("ctx.getGuildMemberNamesの結果をplain objectとして返す", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    const caller = createCaller(
+      buildContext({ getGuildMemberNames: async () => new Map([["u1", "user-one"]]) }),
+    );
+
+    const result = await caller.resolveTargetUserNames({ guildId, userIds: ["u1"] });
+
+    expect(result).toEqual({ u1: "user-one" });
+  });
+
+  test("userIdsが空配列ならgetGuildMemberNamesを呼ばず空objectを返す", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    let called = false;
+    const caller = createCaller(
+      buildContext({
+        getGuildMemberNames: async () => {
+          called = true;
+          return new Map();
+        },
+      }),
+    );
+
+    const result = await caller.resolveTargetUserNames({ guildId, userIds: [] });
+
+    expect(result).toEqual({});
+    expect(called).toBe(false);
+  });
+
+  test("MANAGE_ACCESSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+
+    await expect(caller.resolveTargetUserNames({ guildId, userIds: [] })).rejects.toThrow();
   });
 });

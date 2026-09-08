@@ -34,6 +34,18 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/guilds/g1/logs"');
   });
 
+  test("guildId指定時はアクセス権限画面へのリンクが表示される", () => {
+    const html = renderSidebar(new QueryClient(), "g1");
+    expect(html).toContain('href="/guilds/g1/access"');
+    expect(html).toContain("アクセス権限");
+  });
+
+  test("guildId未指定時はアクセス権限画面へのリンクにならない", () => {
+    const html = renderSidebar(new QueryClient());
+    expect(html).toContain("アクセス権限");
+    expect(html).not.toContain('href="/guilds/undefined/access"');
+  });
+
   test("サーバー切替セレクトにアクセシブルな名前が付いている", () => {
     const html = renderSidebar(new QueryClient());
     expect(html).toContain('aria-label="サーバーを選択"');

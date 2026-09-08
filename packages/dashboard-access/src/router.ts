@@ -35,6 +35,12 @@ const listMemberOptionsInput = z.object({
   after: z.string().min(1).optional(),
 });
 
+const resolveTargetUserNamesInput = z.object({
+  guildId: z.string().min(1),
+  /** grant一覧の表示名解決用。1回のリクエストで問い合わせるuserId数を制限する。 */
+  userIds: z.array(z.string()).max(100).default([]),
+});
+
 /**
  * targetがguild内に実在するかをサーバー側で検証する。Dashboard UIはセレクター経由でのみ
  * targetIdを渡す設計だが、tRPC呼び出し自体はクライアントの制約を経由しないため、
@@ -77,6 +83,17 @@ export const capabilityGrantsRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
     .query(({ ctx, input }) => listCapabilityGrants(ctx.db, input.guildId)),
 
+  /**
+   * 操作者自身の実効capabilities(@everyone・所属ロール・直接付与のOR)を返す。
+   * Dashboard UIが「自分の保有範囲内のみ付与/剥奪できる」ボタン制御を行うために使う
+   * (issue #198)。最終的な可否判定は各mutationのcanGrantCapabilitiesが行うため、
+   * この値はUIのdisabled制御用のヒントに過ぎない。
+   */
+  getMyCapabilities: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+    .query(({ ctx }) => ({ capabilities: ctx.capabilities })),
+
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在ロール)をこのprocedure経由で提供する。 */
   listRoleOptions: protectedProcedure
     .input(guildIdInput)
@@ -88,6 +105,22 @@ export const capabilityGrantsRouter = router({
     .input(listMemberOptionsInput)
     .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
     .query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
+
+  /**
+   * grant一覧でuser対象のtargetIdをそのまま見せず名前表示するため、まとめて解決する(issue #198)。
+   * 解決できなかったIDはレスポンスに含めない(呼び出し側でIDへフォールバック表示する)。
+   */
+  resolveTargetUserNames: protectedProcedure
+    .input(resolveTargetUserNamesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+    .query(async ({ ctx, input }) => {
+      const uniqueUserIds = [...new Set(input.userIds)];
+      const names =
+        uniqueUserIds.length > 0
+          ? await ctx.getGuildMemberNames(input.guildId, uniqueUserIds)
+          : new Map<string, string>();
+      return Object.fromEntries(names);
+    }),
 
   grantCapabilities: protectedProcedure
     .input(grantCapabilitiesInput)

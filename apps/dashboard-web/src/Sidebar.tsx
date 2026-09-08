@@ -59,6 +59,23 @@ export function Sidebar({ guildId }: SidebarProps) {
             </li>
           );
         })}
+        <li>
+          {guildId ? (
+            <NavLink
+              to={`/guilds/${guildId}/access`}
+              className={({ isActive }) =>
+                cn(
+                  "block rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground",
+                  isActive && "bg-accent text-accent-foreground font-medium",
+                )
+              }
+            >
+              アクセス権限
+            </NavLink>
+          ) : (
+            <span className="text-muted-foreground block px-3 py-2 text-sm">アクセス権限</span>
+          )}
+        </li>
       </ul>
     </nav>
   );
