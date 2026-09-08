@@ -29,6 +29,7 @@ interface WsVariables {
 export function createLogWsRoutes(
   db: Db,
   sessionSecret: string,
+  botToken: string,
   dashboardWebUrl: string,
 ): { app: Hono<{ Variables: WsVariables }>; websocket: typeof websocket } {
   const app = new Hono<{ Variables: WsVariables }>();
@@ -50,7 +51,14 @@ export function createLogWsRoutes(
         return c.text("Unauthorized", 401);
       }
 
-      const membership = await resolveGuildMembership(db, sessionId, sessionSecret, guildId);
+      const membership = await resolveGuildMembership(
+        db,
+        sessionId,
+        sessionSecret,
+        botToken,
+        guildId,
+        session.discordUserId,
+      );
       if (!membership) {
         return c.text("Forbidden", 403);
       }

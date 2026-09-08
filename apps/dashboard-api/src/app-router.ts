@@ -1,4 +1,4 @@
-import { protectedProcedure, router } from "@management-bot/dashboard-access";
+import { capabilityGrantsRouter, protectedProcedure, router } from "@management-bot/dashboard-access";
 import { activityRouter } from "@management-bot/activity";
 import { loggingRouter } from "@management-bot/logging";
 import { tempVoiceRouter } from "@management-bot/temp-voice";
@@ -15,6 +15,7 @@ export const appRouter = router({
   logging: loggingRouter,
   tempVoice: tempVoiceRouter,
   moderation: moderationRouter,
+  access: capabilityGrantsRouter,
 });
 
 export type AppRouter = typeof appRouter;

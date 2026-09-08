@@ -5,8 +5,11 @@ import {
   fetchBotGuildPermissions,
   fetchGuildChannels,
   fetchGuildMemberNames,
+  fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildRoles,
+  isGuildMember,
+  verifyGuildRole,
 } from "./bot-client.ts";
 
 const originalFetch = globalThis.fetch;
@@ -378,6 +381,46 @@ describe("429リトライ(discordGet共通)", () => {
   });
 });
 
+describe("fetchGuildMemberRoleIds", () => {
+  test("guild内の指定ユーザーが持つロールID一覧を返す", async () => {
+    mockFetch({ "/guilds/g1/members/u1": { status: 200, body: { roles: ["r1", "r2"] } } });
+
+    const result = await fetchGuildMemberRoleIds("test-bot-token", "g1", "u1");
+
+    expect(result).toEqual(["r1", "r2"]);
+  });
+
+  test("guild不明/ユーザー未在籍(404)はnullを返す", async () => {
+    mockFetch({ "/guilds/g1/members/u1": { status: 404 } });
+
+    const result = await fetchGuildMemberRoleIds("test-bot-token", "g1", "u1");
+
+    expect(result).toBeNull();
+  });
+
+  test("Bot未参加等の403は、在籍ユーザーの権限をfail-openさせないよう例外を投げる", async () => {
+    mockFetch({ "/guilds/g1/members/u1": { status: 403 } });
+
+    await expect(fetchGuildMemberRoleIds("test-bot-token", "g1", "u1")).rejects.toBeInstanceOf(
+      DiscordAccessForbiddenError,
+    );
+  });
+});
+
+describe("isGuildMember", () => {
+  test("メンバーが実在すればtrue", async () => {
+    mockFetch({ "/guilds/g1/members/u1": { status: 200, body: { roles: [] } } });
+
+    expect(await isGuildMember("test-bot-token", "g1", "u1")).toBe(true);
+  });
+
+  test("メンバーが未在籍(404)ならfalse", async () => {
+    mockFetch({ "/guilds/g1/members/u1": { status: 404 } });
+
+    expect(await isGuildMember("test-bot-token", "g1", "u1")).toBe(false);
+  });
+});
+
 describe("fetchGuildRoles", () => {
   test("guild直下のロール一覧をid/nameで返す(@everyoneも含む)", async () => {
     mockFetch({
@@ -412,6 +455,34 @@ describe("fetchGuildRoles", () => {
     const result = await fetchGuildRoles("test-bot-token", "g1");
 
     expect(result).toEqual([]);
+  });
+});
+
+describe("verifyGuildRole", () => {
+  test("実在するroleならtrue", async () => {
+    mockFetch({ "/guilds/g1/roles": { status: 200, body: [{ id: "r1", name: "Admin", permissions: "0" }] } });
+
+    expect(await verifyGuildRole("test-bot-token", "g1", "r1")).toBe(true);
+  });
+
+  test("実在しないroleならfalse", async () => {
+    mockFetch({ "/guilds/g1/roles": { status: 200, body: [{ id: "r1", name: "Admin", permissions: "0" }] } });
+
+    expect(await verifyGuildRole("test-bot-token", "g1", "unknown")).toBe(false);
+  });
+
+  test("guild不明(404)はfalseを返す", async () => {
+    mockFetch({ "/guilds/g1/roles": { status: 404 } });
+
+    expect(await verifyGuildRole("test-bot-token", "g1", "r1")).toBe(false);
+  });
+
+  test("Bot脱退・権限異常等の403は「roleが存在しない」と誤診しないよう例外を投げる", async () => {
+    mockFetch({ "/guilds/g1/roles": { status: 403 } });
+
+    await expect(verifyGuildRole("test-bot-token", "g1", "r1")).rejects.toBeInstanceOf(
+      DiscordAccessForbiddenError,
+    );
   });
 });
 

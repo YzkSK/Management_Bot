@@ -1,5 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { ALL_CAPABILITIES, BASELINE_EVERYONE_CAPABILITIES, canGrantCapabilities, CAPABILITIES } from "./capabilities.ts";
+import {
+  ALL_CAPABILITIES,
+  BASELINE_EVERYONE_CAPABILITIES,
+  canGrantCapabilities,
+  CAPABILITIES,
+  isKnownCapabilityMask,
+} from "./capabilities.ts";
+
+describe("isKnownCapabilityMask", () => {
+  test("ALL_CAPABILITIESちょうどは既知マスク", () => {
+    expect(isKnownCapabilityMask(ALL_CAPABILITIES)).toBe(true);
+  });
+
+  test("ALL_CAPABILITIESを超える値は未知マスク", () => {
+    expect(isKnownCapabilityMask(ALL_CAPABILITIES + 1)).toBe(false);
+  });
+
+  test("2**32を超える安全整数は、32bitビット演算では既知マスクに切り詰められうるが拒否する", () => {
+    // 2**32 + 1 は `& ~ALL_CAPABILITIES` だけだと32bit演算で1に切り詰められ既知マスクと誤判定しうる。
+    expect(isKnownCapabilityMask(2 ** 32 + 1)).toBe(false);
+  });
+
+  test("負数は未知マスク", () => {
+    expect(isKnownCapabilityMask(-1)).toBe(false);
+  });
+
+  test("非整数は未知マスク", () => {
+    expect(isKnownCapabilityMask(1.5)).toBe(false);
+  });
+});
 
 describe("canGrantCapabilities", () => {
   test("付与者が持つcapabilityの部分集合は付与できる", () => {

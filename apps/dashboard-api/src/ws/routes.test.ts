@@ -12,7 +12,7 @@ const guildId = `test-guild-${randomUUID()}`;
 const sessionSecret = "test-session-secret";
 const dashboardWebUrl = "http://localhost:5173";
 
-const { app } = createLogWsRoutes(db, sessionSecret, dashboardWebUrl);
+const { app } = createLogWsRoutes(db, sessionSecret, "test-bot-token", dashboardWebUrl);
 
 afterAll(async () => {
   await db.delete(guilds).where(eq(guilds.id, guildId));

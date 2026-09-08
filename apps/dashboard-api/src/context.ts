@@ -16,8 +16,11 @@ import {
   fetchBotGuildPermissions,
   fetchGuildChannels,
   fetchGuildMemberNames,
+  fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildRoles,
+  isGuildMember,
+  verifyGuildRole,
 } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
@@ -71,11 +74,23 @@ function createGetGuildRoles(botToken: string): (guildId: string) => Promise<rea
   return (guildId) => guildRolesCache(guildId, () => fetchGuildRoles(botToken, guildId));
 }
 
+function createVerifyGuildRole(botToken: string): (guildId: string, roleId: string) => Promise<boolean> {
+  return (guildId, roleId) => verifyGuildRole(botToken, guildId, roleId);
+}
+
 function createGetGuildMembersPage(
   botToken: string,
 ): (guildId: string, after?: string) => Promise<MemberPage> {
   return (guildId, after = "0") =>
     guildMembersPageCache(`${guildId}:${after}`, () => fetchGuildMembersPage(botToken, guildId, after));
+}
+
+/**
+ * targetId実在検証専用(issue #198)。表示用キャッシュを介さず常にBot APIへ問い合わせる
+ * (脱退直後のユーザーへの誤付与を防ぐため。verifyGuildChannelと同じ考え方)。
+ */
+function createIsGuildMember(botToken: string): (guildId: string, userId: string) => Promise<boolean> {
+  return (guildId, userId) => isGuildMember(botToken, guildId, userId);
 }
 
 function createGetGuildMemberNames(
@@ -128,29 +143,38 @@ function createListMyGuilds(
 /**
  * ダッシュボードの独自capability(VIEW_LOGS等)は、onboardGuild時に発行される
  * オーナー(全capability)と@everyone(roleId===guildId、閲覧系ベースライン)の2種類の
- * capabilityGrantに基づく。Discord本来のロール一覧までは取得しない(`guilds.members.read`
- * スコープの追加同意が必要になるため)ので、実在確認できたguildについては
- * 「オーナーかどうか」と「@everyoneロール(=在籍者全員)」のみを返す簡易実装とする。
- * ponytail: 独自にcapability grantを個別付与されたユーザーの実ロールまでは反映しない。
- * 必要になったら`guilds.members.read`スコープを追加してDiscordのロールIDを取得する。
+ * capabilityGrantに加え、capability付与画面(issue #198)で個別に付与されたuser/role grantに基づく。
+ * roleIdsはBotトークン経由でDiscordの実ロールを取得して返す(ユーザーOAuthスコープの追加同意は不要。
+ * Botは対象guildに既に参加しているため、`/guilds/{id}/members/{userId}`をBotトークンで問い合わせられる)。
  */
 export async function resolveGuildMembership(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
+  botToken: string,
   guildId: string,
+  discordUserId: string,
 ): Promise<GuildMembership | null> {
   const userGuilds = await fetchCurrentUserGuilds(db, sessionId, sessionSecret);
   const membership = userGuilds?.find((guild) => guild.id === guildId);
-  return membership ? { isOwner: membership.owner, roleIds: [guildId] } : null;
+  if (!membership) {
+    return null;
+  }
+  const memberRoleIds = await fetchGuildMemberRoleIds(botToken, guildId, discordUserId);
+  if (memberRoleIds === null) {
+    return null;
+  }
+  return { isOwner: membership.owner, roleIds: [guildId, ...memberRoleIds] };
 }
 
 function createGetGuildMembership(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
-): (guildId: string) => Promise<GuildMembership | null> {
-  return (guildId) => resolveGuildMembership(db, sessionId, sessionSecret, guildId);
+  botToken: string,
+): (guildId: string, discordUserId: string) => Promise<GuildMembership | null> {
+  return (guildId, discordUserId) =>
+    resolveGuildMembership(db, sessionId, sessionSecret, botToken, guildId, discordUserId);
 }
 
 /**
@@ -170,14 +194,16 @@ export function createContext(
       db,
       sessionId,
       discordClientId,
-      getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret),
+      getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret, botToken),
       getGuildChannels: createGetGuildChannels(botToken),
       getAllGuildChannels: createGetAllGuildChannels(botToken),
       verifyGuildChannel: createVerifyGuildChannel(botToken),
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
       getGuildRoles: createGetGuildRoles(botToken),
+      verifyGuildRole: createVerifyGuildRole(botToken),
       getGuildMembersPage: createGetGuildMembersPage(botToken),
+      isGuildMember: createIsGuildMember(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
     };
     return ctx as unknown as Record<string, unknown>;

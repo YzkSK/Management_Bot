@@ -90,12 +90,26 @@ export interface DashboardAccessContext {
    */
   getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
   /**
+   * guildId直下でroleIdが実在するかをキャッシュを介さず確認する。capability grantのtargetId
+   * 実在検証専用(issue #198)。getGuildRolesは表示用に短命キャッシュされうるため、削除直後の
+   * roleへの誤付与を防ぐにはこちらを使うこと(verifyGuildChannelと同じ考え方)。
+   */
+  verifyGuildRole: (guildId: string, roleId: string) => Promise<boolean>;
+  /**
    * guildId直下のメンバーをuser id昇順で1ページ分取得する。capability付与画面のユーザー
    * セレクターに使う(issue #198)。大規模guildで全件を一度に返さないよう、afterで明示的に
    * ページ送りする(省略時は先頭ページ)。GUILD_MEMBERS Privileged Intent未設定の場合は
    * DiscordAccessForbiddenErrorが投げられうる。
    */
   getGuildMembersPage: (guildId: string, after?: string) => Promise<MemberPage>;
+  /**
+   * guildIdに指定userIdが実在(在籍)するかを判定する。capability grantのtargetId実在検証専用
+   * (issue #198)。getGuildMembershipは「ログイン中の操作者自身」の在籍確認専用であり、
+   * 任意のtargetユーザーの在籍確認には使えないため、別メソッドとして分離している。
+   * キャッシュを介さずBot APIへ問い合わせること(実在検証の性質上、表示用キャッシュを使うと
+   * 脱退直後のユーザーへの誤付与を許してしまう)。
+   */
+  isGuildMember: (guildId: string, userId: string) => Promise<boolean>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();

@@ -223,6 +223,42 @@ export async function fetchGuildRoles(botToken: string, guildId: string): Promis
   return roles.map((role) => ({ id: role.id, name: role.name }));
 }
 
+/**
+ * capability grantのtargetId実在検証専用(issue #198)。Bot脱退・権限異常による403を
+ * 「roleが存在しない」と誤診しないよう、fetchGuildRolesとは異なり403を例外として投げる
+ * (isGuildMemberと同じfail-closedの考え方)。guild不明(404)はfalseを返す。
+ */
+export async function verifyGuildRole(botToken: string, guildId: string, roleId: string): Promise<boolean> {
+  const roles = await discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleSchema), "throw");
+  return roles !== "not_found" && roles.some((role) => role.id === roleId);
+}
+
+/**
+ * guild内の指定ユーザーが持つロールID一覧を返す(`@everyone`は含まない、Discord APIの仕様通り)。
+ * capability grantの実効capabilities計算(resolveEffectiveCapabilitiesのroleIds)で、role単位の
+ * grantをDashboardの認可に反映するために使う(issue #198)。ユーザーOAuthスコープの追加同意なしに
+ * Botトークンのみで取得できる。
+ * guild不明/ユーザー未在籍(404)はnullを返す(呼び出し側はguild未所属として扱うこと)。
+ * Bot未参加等の403は、実際には在籍しているユーザーの権限を「ロールなし」と誤って
+ * fail-openさせないよう例外として投げる(issue #198 codexレビュー対応)。
+ */
+export async function fetchGuildMemberRoleIds(
+  botToken: string,
+  guildId: string,
+  userId: string,
+): Promise<readonly string[] | null> {
+  const member = await discordGet(botToken, `/guilds/${guildId}/members/${userId}`, guildMemberSchema, "throw");
+  if (member === "not_found") {
+    return null;
+  }
+  return member.roles;
+}
+
+/** guild内に指定ユーザーが実在(在籍)するかを判定する。capability grantのtargetId検証用(issue #198)。 */
+export async function isGuildMember(botToken: string, guildId: string, userId: string): Promise<boolean> {
+  return (await fetchGuildMemberRoleIds(botToken, guildId, userId)) !== null;
+}
+
 /** 1ページあたりに取得するguildメンバー数(Discord APIの`/guilds/{id}/members`が許容する最大値)。 */
 const MEMBER_LIST_PAGE_SIZE = 1000;
 

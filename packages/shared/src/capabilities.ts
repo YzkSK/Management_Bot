@@ -31,9 +31,19 @@ export function hasCapability(granted: number, required: number): boolean {
   return (granted & required) === required;
 }
 
-/** 未定義ビットや負数・非整数を含まない、既知のcapability集合のみを表すかを判定する。 */
+/**
+ * 未定義ビットや負数・非整数を含まない、既知のcapability集合のみを表すかを判定する。
+ * ビット演算(&)は32bit符号付き整数に丸められるため、value自体の範囲チェック
+ * (value <= ALL_CAPABILITIES)を先に行う。これが無いと`2**32 + n`のような安全整数が
+ * 32bit演算で下位ビットに切り詰められ、範囲外の値を誤って既知マスクと判定してしまう。
+ */
 export function isKnownCapabilityMask(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0 && (value & ~ALL_CAPABILITIES) === 0;
+  return (
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= ALL_CAPABILITIES &&
+    (value & ~ALL_CAPABILITIES) === 0
+  );
 }
 
 /**
