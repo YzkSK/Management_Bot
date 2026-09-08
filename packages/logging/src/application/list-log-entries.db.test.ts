@@ -189,6 +189,24 @@ describe("maskSensitiveFields", () => {
     expect((masked as { content?: string }).content).toBeUndefined();
   });
 
+  test("messageカテゴリのpreviousContent(編集前本文)も取り除く(issue #207)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "a1",
+      action: "update",
+      content: "new message",
+      previousContent: "secret previous message",
+    };
+
+    const masked = maskSensitiveFields(entry);
+
+    expect((masked as { content?: string }).content).toBeUndefined();
+    expect((masked as { previousContent?: string }).previousContent).toBeUndefined();
+  });
+
   test("threadカテゴリのcontent(スターターメッセージ本文)も取り除く", () => {
     const entry: LogEntry = {
       category: "thread",

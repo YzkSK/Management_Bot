@@ -85,9 +85,13 @@ export async function listLogEntries(
 /**
  * VIEW_LOGS_RAWを持たない閲覧者向けに、メッセージ本文など生データを含むフィールドを取り除く。
  * VIEW_LOGSのみでは要約(誰が・いつ・何をしたか)のみ見える想定。
+ * messageのpreviousContent(編集前本文)もcontentと同じ生データのため、合わせて取り除く。
  */
 export function maskSensitiveFields(entry: LogEntry): LogEntry {
-  if ((entry.category === "message" || entry.category === "thread") && entry.content !== undefined) {
+  if (entry.category === "message" && (entry.content !== undefined || entry.previousContent !== undefined)) {
+    return { ...entry, content: undefined, previousContent: undefined };
+  }
+  if (entry.category === "thread" && entry.content !== undefined) {
     return { ...entry, content: undefined };
   }
   return entry;

@@ -57,8 +57,9 @@ beforeEach(async () => {
       createdAt: "2026-08-31T00:00:00.000Z",
       channelId: "c1",
       authorId: "a1",
-      action: "create",
+      action: "update",
       content: "secret message",
+      previousContent: "secret previous message",
     },
     createdAt: new Date("2026-08-31T00:00:00.000Z"),
   });
@@ -133,6 +134,9 @@ describe("loggingRouter.listLogEntries", () => {
 
     expect(result.entries).toHaveLength(1);
     expect((result.entries[0]?.entry as { content?: string }).content).toBeUndefined();
+    expect(
+      (result.entries[0]?.entry as { previousContent?: string }).previousContent,
+    ).toBeUndefined();
   });
 
   test("VIEW_LOGS_RAWも持つ場合はcontentがそのまま返る", async () => {
@@ -160,6 +164,9 @@ describe("loggingRouter.listLogEntries", () => {
     const result = await caller.listLogEntries({ guildId, limit: 50 });
 
     expect((result.entries[0]?.entry as { content?: string }).content).toBe("secret message");
+    expect(
+      (result.entries[0]?.entry as { previousContent?: string }).previousContent,
+    ).toBe("secret previous message");
   });
 
   test("VIEW_LOGSを持たない場合はFORBIDDEN", async () => {
