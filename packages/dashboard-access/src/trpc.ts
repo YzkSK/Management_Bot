@@ -2,7 +2,10 @@ import type { Db } from "@management-bot/db";
 import { isKnownCapabilityMask } from "@management-bot/shared";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { validateSession } from "./session.js";
-import { resolveEffectiveCapabilities } from "./effective-capabilities.js";
+import {
+  resolveEffectiveCapabilities,
+  type ResolveEffectiveCapabilitiesInput,
+} from "./effective-capabilities.js";
 
 export interface GuildMembership {
   isOwner: boolean;
@@ -110,6 +113,14 @@ export interface DashboardAccessContext {
    * 脱退直後のユーザーへの誤付与を許してしまう)。
    */
   isGuildMember: (guildId: string, userId: string) => Promise<boolean>;
+  /**
+   * requireCapabilityが実効capabilities(DB SELECT)を計算する際に使う関数。省略時は
+   * effective-capabilities.tsのresolveEffectiveCapabilitiesを毎回そのまま呼ぶ。
+   * 1画面が複数procedureを呼ぶ場合(例: AccessPageは最低5つ)の同一リクエストバッチ内での
+   * 重複問い合わせを避けたいdashboard-api側は、短命TTLキャッシュ付きの実装をここに注入できる
+   * (issue #198 パフォーマンス改善。getGuildMembershipキャッシュと同じ考え方)。
+   */
+  resolveEffectiveCapabilities?: (input: ResolveEffectiveCapabilitiesInput) => Promise<number>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();
@@ -162,7 +173,10 @@ export function requireCapability(cap: number) {
       throw new TRPCError({ code: "FORBIDDEN" });
     }
 
-    const capabilities = await resolveEffectiveCapabilities(db, {
+    const resolve =
+      (ctx as DashboardAccessContext).resolveEffectiveCapabilities ??
+      ((input: ResolveEffectiveCapabilitiesInput) => resolveEffectiveCapabilities(db, input));
+    const capabilities = await resolve({
       guildId,
       discordUserId,
       isOwner: membership.isOwner,

@@ -183,6 +183,49 @@ describe("requireCapability / assertGuildScope", () => {
   });
 });
 
+describe("requireCapability(resolveEffectiveCapabilitiesの注入)", () => {
+  test("ctxにresolveEffectiveCapabilitiesを渡した場合はそれをmembership由来の引数で呼び、結果で判定する", async () => {
+    const calls: unknown[] = [];
+    const caller = createCaller({
+      db,
+      sessionId,
+      getGuildMembership: memberOf(guildId1),
+      resolveEffectiveCapabilities: async (input) => {
+        calls.push(input);
+        return CAPABILITIES.VIEW_ACTIVITY;
+      },
+    });
+
+    const result = await caller.viewActivity({ guildId: guildId1 });
+
+    expect(result).toBe("ok");
+    expect(calls).toEqual([
+      { guildId: guildId1, discordUserId: "user-1", isOwner: false, roleIds: [] },
+    ]);
+  });
+
+  test("注入したresolveEffectiveCapabilitiesが不十分なcapabilitiesを返せばFORBIDDENになる(DB上のgrantは無視される)", async () => {
+    await db.insert(capabilityGrants).values({
+      id: grantId,
+      guildId: guildId1,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_ACTIVITY,
+    });
+
+    const caller = createCaller({
+      db,
+      sessionId,
+      getGuildMembership: memberOf(guildId1),
+      resolveEffectiveCapabilities: async () => 0,
+    });
+
+    const error = await captureError(caller.viewActivity({ guildId: guildId1 }));
+
+    expect(error.code).toBe("FORBIDDEN");
+  });
+});
+
 describe("requireCapability(不正なcapability引数)", () => {
   test("0を渡すと構築時にエラーになる", () => {
     expect(() => requireCapability(0)).toThrow();

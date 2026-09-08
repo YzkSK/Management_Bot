@@ -4,9 +4,14 @@ import type {
   GuildMembership,
   ManagedGuild,
   MemberPage,
+  ResolveEffectiveCapabilitiesInput,
   RoleOption,
 } from "@management-bot/dashboard-access";
-import { getSessionAccessToken, listMyGuilds } from "@management-bot/dashboard-access";
+import {
+  getSessionAccessToken,
+  listMyGuilds,
+  resolveEffectiveCapabilities,
+} from "@management-bot/dashboard-access";
 import type { Db } from "@management-bot/db";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
@@ -56,6 +61,32 @@ const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
  */
 const GUILD_MEMBERSHIP_TTL_MS = 5_000;
 const guildMembershipCache = createTtlCache<GuildMembership | null>(GUILD_MEMBERSHIP_TTL_MS);
+
+/**
+ * requireCapabilityミドルウェアはprocedureごとにresolveEffectiveCapabilities(DB SELECT)も
+ * 呼ぶため、guildMembershipCacheと同じ理由でAccessPageのような1画面複数procedureの場合に
+ * 重複問い合わせが起きる。ただしgrant/revokeCapabilityGrantはこのDBの内容そのものを直接
+ * 書き換えるmutationであり、モジュールスコープのTTLキャッシュにすると剥奪した権限が最大TTL秒
+ * 別リクエストでも有効になってしまい昇格防止の前提を壊す(codexレビュー対応)。そのため
+ * guildMembershipCacheのようなプロセス全体で共有するキャッシュにはせず、createContext呼び出し
+ * (=1 HTTPリクエスト=1 tRPCバッチ)ごとに新しいキャッシュを生成し、同一バッチ内のin-flight
+ * 重複排除のみを行う(バッチをまたいでは共有しない)。
+ */
+function createResolveEffectiveCapabilities(
+  db: Db,
+): (input: ResolveEffectiveCapabilitiesInput) => Promise<number> {
+  const inFlight = new Map<string, Promise<number>>();
+  return (input) => {
+    const key = `${input.guildId}:${input.discordUserId}:${input.isOwner}:${[...input.roleIds].sort().join(",")}`;
+    const cached = inFlight.get(key);
+    if (cached) {
+      return cached;
+    }
+    const value = resolveEffectiveCapabilities(db, input);
+    inFlight.set(key, value);
+    return value;
+  };
+}
 
 function createGetGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => guildChannelsCache(guildId, () => fetchGuildChannels(botToken, guildId));
@@ -208,6 +239,7 @@ export function createContext(
       sessionId,
       discordClientId,
       getGuildMembership: createGetGuildMembership(db, sessionId, sessionSecret, botToken),
+      resolveEffectiveCapabilities: createResolveEffectiveCapabilities(db),
       getGuildChannels: createGetGuildChannels(botToken),
       getAllGuildChannels: createGetAllGuildChannels(botToken),
       verifyGuildChannel: createVerifyGuildChannel(botToken),

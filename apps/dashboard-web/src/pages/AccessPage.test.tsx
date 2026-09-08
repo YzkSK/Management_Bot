@@ -128,4 +128,38 @@ describe("AccessPage", () => {
     const switchTagEnd = html.indexOf(">", switchIndex);
     expect(html.slice(switchIndex, switchTagEnd)).toContain(`disabled=""`);
   });
+
+  test("必須クエリ(grants/myCapabilities)が未取得の間はlistRoleOptions/resolveTargetUserNamesを発火しない", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    // listCapabilityGrants/getMyCapabilitiesを意図的にseedしない(pending状態を維持する)。
+
+    renderPage("g1", queryClient);
+
+    const roleOptionsState = queryClient.getQueryState(
+      trpc.access.listRoleOptions.queryOptions({ guildId: "g1" }).queryKey,
+    );
+    const targetUserNamesState = queryClient.getQueryState(
+      trpc.access.resolveTargetUserNames.queryOptions({ guildId: "g1", userIds: [] }).queryKey,
+    );
+    expect(roleOptionsState?.fetchStatus).toBe("idle");
+    expect(roleOptionsState?.dataUpdatedAt).toBe(0);
+    expect(targetUserNamesState?.fetchStatus).toBe("idle");
+    expect(targetUserNamesState?.dataUpdatedAt).toBe(0);
+  });
+
+  test("必須クエリの片方(myCapabilities)しか取得できていない間はlistRoleOptionsを発火しない", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    // listCapabilityGrantsは未取得のまま、getMyCapabilitiesのみ成功させる。
+    queryClient.setQueryData(trpc.access.getMyCapabilities.queryOptions({ guildId: "g1" }).queryKey, {
+      capabilities: CAPABILITIES.MANAGE_ACCESS,
+    });
+
+    renderPage("g1", queryClient);
+
+    const roleOptionsState = queryClient.getQueryState(
+      trpc.access.listRoleOptions.queryOptions({ guildId: "g1" }).queryKey,
+    );
+    expect(roleOptionsState?.fetchStatus).toBe("idle");
+    expect(roleOptionsState?.dataUpdatedAt).toBe(0);
+  });
 });

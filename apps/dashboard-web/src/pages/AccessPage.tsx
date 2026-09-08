@@ -293,19 +293,21 @@ export function AccessPage() {
     ...trpc.access.getMyCapabilities.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
   });
-  // 表示専用(対象名の解決)。取得に失敗してもgrant一覧・付与操作自体は継続できるよう、
-  // ページ全体のエラー判定には含めない(codexレビュー対応: 候補取得の失敗が画面全体を
-  // 使用不能にしないため)。
+  // grantsQuery/myCapabilitiesQueryがFORBIDDENの場合、この画面自体を使用できないユーザーなので
+  // 権限確認前にroleOptions/resolveTargetUserNamesまで発火させない(不要なprocedure呼び出し・
+  // consoleのForbiddenログを避ける)。表示専用(対象名の解決)なので、取得に失敗してもgrant一覧・
+  // 付与操作自体は継続できるよう、ページ全体のエラー判定には含めない(codexレビュー対応)。
+  const hasAccess = Boolean(guildId) && grantsQuery.isSuccess && myCapabilitiesQuery.isSuccess;
   const roleOptionsQuery = useQuery({
     ...trpc.access.listRoleOptions.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: hasAccess,
   });
   const userTargetIds = (grantsQuery.data ?? [])
     .filter((grant) => grant.targetType === "user")
     .map((grant) => grant.targetId);
   const targetUserNamesQuery = useQuery({
     ...trpc.access.resolveTargetUserNames.queryOptions({ guildId: guildId ?? "", userIds: userTargetIds }),
-    enabled: Boolean(guildId) && userTargetIds.length > 0,
+    enabled: hasAccess && userTargetIds.length > 0,
   });
 
   if (!guildId) {
