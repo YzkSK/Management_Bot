@@ -21,6 +21,7 @@ describe("loggingFeatureModule", () => {
           db: {} as Db,
           databaseUrl: "postgres://invalid-test-host/db",
           eventBus,
+          onShutdown: () => {},
         }),
       ),
     ).resolves.toBeUndefined();

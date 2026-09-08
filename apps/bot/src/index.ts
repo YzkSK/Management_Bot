@@ -24,6 +24,7 @@ const shutdown = async () => {
   client.destroy();
   await Promise.allSettled(pendingOnboardings);
   await Promise.all([...eventBuses.values()].map((bus) => bus.close()));
+  await client.runShutdownCleanups();
   await close();
 };
 process.once("SIGTERM", () => void shutdown());

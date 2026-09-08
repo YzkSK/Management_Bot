@@ -17,6 +17,8 @@ import type { FeatureModule } from "./feature-module.js";
  * (将来piece loaderを正式採用する場合はFEATURES経由の登録を廃止し、片方に一本化すること)
  */
 export class BotClient extends SapphireClient {
+  private readonly shutdownCleanups: (() => Promise<void>)[] = [];
+
   constructor() {
     super({
       intents: [
@@ -64,10 +66,16 @@ export class BotClient extends SapphireClient {
           db: deps.db,
           databaseUrl: deps.databaseUrl,
           eventBus: deps.eventBusFor(feature),
+          onShutdown: (cleanup) => this.shutdownCleanups.push(cleanup),
         });
       } catch (error) {
         throw new Error(`Failed to register feature "${feature.key}"`, { cause: error });
       }
     }
+  }
+
+  /** registerFeatures中にonShutdownへ登録された全クリーンアップを実行する。呼び出し元のshutdown処理から呼ぶこと。 */
+  async runShutdownCleanups(): Promise<void> {
+    await Promise.allSettled(this.shutdownCleanups.map((cleanup) => cleanup()));
   }
 }

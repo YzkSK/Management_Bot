@@ -15,6 +15,13 @@ export interface FeatureModuleContext {
   databaseUrl: string;
   /** 機能間連携用。他機能への直接importではなくdomain-events経由で疎結合にする(CLAUDE.md参照)。 */
   eventBus: DomainEventBus;
+  /**
+   * registerDiscordHandlers内で開いた追加のリソース(databaseUrlでのLISTEN接続等)を
+   * bot終了時(SIGTERM/SIGINT)に閉じるためのフック登録。呼ばなかったリソースは
+   * プロセスが自然終了しない・接続がリークする原因になるため、db/eventBus以外の
+   * 永続接続を開く場合は必ず登録すること。
+   */
+  onShutdown: (cleanup: () => Promise<void>) => void;
 }
 
 /**

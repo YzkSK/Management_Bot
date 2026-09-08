@@ -8,7 +8,7 @@ import { FEATURES } from "./features.ts";
 const t = initTRPC.create();
 const fakeDb = {} as Db;
 const fakeEventBus = { subscribe: () => Promise.resolve() } as unknown as DomainEventBus;
-const testDeps = { db: fakeDb, eventBusFor: () => fakeEventBus };
+const testDeps = { db: fakeDb, databaseUrl: "postgres://invalid-test-host/db", eventBusFor: () => fakeEventBus };
 
 describe("FEATURES registry", () => {
   test("Phase0で予定された4機能がすべて登録されている", () => {

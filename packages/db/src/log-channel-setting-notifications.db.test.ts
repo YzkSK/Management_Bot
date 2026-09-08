@@ -90,4 +90,32 @@ describe("listenForLogChannelSettingChanges", () => {
     const result = await notification;
     expect(result).toEqual({ guildId, category: "message" });
   });
+
+  test("UPDATEで複合主キー(category)自体が変わる場合、新旧両方のキーを通知する", async () => {
+    await db.insert(logChannelSettings).values({ guildId, category: "message", channelId: "c1" });
+
+    const notifications: LogChannelSettingChangedNotification[] = [];
+    let onChange: (n: LogChannelSettingChangedNotification) => void = () => {};
+    const received = new Promise<void>((resolve) => {
+      onChange = (n) => {
+        notifications.push(n);
+        if (notifications.length >= 2) resolve();
+      };
+    });
+    listener = listenForLogChannelSettingChanges(databaseUrl, (n) => onChange(n));
+    await listener.ready;
+
+    await db
+      .update(logChannelSettings)
+      .set({ category: "reaction" })
+      .where(eq(logChannelSettings.guildId, guildId));
+
+    await Promise.race([
+      received,
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("timed out")), 5000)),
+    ]);
+
+    expect(notifications).toContainEqual({ guildId, category: "message" });
+    expect(notifications).toContainEqual({ guildId, category: "reaction" });
+  });
 });

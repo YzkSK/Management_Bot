@@ -48,6 +48,7 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   channelSettingNotifications.ready.catch((error: unknown) => {
     console.error("Failed to listen for log_channel_settings changes (cache invalidation disabled)", error);
   });
+  ctx.onShutdown(channelSettingNotifications.close);
 
   await ctx.eventBus.subscribe(
     "moderation.action.recorded",
