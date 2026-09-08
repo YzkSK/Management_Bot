@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Invite } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -23,8 +23,8 @@ export function toInviteDeleteLogEntry(invite: Invite): LogEntry | undefined {
   return { category: "invite", ...base, createdAt: new Date().toISOString(), action: "delete" };
 }
 
-export function registerInviteHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerInviteHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("inviteCreate", (invite) => {
     const entry = toInviteCreateLogEntry(invite);

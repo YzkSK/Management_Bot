@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { GuildMember, PartialGuildMember, Role } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -61,8 +61,8 @@ export function toRoleMembershipLogEntries(oldMember: GuildMember | PartialGuild
   return entries;
 }
 
-export function registerRoleHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerRoleHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("roleCreate", (role) => writeLogEntrySafely(deps, toRoleCreateLogEntry(role)));
   ctx.client.on("roleUpdate", (oldRole, newRole) => {

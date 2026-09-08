@@ -13,6 +13,7 @@ import {
   resolveEffectiveCapabilities,
 } from "@management-bot/dashboard-access";
 import type { Db } from "@management-bot/db";
+import { createTtlCache } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
@@ -29,7 +30,6 @@ import {
 } from "./discord/bot-client.js";
 import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
-import { createTtlCache } from "./ttl-cache.js";
 
 /**
  * セッションID単位で「ログインユーザーの所属guild一覧」を短命キャッシュする。同一リクエスト内の

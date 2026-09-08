@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { GuildBan, GuildMember, PartialGuildMember } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -82,8 +82,8 @@ export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMe
   return entries;
 }
 
-export function registerMemberHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerMemberHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("guildMemberAdd", (member) => writeLogEntrySafely(deps, toMemberJoinLogEntry(member)));
   ctx.client.on("guildMemberRemove", (member) => writeLogEntrySafely(deps, toMemberLeaveLogEntry(member)));

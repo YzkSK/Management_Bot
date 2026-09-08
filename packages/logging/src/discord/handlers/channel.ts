@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { DMChannel, NonThreadGuildBasedChannel } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -70,8 +70,8 @@ export function toChannelDeleteLogEntry(channel: DMChannel | NonThreadGuildBased
   };
 }
 
-export function registerChannelHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerChannelHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("channelCreate", (channel) => writeLogEntrySafely(deps, toChannelCreateLogEntry(channel)));
   ctx.client.on("channelUpdate", (oldChannel, newChannel) => {

@@ -1,5 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
-import { handleModerationEvent } from "../application/index.js";
+import { createChannelSettingResolver, handleModerationEvent } from "../application/index.js";
 import { registerMessageHandlers } from "./handlers/message.js";
 import { registerReactionHandlers } from "./handlers/reaction.js";
 import { registerMemberHandlers } from "./handlers/member.js";
@@ -32,25 +32,28 @@ export { createSendToChannel } from "./send-to-channel.js";
  */
 export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promise<void> {
   const sendToChannel = createSendToChannel(ctx);
+  // guild×categoryの出力先チャンネル設定は全ハンドラで共通のTTLキャッシュを共有する
+  // (ハンドラごとに別インスタンスを作ると重複問い合わせが解消されないため、ここで1つだけ生成する)。
+  const getChannelId = createChannelSettingResolver(ctx.db);
   await ctx.eventBus.subscribe(
     "moderation.action.recorded",
-    handleModerationEvent({ db: ctx.db, sendToChannel }),
+    handleModerationEvent({ db: ctx.db, sendToChannel, getChannelId }),
   );
 
-  registerMessageHandlers(ctx);
-  registerReactionHandlers(ctx);
-  registerMemberHandlers(ctx);
-  registerRoleHandlers(ctx);
-  registerChannelHandlers(ctx);
-  registerGuildHandlers(ctx);
-  registerThreadHandlers(ctx);
-  registerInviteHandlers(ctx);
-  registerEmojiHandlers(ctx);
-  registerStickerHandlers(ctx);
-  registerAutoModHandlers(ctx);
-  registerPollHandlers(ctx);
-  registerScheduledEventHandlers(ctx);
-  registerStageHandlers(ctx);
-  registerAuditLogCorrelationHandlers(ctx);
-  registerVoiceHandlers(ctx);
+  registerMessageHandlers(ctx, getChannelId);
+  registerReactionHandlers(ctx, getChannelId);
+  registerMemberHandlers(ctx, getChannelId);
+  registerRoleHandlers(ctx, getChannelId);
+  registerChannelHandlers(ctx, getChannelId);
+  registerGuildHandlers(ctx, getChannelId);
+  registerThreadHandlers(ctx, getChannelId);
+  registerInviteHandlers(ctx, getChannelId);
+  registerEmojiHandlers(ctx, getChannelId);
+  registerStickerHandlers(ctx, getChannelId);
+  registerAutoModHandlers(ctx, getChannelId);
+  registerPollHandlers(ctx, getChannelId);
+  registerScheduledEventHandlers(ctx, getChannelId);
+  registerStageHandlers(ctx, getChannelId);
+  registerAuditLogCorrelationHandlers(ctx, getChannelId);
+  registerVoiceHandlers(ctx, getChannelId);
 }

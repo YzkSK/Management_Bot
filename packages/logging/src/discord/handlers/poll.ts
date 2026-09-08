@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { PendingPoll, WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, PendingPoll, WriteLogEntryDeps } from "../../application/index.js";
 import { findPendingPolls, writeLogEntry } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
@@ -94,8 +94,8 @@ function registerPollReconciliation(ctx: FeatureModuleContext, deps: WriteLogEnt
   });
 }
 
-export function registerPollHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerPollHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("messageCreate", (message) => {
     const entry = toPollCreateLogEntry(message);

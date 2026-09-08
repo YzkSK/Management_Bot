@@ -1,6 +1,6 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { AuditLogEvent, type GuildAuditLogsEntry } from "discord.js";
-import type { AuditLogEntryInfo, WriteLogEntryDeps } from "../../application/index.js";
+import type { AuditLogEntryInfo, GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { correlateAuditLogEntry } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 
@@ -106,8 +106,8 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
  * correlateAuditLogEntry(生ログ保存+既存行への実行者追記)という複合処理のため、
  * writeLogEntrySafelyではなくここで個別にエラーを握りつぶす(discord.jsのリスナーに再配送はない)。
  */
-export function registerAuditLogCorrelationHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerAuditLogCorrelationHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("guildAuditLogEntryCreate", (entry, guild) => {
     void correlateAuditLogEntry(deps, toAuditLogEntryInfo(entry, guild.id)).catch((error: unknown) => {

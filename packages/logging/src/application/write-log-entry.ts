@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@management-bot/db";
 import { logChannelSettings, logEntries } from "@management-bot/db";
+import { createTtlCache } from "@management-bot/shared";
 import { eq, and } from "drizzle-orm";
 import type { LogEntry } from "../domain/index.js";
 
@@ -11,13 +12,41 @@ export interface ChannelMessage {
 
 export type ChannelSender = (channelId: string, message: ChannelMessage) => Promise<void>;
 
+export type GetChannelId = (guildId: string, category: LogEntry["category"]) => Promise<string | null>;
+
 export interface WriteLogEntryDeps {
   db: Db;
   sendToChannel: ChannelSender;
+  /**
+   * guild×categoryの出力先チャンネルIDを解決する関数。省略時はdbへ毎回SELECTする。
+   * writeLogEntryは全Discordイベントごとに呼ばれ、書き込み頻度に対して設定変更頻度は
+   * ずっと低いため、registerDiscordHandlers側でcreateChannelSettingResolver()を使い
+   * 短命キャッシュ付きの実装を注入すると、DB往復を削減できる(パフォーマンス改善)。
+   */
+  getChannelId?: GetChannelId;
 }
 
 const MAX_MESSAGE_LENGTH = 1_900;
 const TRUNCATION_SUFFIX = "…";
+
+async function selectChannelId(db: Db, guildId: string, category: LogEntry["category"]): Promise<string | null> {
+  const [channelSetting] = await db
+    .select({ channelId: logChannelSettings.channelId })
+    .from(logChannelSettings)
+    .where(and(eq(logChannelSettings.guildId, guildId), eq(logChannelSettings.category, category)));
+  return channelSetting?.channelId ?? null;
+}
+
+/**
+ * writeLogEntryのWriteLogEntryDeps.getChannelIdに注入する、TTLキャッシュ付きの出力先チャンネル
+ * 解決関数を作る。プロセス起動時(registerDiscordHandlers)に1回だけ生成し全ハンドラで共有する。
+ * dashboard-api(別プロセス)での設定変更がここに反映されるまで最大TTL秒遅れうるが、
+ * 通知先チャンネルの切り替えなのでこの遅延は許容する。
+ */
+export function createChannelSettingResolver(db: Db, ttlMs = 5_000): GetChannelId {
+  const cache = createTtlCache<string | null>(ttlMs);
+  return (guildId, category) => cache(`${guildId}:${category}`, () => selectChannelId(db, guildId, category));
+}
 
 function formatValue(value: unknown): string {
   const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
@@ -68,7 +97,7 @@ export async function writeLogEntry(
   id: string = randomUUID(),
   skipNotifyIfExists = false,
 ): Promise<void> {
-  const { db, sendToChannel } = deps;
+  const { db, sendToChannel, getChannelId = (guildId, category) => selectChannelId(db, guildId, category) } = deps;
 
   const inserted = await db
     .insert(logEntries)
@@ -85,14 +114,11 @@ export async function writeLogEntry(
 
   if (skipNotifyIfExists && inserted.length === 0) return;
 
-  const [channelSetting] = await db
-    .select({ channelId: logChannelSettings.channelId })
-    .from(logChannelSettings)
-    .where(and(eq(logChannelSettings.guildId, entry.guildId), eq(logChannelSettings.category, entry.category)));
+  const channelId = await getChannelId(entry.guildId, entry.category);
 
-  if (!channelSetting) return;
+  if (channelId === null) return;
 
-  await sendToChannel(channelSetting.channelId, {
+  await sendToChannel(channelId, {
     content: formatLogEntry(entry),
     suppressMentions: true,
   });

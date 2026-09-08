@@ -2,7 +2,7 @@ import type { FeatureModuleContext } from "@management-bot/core";
 import type { VoiceState } from "discord.js";
 import { VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -59,8 +59,8 @@ export function toVoiceStateUpdateEntry(oldState: VoiceState, newState: VoiceSta
   };
 }
 
-export function registerVoiceHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerVoiceHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("voiceStateUpdate", (oldState, newState) => {
     const moveEntry = toVoiceStateLogEntry(oldState, newState);
