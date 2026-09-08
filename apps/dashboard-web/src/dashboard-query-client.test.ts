@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { TRPCClientError } from "@trpc/client";
-import { createDashboardQueryClient } from "./dashboard-query-client.js";
+import { createDashboardQueryClient, DASHBOARD_QUERY_STALE_TIME_MS } from "./dashboard-query-client.js";
 
 function unauthorizedError() {
   return TRPCClientError.from({
@@ -15,6 +15,12 @@ function internalServerError() {
 }
 
 describe("createDashboardQueryClient", () => {
+  test("queryの既定staleTimeがDASHBOARD_QUERY_STALE_TIME_MSに設定される", () => {
+    const client = createDashboardQueryClient(() => {});
+
+    expect(client.getDefaultOptions().queries?.staleTime).toBe(DASHBOARD_QUERY_STALE_TIME_MS);
+  });
+
   test("queryがUNAUTHORIZEDで失敗するとonUnauthorizedが呼ばれる", async () => {
     const onUnauthorized = mock();
     const client = createDashboardQueryClient(onUnauthorized);
