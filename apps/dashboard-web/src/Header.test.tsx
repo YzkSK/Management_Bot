@@ -21,6 +21,6 @@ describe("Header", () => {
 
   test("タイトルはギルド選択画面(トップ)へのリンクになっている", () => {
     const html = renderHeader();
-    expect(html).toContain('href="/"');
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot Dashboard<\/a>/);
   });
 });
