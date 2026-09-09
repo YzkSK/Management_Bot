@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+/** チャンネル一覧はDiscord側の作成・削除・リネームが起きない限り変わらないため、既定より長めに据え置く。 */
+const CHANNEL_OPTIONS_STALE_TIME_MS = 5 * 60_000;
+
 const NO_CHANNEL = "__none__";
 /** 一括設定チャンネルSelectの初期状態(カテゴリごとに設定がバラバラで、まだ明示選択されていない)。 */
 const UNCHOSEN = "";
@@ -249,6 +252,7 @@ export function SettingsPage() {
   const channelOptionsQuery = useQuery({
     ...trpc.logging.listChannelOptions.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
+    staleTime: CHANNEL_OPTIONS_STALE_TIME_MS,
   });
   const displaySettingsQuery = useQuery({
     ...trpc.logging.getDisplaySettings.queryOptions({ guildId: guildId ?? "" }),
