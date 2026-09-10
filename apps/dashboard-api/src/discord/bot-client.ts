@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ChannelOption, MemberOption, RoleOption } from "@management-bot/dashboard-access";
+import { mapWithConcurrency } from "@management-bot/shared";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -319,18 +320,6 @@ export async function fetchGuildMembersPage(
  * (issue #165)。
  */
 const MEMBER_LOOKUP_CONCURRENCY = 5;
-
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  limit: number,
-  fn: (value: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < values.length; i += limit) {
-    results.push(...(await Promise.all(values.slice(i, i + limit).map(fn))));
-  }
-  return results;
-}
 
 interface BulkMemberNamesResult {
   names: Map<string, string>;
