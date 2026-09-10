@@ -327,23 +327,34 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+interface BulkMemberNamesResult {
+  names: Map<string, string>;
+  /**
+   * 一括取得に含まれなかったuserIdを個別取得(getGuildMembershipと同一バケット)へフォールバックして
+   * よいか。GUILD_MEMBERS Privileged Intent未設定(403)は恒久的な状態なので個別取得のみに倒してよいが、
+   * 429(リトライ上限到達)・5xx等の一時的な過負荷時に個別取得へフォールバックすると、getGuildMembershipと
+   * 同じバケットへ負荷を付け替えてしまい本修正の目的が崩れるため許可しない(その回は表示名解決を諦める)。
+   */
+  allowIndividualFallback: boolean;
+}
+
 /**
  * `/guilds/{id}/members?limit=1000`(一括取得、fetchGuildMembersPageと同じエンドポイント)は
  * `/guilds/{id}/members/{userId}`(個別取得、getGuildMembershipが使うエンドポイント)とは
  * 別のレート制限バケットのため、ここで一括取得しておけばgetGuildMembershipの応答を遅延させない
- * (issue #213: ログ一覧表示のuserIds個別問い合わせがgetGuildMembershipと同一バケットを取り合い、
- * 権限チェックが5秒以上遅延する不具合の原因だったことをdevトークンでの負荷再現で確認した)。
- * GUILD_MEMBERS Privileged Intent未設定(403)等で一括取得自体に失敗した場合は、
- * 全件を個別取得フォールバックに委ねる(呼び出し側からは見えないベストエフォート)。
- * 1000人を超えるguildでは最初の1000人(idの昇順)のみが対象になり、それ以外は個別取得にフォールバックする。
+ * (issue #213)。1000人を超えるguildでは最初の1000人(idの昇順)のみが対象になり、それ以外は
+ * allowIndividualFallback=trueの場合のみ個別取得にフォールバックする。
  */
-async function fetchBulkMemberNames(botToken: string, guildId: string): Promise<Map<string, string>> {
+async function fetchBulkMemberNames(botToken: string, guildId: string): Promise<BulkMemberNamesResult> {
   try {
     const page = await fetchGuildMembersPage(botToken, guildId);
-    return new Map(page.members.map((member) => [member.id, member.name]));
+    return { names: new Map(page.members.map((member) => [member.id, member.name])), allowIndividualFallback: true };
   } catch (error) {
-    console.error(`Failed to bulk-fetch guild members for guild ${guildId}, falling back to per-user lookups`, error);
-    return new Map();
+    if (error instanceof DiscordAccessForbiddenError) {
+      return { names: new Map(), allowIndividualFallback: true };
+    }
+    console.error(`Failed to bulk-fetch guild members for guild ${guildId}`, error);
+    return { names: new Map(), allowIndividualFallback: false };
   }
 }
 
@@ -391,10 +402,12 @@ export async function fetchGuildMemberNames(
 ): Promise<Map<string, string>> {
   if (userIds.length === 0) return new Map();
 
-  const bulkNames = await fetchBulkMemberNames(botToken, guildId);
+  const { names: bulkNames, allowIndividualFallback } = await fetchBulkMemberNames(botToken, guildId);
   const missingUserIds = userIds.filter((userId) => !bulkNames.has(userId));
   const fallbackNames =
-    missingUserIds.length > 0 ? await fetchMemberNamesIndividually(botToken, guildId, missingUserIds) : new Map();
+    allowIndividualFallback && missingUserIds.length > 0
+      ? await fetchMemberNamesIndividually(botToken, guildId, missingUserIds)
+      : new Map();
 
   const names = new Map(bulkNames);
   for (const [userId, name] of fallbackNames) {

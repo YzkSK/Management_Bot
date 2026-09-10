@@ -844,6 +844,34 @@ describe("fetchGuildMemberNames", () => {
     expect(result.get("u1")).toBe("ニックネーム");
   });
 
+  test("一括取得が429(リトライ上限到達)で失敗した場合は個別取得にフォールバックしない(getGuildMembershipと同一バケットへの負荷付け替えを避けるため)", async () => {
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    let individualCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return new Response(JSON.stringify({ message: "rate limited" }), {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        });
+      }
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        individualCalled = true;
+        return jsonResponse(200, { nick: null, user: { username: "user-u1", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+      expect(result.has("u1")).toBe(false);
+      expect(individualCalled).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   test("一括取得に含まれないuserId(1000人超のguild等)のみ個別取得にフォールバックする", async () => {
     const individualCalled: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
