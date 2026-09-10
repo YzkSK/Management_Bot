@@ -307,6 +307,16 @@ describe("logEntrySchema", () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.changes).toEqual(changes);
   });
+
+  test("member: nicknameChange preserves the previous display name", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      previousUserName: "元の表示名",
+    });
+
+    expect(result).toMatchObject({ success: true, data: { previousUserName: "元の表示名" } });
+  });
 });
 
 describe("SENSITIVE_LOG_FIELDS", () => {

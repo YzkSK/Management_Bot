@@ -84,6 +84,7 @@ export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMe
       userId: newMember.id,
       userName: newMember.displayName,
       action: "nicknameChange",
+      previousUserName: oldMember.displayName,
       changes: {
         nickname: {
           before: oldMember.nickname,

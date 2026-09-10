@@ -56,6 +56,8 @@ export const memberLogEntrySchema = z.object({
   /** イベント発生時点のDiscord表示名のスナップショット。ban/unbanはGuildMemberを取得できないためニックネーム抜き。 */
   userName: nonEmptyString.optional(),
   action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "timeoutRemove", "nicknameChange"]),
+  /** nicknameChange時点の変更前表示名。変更前ニックネームが未設定の自己変更見出しに使う。 */
+  previousUserName: nonEmptyString.optional(),
   changes: z
     .object({
       nickname: z.object({ before: z.string().nullable(), after: z.string().nullable() }),

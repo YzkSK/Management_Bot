@@ -59,10 +59,14 @@ describe("member category mappers", () => {
 
 describe("toMemberUpdateLogEntries", () => {
   test("ニックネーム設定時に変更前後の値を含むnicknameChangeを返す", () => {
-    const entries = toMemberUpdateLogEntries(fakeMember({ nickname: null }), fakeMember({ nickname: "new" }));
+    const entries = toMemberUpdateLogEntries(
+      fakeMember({ nickname: null, displayName: "たろう" }),
+      fakeMember({ nickname: "new" }),
+    );
     expect(entries).toEqual([
       expect.objectContaining({
         action: "nicknameChange",
+        previousUserName: "たろう",
         changes: { nickname: { before: null, after: "new" } },
       }),
     ]);
