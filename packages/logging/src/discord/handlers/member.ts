@@ -67,8 +67,12 @@ export function toMemberUnbanLogEntry(ban: GuildBan): LogEntry {
  * 期限切れによる自動解除と手動解除はdiscord.jsのイベントだけでは区別できないため、どちらもtimeoutRemoveとして
  * 一律記録する(#81)。区別が必要な場合は#52の監査ログ相関(実行者の有無)に委ねる。
  * userIdは変更対象(実行者ではない)のため、ban/unban同様actorIsBotは設定しない(codexレビュー指摘)。
+ * oldMemberがpartial(nickname/communicationDisabledUntilTimestamp未取得)の場合、実際は変化していなくても
+ * 比較が常に不一致になり誤ったログを生成するため、比較前にスキップする。
  */
 export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMember, newMember: GuildMember): LogEntry[] {
+  if (oldMember.partial) return [];
+
   const createdAt = new Date().toISOString();
   const entries: LogEntry[] = [];
 

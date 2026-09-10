@@ -16,9 +16,10 @@ function fakeMember(
     communicationDisabledUntilTimestamp: number | null;
     bot: boolean;
     displayName: string;
+    partial: boolean;
   }> = {},
 ) {
-  const { bot = false, displayName = "たろう", ...rest } = overrides;
+  const { bot = false, displayName = "たろう", partial = false, ...rest } = overrides;
   return {
     id: "u1",
     guild: { id: "g1" },
@@ -26,6 +27,7 @@ function fakeMember(
     communicationDisabledUntilTimestamp: null,
     user: { bot },
     displayName,
+    partial,
     ...rest,
   } as never;
 }
@@ -79,6 +81,14 @@ describe("toMemberUpdateLogEntries", () => {
 
   test("変化がなければ空配列", () => {
     expect(toMemberUpdateLogEntries(fakeMember(), fakeMember())).toEqual([]);
+  });
+
+  test("oldMemberがpartialなら実際は無変化でも誤検知せず空配列を返す", () => {
+    const entries = toMemberUpdateLogEntries(
+      fakeMember({ partial: true, nickname: null, communicationDisabledUntilTimestamp: null }),
+      fakeMember({ nickname: "new", communicationDisabledUntilTimestamp: Date.now() + 60_000 }),
+    );
+    expect(entries).toEqual([]);
   });
 });
 
