@@ -223,7 +223,65 @@ describe("maskSensitiveFields", () => {
     expect((masked as { content?: string }).content).toBeUndefined();
   });
 
-  test("message/thread以外のカテゴリはそのまま返す", () => {
+  test("channelカテゴリのchanges(topic等の変更前後)も取り除く", () => {
+    const entry: LogEntry = {
+      category: "channel",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      action: "update",
+      changes: { topic: { before: "secret before", after: "secret after" } },
+    };
+
+    const masked = maskSensitiveFields(entry);
+
+    expect((masked as { changes?: unknown }).changes).toBeUndefined();
+  });
+
+  test("guildカテゴリのchangesも取り除く", () => {
+    const entry: LogEntry = {
+      category: "guild",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      action: "update",
+      changes: { name: { before: "secret before", after: "secret after" } },
+    };
+
+    const masked = maskSensitiveFields(entry);
+
+    expect((masked as { changes?: unknown }).changes).toBeUndefined();
+  });
+
+  test("roleカテゴリのchangesも取り除く", () => {
+    const entry: LogEntry = {
+      category: "role",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      roleId: "r1",
+      action: "update",
+      changes: { name: { before: "secret before", after: "secret after" } },
+    };
+
+    const masked = maskSensitiveFields(entry);
+
+    expect((masked as { changes?: unknown }).changes).toBeUndefined();
+  });
+
+  test("voiceカテゴリのchanges(フラグのon/off)は機微性が低いため取り除かない", () => {
+    const entry: LogEntry = {
+      category: "voice",
+      guildId,
+      createdAt: "2026-08-31T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: { selfMute: { before: false, after: true } },
+    };
+
+    expect(maskSensitiveFields(entry)).toEqual(entry);
+  });
+
+  test("message/thread/channel/guild/role以外のカテゴリはそのまま返す", () => {
     const entry = memberEntry();
 
     expect(maskSensitiveFields(entry)).toEqual(entry);

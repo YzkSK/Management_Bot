@@ -83,16 +83,45 @@ export async function listLogEntries(
 }
 
 /**
+ * VIEW_LOGS_RAWを持たない閲覧者向けにマスクするフィールド名をカテゴリごとに列挙したもの。
+ * Record<LogCategory, ...>にすることで、カテゴリ追加時にここへの追記漏れを型チェックで検知できる。
+ * voiceのchanges(selfMute等のフラグon/off)は本文相当の生データを含まないため対象外。
+ */
+const RAW_FIELDS: Record<LogCategory, readonly string[]> = {
+  message: ["content", "previousContent"],
+  thread: ["content"],
+  channel: ["changes"],
+  guild: ["changes"],
+  role: ["changes"],
+  reaction: [],
+  member: [],
+  invite: [],
+  emoji: [],
+  sticker: [],
+  autoMod: [],
+  integration: [],
+  poll: [],
+  scheduledEvent: [],
+  stage: [],
+  auditLogCorrelation: [],
+  moderationCase: [],
+  voice: [],
+};
+
+/**
  * VIEW_LOGS_RAWを持たない閲覧者向けに、メッセージ本文など生データを含むフィールドを取り除く。
  * VIEW_LOGSのみでは要約(誰が・いつ・何をしたか)のみ見える想定。
- * messageのpreviousContent(編集前本文)もcontentと同じ生データのため、合わせて取り除く。
  */
 export function maskSensitiveFields(entry: LogEntry): LogEntry {
-  if (entry.category === "message" && (entry.content !== undefined || entry.previousContent !== undefined)) {
-    return { ...entry, content: undefined, previousContent: undefined };
+  const fields = RAW_FIELDS[entry.category];
+  if (fields.length === 0) return entry;
+  const masked = { ...entry } as Record<string, unknown>;
+  let changed = false;
+  for (const field of fields) {
+    if (masked[field] !== undefined) {
+      masked[field] = undefined;
+      changed = true;
+    }
   }
-  if (entry.category === "thread" && entry.content !== undefined) {
-    return { ...entry, content: undefined };
-  }
-  return entry;
+  return changed ? (masked as LogEntry) : entry;
 }
