@@ -384,7 +384,7 @@ describe("formatLogMessage", () => {
     expect(message).toBe("現在の表示名 がニックネームを変更しました");
   });
 
-  test("ニックネーム変更(他者): 実行者と対象者を表示する", () => {
+  test("ニックネーム変更(他者): 実行者と変更前の対象者名を表示する", () => {
     const entry = {
       category: "member",
       guildId: "g1",
@@ -400,7 +400,27 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, noNames);
 
-    expect(message).toBe("モデレーター が 対象者 のニックネームを変更しました");
+    expect(message).toBe("モデレーター が 以前のニックネーム のニックネームを変更しました");
+  });
+
+  test("ニックネーム変更(他者・初回設定): 元の表示名を対象者名にする", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "新しいニックネーム",
+      previousUserName: "元の表示名",
+      executorId: "mod1",
+      executorName: "モデレーター",
+      action: "nicknameChange",
+      changes: { nickname: { before: null, after: "新しいニックネーム" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("モデレーター が 元の表示名 のニックネームを変更しました");
   });
 
   test("名前解決できないIDはIDのままフォールバックする", () => {

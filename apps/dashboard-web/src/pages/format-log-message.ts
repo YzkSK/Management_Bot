@@ -155,12 +155,12 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
         case "timeoutRemove":
           return `${executorName} が ${targetName} のタイムアウトを解除しました`;
         case "nicknameChange": {
+          const previousName = entry.changes?.nickname.before ?? entry.previousUserName ?? targetName;
           const isSelfChange = entry.executorId === undefined || entry.executorId === entry.userId;
           if (isSelfChange) {
-            const previousName = entry.changes?.nickname.before ?? entry.previousUserName ?? targetName;
             return `${previousName} がニックネームを変更しました`;
           }
-          return `${executorName} が ${targetName} のニックネームを変更しました`;
+          return `${executorName} が ${previousName} のニックネームを変更しました`;
         }
       }
       break;
