@@ -154,8 +154,14 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
           return `${executorName} が ${targetName} をタイムアウトしました`;
         case "timeoutRemove":
           return `${executorName} が ${targetName} のタイムアウトを解除しました`;
-        case "nicknameChange":
+        case "nicknameChange": {
+          const isSelfChange = entry.executorId === undefined || entry.executorId === entry.userId;
+          if (isSelfChange) {
+            const previousName = entry.changes?.nickname.before ?? entry.previousUserName ?? targetName;
+            return `${previousName} がニックネームを変更しました`;
+          }
           return `${executorName} が ${targetName} のニックネームを変更しました`;
+        }
       }
       break;
     }
