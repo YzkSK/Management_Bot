@@ -23,8 +23,13 @@ function fakeRole(id = "r1", overrides: Partial<Record<"name" | "color" | "hoist
   } as never;
 }
 
-function fakeMember(roleIds: string[], id = "u1") {
-  return { id, guild: { id: "g1" }, roles: { cache: new Map(roleIds.map((rid) => [rid, fakeRole(rid)])) } } as never;
+function fakeMember(roleIds: string[], id = "u1", displayName = "たろう") {
+  return {
+    id,
+    guild: { id: "g1" },
+    displayName,
+    roles: { cache: new Map(roleIds.map((rid) => [rid, fakeRole(rid)])) },
+  } as never;
 }
 
 describe("role category mappers", () => {
@@ -65,8 +70,8 @@ describe("toRoleMembershipLogEntries", () => {
     const entries = toRoleMembershipLogEntries(fakeMember(["r1"], "u1"), fakeMember(["r2"], "u1"));
     expect(entries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ roleId: "r2", userId: "u1", action: "memberAdd" }),
-        expect.objectContaining({ roleId: "r1", userId: "u1", action: "memberRemove" }),
+        expect.objectContaining({ roleId: "r2", userId: "u1", userName: "たろう", action: "memberAdd" }),
+        expect.objectContaining({ roleId: "r1", userId: "u1", userName: "たろう", action: "memberRemove" }),
       ]),
     );
     expect(entries).toHaveLength(2);

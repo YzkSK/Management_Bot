@@ -5,6 +5,12 @@ import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
+/**
+ * userId(creatorId)はルールの作成者であり、ruleUpdate/ruleDelete時点の実行者ではない
+ * (実行者はaudit log相関のexecutorId/executorNameが担う)。userNameスナップショットを
+ * ruleCreate以外にも付けると「作成者=実行者」であるかのように誤読されるため、
+ * 実際に表示に使われるactionExecuted(userId=発言者本人)のみに絞る。
+ */
 export function toAutoModRuleCreateLogEntry(rule: AutoModerationRule): LogEntry {
   return {
     category: "autoMod",
@@ -12,9 +18,6 @@ export function toAutoModRuleCreateLogEntry(rule: AutoModerationRule): LogEntry 
     createdAt: new Date().toISOString(),
     ruleId: rule.id,
     userId: rule.creatorId,
-    // creatorIdは文字列IDのみでdiscord.jsオブジェクトを持たないため、guild.members.cacheからの
-    // best-effort解決に留める(audit-log-correlation.tsのexecutorNameと同じパターン)。
-    userName: rule.guild.members.cache.get(rule.creatorId)?.displayName,
     action: "ruleCreate",
   };
 }
@@ -27,7 +30,6 @@ export function toAutoModRuleUpdateLogEntry(newRule: AutoModerationRule): LogEnt
     createdAt: new Date().toISOString(),
     ruleId: newRule.id,
     userId: newRule.creatorId,
-    userName: newRule.guild.members.cache.get(newRule.creatorId)?.displayName,
     action: "ruleUpdate",
   };
 }
@@ -39,7 +41,6 @@ export function toAutoModRuleDeleteLogEntry(rule: AutoModerationRule): LogEntry 
     createdAt: new Date().toISOString(),
     ruleId: rule.id,
     userId: rule.creatorId,
-    userName: rule.guild.members.cache.get(rule.creatorId)?.displayName,
     action: "ruleDelete",
   };
 }
@@ -51,6 +52,8 @@ export function toAutoModActionExecutedLogEntry(execution: AutoModerationActionE
     createdAt: new Date().toISOString(),
     ruleId: execution.ruleId,
     userId: execution.userId,
+    // creatorIdと異なりuserIdは発言者本人(実行者)のため、guild.members.cacheからの
+    // best-effort解決をスナップショットとして残す(audit-log-correlation.tsのexecutorNameと同じパターン)。
     userName: execution.guild.members.cache.get(execution.userId)?.displayName,
     channelId: execution.channelId ?? undefined,
     action: "actionExecuted",

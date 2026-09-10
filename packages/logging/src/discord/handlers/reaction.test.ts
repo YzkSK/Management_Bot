@@ -9,8 +9,8 @@ function fakeReaction(emojiDisplay = "😀") {
   } as never;
 }
 
-function fakeUser(id = "u1", partial = false, bot = false) {
-  return { id, partial, bot } as never;
+function fakeUser(id = "u1", partial = false, bot = false, displayName = "たろう") {
+  return { id, partial, bot, displayName } as never;
 }
 
 describe("reaction category mappers", () => {
@@ -22,6 +22,7 @@ describe("reaction category mappers", () => {
     expect((entry as { messageId: string }).messageId).toBe("m1");
     expect((entry as { userId: string }).userId).toBe("u1");
     expect((entry as { emoji: string }).emoji).toBe("😀");
+    expect((entry as { userName?: string }).userName).toBe("たろう");
   });
 
   test("remove", () => {
@@ -34,9 +35,10 @@ describe("reaction category mappers", () => {
     expect(toReactionAddLogEntry(reaction, fakeUser())).toBeUndefined();
   });
 
-  test("userがpartial(未キャッシュ)でもuserIdだけでログを作成する", () => {
+  test("userがpartial(未キャッシュ)でもuserIdだけでログを作成する(usernameが取得できないためuserNameは未設定)", () => {
     const entry = toReactionAddLogEntry(fakeReaction(), fakeUser("u1", true));
     expect((entry as { userId: string }).userId).toBe("u1");
+    expect((entry as { userName?: string }).userName).toBeUndefined();
   });
 
   test("Botユーザーのリアクションはactor" + "IsBot=trueとして記録する(除外はしない)", () => {
