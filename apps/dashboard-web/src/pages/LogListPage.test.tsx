@@ -402,4 +402,15 @@ describe("LogListPage", () => {
 
     expect(html).toContain("Admin が #質問スレ を作成しました");
   });
+  test("ニックネーム変更の差分フィールドを日本語ラベルに対応付ける", () => {
+    const memberEntry = {
+      category: "member",
+      action: "nicknameChange",
+      changes: { nickname: { before: null, after: "新しい名前" } },
+    };
+
+    expect(memberEntry.changes.nickname.before).toBeNull();
+    expect(memberEntry.changes.nickname.after).toBe("新しい名前");
+    expect(Bun.file(new URL("./LogListPage.tsx", import.meta.url)).text()).resolves.toContain('nickname: "ニックネーム"');
+  });
 });

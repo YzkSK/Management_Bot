@@ -24,6 +24,7 @@ export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<s
 
 /** role/channel updateのchangesキーを表示用の日本語ラベルに変換する。未知キーはそのまま表示する。 */
 const CHANGE_FIELD_LABELS: Record<string, string> = {
+  nickname: "ニックネーム",
   name: "名前",
   color: "色",
   hoist: "表示を分離",
