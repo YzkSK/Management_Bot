@@ -56,6 +56,23 @@ function extractMemberUpdateVoiceStateChanges(
   return mute !== undefined || deaf !== undefined ? { mute, deaf, hasOtherChanges } : undefined;
 }
 
+/** MemberUpdateのnick差分と、初回設定時に見出しへ使う対象ユーザーの本来の表示名を抽出する。 */
+function extractMemberNicknameChange(
+  entry: GuildAuditLogsEntry,
+): { before: string | null; after: string | null; previousUserName?: string } | undefined {
+  if (entry.action !== AuditLogEvent.MemberUpdate) return undefined;
+  const change = entry.changes.find((candidate) => candidate.key === "nick");
+  if (!change) return undefined;
+
+  const target = entry.target as { displayName?: unknown } | null | undefined;
+  const previousUserName = typeof target?.displayName === "string" ? target.displayName : undefined;
+  return {
+    before: typeof change.old === "string" ? change.old : null,
+    after: typeof change.new === "string" ? change.new : null,
+    previousUserName,
+  };
+}
+
 /**
  * MemberDisconnect/MemberMoveのextra.countとextra.channel.id(MemberMoveの移動先)を取得する。
  * それ以外のactionではundefined。Discord APIのaudit log optional infoは仕様上欠損し得るため、
@@ -109,6 +126,7 @@ export function toAuditLogEntryInfo(
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),
     voiceDisconnectOrMove: extractVoiceDisconnectOrMove(entry),
     memberUpdateVoiceStateChanges: extractMemberUpdateVoiceStateChanges(entry),
+    memberNicknameChange: extractMemberNicknameChange(entry),
   };
 }
 

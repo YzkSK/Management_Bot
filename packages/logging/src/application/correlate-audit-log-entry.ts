@@ -41,6 +41,8 @@ export interface AuditLogEntryInfo {
    * (mute/deafのみの監査ログを無関係なmemberログの実行者として誤帰属させないため)。
    */
   memberUpdateVoiceStateChanges?: { mute?: boolean; deaf?: boolean; hasOtherChanges: boolean };
+  /** MemberUpdateのnick差分。通常のguildMemberUpdateログが欠落した場合の補完に使う。 */
+  memberNicknameChange?: { before: string | null; after: string | null; previousUserName?: string };
 }
 
 interface CorrelationRule {
