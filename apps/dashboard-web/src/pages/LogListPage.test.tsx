@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
 import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
+
+const reactUseState = React.useState;
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
@@ -402,15 +405,46 @@ describe("LogListPage", () => {
 
     expect(html).toContain("Admin が #質問スレ を作成しました");
   });
-  test("ニックネーム変更の差分フィールドを日本語ラベルに対応付ける", () => {
-    const memberEntry = {
-      category: "member",
-      action: "nicknameChange",
-      changes: { nickname: { before: null, after: "新しい名前" } },
-    };
+  test("展開したメンバーのニックネーム変更では差分を日本語ラベルで表示する", () => {
+    const expandedIds = new Set(["log-1"]);
+    let expandedStateInitialized = false;
+    mock.module("react", () => ({
+      ...React,
+      useState: <T,>(initialValue: T) => {
+        if (!expandedStateInitialized && initialValue instanceof Set && initialValue.size === 0) {
+          expandedStateInitialized = true;
+          const setExpandedIds = mock<React.Dispatch<React.SetStateAction<Set<string>>>>();
+          return [expandedIds, setExpandedIds] as [T, React.Dispatch<React.SetStateAction<T>>];
+        }
+        return reactUseState(initialValue);
+      },
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "member",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              userId: "u1",
+              action: "nicknameChange",
+              changes: { nickname: { before: null, after: "新しい名前" } },
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
 
-    expect(memberEntry.changes.nickname.before).toBeNull();
-    expect(memberEntry.changes.nickname.after).toBe("新しい名前");
-    expect(Bun.file(new URL("./LogListPage.tsx", import.meta.url)).text()).resolves.toContain('nickname: "ニックネーム"');
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("ニックネーム");
+    expect(html).toContain("未設定");
+    expect(html).toContain("新しい名前");
+    mock.restore();
   });
 });
