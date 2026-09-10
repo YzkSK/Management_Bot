@@ -1,5 +1,5 @@
 import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
-import { buildInviteUrl, CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
+import { buildInviteUrl, CAPABILITIES, discordIdSchema, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import {
 import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const listLogEntriesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   /** 前回レスポンスのnextCursorをそのまま渡す不透明なトークン。 */
@@ -26,39 +26,39 @@ const listLogEntriesInput = z.object({
 });
 
 const guildIdInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
 });
 
 /** 100年。無期限保存(0)以外の実運用上限として設定し、DBのinteger範囲外の値を弾く。 */
 const MAX_RETENTION_DAYS = 36_500;
 
 const setRetentionSettingInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES),
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
 const setRetentionSettingForAllCategoriesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
 const setChannelSettingInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES),
   /** nullで出力先未設定に戻す(該当カテゴリの送信を停止)。 */
-  channelId: z.string().min(1).nullable(),
+  channelId: discordIdSchema.nullable(),
 });
 
 const setChannelSettingForAllCategoriesInput = z.object({
-  guildId: z.string().min(1),
-  channelId: z.string().min(1).nullable(),
+  guildId: discordIdSchema,
+  channelId: discordIdSchema.nullable(),
 });
 
 /** 呼び出し側が変更したいフィールドのみ送る(部分更新)。未指定フィールドは既存値を維持する。 */
 const setDisplaySettingInput = z
   .object({
-    guildId: z.string().min(1),
+    guildId: discordIdSchema,
     hideAuditLogCorrelation: z.boolean().optional(),
     hideBotEvents: z.boolean().optional(),
   })
@@ -69,7 +69,7 @@ const setDisplaySettingInput = z
   );
 
 const resolveDisplayNamesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   userIds: z.array(z.string()).default([]),
   channelIds: z.array(z.string()).default([]),
 });

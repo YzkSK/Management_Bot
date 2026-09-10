@@ -1,4 +1,4 @@
-import { CAPABILITIES, canGrantCapabilities, isKnownCapabilityMask } from "@management-bot/shared";
+import { CAPABILITIES, canGrantCapabilities, discordIdSchema, isKnownCapabilityMask } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -11,32 +11,32 @@ import {
 import type { DashboardAccessContext } from "./trpc.js";
 import { protectedProcedure, requireCapability, router } from "./trpc.js";
 
-const guildIdInput = z.object({ guildId: z.string().min(1) });
+const guildIdInput = z.object({ guildId: discordIdSchema });
 
 const targetTypeSchema = z.enum(["user", "role"]);
 
 const grantCapabilitiesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   targetType: targetTypeSchema,
-  targetId: z.string().min(1),
+  targetId: discordIdSchema,
   /** 0(無権限)でのgrantは意味を持たないため拒否する。剥奪はrevokeCapabilityGrantを使う。 */
   capabilities: z.number().int().positive(),
 });
 
 const revokeCapabilityGrantInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   targetType: targetTypeSchema,
-  targetId: z.string().min(1),
+  targetId: discordIdSchema,
 });
 
 const listMemberOptionsInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   /** 前回レスポンスのnextAfterをそのまま渡す不透明なカーソル。省略時は先頭ページ。 */
   after: z.string().min(1).optional(),
 });
 
 const resolveTargetUserNamesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   /** grant一覧の表示名解決用。1回のリクエストで問い合わせるuserId数を制限する。 */
   userIds: z.array(z.string()).max(100).default([]),
 });
