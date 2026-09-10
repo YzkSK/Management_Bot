@@ -354,6 +354,34 @@ describe("429リトライ(discordGet共通)", () => {
     expect(result.get("u1")).toBe("user1");
   });
 
+  test("429発生時はレート制限の発生をログに残す(原因調査用、issue #211)", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    let calls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        calls++;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ message: "rate limited" }), {
+            status: 429,
+            headers: { "Retry-After": "0" },
+          });
+        }
+        return jsonResponse(200, { nick: null, user: { username: "user1", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]?.[0]).toContain("/guilds/g1/members/u1");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   test("429がリトライ上限を超えて続く場合はエラーになりMapに含めない", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     let calls = 0;

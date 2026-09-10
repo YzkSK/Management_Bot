@@ -91,6 +91,8 @@ async function discordGet<T>(
     if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
       const retryAfterSeconds = Number(response.headers.get("Retry-After"));
       const delayMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 1000;
+      // Dashboardの体感遅延がレート制限のリトライ待ちによるものか判断するための観測用ログ(issue #211)。
+      console.warn(`Discord API rate limited (${path}): retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES} after ${delayMs}ms`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       continue;
     }
