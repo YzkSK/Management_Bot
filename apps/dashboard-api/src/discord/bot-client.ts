@@ -122,10 +122,15 @@ function getMe(botToken: string): Promise<z.infer<typeof meSchema> | "not_found"
   let cached = meCache.get(botToken);
   if (!cached) {
     cached = discordGet(botToken, "/users/@me", meSchema);
-    cached.catch((error: unknown) => {
-      console.error("Failed to fetch /users/@me", error);
-      meCache.delete(botToken);
-    });
+    cached.then(
+      (result) => {
+        if (result === "not_found") meCache.delete(botToken);
+      },
+      (error: unknown) => {
+        console.error("Failed to fetch /users/@me", error);
+        meCache.delete(botToken);
+      },
+    );
     meCache.set(botToken, cached);
   }
   return cached;

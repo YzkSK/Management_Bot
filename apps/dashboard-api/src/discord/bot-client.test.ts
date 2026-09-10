@@ -128,6 +128,40 @@ describe("fetchGuildChannels", () => {
 
     await expect(fetchGuildChannels("test-bot-token", "g1")).rejects.toThrow();
   });
+
+  test("/users/@meが一時的に403/404を返した場合、次回呼び出し時にキャッシュされた\"not_found\"を使い回さず再取得する", async () => {
+    const token = "retry-bot-token";
+    let meCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) {
+        meCalls++;
+        return meCalls === 1 ? jsonResponse(403) : jsonResponse(200, { id: "bot1" });
+      }
+      if (url.endsWith("/guilds/g1/channels")) {
+        return jsonResponse(200, [{ id: "c1", name: "general", type: 0, permission_overwrites: [] }]);
+      }
+      if (url.endsWith("/guilds/g1/threads/active")) {
+        return jsonResponse(200, { threads: [] });
+      }
+      if (url.endsWith("/guilds/g1/roles")) {
+        return jsonResponse(200, [
+          { id: "g1", name: "everyone", permissions: String(BigInt(VIEW_CHANNEL) | BigInt(SEND_MESSAGES)) },
+        ]);
+      }
+      if (url.endsWith("/guilds/g1/members/bot1")) {
+        return jsonResponse(200, { roles: [] });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const firstResult = await fetchGuildChannels(token, "g1");
+    expect(firstResult).toEqual([]);
+
+    const secondResult = await fetchGuildChannels(token, "g1");
+    expect(secondResult).toEqual([{ id: "c1", name: "general" }]);
+    expect(meCalls).toBe(2);
+  });
 });
 
 describe("fetchAllGuildChannelNames", () => {
