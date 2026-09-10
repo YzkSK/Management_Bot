@@ -49,6 +49,7 @@ export {
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
+  SENSITIVE_LOG_FIELDS,
   type LogEntry,
   type VoiceStateFlagName,
 } from "./log-entry.js";

@@ -4,6 +4,7 @@ import {
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
+  SENSITIVE_LOG_FIELDS,
   type LogCategory,
 } from "./log-entry.js";
 
@@ -284,5 +285,27 @@ describe("logEntrySchema", () => {
       changes: { icon: { before: null, after: "hash" } },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("SENSITIVE_LOG_FIELDS", () => {
+  test("message.previousContentをマスク対象として検出する(schema上.meta({sensitive:true})指定)", () => {
+    expect(SENSITIVE_LOG_FIELDS.message).toContain("previousContent");
+  });
+
+  test("channel/guild/roleのchangesをマスク対象として検出する", () => {
+    expect(SENSITIVE_LOG_FIELDS.channel).toContain("changes");
+    expect(SENSITIVE_LOG_FIELDS.guild).toContain("changes");
+    expect(SENSITIVE_LOG_FIELDS.role).toContain("changes");
+  });
+
+  test("sensitiveマークのないカテゴリは空配列を返す", () => {
+    expect(SENSITIVE_LOG_FIELDS.member).toEqual([]);
+    expect(SENSITIVE_LOG_FIELDS.reaction).toEqual([]);
+    expect(SENSITIVE_LOG_FIELDS.voice).toEqual([]);
+  });
+
+  test("全カテゴリ分のエントリを持つ", () => {
+    expect(Object.keys(SENSITIVE_LOG_FIELDS).sort()).toEqual(Object.keys(LOG_ENTRY_SCHEMAS).sort());
   });
 });

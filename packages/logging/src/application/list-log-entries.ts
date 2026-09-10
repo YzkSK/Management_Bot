@@ -1,6 +1,6 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import type { LogCategory } from "@management-bot/shared";
+import { SENSITIVE_LOG_FIELDS, type LogCategory } from "@management-bot/shared";
 import { and, desc, eq, lt, notInArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
@@ -87,33 +87,15 @@ export async function listLogEntries(
  * Record<LogCategory, ...>にすることで、カテゴリ追加時にここへの追記漏れを型チェックで検知できる。
  * voiceのchanges(selfMute等のフラグon/off)は本文相当の生データを含まないため対象外。
  */
-const RAW_FIELDS: Record<LogCategory, readonly string[]> = {
-  message: ["previousContent"],
-  thread: [],
-  channel: ["changes"],
-  guild: ["changes"],
-  role: ["changes"],
-  reaction: [],
-  member: [],
-  invite: [],
-  emoji: [],
-  sticker: [],
-  autoMod: [],
-  integration: [],
-  poll: [],
-  scheduledEvent: [],
-  stage: [],
-  auditLogCorrelation: [],
-  moderationCase: [],
-  voice: [],
-};
-
 /**
  * VIEW_LOGS_RAWを持たない閲覧者向けに、メッセージ本文など生データを含むフィールドを取り除く。
  * VIEW_LOGSのみでは要約(誰が・いつ・何をしたか)のみ見える想定。
+ * マスク対象フィールドはLogEntryのzodスキーマの`.meta({ sensitive: true })`から導出する
+ * (SENSITIVE_LOG_FIELDS、issue #219)。従来はここに手動列挙テーブルを持っており、
+ * スキーマに新しい生データフィールドが増えた際の追記漏れが実際にバグを起こしていた。
  */
 export function maskSensitiveFields(entry: LogEntry): LogEntry {
-  const fields = RAW_FIELDS[entry.category];
+  const fields = SENSITIVE_LOG_FIELDS[entry.category];
   if (fields.length === 0) return entry;
   const masked = { ...entry } as Record<string, unknown>;
   let changed = false;

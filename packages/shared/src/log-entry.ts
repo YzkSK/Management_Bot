@@ -32,7 +32,7 @@ export const messageLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
   /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
-  previousContent: z.string().optional(),
+  previousContent: z.string().optional().meta({ sensitive: true }),
   /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
 });
@@ -71,7 +71,8 @@ export const roleLogEntrySchema = z.object({
   changes: z
     .record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 const channelChangeValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -85,7 +86,8 @@ export const channelLogEntrySchema = z.object({
   changes: z
     .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 export const guildLogEntrySchema = z.object({
@@ -96,7 +98,8 @@ export const guildLogEntrySchema = z.object({
   changes: z
     .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 export const threadLogEntrySchema = z.object({
@@ -274,3 +277,31 @@ export function parseLogEntry(input: unknown): LogEntry {
 export function safeParseLogEntry(input: unknown): z.ZodSafeParseResult<LogEntry> {
   return logEntrySchema.safeParse(input);
 }
+
+/**
+ * カテゴリごとの「VIEW_LOGS_RAWなしでマスクすべきフィールド名」をzodスキーマの
+ * `.meta({ sensitive: true })`から導出する。手動列挙テーブルとLogEntryスキーマが
+ * 独立して二重管理になっており、フィールド追加時にマスク対象への追記漏れが起きていたため
+ * (issue #219)、スキーマ自体を単一の情報源にする。
+ * voiceのようなdiscriminatedUnionスキーマは各選択肢(action別)のshapeを合成して調べる。
+ */
+function collectSensitiveFields(schema: z.ZodTypeAny): readonly string[] {
+  const options: z.ZodTypeAny[] =
+    "options" in schema.def && Array.isArray((schema.def as { options?: unknown }).options)
+      ? ((schema.def as { options: z.ZodTypeAny[] }).options)
+      : [schema];
+
+  const fields = new Set<string>();
+  for (const option of options) {
+    const shape = (option as { shape?: Record<string, z.ZodTypeAny> }).shape;
+    if (!shape) continue;
+    for (const [key, field] of Object.entries(shape)) {
+      if ((field.meta() as { sensitive?: boolean } | undefined)?.sensitive) fields.add(key);
+    }
+  }
+  return [...fields];
+}
+
+export const SENSITIVE_LOG_FIELDS: Record<LogCategory, readonly string[]> = Object.fromEntries(
+  Object.entries(LOG_ENTRY_SCHEMAS).map(([category, schema]) => [category, collectSensitiveFields(schema)]),
+) as Record<LogCategory, readonly string[]>;
