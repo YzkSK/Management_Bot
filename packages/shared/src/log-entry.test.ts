@@ -286,6 +286,27 @@ describe("logEntrySchema", () => {
     });
     expect(result.success).toBe(true);
   });
+  test("member: nicknameChange permits setting a nickname", () => {
+    const changes = { nickname: { before: null, after: "新しい名前" } };
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      changes,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.changes).toEqual(changes);
+  });
+
+  test("member: nicknameChange permits clearing a nickname", () => {
+    const changes = { nickname: { before: "以前の名前", after: null } };
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      changes,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.changes).toEqual(changes);
+  });
 });
 
 describe("SENSITIVE_LOG_FIELDS", () => {
