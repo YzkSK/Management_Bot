@@ -257,8 +257,8 @@ async function correlateJobs(
   executorName: string | undefined,
   jobs: CorrelationJob[],
   retryDelayMs: number,
-): Promise<void> {
-  if (jobs.length === 0) return;
+): Promise<boolean[]> {
+  if (jobs.length === 0) return [];
 
   const excludeIds: string[][] = jobs.map(() => []);
   let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, executorName, job, excludeIds[i]!)));
@@ -270,6 +270,7 @@ async function correlateJobs(
       ),
     );
   }
+  return results;
 }
 
 /**
@@ -425,6 +426,47 @@ export async function correlateAuditLogEntry(
      * 下のCORRELATION_RULES処理でmember側にも相関する。
      */
     if (!entry.memberUpdateVoiceStateChanges.hasOtherChanges) return;
+  }
+
+  if (entry.action === "MemberUpdate" && entry.targetId && entry.memberNicknameChange) {
+    const nicknameChange = entry.memberNicknameChange;
+    const afterCondition =
+      nicknameChange.after === null
+        ? sql`${logEntries.payload} -> 'changes' -> 'nickname' -> 'after' = 'null'::jsonb`
+        : sql`${logEntries.payload} -> 'changes' -> 'nickname' ->> 'after' = ${nicknameChange.after}`;
+    const [matched] = await correlateJobs(
+      deps.db,
+      entry.executorId,
+      entry.executorName,
+      [
+        makeJob("member", [
+          sql`${logEntries.payload} ->> 'action' = 'nicknameChange'`,
+          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+          afterCondition,
+        ]),
+      ],
+      retryDelayMs,
+    );
+
+    if (!matched) {
+      await writeLogEntry(
+        deps,
+        {
+          category: "member",
+          guildId: entry.guildId,
+          createdAt: entry.createdAt,
+          userId: entry.targetId,
+          userName: nicknameChange.after ?? nicknameChange.previousUserName ?? entry.targetId,
+          executorId: entry.executorId,
+          executorName: entry.executorName,
+          action: "nicknameChange",
+          previousUserName: nicknameChange.previousUserName,
+          changes: { nickname: { before: nicknameChange.before, after: nicknameChange.after } },
+        },
+        `memberNicknameChange:${entry.id}`,
+      );
+    }
+    return;
   }
 
   const rule = CORRELATION_RULES[entry.action];

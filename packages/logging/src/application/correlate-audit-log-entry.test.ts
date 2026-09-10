@@ -141,6 +141,86 @@ describe("correlateAuditLogEntry", () => {
     expect(updates).toHaveLength(0);
   });
 
+  test("MemberUpdateのnick差分は変更後ニックネームまで一致する既存ログへ相関する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const selectWhereArgs: unknown[] = [];
+    let correlationQueryCount = 0;
+    const db = {
+      ...fakeDb({ inserts, updates, selectResult: [{ id: "nickname-log-1" }] }),
+      select: () => ({
+        from: () => ({
+          where: (whereArg: unknown) => {
+            selectWhereArgs.push(whereArg);
+            return {
+              then: (resolve: (rows: unknown[]) => void) => resolve([]),
+              orderBy: () => ({
+                // nickname行へのexecutor追記後は、通常のMemberUpdate相関が同じ行を再取得しない。
+                limit: () => Promise.resolve(correlationQueryCount++ === 0 ? [{ id: "nickname-log-1" }] : []),
+              }),
+            };
+          },
+        }),
+      }),
+    } as unknown as Db;
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      {
+        ...baseEntry,
+        action: "MemberUpdate",
+        targetId: "u1",
+        memberNicknameChange: { before: "Yzk", after: "Yuzuki", previousUserName: "Yuzuki" },
+      },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(1);
+    expect(inserts).toHaveLength(1);
+    const correlationWhereCall = selectWhereArgs.find(
+      (whereArg) => pgDialect.sqlToQuery(whereArg as Parameters<typeof pgDialect.sqlToQuery>[0]).params.includes("u1"),
+    );
+    expect(correlationWhereCall).toBeDefined();
+    const { sql, params } = pgDialect.sqlToQuery(correlationWhereCall as Parameters<typeof pgDialect.sqlToQuery>[0]);
+    expect(sql).toContain("'nickname'");
+    expect(params).toContain("Yuzuki");
+    // 先頭はwriteLogEntryのlog_channel_settings照会、2件目だけがニックネーム相関の照会。
+    expect(selectWhereArgs).toHaveLength(2);
+  });
+
+  test("MemberUpdateのnick差分に既存ログがなければメンバーログを補完する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb({ inserts, updates, selectResult: [] });
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      {
+        ...baseEntry,
+        action: "MemberUpdate",
+        targetId: "u1",
+        memberNicknameChange: { before: null, after: "Yuzuki", previousUserName: "Yuzuki" },
+      },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(0);
+    expect(inserts).toHaveLength(2);
+    expect(inserts[1]?.values).toMatchObject({
+      id: "memberNicknameChange:audit-1",
+      category: "member",
+      payload: {
+        category: "member",
+        userId: "u1",
+        userName: "Yuzuki",
+        executorId: "mod-1",
+        action: "nicknameChange",
+        previousUserName: "Yuzuki",
+        changes: { nickname: { before: null, after: "Yuzuki" } },
+      },
+    });
+  });
+
   test("IntegrationCreate/Update/Deleteは既存行への追記ではなくintegrationカテゴリを新規作成する", async () => {
     const inserts: RecordedInsert[] = [];
     const updates: RecordedUpdate[] = [];
