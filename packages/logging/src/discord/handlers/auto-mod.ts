@@ -12,6 +12,9 @@ export function toAutoModRuleCreateLogEntry(rule: AutoModerationRule): LogEntry 
     createdAt: new Date().toISOString(),
     ruleId: rule.id,
     userId: rule.creatorId,
+    // creatorIdは文字列IDのみでdiscord.jsオブジェクトを持たないため、guild.members.cacheからの
+    // best-effort解決に留める(audit-log-correlation.tsのexecutorNameと同じパターン)。
+    userName: rule.guild.members.cache.get(rule.creatorId)?.displayName,
     action: "ruleCreate",
   };
 }
@@ -24,6 +27,7 @@ export function toAutoModRuleUpdateLogEntry(newRule: AutoModerationRule): LogEnt
     createdAt: new Date().toISOString(),
     ruleId: newRule.id,
     userId: newRule.creatorId,
+    userName: newRule.guild.members.cache.get(newRule.creatorId)?.displayName,
     action: "ruleUpdate",
   };
 }
@@ -35,6 +39,7 @@ export function toAutoModRuleDeleteLogEntry(rule: AutoModerationRule): LogEntry 
     createdAt: new Date().toISOString(),
     ruleId: rule.id,
     userId: rule.creatorId,
+    userName: rule.guild.members.cache.get(rule.creatorId)?.displayName,
     action: "ruleDelete",
   };
 }
@@ -46,6 +51,7 @@ export function toAutoModActionExecutedLogEntry(execution: AutoModerationActionE
     createdAt: new Date().toISOString(),
     ruleId: execution.ruleId,
     userId: execution.userId,
+    userName: execution.guild.members.cache.get(execution.userId)?.displayName,
     channelId: execution.channelId ?? undefined,
     action: "actionExecuted",
   };

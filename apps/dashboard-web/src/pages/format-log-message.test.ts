@@ -69,6 +69,27 @@ describe("formatLogMessage", () => {
     expect(message).toBe("モデレーター太郎 が Yuzuki のメッセージを削除しました");
   });
 
+  test("メッセージ削除(投稿者名スナップショットあり): resolveDisplayNamesの結果より優先する", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "退室済みユーザー",
+      action: "delete",
+      content: "spam",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "古い名前" },
+      channels: {},
+    });
+
+    expect(message).toBe("退室済みユーザー が自分のメッセージを削除しました");
+  });
+
   test("メッセージ投稿", () => {
     const entry = {
       category: "message",

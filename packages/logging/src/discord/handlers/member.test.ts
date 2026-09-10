@@ -15,21 +15,23 @@ function fakeMember(
     nickname: string | null;
     communicationDisabledUntilTimestamp: number | null;
     bot: boolean;
+    displayName: string;
   }> = {},
 ) {
-  const { bot = false, ...rest } = overrides;
+  const { bot = false, displayName = "たろう", ...rest } = overrides;
   return {
     id: "u1",
     guild: { id: "g1" },
     nickname: null,
     communicationDisabledUntilTimestamp: null,
     user: { bot },
+    displayName,
     ...rest,
   } as never;
 }
 
 function fakeBan(bot = false) {
-  return { guild: { id: "g1" }, user: { id: "u1", bot } } as never;
+  return { guild: { id: "g1" }, user: { id: "u1", bot, displayName: "たろう" } } as never;
 }
 
 describe("member category mappers", () => {
@@ -37,6 +39,11 @@ describe("member category mappers", () => {
   test("leave", () => expect(toMemberLeaveLogEntry(fakeMember()).action).toBe("leave"));
   test("ban", () => expect(toMemberBanLogEntry(fakeBan()).action).toBe("ban"));
   test("unban", () => expect(toMemberUnbanLogEntry(fakeBan()).action).toBe("unban"));
+
+  test("イベント発生時点の表示名をuserNameにスナップショット保存する", () => {
+    expect(toMemberJoinLogEntry(fakeMember()).userName).toBe("たろう");
+    expect(toMemberBanLogEntry(fakeBan()).userName).toBe("たろう");
+  });
 
   test("Botアカウントのjoinはactor" + "IsBot=trueとして記録する(除外はしない)", () => {
     expect(toMemberJoinLogEntry(fakeMember({ bot: true })).actorIsBot).toBe(true);

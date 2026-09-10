@@ -37,13 +37,15 @@ function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
   excludeBotAuthor = true,
-): { guildId: string; channelId: string; authorId: string; actorIsBot: boolean } | undefined {
+): { guildId: string; channelId: string; authorId: string; authorName: string; actorIsBot: boolean } | undefined {
   if (!message.guildId || !message.author) return undefined;
   if (excludeBotAuthor && (!botUserId || message.author.id === botUserId)) return undefined;
   return {
     guildId: message.guildId,
     channelId: message.channelId,
     authorId: message.author.id,
+    // message.memberはキャッシュ済みの場合のみニックネームを反映する(未キャッシュ時はUser.displayNameへフォールバック)。
+    authorName: message.member?.displayName ?? message.author.displayName,
     actorIsBot: message.author.bot,
   };
 }

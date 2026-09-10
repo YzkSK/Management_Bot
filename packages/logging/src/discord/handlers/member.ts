@@ -11,6 +11,7 @@ export function toMemberJoinLogEntry(member: GuildMember): LogEntry {
     guildId: member.guild.id,
     createdAt: new Date().toISOString(),
     userId: member.id,
+    userName: member.displayName,
     action: "join",
     actorIsBot: member.user.bot,
   };
@@ -27,6 +28,7 @@ export function toMemberLeaveLogEntry(member: GuildMember | PartialGuildMember):
     guildId: member.guild.id,
     createdAt: new Date().toISOString(),
     userId: member.id,
+    userName: member.displayName,
     action: "leave",
     actorIsBot: member.user.bot,
   };
@@ -43,6 +45,8 @@ export function toMemberBanLogEntry(ban: GuildBan): LogEntry {
     guildId: ban.guild.id,
     createdAt: new Date().toISOString(),
     userId: ban.user.id,
+    // BAN対象はguildMemberではなくUserしか取得できない(脱退済み扱いのため)ため、ニックネームは反映されない。
+    userName: ban.user.displayName,
     action: "ban",
   };
 }
@@ -53,6 +57,7 @@ export function toMemberUnbanLogEntry(ban: GuildBan): LogEntry {
     guildId: ban.guild.id,
     createdAt: new Date().toISOString(),
     userId: ban.user.id,
+    userName: ban.user.displayName,
     action: "unban",
   };
 }
@@ -68,14 +73,35 @@ export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMe
   const entries: LogEntry[] = [];
 
   if (oldMember.nickname !== newMember.nickname) {
-    entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "nicknameChange" });
+    entries.push({
+      category: "member",
+      guildId: newMember.guild.id,
+      createdAt,
+      userId: newMember.id,
+      userName: newMember.displayName,
+      action: "nicknameChange",
+    });
   }
 
   if (oldMember.communicationDisabledUntilTimestamp !== newMember.communicationDisabledUntilTimestamp) {
     if (newMember.communicationDisabledUntilTimestamp !== null) {
-      entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "timeout" });
+      entries.push({
+        category: "member",
+        guildId: newMember.guild.id,
+        createdAt,
+        userId: newMember.id,
+        userName: newMember.displayName,
+        action: "timeout",
+      });
     } else {
-      entries.push({ category: "member", guildId: newMember.guild.id, createdAt, userId: newMember.id, action: "timeoutRemove" });
+      entries.push({
+        category: "member",
+        guildId: newMember.guild.id,
+        createdAt,
+        userId: newMember.id,
+        userName: newMember.displayName,
+        action: "timeoutRemove",
+      });
     }
   }
 

@@ -57,11 +57,11 @@ export function toThreadMembershipLogEntries(
   if (!base) return [];
   const createdAt = new Date().toISOString();
   const entries: LogEntry[] = [];
-  for (const userId of addedMembers.keys()) {
-    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberAdd" });
+  for (const [userId, member] of addedMembers) {
+    entries.push({ category: "thread", ...base, createdAt, userId, userName: member.guildMember?.displayName, action: "memberAdd" });
   }
-  for (const userId of removedMembers.keys()) {
-    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberRemove" });
+  for (const [userId, member] of removedMembers) {
+    entries.push({ category: "thread", ...base, createdAt, userId, userName: member.guildMember?.displayName, action: "memberRemove" });
   }
   return entries;
 }

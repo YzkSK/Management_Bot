@@ -12,7 +12,13 @@ import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 export function toVoiceStateLogEntry(oldState: VoiceState, newState: VoiceState): LogEntry | undefined {
   const oldChannelId = oldState.channelId;
   const newChannelId = newState.channelId;
-  const base = { guildId: newState.guild.id, createdAt: new Date().toISOString(), userId: newState.id } as const;
+  const base = {
+    guildId: newState.guild.id,
+    createdAt: new Date().toISOString(),
+    userId: newState.id,
+    // leave(newState.member===null)ではスナップショットを残せない。
+    userName: newState.member?.displayName,
+  } as const;
 
   if (oldChannelId === null && newChannelId !== null) {
     return { ...base, category: "voice", channelId: newChannelId, action: "join" };
@@ -52,6 +58,7 @@ export function toVoiceStateUpdateEntry(oldState: VoiceState, newState: VoiceSta
     guildId: newState.guild.id,
     createdAt: new Date().toISOString(),
     userId: newState.id,
+    userName: newState.member?.displayName,
     category: "voice",
     channelId: newState.channelId,
     action: "update",

@@ -48,15 +48,16 @@ export function toRoleMembershipLogEntries(oldMember: GuildMember | PartialGuild
   const createdAt = new Date().toISOString();
   const guildId = newMember.guild.id;
   const userId = newMember.id;
+  const userName = newMember.displayName;
   const oldRoleIds = new Set(oldMember.roles.cache.keys());
   const newRoleIds = new Set(newMember.roles.cache.keys());
 
   const entries: LogEntry[] = [];
   for (const roleId of newRoleIds) {
-    if (!oldRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, action: "memberAdd" });
+    if (!oldRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, userName, action: "memberAdd" });
   }
   for (const roleId of oldRoleIds) {
-    if (!newRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, action: "memberRemove" });
+    if (!newRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, userName, action: "memberRemove" });
   }
   return entries;
 }

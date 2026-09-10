@@ -8,12 +8,14 @@ import {
   toAutoModRuleUpdateLogEntry,
 } from "./auto-mod.js";
 
+const fakeGuild = { id: "g1", members: { cache: { get: () => undefined } } };
+
 function fakeRule() {
-  return { id: "r1", guild: { id: "g1" }, creatorId: "u1" } as never;
+  return { id: "r1", guild: fakeGuild, creatorId: "u1" } as never;
 }
 
 function fakeExecution(channelId: string | null = "c1") {
-  return { guild: { id: "g1" }, ruleId: "r1", userId: "u1", channelId } as never;
+  return { guild: fakeGuild, ruleId: "r1", userId: "u1", channelId } as never;
 }
 
 describe("auto-mod category mappers", () => {

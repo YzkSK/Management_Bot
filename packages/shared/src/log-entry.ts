@@ -27,6 +27,8 @@ export const messageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   authorId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット(executorName/threadNameと同じパターン)。 */
+  authorName: nonEmptyString.optional(),
   action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
   /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
@@ -41,6 +43,8 @@ export const reactionLogEntrySchema = z.object({
   channelId: nonEmptyString,
   messageId: nonEmptyString,
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。partial(未キャッシュ)userの場合は未設定。 */
+  userName: nonEmptyString.optional(),
   emoji: nonEmptyString,
   action: z.enum(["add", "remove"]),
 });
@@ -49,6 +53,8 @@ export const memberLogEntrySchema = z.object({
   ...base,
   category: z.literal("member"),
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。ban/unbanはGuildMemberを取得できないためニックネーム抜き。 */
+  userName: nonEmptyString.optional(),
   action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "timeoutRemove", "nicknameChange"]),
 });
 
@@ -59,6 +65,8 @@ export const roleLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。create/update/delete(ロール自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** イベント発生時点のDiscord表示名のスナップショット。userIdと同様action=memberAdd/memberRemoveのみ設定する。 */
+  userName: nonEmptyString.optional(),
   /** action=updateのみ設定する変更フィールドごとのbefore/after。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
   changes: z
     .record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) }))
@@ -99,6 +107,8 @@ export const threadLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "archive", "unarchive", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。それ以外(スレッド自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** イベント発生時点のDiscord表示名のスナップショット。guildMemberが未キャッシュの場合は未設定。 */
+  userName: nonEmptyString.optional(),
   /** 通常はaction=createのみ設定する、フォーラム/メディア投稿のスターターメッセージ本文。 */
   content: z.string().optional(),
   /**
@@ -135,6 +145,8 @@ export const autoModLogEntrySchema = z.object({
   category: z.literal("autoMod"),
   ruleId: nonEmptyString,
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。guild.members.cacheに存在する場合のみ設定する。 */
+  userName: nonEmptyString.optional(),
   channelId: nonEmptyString.optional(),
   action: z.enum(["ruleCreate", "ruleUpdate", "ruleDelete", "actionExecuted"]),
 });
@@ -191,6 +203,8 @@ const voiceBase = {
   ...base,
   category: z.literal("voice"),
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。leave(VoiceState.memberが取得できない)では未設定。 */
+  userName: nonEmptyString.optional(),
   /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
   channelId: nonEmptyString,
 };

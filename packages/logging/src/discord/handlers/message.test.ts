@@ -15,7 +15,7 @@ function fakeMessage(
   overrides: Partial<{
     id: string;
     guildId: string | null;
-    author: { id: string; bot?: boolean } | null;
+    author: { id: string; bot?: boolean; displayName?: string } | null;
     channelId: string;
     content: string;
     partial: boolean;
@@ -26,7 +26,7 @@ function fakeMessage(
   return {
     id: "m1",
     guildId: "g1",
-    author: { id: "u1", bot: false },
+    author: { id: "u1", bot: false, displayName: "たろう" },
     channelId: "c1",
     content: "hello",
     partial: false,
@@ -44,6 +44,7 @@ describe("toMessageCreateLogEntry", () => {
       guildId: "g1",
       channelId: "c1",
       authorId: "u1",
+      authorName: "たろう",
       createdAt: "2026-01-01T00:00:00.000Z",
       action: "create",
       content: "hello",

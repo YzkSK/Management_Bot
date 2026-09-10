@@ -69,6 +69,17 @@ const INVALIDATE_DEBOUNCE_MS = 300;
 /** formatLogMessageが参照しうる全ユーザーIDフィールド。新カテゴリ追加時はここにも追記する。 */
 const USER_ID_FIELDS = ["executorId", "authorId", "userId", "targetUserId", "moderatorId"] as const;
 
+/**
+ * 各IDフィールドに対応するDiscord表示名スナップショットフィールド。スナップショットが存在すれば
+ * Discord APIへの名前解決(resolveDisplayNames)を省略できる。targetUserId/moderatorIdは
+ * moderationCase(#212時点で書き込み経路が未実装)のため対応するスナップショットがない。
+ */
+const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number], string>> = {
+  executorId: "executorName",
+  authorId: "authorName",
+  userId: "userName",
+};
+
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [category, setCategory] = useState<LogCategory | "">("");
@@ -92,8 +103,9 @@ export function LogListPage() {
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) =>
                 USER_ID_FIELDS.flatMap((key) => {
-                  // executorNameスナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
-                  if (key === "executorId" && "executorName" in entry && entry.executorName) return [];
+                  // スナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
+                  const snapshotField = SNAPSHOT_FIELD_BY_ID_FIELD[key];
+                  if (snapshotField && snapshotField in entry && entry[snapshotField as keyof typeof entry]) return [];
                   const value = entry[key as keyof typeof entry];
                   return typeof value === "string" ? [value] : [];
                 }),

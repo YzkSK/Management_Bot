@@ -29,6 +29,8 @@ function toReactionLogEntry(
     channelId: message.channelId,
     messageId: message.id,
     userId: user.id,
+    // partial(未キャッシュ)なuserはusername自体が取得できないため、その場合はスナップショットを残さない。
+    userName: user.partial ? undefined : user.displayName,
     emoji: reaction.emoji.toString(),
     action,
     actorIsBot: user.bot,
