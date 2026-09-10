@@ -5,68 +5,15 @@
 共有基盤と機能パッケージの依存方向を示す。機能間の通知は直接importではなく Redis Streams のドメインイベントを使う。
 
 ```mermaid
-classDiagram
-  direction LR
+flowchart BT
+  config["Config<br/>config"]
+  foundation["Common foundation<br/>shared · db · core"]
+  services["Dashboard & logging<br/>dashboard-access · logging"]
+  features["Bot features<br/>activity · temp-voice · moderation"]
 
-  class shared {
-    <<shared contract>>
-    CAPABILITIES
-    LogEntry
-    DomainEvent
-    FEATURE_METADATA
-  }
-  class config {
-    Environment schema
-  }
-  class db {
-    Drizzle schema
-    PostgreSQL client
-    onboarding
-    LISTEN / NOTIFY
-  }
-  class core {
-    FeatureModule
-    DomainEventBus
-  }
-  class dashboardAccess {
-    Session
-    Effective capabilities
-    Capability grants
-  }
-  class logging {
-    Discord event handlers
-    Log storage
-    Logging tRPC router
-  }
-  class activity {
-    Activity feature
-  }
-  class tempVoice {
-    Temporary voice feature
-  }
-  class moderation {
-    Moderation feature
-  }
-
-  config --> db
-  db --> shared
-  core --> shared
-  core --> db
-  dashboardAccess --> db
-  dashboardAccess --> shared
-  logging --> core
-  logging --> db
-  logging --> dashboardAccess
-  logging --> shared
-  activity --> core
-  activity --> db
-  activity --> shared
-  tempVoice --> core
-  tempVoice --> db
-  tempVoice --> shared
-  moderation --> core
-  moderation --> db
-  moderation --> shared
+  config --> foundation
+  services --> foundation
+  features --> foundation
 ```
 
 ## 境界
