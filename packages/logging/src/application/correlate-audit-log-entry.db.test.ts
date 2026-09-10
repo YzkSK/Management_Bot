@@ -132,6 +132,24 @@ describe("correlateAuditLogEntry (実DB)", () => {
     expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
+  test("executorNameが渡されればpayloadにexecutorIdと一緒に追記する", async () => {
+    const logId = await insertChannelLogEntry("c1", new Date("2026-08-31T00:00:00.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "ChannelDelete",
+      executorId: "mod-1",
+      executorName: "モデレーター太郎",
+      targetId: "c1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row] = await db.select().from(logEntries).where(eq(logEntries.id, logId));
+    expect(row?.payload).toMatchObject({ executorId: "mod-1", executorName: "モデレーター太郎" });
+  });
+
   test("時間窓(前後30秒)を超えた古いログ行には追記しない", async () => {
     const logId = await insertChannelLogEntry("c1", new Date("2026-08-31T00:00:00.000Z"));
     const entry: AuditLogEntryInfo = {

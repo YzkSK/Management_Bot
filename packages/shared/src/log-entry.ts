@@ -12,6 +12,8 @@ const base = {
    * 実行者を取得できないカテゴリが大半のため、初回書き込み時は未設定(undefined)が正常系。
    */
   executorId: nonEmptyString.optional(),
+  /** executorIdが判明した時点(監査ログ相関時)のDiscord表示名のスナップショット。executorId未設定なら常に未設定。 */
+  executorName: nonEmptyString.optional(),
   /**
    * イベントの主体(message.authorId/reaction.userId/member.userId等)がBotアカウントかどうか。
    * 監査ログ相関と同様、ダッシュボードのデフォルト表示から隔離するためのフラグ。

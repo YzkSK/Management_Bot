@@ -92,6 +92,11 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
     guildId,
     action: AuditLogEvent[entry.action] ?? String(entry.action),
     executorId: entry.executorId,
+    /**
+     * entry.executorはBotのユーザーキャッシュにいる場合のみ設定される(discord.jsの仕様上null許容)。
+     * ここで解決できない場合は既存のresolveDisplayNames(Discord API個別取得)へフォールバックする。
+     */
+    executorName: entry.executor?.displayName,
     targetId: extractInviteTargetId(entry),
     createdAt: entry.createdAt.toISOString(),
     roleChanges: extractRoleChanges(entry),

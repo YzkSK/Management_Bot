@@ -13,6 +13,8 @@ export interface AuditLogEntryInfo {
   guildId: string;
   action: string;
   executorId: string | null;
+  /** executorId判明時点のDiscord表示名のスナップショット。監査ログのexecutorがBotのキャッシュにない場合はundefined(既存のresolveDisplayNamesへフォールバックする)。 */
+  executorName?: string;
   /**
    * 相関時にpayload内の対象フィールド(CorrelationRule.field)と突き合わせるキー。
    * 通常はDiscordのSnowflake IDだが、InviteCreate/InviteDeleteに限りDiscord API仕様上
@@ -206,10 +208,16 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: r
  * 実際に更新できたかを呼び出し元に返す(coderabbitレビュー指摘: 従来はここを見ずに
  * 「候補が見つかった=相関成功」とみなしていたため、競り負けたジョブは実行者を失っていた)。
  */
-async function annotateRow(db: Db, id: string, executorId: string, rewriteAction?: string): Promise<boolean> {
-  const patch = rewriteAction
-    ? sql`jsonb_build_object('executorId', ${executorId}::text, 'action', ${rewriteAction}::text)`
-    : sql`jsonb_build_object('executorId', ${executorId}::text)`;
+async function annotateRow(
+  db: Db,
+  id: string,
+  executorId: string,
+  executorName: string | undefined,
+  rewriteAction?: string,
+): Promise<boolean> {
+  const patch = sql`jsonb_build_object('executorId', ${executorId}::text)${
+    executorName ? sql` || jsonb_build_object('executorName', ${executorName}::text)` : sql``
+  }${rewriteAction ? sql` || jsonb_build_object('action', ${rewriteAction}::text)` : sql``}`;
   const updated = await db
     .update(logEntries)
     .set({ payload: sql`${logEntries.payload} || ${patch}` })
@@ -225,12 +233,13 @@ async function annotateRow(db: Db, id: string, executorId: string, rewriteAction
 async function claimRow(
   db: Db,
   executorId: string,
+  executorName: string | undefined,
   job: CorrelationJob,
   excludeIds: string[],
 ): Promise<boolean> {
   const match = await findUnannotatedRow(db, job.criteria, excludeIds);
   if (!match) return false;
-  const success = await annotateRow(db, match.id, executorId, job.rewriteAction);
+  const success = await annotateRow(db, match.id, executorId, executorName, job.rewriteAction);
   if (!success) excludeIds.push(match.id);
   return success;
 }
@@ -240,15 +249,23 @@ async function claimRow(
  * MemberRoleUpdateでロール数ぶん直列に2秒待つと最大数十秒かかっていた不具合の修正。
  * イベント全体で「最大1回、2秒」のリトライに揃える)。
  */
-async function correlateJobs(db: Db, executorId: string, jobs: CorrelationJob[], retryDelayMs: number): Promise<void> {
+async function correlateJobs(
+  db: Db,
+  executorId: string,
+  executorName: string | undefined,
+  jobs: CorrelationJob[],
+  retryDelayMs: number,
+): Promise<void> {
   if (jobs.length === 0) return;
 
   const excludeIds: string[][] = jobs.map(() => []);
-  let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, job, excludeIds[i]!)));
+  let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, executorName, job, excludeIds[i]!)));
   if (results.some((success) => !success)) {
     await delay(retryDelayMs);
     results = await Promise.all(
-      jobs.map((job, i) => (results[i] ? Promise.resolve(true) : claimRow(db, executorId, job, excludeIds[i]!))),
+      jobs.map((job, i) =>
+        results[i] ? Promise.resolve(true) : claimRow(db, executorId, executorName, job, excludeIds[i]!),
+      ),
     );
   }
 }
@@ -273,6 +290,7 @@ export async function correlateAuditLogEntry(
       guildId: entry.guildId,
       createdAt: entry.createdAt,
       executorId: entry.executorId ?? undefined,
+      executorName: entry.executorName,
       auditLogEntryId: entry.id,
       targetId: entry.targetId ?? undefined,
       actionType: entry.action,
@@ -325,7 +343,7 @@ export async function correlateAuditLogEntry(
       ...entry.roleChanges.added.map((roleId) => roleJob(roleId, "memberAdd")),
       ...entry.roleChanges.removed.map((roleId) => roleJob(roleId, "memberRemove")),
     ];
-    await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+    await correlateJobs(deps.db, entry.executorId, entry.executorName, jobs, retryDelayMs);
     return;
   }
 
@@ -334,6 +352,7 @@ export async function correlateAuditLogEntry(
     await correlateJobs(
       deps.db,
       entry.executorId,
+      entry.executorName,
       [
         {
           criteria: {
@@ -363,6 +382,7 @@ export async function correlateAuditLogEntry(
     await correlateJobs(
       deps.db,
       entry.executorId,
+      entry.executorName,
       [
         {
           criteria: {
@@ -415,7 +435,7 @@ export async function correlateAuditLogEntry(
       ...(deaf !== undefined ? [flagJob("serverDeaf", deaf)] : []),
     ];
     if (jobs.length > 0) {
-      await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+      await correlateJobs(deps.db, entry.executorId, entry.executorName, jobs, retryDelayMs);
     }
     /**
      * MemberUpdateの1回の監査ログがmute/deaf「のみ」を表す場合、通常のmember側ルール
@@ -433,6 +453,7 @@ export async function correlateAuditLogEntry(
   await correlateJobs(
     deps.db,
     entry.executorId,
+    entry.executorName,
     [
       {
         criteria: {

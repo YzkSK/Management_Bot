@@ -8,6 +8,7 @@ function fakeAuditLogEntry(
     id: string;
     action: AuditLogEvent;
     executorId: string | null;
+    executor: { displayName: string } | null;
     targetId: string | null;
     target: unknown;
     changes: { key: string; new?: { id: string; name: string }[] | boolean }[];
@@ -18,6 +19,7 @@ function fakeAuditLogEntry(
     id: "audit-1",
     action: AuditLogEvent.ChannelDelete,
     executorId: "u1",
+    executor: null,
     targetId: "c1",
     target: null,
     createdAt: new Date("2026-08-31T00:00:00.000Z"),
@@ -38,6 +40,19 @@ describe("toAuditLogEntryInfo", () => {
       targetId: "c1",
       createdAt: "2026-08-31T00:00:00.000Z",
     });
+  });
+
+  test("executorがBotのキャッシュにいればexecutorNameに表示名を設定する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ executor: { displayName: "モデレーター太郎" } }),
+      "g1",
+    );
+    expect(info.executorName).toBe("モデレーター太郎");
+  });
+
+  test("executorがキャッシュにない(null)場合はexecutorNameを設定しない", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ executor: null }), "g1");
+    expect(info.executorName).toBeUndefined();
   });
 
   test("未知のaction数値は数値文字列にフォールバックする", () => {

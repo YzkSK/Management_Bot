@@ -62,7 +62,13 @@ function channelName(id: string, names: NameResolvers): string {
 
 /** summarizeLogEntryの出力(カテゴリ横断の共通形式)を、一覧カード見出し用の日本語1文に変換する。 */
 export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, names: NameResolvers): string {
-  const executorName = summary.subjectId ? userName(summary.subjectId, names) : "不明なユーザー";
+  // executorNameはログ作成後の監査ログ相関時点のスナップショット(常にresolveDisplayNamesより新鮮)を優先し、
+  // 未設定(スナップショット導入前の既存ログ、または相関自体が未発生)の場合のみ名前解決結果にフォールバックする。
+  const executorName = entry.executorId
+    ? (entry.executorName ?? userName(entry.executorId, names))
+    : summary.subjectId
+      ? userName(summary.subjectId, names)
+      : "不明なユーザー";
 
   switch (entry.category) {
     case "message": {
