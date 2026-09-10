@@ -335,6 +335,9 @@ describe("429リトライ(discordGet共通)", () => {
     let calls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       if (url.endsWith("/guilds/g1/members/u1")) {
         calls++;
         if (calls === 1) {
@@ -359,6 +362,9 @@ describe("429リトライ(discordGet共通)", () => {
     let calls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       if (url.endsWith("/guilds/g1/members/u1")) {
         calls++;
         if (calls === 1) {
@@ -387,6 +393,9 @@ describe("429リトライ(discordGet共通)", () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       if (url.endsWith("/guilds/g1/members/u1")) {
         return new Response(JSON.stringify({ message: "rate limited" }), {
           status: 429,
@@ -412,6 +421,9 @@ describe("429リトライ(discordGet共通)", () => {
     let calls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       if (url.endsWith("/guilds/g1/members/u1")) {
         calls++;
         return new Response(JSON.stringify({ message: "rate limited" }), {
@@ -622,8 +634,12 @@ describe("fetchGuildMembersPage", () => {
 });
 
 describe("fetchGuildMemberNames", () => {
+  /** 一括取得(GUILD_MEMBERS Privileged Intent未設定等)を空応答にし、個別取得フォールバックの経路を検証する。 */
+  const emptyBulkPage = { "/guilds/g1/members?limit=1000&after=0": { status: 200, body: [] } };
+
   test("nickがあればnickを使う", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": {
         status: 200,
         body: { nick: "ニックネーム", user: { username: "user1", global_name: "User One" } },
@@ -637,6 +653,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("nickがなければglobal_nameを使う", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": {
         status: 200,
         body: { nick: null, user: { username: "user1", global_name: "User One" } },
@@ -650,6 +667,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("nickもglobal_nameもなければusernameを使う", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": {
         status: 200,
         body: { nick: null, user: { username: "user1", global_name: null } },
@@ -663,6 +681,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("404(脱退済み等)は/users/{id}にフォールバックしglobal_name > usernameで解決する", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": { status: 404 },
       "/users/u1": { status: 200, body: { username: "leftuser", global_name: "Left User" } },
     });
@@ -674,6 +693,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("404かつ/users/{id}もglobal_nameがなければusernameを使う", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": { status: 404 },
       "/users/u1": { status: 200, body: { username: "leftuser", global_name: null } },
     });
@@ -685,6 +705,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("404かつ/users/{id}も404(アカウント削除済み等)ならMapに含めない", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": { status: 404 },
       "/users/u1": { status: 404 },
     });
@@ -699,6 +720,9 @@ describe("fetchGuildMemberNames", () => {
     let usersCalled = false;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       if (url.endsWith("/guilds/g1/members/u1")) {
         return jsonResponse(500);
       }
@@ -721,6 +745,7 @@ describe("fetchGuildMemberNames", () => {
 
   test("複数IDを並列解決する", async () => {
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": {
         status: 200,
         body: { nick: null, user: { username: "user-u1", global_name: null } },
@@ -743,6 +768,9 @@ describe("fetchGuildMemberNames", () => {
     let maxInFlight = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, []);
+      }
       const match = /\/guilds\/g1\/members\/(u\d+)$/.exec(url);
       if (!match) throw new Error(`unexpected request: ${url}`);
       inFlight++;
@@ -761,6 +789,7 @@ describe("fetchGuildMemberNames", () => {
   test("1件が500(レート制限等)で失敗しても他のIDは解決し、全体は例外にしない", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     mockFetch({
+      ...emptyBulkPage,
       "/guilds/g1/members/u1": { status: 500 },
       "/guilds/g1/members/u2": {
         status: 200,
@@ -777,5 +806,62 @@ describe("fetchGuildMemberNames", () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  test("一括取得(/guilds/{id}/members一覧)にヒットすれば個別取得(/guilds/{id}/members/{userId})を叩かない(issue #213: getGuildMembershipと同じバケットを取り合わないため)", async () => {
+    let individualCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, [
+          { user: { id: "u1", username: "user-u1", global_name: null }, nick: "ニックネーム" },
+        ]);
+      }
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        individualCalled = true;
+        return jsonResponse(200, { nick: null, user: { username: "user-u1", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("ニックネーム");
+    expect(individualCalled).toBe(false);
+  });
+
+  test("一括取得がGUILD_MEMBERS Privileged Intent未設定(403)で失敗しても、個別取得にフォールバックして解決する", async () => {
+    mockFetch({
+      "/guilds/g1/members?limit=1000&after=0": { status: 403 },
+      "/guilds/g1/members/u1": {
+        status: 200,
+        body: { nick: "ニックネーム", user: { username: "user1", global_name: "User One" } },
+      },
+    });
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+    expect(result.get("u1")).toBe("ニックネーム");
+  });
+
+  test("一括取得に含まれないuserId(1000人超のguild等)のみ個別取得にフォールバックする", async () => {
+    const individualCalled: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members?limit=1000&after=0")) {
+        return jsonResponse(200, [{ user: { id: "u1", username: "user-u1", global_name: null }, nick: null }]);
+      }
+      if (url.endsWith("/guilds/g1/members/u2")) {
+        individualCalled.push("u2");
+        return jsonResponse(200, { nick: null, user: { username: "user-u2", global_name: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const result = await fetchGuildMemberNames("test-bot-token", "g1", ["u1", "u2"]);
+
+    expect(result.get("u1")).toBe("user-u1");
+    expect(result.get("u2")).toBe("user-u2");
+    expect(individualCalled).toEqual(["u2"]);
   });
 });

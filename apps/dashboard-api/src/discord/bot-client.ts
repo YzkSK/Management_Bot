@@ -328,13 +328,33 @@ async function mapWithConcurrency<T, R>(
 }
 
 /**
+ * `/guilds/{id}/members?limit=1000`(一括取得、fetchGuildMembersPageと同じエンドポイント)は
+ * `/guilds/{id}/members/{userId}`(個別取得、getGuildMembershipが使うエンドポイント)とは
+ * 別のレート制限バケットのため、ここで一括取得しておけばgetGuildMembershipの応答を遅延させない
+ * (issue #213: ログ一覧表示のuserIds個別問い合わせがgetGuildMembershipと同一バケットを取り合い、
+ * 権限チェックが5秒以上遅延する不具合の原因だったことをdevトークンでの負荷再現で確認した)。
+ * GUILD_MEMBERS Privileged Intent未設定(403)等で一括取得自体に失敗した場合は、
+ * 全件を個別取得フォールバックに委ねる(呼び出し側からは見えないベストエフォート)。
+ * 1000人を超えるguildでは最初の1000人(idの昇順)のみが対象になり、それ以外は個別取得にフォールバックする。
+ */
+async function fetchBulkMemberNames(botToken: string, guildId: string): Promise<Map<string, string>> {
+  try {
+    const page = await fetchGuildMembersPage(botToken, guildId);
+    return new Map(page.members.map((member) => [member.id, member.name]));
+  } catch (error) {
+    console.error(`Failed to bulk-fetch guild members for guild ${guildId}, falling back to per-user lookups`, error);
+    return new Map();
+  }
+}
+
+/**
  * 指定したuserIdごとにguild memberを引き、表示名(サーバーニックネーム > global_name > username)を
  * 解決する。429自体はdiscordGet共通でリトライし、同時実行数もMEMBER_LOOKUP_CONCURRENCYで絞る。
  * guild memberが404(脱退済み等)の場合は`/users/{id}`にフォールバックし、ニックネームなしでglobal_name/usernameを解決する
  * (issue #165)。個別リクエストが失敗(5xx等)した場合や、脱退済みかつユーザー自体も404(アカウント削除済み等)の場合は
  * Mapに含めない(呼び出し側でIDそのまま表示にフォールバックする。1件の失敗で表示名解決全体を巻き込まないため)。
  */
-export async function fetchGuildMemberNames(
+async function fetchMemberNamesIndividually(
   botToken: string,
   guildId: string,
   userIds: readonly string[],
@@ -362,4 +382,23 @@ export async function fetchGuildMemberNames(
     return [userId, name] as const;
   });
   return new Map(entries.filter((entry): entry is readonly [string, string] => entry !== undefined));
+}
+
+export async function fetchGuildMemberNames(
+  botToken: string,
+  guildId: string,
+  userIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+
+  const bulkNames = await fetchBulkMemberNames(botToken, guildId);
+  const missingUserIds = userIds.filter((userId) => !bulkNames.has(userId));
+  const fallbackNames =
+    missingUserIds.length > 0 ? await fetchMemberNamesIndividually(botToken, guildId, missingUserIds) : new Map();
+
+  const names = new Map(bulkNames);
+  for (const [userId, name] of fallbackNames) {
+    names.set(userId, name);
+  }
+  return new Map(userIds.flatMap((userId) => (names.has(userId) ? [[userId, names.get(userId)!] as const] : [])));
 }
