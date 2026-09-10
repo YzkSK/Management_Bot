@@ -18,6 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
 
+export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
+  return hasRawAccess && Object.keys(details).length > 0;
+}
+
 /** role/channel updateのchangesキーを表示用の日本語ラベルに変換する。未知キーはそのまま表示する。 */
 const CHANGE_FIELD_LABELS: Record<string, string> = {
   name: "名前",
@@ -364,7 +368,7 @@ export function LogListPage() {
                           </div>
                         </div>
 
-                        {Object.keys(summary.details).length > 0 && (
+                        {shouldShowRawLogPayload(logsQuery.data.hasRawAccess, summary.details) && (
                           <details>
                             <summary className="text-muted-foreground cursor-pointer text-xs">生データ</summary>
                             <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>

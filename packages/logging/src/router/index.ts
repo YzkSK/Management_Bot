@@ -95,6 +95,7 @@ export const loggingRouter = router({
       const hasRawAccess = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_LOGS_RAW);
 
       return {
+        hasRawAccess,
         entries: result.entries.map(({ id, entry }) => ({
           id,
           entry: hasRawAccess ? entry : maskSensitiveFields(entry),

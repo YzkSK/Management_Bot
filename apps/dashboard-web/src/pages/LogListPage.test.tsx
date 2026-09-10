@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { LogListPage } from "./LogListPage.js";
+import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
@@ -18,6 +18,12 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
 }
 
 describe("LogListPage", () => {
+  test("VIEW_LOGS_RAWがなければ保存payloadの生データ欄を表示しない", () => {
+    expect(shouldShowRawLogPayload(false, { channelId: "c1" })).toBe(false);
+    expect(shouldShowRawLogPayload(true, { channelId: "c1" })).toBe(true);
+    expect(shouldShowRawLogPayload(true, {})).toBe(false);
+  });
+
   test("取得完了前はローディング表示になる", () => {
     const queryClient = new QueryClient();
     const html = renderPage("g1", queryClient);

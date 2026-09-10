@@ -132,6 +132,7 @@ describe("loggingRouter.listLogEntries", () => {
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
 
+    expect(result.hasRawAccess).toBe(false);
     expect(result.entries).toHaveLength(1);
     expect((result.entries[0]?.entry as { content?: string }).content).toBeUndefined();
     expect(
@@ -163,6 +164,7 @@ describe("loggingRouter.listLogEntries", () => {
 
     const result = await caller.listLogEntries({ guildId, limit: 50 });
 
+    expect(result.hasRawAccess).toBe(true);
     expect((result.entries[0]?.entry as { content?: string }).content).toBe("secret message");
     expect(
       (result.entries[0]?.entry as { previousContent?: string }).previousContent,
