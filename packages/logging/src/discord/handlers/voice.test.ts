@@ -10,6 +10,7 @@ function fakeVoiceState(
     id: "u1",
     channelId,
     guild: { id: "g1" },
+    member: channelId === null ? null : { displayName: "たろう" },
     selfMute: false,
     selfDeaf: false,
     serverMute: false,
@@ -20,14 +21,15 @@ function fakeVoiceState(
 }
 
 describe("toVoiceStateLogEntry", () => {
-  test("未参加→参加はjoin", () => {
+  test("未参加→参加はjoin(イベント発生時点の表示名をスナップショット保存する)", () => {
     const entry = toVoiceStateLogEntry(fakeVoiceState(null), fakeVoiceState("c1"));
-    expect(entry).toMatchObject({ category: "voice", action: "join", channelId: "c1", userId: "u1" });
+    expect(entry).toMatchObject({ category: "voice", action: "join", channelId: "c1", userId: "u1", userName: "たろう" });
   });
 
-  test("参加→未参加はleave(退室元のチャンネルIDを記録)", () => {
+  test("参加→未参加はleave(退室元のチャンネルIDを記録、VoiceState.memberが取得できずuserNameは未設定)", () => {
     const entry = toVoiceStateLogEntry(fakeVoiceState("c1"), fakeVoiceState(null));
     expect(entry).toMatchObject({ category: "voice", action: "leave", channelId: "c1" });
+    expect((entry as { userName?: string } | undefined)?.userName).toBeUndefined();
   });
 
   test("チャンネル間の異動はmove(移動先channelId・移動元previousChannelId)", () => {
@@ -52,6 +54,7 @@ describe("toVoiceStateUpdateEntry", () => {
       action: "update",
       channelId: "c1",
       userId: "u1",
+      userName: "たろう",
       changes: { selfMute: { before: false, after: true } },
     });
   });

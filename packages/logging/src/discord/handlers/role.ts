@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { GuildMember, PartialGuildMember, Role } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -48,21 +48,22 @@ export function toRoleMembershipLogEntries(oldMember: GuildMember | PartialGuild
   const createdAt = new Date().toISOString();
   const guildId = newMember.guild.id;
   const userId = newMember.id;
+  const userName = newMember.displayName;
   const oldRoleIds = new Set(oldMember.roles.cache.keys());
   const newRoleIds = new Set(newMember.roles.cache.keys());
 
   const entries: LogEntry[] = [];
   for (const roleId of newRoleIds) {
-    if (!oldRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, action: "memberAdd" });
+    if (!oldRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, userName, action: "memberAdd" });
   }
   for (const roleId of oldRoleIds) {
-    if (!newRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, action: "memberRemove" });
+    if (!newRoleIds.has(roleId)) entries.push({ category: "role", guildId, createdAt, roleId, userId, userName, action: "memberRemove" });
   }
   return entries;
 }
 
-export function registerRoleHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerRoleHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("roleCreate", (role) => writeLogEntrySafely(deps, toRoleCreateLogEntry(role)));
   ctx.client.on("roleUpdate", (oldRole, newRole) => {

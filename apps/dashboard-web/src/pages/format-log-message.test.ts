@@ -47,6 +47,49 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Admin が Yuzuki のメッセージを削除しました");
   });
 
+  test("メッセージ削除(実行者名スナップショットあり): resolveDisplayNamesの結果より優先する", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      executorId: "mod1",
+      executorName: "モデレーター太郎",
+      action: "delete",
+      content: "spam",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "Yuzuki", mod1: "古い名前" },
+      channels: {},
+    });
+
+    expect(message).toBe("モデレーター太郎 が Yuzuki のメッセージを削除しました");
+  });
+
+  test("メッセージ削除(投稿者名スナップショットあり): resolveDisplayNamesの結果より優先する", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "退室済みユーザー",
+      action: "delete",
+      content: "spam",
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "古い名前" },
+      channels: {},
+    });
+
+    expect(message).toBe("退室済みユーザー が自分のメッセージを削除しました");
+  });
+
   test("メッセージ投稿", () => {
     const entry = {
       category: "message",
@@ -284,6 +327,100 @@ describe("formatLogMessage", () => {
     });
 
     expect(message).toBe("Moderator_Bot が Nao をタイムアウトしました");
+  });
+
+  test("ニックネーム変更(本人): 変更前のニックネームを主語にする", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "新しいニックネーム",
+      executorId: "u1",
+      action: "nicknameChange",
+      changes: { nickname: { before: "以前のニックネーム", after: "新しいニックネーム" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("以前のニックネーム がニックネームを変更しました");
+  });
+
+  test("ニックネーム変更(本人・初回設定): 変更前の表示名を主語にする", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "新しいニックネーム",
+      executorId: "u1",
+      action: "nicknameChange",
+      previousUserName: "元の表示名",
+      changes: { nickname: { before: null, after: "新しいニックネーム" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("元の表示名 がニックネームを変更しました");
+  });
+
+  test("ニックネーム変更(本人・既存ログ): 現在の対象名にフォールバックする", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "現在の表示名",
+      executorId: "u1",
+      action: "nicknameChange",
+      changes: { nickname: { before: null, after: "現在の表示名" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("現在の表示名 がニックネームを変更しました");
+  });
+
+  test("ニックネーム変更(他者): 実行者と変更前の対象者名を表示する", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "対象者",
+      executorId: "mod1",
+      executorName: "モデレーター",
+      action: "nicknameChange",
+      changes: { nickname: { before: "以前のニックネーム", after: "対象者" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("モデレーター が 以前のニックネーム のニックネームを変更しました");
+  });
+
+  test("ニックネーム変更(他者・初回設定): 元の表示名を対象者名にする", () => {
+    const entry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-09-11T00:00:00.000Z",
+      userId: "u1",
+      userName: "新しいニックネーム",
+      previousUserName: "元の表示名",
+      executorId: "mod1",
+      executorName: "モデレーター",
+      action: "nicknameChange",
+      changes: { nickname: { before: null, after: "新しいニックネーム" } },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, noNames);
+
+    expect(message).toBe("モデレーター が 元の表示名 のニックネームを変更しました");
   });
 
   test("名前解決できないIDはIDのままフォールバックする", () => {

@@ -3,7 +3,8 @@ import { createDb, sessions } from "@management-bot/db";
 import { encryptToken } from "@management-bot/dashboard-access";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { fetchCurrentUserGuilds, resolveGuildMembership } from "./context.ts";
+import { DiscordAccessForbiddenError } from "./discord/bot-client.ts";
+import { createGetGuildMembership, fetchCurrentUserGuilds, resolveGuildMembership } from "./context.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -39,6 +40,58 @@ function mockUserGuildsFetch(guilds: unknown[]): { calls: number } {
     return new Response(JSON.stringify(guilds), { status: 200 });
   }) as typeof fetch;
   return state;
+}
+
+/**
+ * `/users/@me/guilds`(ユーザーOAuth)は固定のguild一覧を返し、
+ * `/guilds/{id}/members/{userId}`(Botトークン)は固定のroles配列を返す。
+ * resolveGuildMembershipは両方を呼ぶため、URLで振り分ける。
+ */
+function mockUserGuildsAndMemberRolesFetch(guilds: unknown[], roles: string[]): void {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/users/@me/guilds")) {
+      return new Response(JSON.stringify(guilds), { status: 200 });
+    }
+    if (url.includes("/members/")) {
+      return new Response(JSON.stringify({ roles }), { status: 200 });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  }) as typeof fetch;
+}
+
+/** mockUserGuildsAndMemberRolesFetchと同じだが、member API(Botトークン問い合わせ)の呼び出し回数を数える。 */
+function mockUserGuildsAndMemberRolesFetchCounting(
+  guilds: unknown[],
+  roles: string[],
+): { memberApiCalls: number } {
+  const state = { memberApiCalls: 0 };
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/users/@me/guilds")) {
+      return new Response(JSON.stringify(guilds), { status: 200 });
+    }
+    if (url.includes("/members/")) {
+      state.memberApiCalls++;
+      return new Response(JSON.stringify({ roles }), { status: 200 });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  }) as typeof fetch;
+  return state;
+}
+
+/** member APIのstatusを差し替えられる版。404/403時のresolveGuildMembership挙動を検証する。 */
+function mockUserGuildsFetchWithMemberStatus(guilds: unknown[], memberStatus: number): void {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/users/@me/guilds")) {
+      return new Response(JSON.stringify(guilds), { status: 200 });
+    }
+    if (url.includes("/members/")) {
+      return new Response(undefined, { status: memberStatus });
+    }
+    throw new Error(`unexpected request: ${url}`);
+  }) as typeof fetch;
 }
 
 describe("fetchCurrentUserGuilds", () => {
@@ -77,22 +130,101 @@ describe("resolveGuildMembership (RBAC結果の不変性)", () => {
     const sessionId = `session-${randomUUID()}`;
     await insertSession(sessionId);
     const guildId = `guild-${randomUUID()}`;
-    mockUserGuildsFetch([{ id: guildId, name: "g", owner: true, permissions: "0" }]);
+    mockUserGuildsAndMemberRolesFetch([{ id: guildId, name: "g", owner: true, permissions: "0" }], ["r1"]);
 
-    const first = await resolveGuildMembership(db, sessionId, sessionSecret, guildId);
-    const second = await resolveGuildMembership(db, sessionId, sessionSecret, guildId);
+    const first = await resolveGuildMembership(db, sessionId, sessionSecret, "test-bot-token", guildId, "user-1");
+    const second = await resolveGuildMembership(db, sessionId, sessionSecret, "test-bot-token", guildId, "user-1");
 
-    expect(first).toEqual({ isOwner: true, roleIds: [guildId] });
-    expect(second).toEqual({ isOwner: true, roleIds: [guildId] });
+    expect(first).toEqual({ isOwner: true, roleIds: [guildId, "r1"] });
+    expect(second).toEqual({ isOwner: true, roleIds: [guildId, "r1"] });
   });
 
-  test("在籍していないguildに対してはnullを返す", async () => {
+  test("在籍していないguildに対してはnullを返す(Botトークンへの問い合わせは行わない)", async () => {
     const sessionId = `session-${randomUUID()}`;
     await insertSession(sessionId);
     mockUserGuildsFetch([{ id: "other-guild", name: "g", owner: true, permissions: "0" }]);
 
-    const result = await resolveGuildMembership(db, sessionId, sessionSecret, `guild-${randomUUID()}`);
+    const result = await resolveGuildMembership(
+      db,
+      sessionId,
+      sessionSecret,
+      "test-bot-token",
+      `guild-${randomUUID()}`,
+      "user-1",
+    );
 
     expect(result).toBeNull();
+  });
+
+  test("OAuth上は在籍していてもBot member APIが404(実際は非在籍)ならnullを返す", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    const guildId = `guild-${randomUUID()}`;
+    mockUserGuildsFetchWithMemberStatus([{ id: guildId, name: "g", owner: true, permissions: "0" }], 404);
+
+    const result = await resolveGuildMembership(db, sessionId, sessionSecret, "test-bot-token", guildId, "user-1");
+
+    expect(result).toBeNull();
+  });
+
+  test("Bot member APIが403(Bot脱退・権限異常等)なら、ロールなしにfail-openせず例外を投げる", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    const guildId = `guild-${randomUUID()}`;
+    mockUserGuildsFetchWithMemberStatus([{ id: guildId, name: "g", owner: true, permissions: "0" }], 403);
+
+    // expect(promise).rejects.toBeInstanceOf()はbun:testがハングする既知の相性問題があるため、
+    // try/catchで代替する(packages/logging/src/router/index.test.tsと同様)。
+    let error: unknown;
+    try {
+      await resolveGuildMembership(db, sessionId, sessionSecret, "test-bot-token", guildId, "user-1");
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(DiscordAccessForbiddenError);
+  });
+});
+
+describe("createGetGuildMembership (短命キャッシュ)", () => {
+  test("同一guildId+discordUserIdへの複数回呼び出しはBot member APIを1回しか叩かない", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    const guildId = `guild-${randomUUID()}`;
+    const fetchState = mockUserGuildsAndMemberRolesFetchCounting(
+      [{ id: guildId, name: "g", owner: true, permissions: "0" }],
+      ["r1"],
+    );
+    const getGuildMembership = createGetGuildMembership(db, sessionId, sessionSecret, "test-bot-token");
+
+    const [a, b, c] = await Promise.all([
+      getGuildMembership(guildId, "user-1"),
+      getGuildMembership(guildId, "user-1"),
+      getGuildMembership(guildId, "user-1"),
+    ]);
+
+    // 1画面が複数tRPC procedureを呼ぶ場合(例: AccessPage)、requireCapabilityミドルウェアが
+    // procedureごとにgetGuildMembershipを呼ぶが、短命キャッシュにより実際のBot API問い合わせは
+    // 1回に抑えられる(表示遅延の原因だったissueの再発防止)。
+    expect(fetchState.memberApiCalls).toBe(1);
+    expect(a).toEqual({ isOwner: true, roleIds: [guildId, "r1"] });
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+  });
+
+  test("discordUserIdが異なればキャッシュを共有せず、それぞれBot APIを叩く", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    const guildId = `guild-${randomUUID()}`;
+    const fetchState = mockUserGuildsAndMemberRolesFetchCounting(
+      [{ id: guildId, name: "g", owner: true, permissions: "0" }],
+      ["r1"],
+    );
+    const getGuildMembership = createGetGuildMembership(db, sessionId, sessionSecret, "test-bot-token");
+
+    await getGuildMembership(guildId, "user-1");
+    await getGuildMembership(guildId, "user-2");
+
+    expect(fetchState.memberApiCalls).toBe(2);
   });
 });

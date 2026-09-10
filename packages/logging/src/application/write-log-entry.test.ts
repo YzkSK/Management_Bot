@@ -4,7 +4,7 @@ import { logChannelSettings, logEntries } from "@management-bot/db";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { LogEntry } from "../domain/index.js";
-import { formatLogEntry, writeLogEntry } from "./write-log-entry.js";
+import { createChannelSettingResolver, formatLogEntry, writeLogEntriesBulk, writeLogEntry } from "./write-log-entry.js";
 
 const pgDialect = new PgDialect();
 
@@ -152,6 +152,200 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel }, memberJoinEntry, "fixed-entry-id");
 
     expect(sendToChannel).toHaveBeenCalledTimes(2);
+  });
+
+  test("getChannelIdを注入すると、出力先チャンネル解決にdbへの直接SELECTではなくそちらを使う", async () => {
+    const db = fakeDb([], undefined); // このdbへのselectが呼ばれれば{channelId: undefined}扱いになりバグに気づける
+    const sendToChannel = mock(() => Promise.resolve());
+    const getChannelId = mock(() => Promise.resolve("c1"));
+
+    await writeLogEntry({ db, sendToChannel, getChannelId }, memberJoinEntry);
+
+    expect(getChannelId).toHaveBeenCalledWith("g1", "member");
+    expect(sendToChannel).toHaveBeenCalledWith("c1", {
+      content: formatLogEntry(memberJoinEntry),
+      suppressMentions: true,
+    });
+  });
+
+  test("getChannelIdがnullを返すとsendToChannelを呼ばない", async () => {
+    const db = fakeDb([], { channelId: "c1" }); // dbには設定があるが、注入したgetChannelIdが優先される
+    const sendToChannel = mock(() => Promise.resolve());
+    const getChannelId = mock(() => Promise.resolve(null));
+
+    await writeLogEntry({ db, sendToChannel, getChannelId }, memberJoinEntry);
+
+    expect(sendToChannel).not.toHaveBeenCalled();
+  });
+});
+
+const bulkDeleteEntry1: LogEntry = {
+  category: "message",
+  guildId: "g1",
+  channelId: "c1",
+  authorId: "u1",
+  createdAt: "2026-08-31T00:00:00.000Z",
+  action: "bulkDelete",
+  content: "msg1",
+};
+const bulkDeleteEntry2: LogEntry = {
+  category: "message",
+  guildId: "g1",
+  channelId: "c1",
+  authorId: "u2",
+  createdAt: "2026-08-31T00:00:01.000Z",
+  action: "bulkDelete",
+  content: "msg2",
+};
+
+describe("writeLogEntriesBulk", () => {
+  test("entriesが空なら何もしない", async () => {
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, { channelId: "c1" });
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntriesBulk({ db, sendToChannel }, [], () => "summary");
+
+    expect(inserts).toHaveLength(0);
+    expect(sendToChannel).not.toHaveBeenCalled();
+  });
+
+  test("複数entriesを1回のinsertでまとめて保存する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, undefined);
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1, bulkDeleteEntry2], () => "summary");
+
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]?.values).toHaveLength(2);
+    expect(inserts[0]?.values).toMatchObject([
+      { guildId: "g1", category: "message", payload: bulkDeleteEntry1 },
+      { guildId: "g1", category: "message", payload: bulkDeleteEntry2 },
+    ]);
+  });
+
+  test("出力先チャンネル設定があればsummaryの戻り値を1回だけ送信する", async () => {
+    const db = fakeDb([], { channelId: "c1" });
+    const sendToChannel = mock(() => Promise.resolve());
+    const summary = mock(() => "2メッセージが#c1で一括削除されました");
+
+    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1, bulkDeleteEntry2], summary);
+
+    expect(summary).toHaveBeenCalledWith([bulkDeleteEntry1, bulkDeleteEntry2]);
+    expect(sendToChannel).toHaveBeenCalledTimes(1);
+    expect(sendToChannel).toHaveBeenCalledWith("c1", {
+      content: "2メッセージが#c1で一括削除されました",
+      suppressMentions: true,
+    });
+  });
+
+  test("出力先チャンネル未設定ならsendToChannelを呼ばない", async () => {
+    const db = fakeDb([], undefined);
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1], () => "summary");
+
+    expect(sendToChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe("createChannelSettingResolver", () => {
+  test("同じguildId×categoryへの並行呼び出しはSELECTを1回しか実行しない", async () => {
+    let selectCalls = 0;
+    const db = fakeDb([], { channelId: "c1" }, () => {
+      selectCalls++;
+    });
+    const resolver = createChannelSettingResolver(db, 10_000);
+
+    const [a, b] = await Promise.all([resolver("g1", "member"), resolver("g1", "member")]);
+
+    expect(a).toBe("c1");
+    expect(b).toBe("c1");
+    expect(selectCalls).toBe(1);
+  });
+
+  test("guildIdまたはcategoryが異なれば個別にSELECTする", async () => {
+    let selectCalls = 0;
+    const db = fakeDb([], { channelId: "c1" }, () => {
+      selectCalls++;
+    });
+    const resolver = createChannelSettingResolver(db, 10_000);
+
+    await Promise.all([resolver("g1", "member"), resolver("g2", "member"), resolver("g1", "message")]);
+
+    expect(selectCalls).toBe(3);
+  });
+
+  test("出力先未設定(null)の結果もTTL内はキャッシュする", async () => {
+    let selectCalls = 0;
+    const db = fakeDb([], undefined, () => {
+      selectCalls++;
+    });
+    const resolver = createChannelSettingResolver(db, 10_000);
+
+    const [a, b] = await Promise.all([resolver("g1", "member"), resolver("g1", "member")]);
+
+    expect(a).toBeNull();
+    expect(b).toBeNull();
+    expect(selectCalls).toBe(1);
+  });
+
+  test("TTL経過後は再度SELECTする", async () => {
+    let selectCalls = 0;
+    const db = fakeDb([], { channelId: "c1" }, () => {
+      selectCalls++;
+    });
+    const resolver = createChannelSettingResolver(db, 50);
+
+    await resolver("g1", "member");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await resolver("g1", "member");
+
+    expect(selectCalls).toBe(2);
+  });
+
+  test("invalidateを呼ぶと、TTL満了前でも次回呼び出しで再度SELECTし新しい値を返す", async () => {
+    let channelId = "c1";
+    let selectCalls = 0;
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => {
+            selectCalls++;
+            return Promise.resolve([{ channelId }]);
+          },
+        }),
+      }),
+    } as unknown as Db;
+    const resolver = createChannelSettingResolver(db, 10_000);
+
+    expect(await resolver("g1", "member")).toBe("c1");
+    expect(selectCalls).toBe(1);
+
+    channelId = "c2"; // dashboard-apiが設定変更した想定
+    resolver.invalidate?.("g1", "member");
+
+    expect(await resolver("g1", "member")).toBe("c2");
+    expect(selectCalls).toBe(2);
+  });
+
+  test("invalidateは指定したguildId×category以外のキャッシュに影響しない", async () => {
+    let selectCalls = 0;
+    const db = fakeDb([], { channelId: "c1" }, () => {
+      selectCalls++;
+    });
+    const resolver = createChannelSettingResolver(db, 10_000);
+
+    await resolver("g1", "member");
+    await resolver("g2", "member");
+    expect(selectCalls).toBe(2);
+
+    resolver.invalidate?.("g1", "member");
+    await resolver("g1", "member"); // invalidateされたので再SELECT
+    await resolver("g2", "member"); // キャッシュヒットのままのはず
+
+    expect(selectCalls).toBe(3);
   });
 });
 

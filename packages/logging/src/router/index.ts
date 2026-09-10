@@ -55,10 +55,18 @@ const setChannelSettingForAllCategoriesInput = z.object({
   channelId: z.string().min(1).nullable(),
 });
 
-const setDisplaySettingInput = z.object({
-  guildId: z.string().min(1),
-  hideAuditLogCorrelation: z.boolean(),
-});
+/** 呼び出し側が変更したいフィールドのみ送る(部分更新)。未指定フィールドは既存値を維持する。 */
+const setDisplaySettingInput = z
+  .object({
+    guildId: z.string().min(1),
+    hideAuditLogCorrelation: z.boolean().optional(),
+    hideBotEvents: z.boolean().optional(),
+  })
+  .refine(
+    ({ hideAuditLogCorrelation, hideBotEvents }) =>
+      hideAuditLogCorrelation !== undefined || hideBotEvents !== undefined,
+    { message: "at least one of hideAuditLogCorrelation/hideBotEvents is required" },
+  );
 
 const resolveDisplayNamesInput = z.object({
   guildId: z.string().min(1),
@@ -76,16 +84,18 @@ export const loggingRouter = router({
         displaySettings.hideAuditLogCorrelation && input.category !== "auditLogCorrelation"
           ? (["auditLogCorrelation"] as const)
           : undefined;
+      const excludeBotEvents = displaySettings.hideBotEvents;
 
       let result;
       try {
-        result = await listLogEntries(ctx.db, { ...input, excludeCategories });
+        result = await listLogEntries(ctx.db, { ...input, excludeCategories, excludeBotEvents });
       } catch {
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
       }
       const hasRawAccess = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_LOGS_RAW);
 
       return {
+        hasRawAccess,
         entries: result.entries.map(({ id, entry }) => ({
           id,
           entry: hasRawAccess ? entry : maskSensitiveFields(entry),
@@ -156,7 +166,10 @@ export const loggingRouter = router({
   setDisplaySetting: protectedProcedure
     .input(setDisplaySettingInput)
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
-    .mutation(({ ctx, input }) => setDisplaySetting(ctx.db, input.guildId, input.hideAuditLogCorrelation)),
+    .mutation(({ ctx, input }) => {
+      const { guildId, ...patch } = input;
+      return setDisplaySetting(ctx.db, guildId, patch);
+    }),
 
   /**
    * ログ一覧でユーザーID/チャンネルIDをそのまま見せず名前表示するため、まとめて解決する。

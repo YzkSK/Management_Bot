@@ -1,6 +1,6 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { AuditLogEvent, type GuildAuditLogsEntry } from "discord.js";
-import type { AuditLogEntryInfo, WriteLogEntryDeps } from "../../application/index.js";
+import type { AuditLogEntryInfo, GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { correlateAuditLogEntry } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 
@@ -56,6 +56,23 @@ function extractMemberUpdateVoiceStateChanges(
   return mute !== undefined || deaf !== undefined ? { mute, deaf, hasOtherChanges } : undefined;
 }
 
+/** MemberUpdateのnick差分と、初回設定時に見出しへ使う対象ユーザーの本来の表示名を抽出する。 */
+function extractMemberNicknameChange(
+  entry: GuildAuditLogsEntry,
+): { before: string | null; after: string | null; previousUserName?: string } | undefined {
+  if (entry.action !== AuditLogEvent.MemberUpdate) return undefined;
+  const change = entry.changes.find((candidate) => candidate.key === "nick");
+  if (!change) return undefined;
+
+  const target = entry.target as { displayName?: unknown } | null | undefined;
+  const previousUserName = typeof target?.displayName === "string" ? target.displayName : undefined;
+  return {
+    before: typeof change.old === "string" ? change.old : null,
+    after: typeof change.new === "string" ? change.new : null,
+    previousUserName,
+  };
+}
+
 /**
  * MemberDisconnect/MemberMoveのextra.countとextra.channel.id(MemberMoveの移動先)を取得する。
  * それ以外のactionではundefined。Discord APIのaudit log optional infoは仕様上欠損し得るため、
@@ -85,19 +102,31 @@ function extractInviteTargetId(entry: GuildAuditLogsEntry): string | null {
   return typeof target?.code === "string" && target.code.length > 0 ? target.code : entry.targetId;
 }
 
-/** AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。 */
-export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string): AuditLogEntryInfo {
+/**
+ * AuditLogEvent(数値enum)を名前文字列へ変換する。未知の値(将来追加分等)は数値文字列にフォールバックする。
+ * executorGuildDisplayNameは呼び出し元(registerAuditLogCorrelationHandlers)がguild.members.cacheから
+ * 解決したニックネーム優先の表示名。GuildAuditLogsEntry.executor(User)のdisplayNameはグローバル名のみで、
+ * ギルドニックネームを持つユーザーの表示が既存のresolveDisplayNames(nick優先)より劣化するため使わない
+ * (codexレビュー指摘)。キャッシュにいない場合はundefinedのまま既存のresolveDisplayNamesへフォールバックする。
+ */
+export function toAuditLogEntryInfo(
+  entry: GuildAuditLogsEntry,
+  guildId: string,
+  executorGuildDisplayName?: string,
+): AuditLogEntryInfo {
   return {
     id: entry.id,
     guildId,
     action: AuditLogEvent[entry.action] ?? String(entry.action),
     executorId: entry.executorId,
+    executorName: executorGuildDisplayName,
     targetId: extractInviteTargetId(entry),
     createdAt: entry.createdAt.toISOString(),
     roleChanges: extractRoleChanges(entry),
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),
     voiceDisconnectOrMove: extractVoiceDisconnectOrMove(entry),
     memberUpdateVoiceStateChanges: extractMemberUpdateVoiceStateChanges(entry),
+    memberNicknameChange: extractMemberNicknameChange(entry),
   };
 }
 
@@ -106,12 +135,17 @@ export function toAuditLogEntryInfo(entry: GuildAuditLogsEntry, guildId: string)
  * correlateAuditLogEntry(生ログ保存+既存行への実行者追記)という複合処理のため、
  * writeLogEntrySafelyではなくここで個別にエラーを握りつぶす(discord.jsのリスナーに再配送はない)。
  */
-export function registerAuditLogCorrelationHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerAuditLogCorrelationHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("guildAuditLogEntryCreate", (entry, guild) => {
-    void correlateAuditLogEntry(deps, toAuditLogEntryInfo(entry, guild.id)).catch((error: unknown) => {
-      console.error("Failed to correlate audit log entry", error);
-    });
+    const executorGuildDisplayName = entry.executorId
+      ? guild.members.cache.get(entry.executorId)?.displayName
+      : undefined;
+    void correlateAuditLogEntry(deps, toAuditLogEntryInfo(entry, guild.id, executorGuildDisplayName)).catch(
+      (error: unknown) => {
+        console.error("Failed to correlate audit log entry", error);
+      },
+    );
   });
 }

@@ -1,9 +1,12 @@
 export {
   writeLogEntry,
+  writeLogEntriesBulk,
   formatLogEntry,
+  createChannelSettingResolver,
   type ChannelMessage,
   type ChannelSender,
   type WriteLogEntryDeps,
+  type GetChannelId,
 } from "./write-log-entry.js";
 export { handleModerationEvent } from "./handle-moderation-event.js";
 export { purgeExpiredLogs, type PurgeExpiredLogsResult } from "./purge-expired-logs.js";

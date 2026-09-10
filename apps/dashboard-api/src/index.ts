@@ -49,7 +49,12 @@ app.use(
   }),
 );
 
-const { app: wsApp, websocket } = createLogWsRoutes(db, env.SESSION_SECRET, env.DASHBOARD_WEB_URL);
+const { app: wsApp, websocket } = createLogWsRoutes(
+  db,
+  env.SESSION_SECRET,
+  env.DISCORD_TOKEN,
+  env.DASHBOARD_WEB_URL,
+);
 app.route("/ws", wsApp);
 
 const logNotifications = listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, category }) =>

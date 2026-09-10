@@ -13,6 +13,8 @@ export interface AuditLogEntryInfo {
   guildId: string;
   action: string;
   executorId: string | null;
+  /** executorId判明時点のDiscord表示名のスナップショット。監査ログのexecutorがBotのキャッシュにない場合はundefined(既存のresolveDisplayNamesへフォールバックする)。 */
+  executorName?: string;
   /**
    * 相関時にpayload内の対象フィールド(CorrelationRule.field)と突き合わせるキー。
    * 通常はDiscordのSnowflake IDだが、InviteCreate/InviteDeleteに限りDiscord API仕様上
@@ -39,6 +41,8 @@ export interface AuditLogEntryInfo {
    * (mute/deafのみの監査ログを無関係なmemberログの実行者として誤帰属させないため)。
    */
   memberUpdateVoiceStateChanges?: { mute?: boolean; deaf?: boolean; hasOtherChanges: boolean };
+  /** MemberUpdateのnick差分。通常のguildMemberUpdateログが欠落した場合の補完に使う。 */
+  memberNicknameChange?: { before: string | null; after: string | null; previousUserName?: string };
 }
 
 interface CorrelationRule {
@@ -206,10 +210,16 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: r
  * 実際に更新できたかを呼び出し元に返す(coderabbitレビュー指摘: 従来はここを見ずに
  * 「候補が見つかった=相関成功」とみなしていたため、競り負けたジョブは実行者を失っていた)。
  */
-async function annotateRow(db: Db, id: string, executorId: string, rewriteAction?: string): Promise<boolean> {
-  const patch = rewriteAction
-    ? sql`jsonb_build_object('executorId', ${executorId}::text, 'action', ${rewriteAction}::text)`
-    : sql`jsonb_build_object('executorId', ${executorId}::text)`;
+async function annotateRow(
+  db: Db,
+  id: string,
+  executorId: string,
+  executorName: string | undefined,
+  rewriteAction?: string,
+): Promise<boolean> {
+  const patch = sql`jsonb_build_object('executorId', ${executorId}::text)${
+    executorName ? sql` || jsonb_build_object('executorName', ${executorName}::text)` : sql``
+  }${rewriteAction ? sql` || jsonb_build_object('action', ${rewriteAction}::text)` : sql``}`;
   const updated = await db
     .update(logEntries)
     .set({ payload: sql`${logEntries.payload} || ${patch}` })
@@ -225,12 +235,13 @@ async function annotateRow(db: Db, id: string, executorId: string, rewriteAction
 async function claimRow(
   db: Db,
   executorId: string,
+  executorName: string | undefined,
   job: CorrelationJob,
   excludeIds: string[],
 ): Promise<boolean> {
   const match = await findUnannotatedRow(db, job.criteria, excludeIds);
   if (!match) return false;
-  const success = await annotateRow(db, match.id, executorId, job.rewriteAction);
+  const success = await annotateRow(db, match.id, executorId, executorName, job.rewriteAction);
   if (!success) excludeIds.push(match.id);
   return success;
 }
@@ -240,17 +251,26 @@ async function claimRow(
  * MemberRoleUpdateでロール数ぶん直列に2秒待つと最大数十秒かかっていた不具合の修正。
  * イベント全体で「最大1回、2秒」のリトライに揃える)。
  */
-async function correlateJobs(db: Db, executorId: string, jobs: CorrelationJob[], retryDelayMs: number): Promise<void> {
-  if (jobs.length === 0) return;
+async function correlateJobs(
+  db: Db,
+  executorId: string,
+  executorName: string | undefined,
+  jobs: CorrelationJob[],
+  retryDelayMs: number,
+): Promise<boolean[]> {
+  if (jobs.length === 0) return [];
 
   const excludeIds: string[][] = jobs.map(() => []);
-  let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, job, excludeIds[i]!)));
+  let results = await Promise.all(jobs.map((job, i) => claimRow(db, executorId, executorName, job, excludeIds[i]!)));
   if (results.some((success) => !success)) {
     await delay(retryDelayMs);
     results = await Promise.all(
-      jobs.map((job, i) => (results[i] ? Promise.resolve(true) : claimRow(db, executorId, job, excludeIds[i]!))),
+      jobs.map((job, i) =>
+        results[i] ? Promise.resolve(true) : claimRow(db, executorId, executorName, job, excludeIds[i]!),
+      ),
     );
   }
+  return results;
 }
 
 /**
@@ -273,6 +293,7 @@ export async function correlateAuditLogEntry(
       guildId: entry.guildId,
       createdAt: entry.createdAt,
       executorId: entry.executorId ?? undefined,
+      executorName: entry.executorName,
       auditLogEntryId: entry.id,
       targetId: entry.targetId ?? undefined,
       actionType: entry.action,
@@ -293,6 +314,7 @@ export async function correlateAuditLogEntry(
         createdAt: entry.createdAt,
         integrationId: entry.targetId,
         executorId: entry.executorId,
+        executorName: entry.executorName,
         action: integrationAction,
       },
       `integration:${entry.id}`,
@@ -304,28 +326,29 @@ export async function correlateAuditLogEntry(
   const windowStart = new Date(auditAt.getTime() - CORRELATION_WINDOW_MS);
   const windowEnd = new Date(auditAt.getTime() + CORRELATION_WINDOW_MS);
 
+  /**
+   * auditAt/windowStart/windowEndをクロージャで閉じ込め、category+extraConditionsのみで
+   * CorrelationJobを組み立てるヘルパー(issue #226)。5つ目以降の特殊ケースを追加する際も
+   * この関数を呼ぶだけでよく、window値の使い回しミスやrequireUniqueの付け忘れを防ぐ。
+   */
+  const makeJob = (category: LogCategory, extraConditions: SQL[], opts?: { requireUnique?: boolean }): CorrelationJob => ({
+    criteria: { guildId: entry.guildId, category, auditAt, windowStart, windowEnd, extraConditions, ...opts },
+  });
+
   if (entry.action === "MemberRoleUpdate") {
     if (!entry.targetId || !entry.roleChanges) return;
     const userId = entry.targetId;
-    const roleJob = (roleId: string, logAction: "memberAdd" | "memberRemove"): CorrelationJob => ({
-      criteria: {
-        guildId: entry.guildId,
-        category: "role",
-        auditAt,
-        windowStart,
-        windowEnd,
-        extraConditions: [
-          sql`${logEntries.payload} ->> 'action' = ${logAction}`,
-          sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
-          sql`${logEntries.payload} ->> 'userId' = ${userId}`,
-        ],
-      },
-    });
+    const roleJob = (roleId: string, logAction: "memberAdd" | "memberRemove") =>
+      makeJob("role", [
+        sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+        sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
+        sql`${logEntries.payload} ->> 'userId' = ${userId}`,
+      ]);
     const jobs = [
       ...entry.roleChanges.added.map((roleId) => roleJob(roleId, "memberAdd")),
       ...entry.roleChanges.removed.map((roleId) => roleJob(roleId, "memberRemove")),
     ];
-    await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+    await correlateJobs(deps.db, entry.executorId, entry.executorName, jobs, retryDelayMs);
     return;
   }
 
@@ -334,21 +357,13 @@ export async function correlateAuditLogEntry(
     await correlateJobs(
       deps.db,
       entry.executorId,
+      entry.executorName,
       [
-        {
-          criteria: {
-            guildId: entry.guildId,
-            category: "message",
-            auditAt,
-            windowStart,
-            windowEnd,
-            extraConditions: [
-              sql`${logEntries.payload} ->> 'action' = 'delete'`,
-              sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
-              sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
-            ],
-          },
-        },
+        makeJob("message", [
+          sql`${logEntries.payload} ->> 'action' = 'delete'`,
+          sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
+          sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
+        ]),
       ],
       retryDelayMs,
     );
@@ -363,25 +378,20 @@ export async function correlateAuditLogEntry(
     await correlateJobs(
       deps.db,
       entry.executorId,
+      entry.executorName,
       [
-        {
-          criteria: {
-            guildId: entry.guildId,
-            category: "voice",
-            auditAt,
-            windowStart,
-            windowEnd,
-            extraConditions: [
-              sql`${logEntries.payload} ->> 'action' = ${logAction}`,
-              ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
-            ],
-            /**
-             * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
-             * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
-             */
-            requireUnique: true,
-          },
-        },
+        makeJob(
+          "voice",
+          [
+            sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+            ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
+          ],
+          /**
+           * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
+           * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
+           */
+          { requireUnique: true },
+        ),
       ],
       retryDelayMs,
     );
@@ -396,26 +406,18 @@ export async function correlateAuditLogEntry(
      * 誤って拾い得る。mute/deafは別々のvoice update行(discord.jsのvoiceStateUpdateイベントが
      * 分かれて発火し得る)を指す可能性があるため、フラグごとに個別ジョブにする。
      */
-    const flagJob = (flag: "serverMute" | "serverDeaf", after: boolean): CorrelationJob => ({
-      criteria: {
-        guildId: entry.guildId,
-        category: "voice",
-        auditAt,
-        windowStart,
-        windowEnd,
-        extraConditions: [
-          sql`${logEntries.payload} ->> 'action' = 'update'`,
-          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
-          sql`${logEntries.payload} -> 'changes' -> ${flag} ->> 'after' = ${String(after)}`,
-        ],
-      },
-    });
+    const flagJob = (flag: "serverMute" | "serverDeaf", after: boolean) =>
+      makeJob("voice", [
+        sql`${logEntries.payload} ->> 'action' = 'update'`,
+        sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+        sql`${logEntries.payload} -> 'changes' -> ${flag} ->> 'after' = ${String(after)}`,
+      ]);
     const jobs = [
       ...(mute !== undefined ? [flagJob("serverMute", mute)] : []),
       ...(deaf !== undefined ? [flagJob("serverDeaf", deaf)] : []),
     ];
     if (jobs.length > 0) {
-      await correlateJobs(deps.db, entry.executorId, jobs, retryDelayMs);
+      await correlateJobs(deps.db, entry.executorId, entry.executorName, jobs, retryDelayMs);
     }
     /**
      * MemberUpdateの1回の監査ログがmute/deaf「のみ」を表す場合、通常のmember側ルール
@@ -426,6 +428,47 @@ export async function correlateAuditLogEntry(
     if (!entry.memberUpdateVoiceStateChanges.hasOtherChanges) return;
   }
 
+  if (entry.action === "MemberUpdate" && entry.targetId && entry.memberNicknameChange) {
+    const nicknameChange = entry.memberNicknameChange;
+    const afterCondition =
+      nicknameChange.after === null
+        ? sql`${logEntries.payload} -> 'changes' -> 'nickname' -> 'after' = 'null'::jsonb`
+        : sql`${logEntries.payload} -> 'changes' -> 'nickname' ->> 'after' = ${nicknameChange.after}`;
+    const [matched] = await correlateJobs(
+      deps.db,
+      entry.executorId,
+      entry.executorName,
+      [
+        makeJob("member", [
+          sql`${logEntries.payload} ->> 'action' = 'nicknameChange'`,
+          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+          afterCondition,
+        ]),
+      ],
+      retryDelayMs,
+    );
+
+    if (!matched) {
+      await writeLogEntry(
+        deps,
+        {
+          category: "member",
+          guildId: entry.guildId,
+          createdAt: entry.createdAt,
+          userId: entry.targetId,
+          userName: nicknameChange.after ?? nicknameChange.previousUserName ?? entry.targetId,
+          executorId: entry.executorId,
+          executorName: entry.executorName,
+          action: "nicknameChange",
+          previousUserName: nicknameChange.previousUserName,
+          changes: { nickname: { before: nicknameChange.before, after: nicknameChange.after } },
+        },
+        `memberNicknameChange:${entry.id}`,
+      );
+    }
+    return;
+  }
+
   const rule = CORRELATION_RULES[entry.action];
   if (!rule) return;
   if (rule.field && !entry.targetId) return;
@@ -433,6 +476,7 @@ export async function correlateAuditLogEntry(
   await correlateJobs(
     deps.db,
     entry.executorId,
+    entry.executorName,
     [
       {
         criteria: {

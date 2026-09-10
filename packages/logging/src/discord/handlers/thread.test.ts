@@ -15,8 +15,13 @@ function fakeThread(
   return { id: "t1", guildId: "g1", parentId: "c1", archived: false, name: "質問スレ", ...overrides } as never;
 }
 
-function fakeCollection(ids: string[]) {
-  return new Map(ids.map((id) => [id, { id }])) as never;
+function fakeCollection(ids: string[], displayNames: Partial<Record<string, string>> = {}) {
+  return new Map(
+    ids.map((id) => {
+      const displayName = displayNames[id];
+      return [id, { id, guildMember: displayName ? { displayName } : null }];
+    }),
+  ) as never;
 }
 
 describe("thread category mappers", () => {
@@ -68,14 +73,20 @@ describe("thread category mappers", () => {
 
 describe("toThreadMembershipLogEntries", () => {
   test("addedMembersはmemberAdd、removedMembersはmemberRemoveになり、対象メンバーのuserIdを含む", () => {
-    const entries = toThreadMembershipLogEntries(fakeCollection(["u1"]), fakeCollection(["u2"]), fakeThread());
+    const entries = toThreadMembershipLogEntries(
+      fakeCollection(["u1"], { u1: "たろう" }),
+      fakeCollection(["u2"]),
+      fakeThread(),
+    );
     expect(entries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ userId: "u1", action: "memberAdd", threadId: "t1" }),
+        expect.objectContaining({ userId: "u1", userName: "たろう", action: "memberAdd", threadId: "t1" }),
         expect.objectContaining({ userId: "u2", action: "memberRemove", threadId: "t1" }),
       ]),
     );
     expect(entries).toHaveLength(2);
+    // guildMemberが未キャッシュ(null)の場合はuserNameが未設定(undefined)になる。
+    expect((entries.find((e) => e.userId === "u2") as { userName?: string } | undefined)?.userName).toBeUndefined();
   });
 
   test("親チャンネル不明なら空配列", () => {

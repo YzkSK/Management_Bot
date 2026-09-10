@@ -3,6 +3,8 @@ dist/
 .turbo/
 *.tsbuildinfo
 *.log
+docs/superpowers/
 .env*
 !.env.example
 !.env.dev.example
+.superpowers/

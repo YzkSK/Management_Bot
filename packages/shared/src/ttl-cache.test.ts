@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createTtlCache } from "./ttl-cache.ts";
+import { createTtlCache } from "./ttl-cache.js";
 
 describe("createTtlCache", () => {
   test("TTL内の同時呼び出しはloadを1回しか実行しない(in-flight共有)", async () => {

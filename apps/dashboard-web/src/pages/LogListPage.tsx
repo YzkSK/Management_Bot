@@ -18,8 +18,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
 
+export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
+  return hasRawAccess && Object.keys(details).length > 0;
+}
+
 /** role/channel updateのchangesキーを表示用の日本語ラベルに変換する。未知キーはそのまま表示する。 */
 const CHANGE_FIELD_LABELS: Record<string, string> = {
+  nickname: "ニックネーム",
   name: "名前",
   color: "色",
   hoist: "表示を分離",
@@ -69,6 +74,17 @@ const INVALIDATE_DEBOUNCE_MS = 300;
 /** formatLogMessageが参照しうる全ユーザーIDフィールド。新カテゴリ追加時はここにも追記する。 */
 const USER_ID_FIELDS = ["executorId", "authorId", "userId", "targetUserId", "moderatorId"] as const;
 
+/**
+ * 各IDフィールドに対応するDiscord表示名スナップショットフィールド。スナップショットが存在すれば
+ * Discord APIへの名前解決(resolveDisplayNames)を省略できる。targetUserId/moderatorIdは
+ * moderationCase(#212時点で書き込み経路が未実装)のため対応するスナップショットがない。
+ */
+const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number], string>> = {
+  executorId: "executorName",
+  authorId: "authorName",
+  userId: "userName",
+};
+
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [category, setCategory] = useState<LogCategory | "">("");
@@ -92,6 +108,9 @@ export function LogListPage() {
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) =>
                 USER_ID_FIELDS.flatMap((key) => {
+                  // スナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
+                  const snapshotField = SNAPSHOT_FIELD_BY_ID_FIELD[key];
+                  if (snapshotField && snapshotField in entry && entry[snapshotField as keyof typeof entry]) return [];
                   const value = entry[key as keyof typeof entry];
                   return typeof value === "string" ? [value] : [];
                 }),
@@ -350,7 +369,7 @@ export function LogListPage() {
                           </div>
                         </div>
 
-                        {Object.keys(summary.details).length > 0 && (
+                        {shouldShowRawLogPayload(logsQuery.data.hasRawAccess, summary.details) && (
                           <details>
                             <summary className="text-muted-foreground cursor-pointer text-xs">生データ</summary>
                             <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>

@@ -10,7 +10,7 @@ function fakeAuditLogEntry(
     executorId: string | null;
     targetId: string | null;
     target: unknown;
-    changes: { key: string; new?: { id: string; name: string }[] | boolean }[];
+    changes: { key: string; new?: { id: string; name: string }[] | boolean | string; old?: string }[];
     extra: unknown;
   }> = {},
 ) {
@@ -38,6 +38,16 @@ describe("toAuditLogEntryInfo", () => {
       targetId: "c1",
       createdAt: "2026-08-31T00:00:00.000Z",
     });
+  });
+
+  test("executorのギルド表示名(ニックネーム優先)が渡されればexecutorNameに設定する", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({}), "g1", "モデレーター太郎(ニックネーム)");
+    expect(info.executorName).toBe("モデレーター太郎(ニックネーム)");
+  });
+
+  test("ギルド表示名が渡されない場合はexecutorNameを設定しない(既存のresolveDisplayNamesへフォールバック)", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({}), "g1");
+    expect(info.executorName).toBeUndefined();
   });
 
   test("未知のaction数値は数値文字列にフォールバックする", () => {
@@ -174,6 +184,34 @@ describe("toAuditLogEntryInfo", () => {
       "g1",
     );
     expect(info.memberUpdateVoiceStateChanges).toBeUndefined();
+  });
+
+  test("MemberUpdateのnick差分と対象ユーザーの本来の表示名を抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({
+        action: AuditLogEvent.MemberUpdate,
+        targetId: "u1",
+        target: { displayName: "Yuzuki" },
+        changes: [{ key: "nick", old: "Yzk", new: "Yuzuki" }],
+      }),
+      "g1",
+    );
+
+    expect(info.memberNicknameChange).toEqual({ before: "Yzk", after: "Yuzuki", previousUserName: "Yuzuki" });
+  });
+
+  test("MemberUpdateのnick初回設定では変更前をnullとして本来の表示名を保存する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({
+        action: AuditLogEvent.MemberUpdate,
+        targetId: "u1",
+        target: { displayName: "Yuzuki" },
+        changes: [{ key: "nick", new: "Yzk" }],
+      }),
+      "g1",
+    );
+
+    expect(info.memberNicknameChange).toEqual({ before: null, after: "Yzk", previousUserName: "Yuzuki" });
   });
 
   test("MemberUpdate以外はmemberUpdateVoiceStateChangesがundefinedになる", () => {

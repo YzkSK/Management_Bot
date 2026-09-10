@@ -13,6 +13,16 @@ export {
   type ResolveEffectiveCapabilitiesInput,
 } from "./effective-capabilities.js";
 export {
+  listCapabilityGrants,
+  grantCapabilities,
+  revokeCapabilityGrant,
+  type CapabilityGrant,
+  type CapabilityGrantTargetType,
+  type GrantCapabilitiesInput,
+  type RevokeCapabilityGrantInput,
+} from "./capability-grants.js";
+export { capabilityGrantsRouter } from "./router.js";
+export {
   router,
   publicProcedure,
   protectedProcedure,
@@ -21,5 +31,8 @@ export {
   type DashboardAccessContext,
   type GuildMembership,
   type ChannelOption,
+  type RoleOption,
+  type MemberOption,
+  type MemberPage,
   type ManagedGuild,
 } from "./trpc.js";

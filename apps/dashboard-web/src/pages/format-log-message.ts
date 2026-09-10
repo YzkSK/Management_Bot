@@ -51,8 +51,12 @@ interface NameResolvers {
   channels: Record<string, string>;
 }
 
-function userName(id: string, names: NameResolvers): string {
-  return names.users[id] ?? id;
+/**
+ * snapshotは書き込み時点のDiscord表示名スナップショット(authorName/userName等)。
+ * executorName/threadNameと同じ優先順位で、存在すればresolveDisplayNamesの結果より優先する。
+ */
+function userName(id: string, names: NameResolvers, snapshot?: string): string {
+  return snapshot ?? names.users[id] ?? id;
 }
 
 function channelName(id: string, names: NameResolvers): string {
@@ -62,11 +66,17 @@ function channelName(id: string, names: NameResolvers): string {
 
 /** summarizeLogEntryの出力(カテゴリ横断の共通形式)を、一覧カード見出し用の日本語1文に変換する。 */
 export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, names: NameResolvers): string {
-  const executorName = summary.subjectId ? userName(summary.subjectId, names) : "不明なユーザー";
+  // executorNameはログ作成後の監査ログ相関時点のスナップショット(常にresolveDisplayNamesより新鮮)を優先し、
+  // 未設定(スナップショット導入前の既存ログ、または相関自体が未発生)の場合のみ名前解決結果にフォールバックする。
+  const executorName = entry.executorId
+    ? (entry.executorName ?? userName(entry.executorId, names))
+    : summary.subjectId
+      ? userName(summary.subjectId, names)
+      : "不明なユーザー";
 
   switch (entry.category) {
     case "message": {
-      const authorName = userName(entry.authorId, names);
+      const authorName = userName(entry.authorId, names, entry.authorName);
       switch (entry.action) {
         case "create":
           return `${authorName} がメッセージを投稿しました`;
@@ -87,7 +97,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "voice": {
-      const targetName = userName(entry.userId, names);
+      const targetName = userName(entry.userId, names, entry.userName);
       switch (entry.action) {
         case "join":
           return `${targetName} が ${channelName(entry.channelId, names)} に参加しました`;
@@ -128,7 +138,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "member": {
-      const targetName = userName(entry.userId, names);
+      const targetName = userName(entry.userId, names, entry.userName);
       switch (entry.action) {
         case "join":
           return `${targetName} がサーバーに参加しました`;
@@ -144,8 +154,14 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
           return `${executorName} が ${targetName} をタイムアウトしました`;
         case "timeoutRemove":
           return `${executorName} が ${targetName} のタイムアウトを解除しました`;
-        case "nicknameChange":
-          return `${executorName} が ${targetName} のニックネームを変更しました`;
+        case "nicknameChange": {
+          const previousName = entry.changes?.nickname.before ?? entry.previousUserName ?? targetName;
+          const isSelfChange = entry.executorId === undefined || entry.executorId === entry.userId;
+          if (isSelfChange) {
+            return `${previousName} がニックネームを変更しました`;
+          }
+          return `${executorName} が ${previousName} のニックネームを変更しました`;
+        }
       }
       break;
     }
@@ -159,11 +175,11 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
           return `${executorName} がロールを削除しました`;
         case "memberAdd":
           return entry.userId
-            ? `${executorName} が ${userName(entry.userId, names)} にロールを付与しました`
+            ? `${executorName} が ${userName(entry.userId, names, entry.userName)} にロールを付与しました`
             : `${executorName} がロールを付与しました`;
         case "memberRemove":
           return entry.userId
-            ? `${executorName} が ${userName(entry.userId, names)} のロールを剥奪しました`
+            ? `${executorName} が ${userName(entry.userId, names, entry.userName)} のロールを剥奪しました`
             : `${executorName} がロールを剥奪しました`;
       }
       break;
@@ -181,7 +197,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "reaction": {
-      const targetName = userName(entry.userId, names);
+      const targetName = userName(entry.userId, names, entry.userName);
       switch (entry.action) {
         case "add":
           return `${targetName} が ${entry.emoji} でリアクションしました`;
@@ -207,14 +223,14 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
           return `${executorName} が ${threadLabel} のアーカイブを解除しました`;
         case "memberAdd": {
           if (!entry.userId) return `${executorName} が ${threadLabel} にメンバーを追加しました`;
-          const targetName = userName(entry.userId, names);
+          const targetName = userName(entry.userId, names, entry.userName);
           return entry.executorId
             ? `${executorName} が ${targetName} を ${threadLabel} に追加しました`
             : `${targetName} が ${threadLabel} に参加しました`;
         }
         case "memberRemove": {
           if (!entry.userId) return `${executorName} が ${threadLabel} からメンバーを削除しました`;
-          const targetName = userName(entry.userId, names);
+          const targetName = userName(entry.userId, names, entry.userName);
           return entry.executorId
             ? `${executorName} が ${targetName} を ${threadLabel} から削除しました`
             : `${targetName} が ${threadLabel} から退出しました`;
@@ -254,7 +270,9 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       break;
     }
     case "autoMod": {
-      const ruleExecutorName = entry.executorId ? userName(entry.executorId, names) : "不明なユーザー";
+      const ruleExecutorName = entry.executorId
+        ? (entry.executorName ?? userName(entry.executorId, names))
+        : "不明なユーザー";
       switch (entry.action) {
         case "ruleCreate":
           return `${ruleExecutorName} がAutoModルールを作成しました`;
@@ -263,7 +281,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
         case "ruleDelete":
           return `${ruleExecutorName} がAutoModルールを削除しました`;
         case "actionExecuted":
-          return `${userName(entry.userId, names)} の発言に対してAutoModが作動しました`;
+          return `${userName(entry.userId, names, entry.userName)} の発言に対してAutoModが作動しました`;
       }
       break;
     }

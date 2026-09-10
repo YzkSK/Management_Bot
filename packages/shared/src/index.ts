@@ -49,8 +49,12 @@ export {
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
+  SENSITIVE_LOG_FIELDS,
   type LogEntry,
   type VoiceStateFlagName,
 } from "./log-entry.js";
 export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
 export { buildInviteUrl } from "./invite-url.js";
+export { createTtlCache } from "./ttl-cache.js";
+export { mapWithConcurrency } from "./concurrency.js";
+export { DISCORD_PERMISSION_LABELS } from "./discord-permissions.js";

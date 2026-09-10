@@ -29,6 +29,7 @@ interface WsVariables {
 export function createLogWsRoutes(
   db: Db,
   sessionSecret: string,
+  botToken: string,
   dashboardWebUrl: string,
 ): { app: Hono<{ Variables: WsVariables }>; websocket: typeof websocket } {
   const app = new Hono<{ Variables: WsVariables }>();
@@ -50,7 +51,14 @@ export function createLogWsRoutes(
         return c.text("Unauthorized", 401);
       }
 
-      const membership = await resolveGuildMembership(db, sessionId, sessionSecret, guildId);
+      const membership = await resolveGuildMembership(
+        db,
+        sessionId,
+        sessionSecret,
+        botToken,
+        guildId,
+        session.discordUserId,
+      );
       if (!membership) {
         return c.text("Forbidden", 403);
       }
@@ -64,6 +72,13 @@ export function createLogWsRoutes(
       if (!hasCapability(capabilities, CAPABILITIES.VIEW_LOGS)) {
         return c.text("Forbidden", 403);
       }
+      /**
+       * ここではVIEW_LOGSのみをチェックしている。これは「新規ログ発生の通知のみ流し、
+       * 本文はtRPCで取得させる」設計だから問題ない(WSペイロードにログ本文やchanges等の
+       * プレビューを含めていない)。将来WSペイロードに本文相当の情報を追加する場合は、
+       * 必ずVIEW_LOGS_RAWのチェックも追加すること。忘れるとVIEW_LOGS-onlyのユーザーに
+       * WebSocket経由で生データが漏れる(issue #220)。
+       */
 
       c.set("sessionExpiresAt", session.expiresAt);
       return next();

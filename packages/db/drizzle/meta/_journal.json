@@ -78,6 +78,27 @@
       "when": 1788765315328,
       "tag": "0010_gifted_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788779880487,
+      "tag": "0011_lonely_puck",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788781851580,
+      "tag": "0012_stiff_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788850513407,
+      "tag": "0013_log-channel-settings-notify-trigger",
+      "breakpoints": true
     }
   ]
 }

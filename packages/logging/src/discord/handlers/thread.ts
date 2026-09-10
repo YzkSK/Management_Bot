@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { AnyThreadChannel, PartialThreadMember, ReadonlyCollection, Snowflake, ThreadMember } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -57,11 +57,11 @@ export function toThreadMembershipLogEntries(
   if (!base) return [];
   const createdAt = new Date().toISOString();
   const entries: LogEntry[] = [];
-  for (const userId of addedMembers.keys()) {
-    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberAdd" });
+  for (const [userId, member] of addedMembers) {
+    entries.push({ category: "thread", ...base, createdAt, userId, userName: member.guildMember?.displayName, action: "memberAdd" });
   }
-  for (const userId of removedMembers.keys()) {
-    entries.push({ category: "thread", ...base, createdAt, userId, action: "memberRemove" });
+  for (const [userId, member] of removedMembers) {
+    entries.push({ category: "thread", ...base, createdAt, userId, userName: member.guildMember?.displayName, action: "memberRemove" });
   }
   return entries;
 }
@@ -82,8 +82,8 @@ export async function fetchThreadStarterContent(thread: AnyThreadChannel): Promi
   return message?.content ?? undefined;
 }
 
-export function registerThreadHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerThreadHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("threadCreate", async (thread) => {
     const content = await fetchThreadStarterContent(thread);

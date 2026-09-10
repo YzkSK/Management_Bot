@@ -1,9 +1,9 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollection, Snowflake } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 
@@ -37,10 +37,17 @@ function baseFields(
   message: AnyMessage,
   botUserId: string | undefined,
   excludeBotAuthor = true,
-): { guildId: string; channelId: string; authorId: string } | undefined {
+): { guildId: string; channelId: string; authorId: string; authorName: string; actorIsBot: boolean } | undefined {
   if (!message.guildId || !message.author) return undefined;
   if (excludeBotAuthor && (!botUserId || message.author.id === botUserId)) return undefined;
-  return { guildId: message.guildId, channelId: message.channelId, authorId: message.author.id };
+  return {
+    guildId: message.guildId,
+    channelId: message.channelId,
+    authorId: message.author.id,
+    // message.memberはキャッシュ済みの場合のみニックネームを反映する(未キャッシュ時はUser.displayNameへフォールバック)。
+    authorName: message.member?.displayName ?? message.author.displayName,
+    actorIsBot: message.author.bot,
+  };
 }
 
 export function toMessageCreateLogEntry(
@@ -136,8 +143,8 @@ export function toMessageBulkDeleteLogEntries(
   return entries;
 }
 
-export function registerMessageHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("messageCreate", (message) => {
     const entry = toMessageCreateLogEntry(message, ctx.client.user?.id);
@@ -158,8 +165,13 @@ export function registerMessageHandlers(ctx: FeatureModuleContext): void {
   });
 
   ctx.client.on("messageDeleteBulk", (messages) => {
-    for (const entry of toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id)) {
-      writeLogEntrySafely(deps, entry);
-    }
+    const entries = toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id);
+    if (entries.length === 0) return;
+    const channelId = messages.first()!.channelId;
+    writeLogEntriesBulkSafely(
+      deps,
+      entries,
+      (entries) => `${entries.length}件のメッセージが<#${channelId}>で一括削除されました`,
+    );
   });
 }

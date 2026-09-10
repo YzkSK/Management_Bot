@@ -1,0 +1,2 @@
+ALTER TABLE "log_display_settings" ADD COLUMN "hide_bot_events" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "log_entries" ADD COLUMN "author_is_bot" boolean DEFAULT false NOT NULL;

@@ -9,7 +9,7 @@ describe("registerDiscordHandlers", () => {
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
     const once = mock(() => undefined);
-    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const ctx = { client: { on, once }, db: {} as Db, databaseUrl: "postgres://invalid-test-host/db", eventBus, onShutdown: () => {} } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
@@ -22,7 +22,7 @@ describe("registerDiscordHandlers", () => {
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
     const once = mock(() => undefined);
-    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const ctx = { client: { on, once }, db: {} as Db, databaseUrl: "postgres://invalid-test-host/db", eventBus, onShutdown: () => {} } as unknown as FeatureModuleContext;
 
     await expect(registerDiscordHandlers(ctx)).rejects.toThrow("BUSYGROUP");
   });
@@ -32,7 +32,7 @@ describe("registerDiscordHandlers", () => {
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
     const once = mock(() => undefined);
-    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const ctx = { client: { on, once }, db: {} as Db, databaseUrl: "postgres://invalid-test-host/db", eventBus, onShutdown: () => {} } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 
@@ -63,7 +63,7 @@ describe("registerDiscordHandlers", () => {
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
     const once = mock(() => undefined);
-    const ctx = { client: { on, once }, db: {} as Db, eventBus } as unknown as FeatureModuleContext;
+    const ctx = { client: { on, once }, db: {} as Db, databaseUrl: "postgres://invalid-test-host/db", eventBus, onShutdown: () => {} } as unknown as FeatureModuleContext;
 
     await registerDiscordHandlers(ctx);
 

@@ -4,6 +4,7 @@ import {
   logEntrySchema,
   parseLogEntry,
   safeParseLogEntry,
+  SENSITIVE_LOG_FIELDS,
   type LogCategory,
 } from "./log-entry.js";
 
@@ -284,5 +285,58 @@ describe("logEntrySchema", () => {
       changes: { icon: { before: null, after: "hash" } },
     });
     expect(result.success).toBe(true);
+  });
+  test("member: nicknameChange permits setting a nickname", () => {
+    const changes = { nickname: { before: null, after: "新しい名前" } };
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      changes,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.changes).toEqual(changes);
+  });
+
+  test("member: nicknameChange permits clearing a nickname", () => {
+    const changes = { nickname: { before: "以前の名前", after: null } };
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      changes,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.changes).toEqual(changes);
+  });
+
+  test("member: nicknameChange preserves the previous display name", () => {
+    const result = logEntrySchema.safeParse({
+      ...validByCategory.member,
+      action: "nicknameChange",
+      previousUserName: "元の表示名",
+    });
+
+    expect(result).toMatchObject({ success: true, data: { previousUserName: "元の表示名" } });
+  });
+});
+
+describe("SENSITIVE_LOG_FIELDS", () => {
+  test("message.previousContentをマスク対象として検出する(schema上.meta({sensitive:true})指定)", () => {
+    expect(SENSITIVE_LOG_FIELDS.message).toContain("previousContent");
+  });
+
+  test("channel/guild/roleのchangesをマスク対象として検出する", () => {
+    expect(SENSITIVE_LOG_FIELDS.channel).toContain("changes");
+    expect(SENSITIVE_LOG_FIELDS.guild).toContain("changes");
+    expect(SENSITIVE_LOG_FIELDS.role).toContain("changes");
+  });
+
+  test("sensitiveマークのないカテゴリは空配列を返す", () => {
+    expect(SENSITIVE_LOG_FIELDS.member).toEqual([]);
+    expect(SENSITIVE_LOG_FIELDS.reaction).toEqual([]);
+    expect(SENSITIVE_LOG_FIELDS.voice).toEqual([]);
+  });
+
+  test("全カテゴリ分のエントリを持つ", () => {
+    expect(Object.keys(SENSITIVE_LOG_FIELDS).sort()).toEqual(Object.keys(LOG_ENTRY_SCHEMAS).sort());
   });
 });

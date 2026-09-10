@@ -16,17 +16,21 @@ export function isManagedGuild(guild: Pick<DiscordUserGuildLike, "owner" | "perm
   return guild.owner || (BigInt(guild.permissions) & MANAGE_GUILD) === MANAGE_GUILD;
 }
 
-/** ユーザーが管理者権限を持ち、かつbotが導入済み(guildsテーブルに存在)のguildだけを返す。 */
+/**
+ * ユーザーが所属し、かつbotが導入済み(guildsテーブルに存在)のguildを全て返す(issue #199)。
+ * 管理者権限(オーナーまたはMANAGE_GUILD)を持たないguildも`isManaged: false`で含める。
+ */
 export async function listMyGuilds(
   db: Db,
   userGuilds: readonly DiscordUserGuildLike[],
 ): Promise<readonly ManagedGuild[]> {
-  const managedIds = userGuilds.filter(isManagedGuild).map((guild) => guild.id);
-  if (managedIds.length === 0) {
+  if (userGuilds.length === 0) {
     return [];
   }
-  return db
+  const managedById = new Map(userGuilds.map((guild) => [guild.id, isManagedGuild(guild)]));
+  const installed = await db
     .select({ id: guildsTable.id, name: guildsTable.name })
     .from(guildsTable)
-    .where(inArray(guildsTable.id, managedIds));
+    .where(inArray(guildsTable.id, [...managedById.keys()]));
+  return installed.map((guild) => ({ ...guild, isManaged: managedById.get(guild.id) ?? false }));
 }

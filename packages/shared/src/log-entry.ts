@@ -12,6 +12,14 @@ const base = {
    * 実行者を取得できないカテゴリが大半のため、初回書き込み時は未設定(undefined)が正常系。
    */
   executorId: nonEmptyString.optional(),
+  /** executorIdが判明した時点(監査ログ相関時)のDiscord表示名のスナップショット。executorId未設定なら常に未設定。 */
+  executorName: nonEmptyString.optional(),
+  /**
+   * イベントの主体(message.authorId/reaction.userId/member.userId等)がBotアカウントかどうか。
+   * 監査ログ相関と同様、ダッシュボードのデフォルト表示から隔離するためのフラグ。
+   * 主体を持たないカテゴリ(role/channel/guild等)や、判定情報を持たないハンドラでは未設定のまま。
+   */
+  actorIsBot: z.boolean().optional(),
 };
 
 export const messageLogEntrySchema = z.object({
@@ -19,10 +27,12 @@ export const messageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   authorId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット(executorName/threadNameと同じパターン)。 */
+  authorName: nonEmptyString.optional(),
   action: z.enum(["create", "update", "delete", "bulkDelete", "pin", "unpin"]),
   content: z.string().optional(),
   /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
-  previousContent: z.string().optional(),
+  previousContent: z.string().optional().meta({ sensitive: true }),
   /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
 });
@@ -33,6 +43,8 @@ export const reactionLogEntrySchema = z.object({
   channelId: nonEmptyString,
   messageId: nonEmptyString,
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。partial(未キャッシュ)userの場合は未設定。 */
+  userName: nonEmptyString.optional(),
   emoji: nonEmptyString,
   action: z.enum(["add", "remove"]),
 });
@@ -41,7 +53,16 @@ export const memberLogEntrySchema = z.object({
   ...base,
   category: z.literal("member"),
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。ban/unbanはGuildMemberを取得できないためニックネーム抜き。 */
+  userName: nonEmptyString.optional(),
   action: z.enum(["join", "leave", "ban", "unban", "kick", "timeout", "timeoutRemove", "nicknameChange"]),
+  /** nicknameChange時点の変更前表示名。変更前ニックネームが未設定の自己変更見出しに使う。 */
+  previousUserName: nonEmptyString.optional(),
+  changes: z
+    .object({
+      nickname: z.object({ before: z.string().nullable(), after: z.string().nullable() }),
+    })
+    .optional(),
 });
 
 export const roleLogEntrySchema = z.object({
@@ -51,11 +72,14 @@ export const roleLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。create/update/delete(ロール自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** イベント発生時点のDiscord表示名のスナップショット。userIdと同様action=memberAdd/memberRemoveのみ設定する。 */
+  userName: nonEmptyString.optional(),
   /** action=updateのみ設定する変更フィールドごとのbefore/after。差分なしのupdateは書き込み自体を行わないため、空オブジェクトは許容しない。 */
   changes: z
     .record(z.string(), z.object({ before: z.union([z.string(), z.number(), z.boolean()]), after: z.union([z.string(), z.number(), z.boolean()]) }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 const channelChangeValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -69,7 +93,8 @@ export const channelLogEntrySchema = z.object({
   changes: z
     .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 export const guildLogEntrySchema = z.object({
@@ -80,7 +105,8 @@ export const guildLogEntrySchema = z.object({
   changes: z
     .record(z.string(), z.object({ before: channelChangeValue, after: channelChangeValue }))
     .refine((changes) => Object.keys(changes).length > 0, { message: "changes must not be empty" })
-    .optional(),
+    .optional()
+    .meta({ sensitive: true }),
 });
 
 export const threadLogEntrySchema = z.object({
@@ -91,6 +117,8 @@ export const threadLogEntrySchema = z.object({
   action: z.enum(["create", "update", "delete", "archive", "unarchive", "memberAdd", "memberRemove"]),
   /** action=memberAdd/memberRemoveの対象メンバー。それ以外(スレッド自体の変更)では設定しない。 */
   userId: nonEmptyString.optional(),
+  /** イベント発生時点のDiscord表示名のスナップショット。guildMemberが未キャッシュの場合は未設定。 */
+  userName: nonEmptyString.optional(),
   /** 通常はaction=createのみ設定する、フォーラム/メディア投稿のスターターメッセージ本文。 */
   content: z.string().optional(),
   /**
@@ -127,6 +155,8 @@ export const autoModLogEntrySchema = z.object({
   category: z.literal("autoMod"),
   ruleId: nonEmptyString,
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。guild.members.cacheに存在する場合のみ設定する。 */
+  userName: nonEmptyString.optional(),
   channelId: nonEmptyString.optional(),
   action: z.enum(["ruleCreate", "ruleUpdate", "ruleDelete", "actionExecuted"]),
 });
@@ -183,6 +213,8 @@ const voiceBase = {
   ...base,
   category: z.literal("voice"),
   userId: nonEmptyString,
+  /** イベント発生時点のDiscord表示名のスナップショット。leave(VoiceState.memberが取得できない)では未設定。 */
+  userName: nonEmptyString.optional(),
   /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
   channelId: nonEmptyString,
 };
@@ -252,3 +284,31 @@ export function parseLogEntry(input: unknown): LogEntry {
 export function safeParseLogEntry(input: unknown): z.ZodSafeParseResult<LogEntry> {
   return logEntrySchema.safeParse(input);
 }
+
+/**
+ * カテゴリごとの「VIEW_LOGS_RAWなしでマスクすべきフィールド名」をzodスキーマの
+ * `.meta({ sensitive: true })`から導出する。手動列挙テーブルとLogEntryスキーマが
+ * 独立して二重管理になっており、フィールド追加時にマスク対象への追記漏れが起きていたため
+ * (issue #219)、スキーマ自体を単一の情報源にする。
+ * voiceのようなdiscriminatedUnionスキーマは各選択肢(action別)のshapeを合成して調べる。
+ */
+function collectSensitiveFields(schema: z.ZodTypeAny): readonly string[] {
+  const options: z.ZodTypeAny[] =
+    "options" in schema.def && Array.isArray((schema.def as { options?: unknown }).options)
+      ? ((schema.def as { options: z.ZodTypeAny[] }).options)
+      : [schema];
+
+  const fields = new Set<string>();
+  for (const option of options) {
+    const shape = (option as { shape?: Record<string, z.ZodTypeAny> }).shape;
+    if (!shape) continue;
+    for (const [key, field] of Object.entries(shape)) {
+      if ((field.meta() as { sensitive?: boolean } | undefined)?.sensitive) fields.add(key);
+    }
+  }
+  return [...fields];
+}
+
+export const SENSITIVE_LOG_FIELDS: Record<LogCategory, readonly string[]> = Object.fromEntries(
+  Object.entries(LOG_ENTRY_SCHEMAS).map(([category, schema]) => [category, collectSensitiveFields(schema)]),
+) as Record<LogCategory, readonly string[]>;

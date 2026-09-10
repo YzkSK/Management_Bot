@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { isUnauthorizedError } from "./is-unauthorized-error.js";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
+import { AccessPage } from "./pages/AccessPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
@@ -53,6 +54,7 @@ export function App() {
         >
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
+          <Route path="access" element={<AccessPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

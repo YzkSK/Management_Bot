@@ -2,7 +2,10 @@ import type { Db } from "@management-bot/db";
 import { isKnownCapabilityMask } from "@management-bot/shared";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { validateSession } from "./session.js";
-import { resolveEffectiveCapabilities } from "./effective-capabilities.js";
+import {
+  resolveEffectiveCapabilities,
+  type ResolveEffectiveCapabilitiesInput,
+} from "./effective-capabilities.js";
 
 export interface GuildMembership {
   isOwner: boolean;
@@ -14,9 +17,33 @@ export interface ChannelOption {
   name: string;
 }
 
+export interface RoleOption {
+  id: string;
+  name: string;
+}
+
+export interface MemberOption {
+  id: string;
+  name: string;
+}
+
+export interface MemberPage {
+  members: readonly MemberOption[];
+  /** 次ページ取得用のuser id(昇順カーソル)。undefinedなら最終ページ。 */
+  nextAfter: string | undefined;
+}
+
 export interface ManagedGuild {
   id: string;
   name: string;
+  /**
+   * ログインユーザーがオーナーまたはDiscordのMANAGE_GUILD権限を持つか(issue #199)。
+   * ダッシュボード側のcapability(VIEW_LOGS等)は@everyoneにも既定付与されうるため、
+   * falseでも機能自体は利用できる場合がある。Dashboard UIでは「管理者権限がありません」
+   * 等の補助ラベル表示にのみ使い、リンクの選択不可化には使わないこと
+   * (閲覧可否は各procedure側のrequireCapabilityがFORBIDDENで最終的に強制する)。
+   */
+  isManaged: boolean;
 }
 
 export interface DashboardAccessContext {
@@ -25,7 +52,8 @@ export interface DashboardAccessContext {
   /** Bot招待/再認可URL生成に使うOAuth2クライアントID。dashboard-api側でenvから供給する。 */
   discordClientId: string;
   /**
-   * ログインユーザーが管理者権限(オーナーまたはMANAGE_GUILD)を持ち、かつbotが導入済みのguild一覧を返す。
+   * ログインユーザーが所属し、かつbotが導入済みのguild一覧を返す(issue #199)。
+   * 管理者権限(オーナーまたはMANAGE_GUILD)を持たないguildも`isManaged: false`で含まれる。
    * Dashboardのサーバー選択画面で使う。dashboard-api側でDiscord APIから供給する。
    */
   listMyGuilds: () => Promise<readonly ManagedGuild[]>;
@@ -67,6 +95,41 @@ export interface DashboardAccessContext {
    * Dashboardの再認可導線に使う。dashboard-api側でDiscord APIから供給する。
    */
   getBotPermissions: (guildId: string) => Promise<bigint>;
+  /**
+   * guildId直下の全ロールのid/nameを返す。capability付与画面のロールセレクターに使う
+   * (issue #198)。`@everyone`ロール(id===guildId)も含む。表示専用なのでdashboard-api側で
+   * 短命キャッシュしてよい。
+   */
+  getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
+  /**
+   * guildId直下でroleIdが実在するかをキャッシュを介さず確認する。capability grantのtargetId
+   * 実在検証専用(issue #198)。getGuildRolesは表示用に短命キャッシュされうるため、削除直後の
+   * roleへの誤付与を防ぐにはこちらを使うこと(verifyGuildChannelと同じ考え方)。
+   */
+  verifyGuildRole: (guildId: string, roleId: string) => Promise<boolean>;
+  /**
+   * guildId直下のメンバーをuser id昇順で1ページ分取得する。capability付与画面のユーザー
+   * セレクターに使う(issue #198)。大規模guildで全件を一度に返さないよう、afterで明示的に
+   * ページ送りする(省略時は先頭ページ)。GUILD_MEMBERS Privileged Intent未設定の場合は
+   * DiscordAccessForbiddenErrorが投げられうる。
+   */
+  getGuildMembersPage: (guildId: string, after?: string) => Promise<MemberPage>;
+  /**
+   * guildIdに指定userIdが実在(在籍)するかを判定する。capability grantのtargetId実在検証専用
+   * (issue #198)。getGuildMembershipは「ログイン中の操作者自身」の在籍確認専用であり、
+   * 任意のtargetユーザーの在籍確認には使えないため、別メソッドとして分離している。
+   * キャッシュを介さずBot APIへ問い合わせること(実在検証の性質上、表示用キャッシュを使うと
+   * 脱退直後のユーザーへの誤付与を許してしまう)。
+   */
+  isGuildMember: (guildId: string, userId: string) => Promise<boolean>;
+  /**
+   * requireCapabilityが実効capabilities(DB SELECT)を計算する際に使う関数。省略時は
+   * effective-capabilities.tsのresolveEffectiveCapabilitiesを毎回そのまま呼ぶ。
+   * 1画面が複数procedureを呼ぶ場合(例: AccessPageは最低5つ)の同一リクエストバッチ内での
+   * 重複問い合わせを避けたいdashboard-api側は、短命TTLキャッシュ付きの実装をここに注入できる
+   * (issue #198 パフォーマンス改善。getGuildMembershipキャッシュと同じ考え方)。
+   */
+  resolveEffectiveCapabilities?: (input: ResolveEffectiveCapabilitiesInput) => Promise<number>;
 }
 
 const t = initTRPC.context<DashboardAccessContext>().create();
@@ -119,7 +182,10 @@ export function requireCapability(cap: number) {
       throw new TRPCError({ code: "FORBIDDEN" });
     }
 
-    const capabilities = await resolveEffectiveCapabilities(db, {
+    const resolve =
+      (ctx as DashboardAccessContext).resolveEffectiveCapabilities ??
+      ((input: ResolveEffectiveCapabilitiesInput) => resolveEffectiveCapabilities(db, input));
+    const capabilities = await resolve({
       guildId,
       discordUserId,
       isOwner: membership.isOwner,

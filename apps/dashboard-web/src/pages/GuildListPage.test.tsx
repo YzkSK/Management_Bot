@@ -25,16 +25,27 @@ describe("GuildListPage", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, []);
     const html = renderPage(queryClient);
-    expect(html).toContain("管理できるサーバーが見つかりませんでした");
+    expect(html).toContain("表示できるサーバーが見つかりませんでした");
   });
 
   test("取得成功時はサーバー一覧をログ一覧画面へのリンクとして描画する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "テストサーバー" },
+      { id: "g1", name: "テストサーバー", isManaged: true },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("テストサーバー");
+    expect(html).toContain('href="/guilds/g1/logs"');
+  });
+
+  test("管理者権限のないサーバーもリンクとして描画しつつ理由を明示する(issue #199, @everyoneのVIEW_LOGS等は別途利用できるため)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+      { id: "g1", name: "非管理サーバー", isManaged: false },
+    ]);
+    const html = renderPage(queryClient);
+    expect(html).toContain("非管理サーバー");
+    expect(html).toContain("管理者権限がありません");
     expect(html).toContain('href="/guilds/g1/logs"');
   });
 });

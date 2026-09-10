@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { GuildScheduledEvent, PartialGuildScheduledEvent } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -34,8 +34,8 @@ export function toScheduledEventUpdateLogEntry(
   return { category: "scheduledEvent", guildId: newEvent.guildId, createdAt: new Date().toISOString(), eventId: newEvent.id, action };
 }
 
-export function registerScheduledEventHandlers(ctx: FeatureModuleContext): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx) };
+export function registerScheduledEventHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
+  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("guildScheduledEventCreate", (event) => writeLogEntrySafely(deps, toScheduledEventCreateLogEntry(event)));
   ctx.client.on("guildScheduledEventDelete", (event) => writeLogEntrySafely(deps, toScheduledEventDeleteLogEntry(event)));

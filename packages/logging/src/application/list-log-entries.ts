@@ -1,6 +1,6 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import type { LogCategory } from "@management-bot/shared";
+import { SENSITIVE_LOG_FIELDS, type LogCategory } from "@management-bot/shared";
 import { and, desc, eq, lt, notInArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
@@ -27,6 +27,8 @@ export interface ListLogEntriesInput {
   cursor?: string;
   /** これらのカテゴリは結果から除外する(categoryフィルタと併用可)。 */
   excludeCategories?: readonly LogCategory[];
+  /** trueの場合、authorIsBot=trueの行を結果から除外する。 */
+  excludeBotEvents?: boolean;
 }
 
 export interface ListLogEntriesResult {
@@ -47,6 +49,9 @@ export async function listLogEntries(
   if (input.category) conditions.push(eq(logEntries.category, input.category));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
+  }
+  if (input.excludeBotEvents) {
+    conditions.push(eq(logEntries.authorIsBot, false));
   }
   if (input.cursor) {
     const cursor = decodeCursor(input.cursor);
@@ -78,12 +83,27 @@ export async function listLogEntries(
 }
 
 /**
+ * VIEW_LOGS_RAWを持たない閲覧者向けにマスクするフィールド名をカテゴリごとに列挙したもの。
+ * Record<LogCategory, ...>にすることで、カテゴリ追加時にここへの追記漏れを型チェックで検知できる。
+ * voiceのchanges(selfMute等のフラグon/off)は本文相当の生データを含まないため対象外。
+ */
+/**
  * VIEW_LOGS_RAWを持たない閲覧者向けに、メッセージ本文など生データを含むフィールドを取り除く。
  * VIEW_LOGSのみでは要約(誰が・いつ・何をしたか)のみ見える想定。
+ * マスク対象フィールドはLogEntryのzodスキーマの`.meta({ sensitive: true })`から導出する
+ * (SENSITIVE_LOG_FIELDS、issue #219)。従来はここに手動列挙テーブルを持っており、
+ * スキーマに新しい生データフィールドが増えた際の追記漏れが実際にバグを起こしていた。
  */
 export function maskSensitiveFields(entry: LogEntry): LogEntry {
-  if ((entry.category === "message" || entry.category === "thread") && entry.content !== undefined) {
-    return { ...entry, content: undefined };
+  const fields = SENSITIVE_LOG_FIELDS[entry.category];
+  if (fields.length === 0) return entry;
+  const masked = { ...entry } as Record<string, unknown>;
+  let changed = false;
+  for (const field of fields) {
+    if (masked[field] !== undefined) {
+      masked[field] = undefined;
+      changed = true;
+    }
   }
-  return entry;
+  return changed ? (masked as LogEntry) : entry;
 }

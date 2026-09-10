@@ -8,12 +8,14 @@ import {
   toAutoModRuleUpdateLogEntry,
 } from "./auto-mod.js";
 
+const fakeGuild = { id: "g1", members: { cache: { get: () => ({ displayName: "たろう" }) } } };
+
 function fakeRule() {
-  return { id: "r1", guild: { id: "g1" }, creatorId: "u1" } as never;
+  return { id: "r1", guild: fakeGuild, creatorId: "u1" } as never;
 }
 
 function fakeExecution(channelId: string | null = "c1") {
-  return { guild: { id: "g1" }, ruleId: "r1", userId: "u1", channelId } as never;
+  return { guild: fakeGuild, ruleId: "r1", userId: "u1", channelId } as never;
 }
 
 describe("auto-mod category mappers", () => {
@@ -21,9 +23,21 @@ describe("auto-mod category mappers", () => {
   test("ruleUpdate", () => expect(toAutoModRuleUpdateLogEntry(fakeRule()).action).toBe("ruleUpdate"));
   test("ruleDelete", () => expect(toAutoModRuleDeleteLogEntry(fakeRule()).action).toBe("ruleDelete"));
 
-  test("actionExecuted: channelIdがあれば含める", () => {
+  test("ruleCreate/ruleUpdate/ruleDeleteのcreatorIdは実行者ではないため、userNameスナップショットを持たない", () => {
+    expect((toAutoModRuleCreateLogEntry(fakeRule()) as { userName?: string }).userName).toBeUndefined();
+    expect((toAutoModRuleUpdateLogEntry(fakeRule()) as { userName?: string }).userName).toBeUndefined();
+    expect((toAutoModRuleDeleteLogEntry(fakeRule()) as { userName?: string }).userName).toBeUndefined();
+  });
+
+  test("actionExecuted: channelIdがあれば含める。userIdは発言者本人のためguild.members.cacheからuserNameをスナップショット保存する", () => {
     const entry = toAutoModActionExecutedLogEntry(fakeExecution("c1"));
-    expect(entry).toMatchObject({ action: "actionExecuted", channelId: "c1", ruleId: "r1", userId: "u1" });
+    expect(entry).toMatchObject({
+      action: "actionExecuted",
+      channelId: "c1",
+      ruleId: "r1",
+      userId: "u1",
+      userName: "たろう",
+    });
   });
 
   test("actionExecuted: channelIdがnullならundefinedにする", () => {

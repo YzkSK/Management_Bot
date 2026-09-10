@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { LogListPage } from "./LogListPage.js";
+import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
+
+const reactUseState = React.useState;
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
@@ -18,6 +21,12 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
 }
 
 describe("LogListPage", () => {
+  test("VIEW_LOGS_RAWがなければ保存payloadの生データ欄を表示しない", () => {
+    expect(shouldShowRawLogPayload(false, { channelId: "c1" })).toBe(false);
+    expect(shouldShowRawLogPayload(true, { channelId: "c1" })).toBe(true);
+    expect(shouldShowRawLogPayload(true, {})).toBe(false);
+  });
+
   test("取得完了前はローディング表示になる", () => {
     const queryClient = new QueryClient();
     const html = renderPage("g1", queryClient);
@@ -83,6 +92,82 @@ describe("LogListPage", () => {
     expect(html).toContain("がメッセージを投稿しました");
     // 初期状態(未展開)ではカードは折りたたまれており、本文はクリックして展開するまでDOMに現れない。
     expect(html).not.toContain("こんにちは");
+  });
+
+  test("executorNameスナップショットがあるログのexecutorIdはresolveDisplayNamesの対象から除外する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              executorId: "mod1",
+              executorName: "モデレーター太郎",
+              action: "delete",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    renderPage("g1", queryClient);
+
+    const namesQueryKey = trpc.logging.resolveDisplayNames.queryOptions({
+      guildId: "g1",
+      userIds: ["u1"],
+      channelIds: ["c1"],
+    }).queryKey;
+    expect(queryClient.getQueryCache().find({ queryKey: namesQueryKey, exact: true })).toBeDefined();
+  });
+
+  test("authorNameスナップショットがあるログのauthorIdはresolveDisplayNamesの対象から除外する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              authorName: "たろう",
+              action: "create",
+              content: "こんにちは",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    renderPage("g1", queryClient);
+
+    const namesQueryKey = trpc.logging.resolveDisplayNames.queryOptions({
+      guildId: "g1",
+      userIds: [],
+      channelIds: ["c1"],
+    }).queryKey;
+    expect(queryClient.getQueryCache().find({ queryKey: namesQueryKey, exact: true })).toBeDefined();
   });
 
   test("executorIdがないmessageエントリはauthorIdを実行者列に表示する", () => {
@@ -319,5 +404,47 @@ describe("LogListPage", () => {
     const html = renderPage("g1", queryClient);
 
     expect(html).toContain("Admin が #質問スレ を作成しました");
+  });
+  test("展開したメンバーのニックネーム変更では差分を日本語ラベルで表示する", () => {
+    const expandedIds = new Set(["log-1"]);
+    let expandedStateInitialized = false;
+    mock.module("react", () => ({
+      ...React,
+      useState: <T,>(initialValue: T) => {
+        if (!expandedStateInitialized && initialValue instanceof Set && initialValue.size === 0) {
+          expandedStateInitialized = true;
+          const setExpandedIds = mock<React.Dispatch<React.SetStateAction<Set<string>>>>();
+          return [expandedIds, setExpandedIds] as [T, React.Dispatch<React.SetStateAction<T>>];
+        }
+        return reactUseState(initialValue);
+      },
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "member",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              userId: "u1",
+              action: "nicknameChange",
+              changes: { nickname: { before: null, after: "新しい名前" } },
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("ニックネーム");
+    expect(html).toContain("未設定");
+    expect(html).toContain("新しい名前");
+    mock.restore();
   });
 });
