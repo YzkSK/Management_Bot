@@ -50,6 +50,12 @@ const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
 const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
+/**
+ * fetchGuildMembersPageの1000人上限に含まれない個別フォールバック解決分をuserId単位でキャッシュする。
+ * ログ一覧表示のたびに含まれる実行者IDの数だけDiscord APIへ個別問い合わせが発生していたため(issue #221)。
+ * キーは`${guildId}:${userId}`。
+ */
+const guildMemberNameCache = createTtlCache<string | undefined>(GUILD_TTL_MS);
 
 /**
  * requireCapabilityミドルウェアはprocedureごとにgetGuildMembershipを呼ぶため、
@@ -142,10 +148,30 @@ function createIsGuildMember(botToken: string): (guildId: string, userId: string
   return (guildId, userId) => isGuildMember(botToken, guildId, userId);
 }
 
+export function createGetGuildMemberNamesWith(
+  fetchNames: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>,
+): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
+  return async (guildId, userIds) => {
+    const resolved = await Promise.all(
+      userIds.map(
+        async (userId) =>
+          [
+            userId,
+            await guildMemberNameCache(`${guildId}:${userId}`, async () => {
+              const names = await fetchNames(guildId, [userId]);
+              return names.get(userId);
+            }),
+          ] as const,
+      ),
+    );
+    return new Map(resolved.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+  };
+}
+
 function createGetGuildMemberNames(
   botToken: string,
 ): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
-  return (guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds);
+  return createGetGuildMemberNamesWith((guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds));
 }
 
 /**

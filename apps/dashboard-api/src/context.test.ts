@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Db } from "@management-bot/db";
-import { createResolveEffectiveCapabilities } from "./context.js";
+import { createGetGuildMemberNamesWith, createResolveEffectiveCapabilities } from "./context.js";
 
 // resolveはDb引数をそのままdbに渡すだけの薄いラッパーとして注入するため、
 // このユニットテストではdbは使われない(型を満たすためのダミー)。
@@ -67,5 +67,46 @@ describe("createResolveEffectiveCapabilities", () => {
     await expect(resolveEffectiveCapabilities(input)).resolves.toBe(5);
 
     expect(resolve).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createGetGuildMemberNamesWith", () => {
+  test("同じguildId:userIdへの再呼び出しはfetchNamesを再実行せずキャッシュを使う", async () => {
+    const fetchNames = mock((_guildId: string, userIds: readonly string[]) =>
+      Promise.resolve(new Map(userIds.map((id) => [id, `name-${id}`]))),
+    );
+    const getGuildMemberNames = createGetGuildMemberNamesWith(fetchNames);
+
+    const first = await getGuildMemberNames("cache-g1", ["cache-u1"]);
+    const second = await getGuildMemberNames("cache-g1", ["cache-u1"]);
+
+    expect(first.get("cache-u1")).toBe("name-cache-u1");
+    expect(second.get("cache-u1")).toBe("name-cache-u1");
+    expect(fetchNames).toHaveBeenCalledTimes(1);
+  });
+
+  test("未キャッシュのuserIdが混在する場合はそのuserIdのみfetchNamesを呼ぶ", async () => {
+    const fetchNames = mock((_guildId: string, userIds: readonly string[]) =>
+      Promise.resolve(new Map(userIds.map((id) => [id, `name-${id}`]))),
+    );
+    const getGuildMemberNames = createGetGuildMemberNamesWith(fetchNames);
+
+    await getGuildMemberNames("cache-g2", ["cache-u1"]);
+    fetchNames.mockClear();
+    const result = await getGuildMemberNames("cache-g2", ["cache-u1", "cache-u2"]);
+
+    expect(result.get("cache-u1")).toBe("name-cache-u1");
+    expect(result.get("cache-u2")).toBe("name-cache-u2");
+    expect(fetchNames).toHaveBeenCalledTimes(1);
+    expect(fetchNames).toHaveBeenCalledWith("cache-g2", ["cache-u2"]);
+  });
+
+  test("解決できなかったuserIdはMapに含めない", async () => {
+    const fetchNames = mock(() => Promise.resolve(new Map()));
+    const getGuildMemberNames = createGetGuildMemberNamesWith(fetchNames);
+
+    const result = await getGuildMemberNames("cache-g3", ["cache-u-missing"]);
+
+    expect(result.has("cache-u-missing")).toBe(false);
   });
 });
