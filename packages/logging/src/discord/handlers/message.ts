@@ -3,7 +3,7 @@ import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollec
 import type { LogEntry } from "../../domain/index.js";
 import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 
@@ -165,8 +165,13 @@ export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId:
   });
 
   ctx.client.on("messageDeleteBulk", (messages) => {
-    for (const entry of toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id)) {
-      writeLogEntrySafely(deps, entry);
-    }
+    const entries = toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id);
+    if (entries.length === 0) return;
+    const channelId = messages.first()!.channelId;
+    writeLogEntriesBulkSafely(
+      deps,
+      entries,
+      (entries) => `${entries.length}件のメッセージが<#${channelId}>で一括削除されました`,
+    );
   });
 }

@@ -191,4 +191,39 @@ describe("registerMessageHandlers", () => {
       expect.arrayContaining(["messageCreate", "messageUpdate", "messageDelete", "messageDeleteBulk"]),
     );
   });
+
+  test("messageDeleteBulkは削除件数によらずDB保存を1回のマルチバリューINSERTにまとめる", async () => {
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    const on = mock((event: string, handler: (...args: never[]) => unknown) => {
+      handlers.set(event, handler);
+    });
+    const insertCalls: unknown[] = [];
+    const db = {
+      insert: () => ({
+        values: (values: unknown) => {
+          insertCalls.push(values);
+          return { onConflictDoNothing: () => Promise.resolve() };
+        },
+      }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    };
+    const ctx = {
+      client: { on, user: { id: BOT_USER_ID }, channels: { fetch: mock(() => Promise.resolve(null)) } },
+      db,
+    } as unknown as FeatureModuleContext;
+
+    registerMessageHandlers(ctx);
+    const messages = new Map([
+      ["1", fakeMessage({ id: "1", author: { id: "u1" } })],
+      ["2", fakeMessage({ id: "2", author: { id: "u2" } })],
+      ["3", fakeMessage({ id: "3", author: { id: "u3" } })],
+    ]) as unknown as Map<string, unknown> & { first: () => unknown };
+    messages.first = () => [...messages.values()][0];
+
+    await handlers.get("messageDeleteBulk")!(messages as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(insertCalls).toHaveLength(1);
+    expect((insertCalls[0] as unknown[]).length).toBe(3);
+  });
 });

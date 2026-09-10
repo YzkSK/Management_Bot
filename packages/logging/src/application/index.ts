@@ -1,5 +1,6 @@
 export {
   writeLogEntry,
+  writeLogEntriesBulk,
   formatLogEntry,
   createChannelSettingResolver,
   type ChannelMessage,

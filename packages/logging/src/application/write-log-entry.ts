@@ -130,3 +130,42 @@ export async function writeLogEntry(
     suppressMentions: true,
   });
 }
+
+/**
+ * messageDeleteBulk等、1イベントで大量のLogEntryが同時発生するケース専用。writeLogEntryを
+ * 件数分individually呼ぶと、削除件数分のINSERTとDiscord送信(最大100件規模)が同時発生し
+ * Discord 429やDB接続の圧迫を招くため(issue #224)、1回のマルチバリューINSERTでまとめて保存し、
+ * Discord送信も「Nメッセージが削除されました」のようなサマリ1通にまとめる。
+ * entriesが空の場合は何もしない。全entriesは同じguildId/categoryである前提(呼び出し元で保証)。
+ */
+export async function writeLogEntriesBulk(
+  deps: WriteLogEntryDeps,
+  entries: readonly LogEntry[],
+  summary: (entries: readonly LogEntry[]) => string,
+): Promise<void> {
+  if (entries.length === 0) return;
+  const { db, sendToChannel, getChannelId = (guildId, category) => selectChannelId(db, guildId, category) } = deps;
+  const first = entries[0]!;
+
+  await db
+    .insert(logEntries)
+    .values(
+      entries.map((entry) => ({
+        id: randomUUID(),
+        guildId: entry.guildId,
+        category: entry.category,
+        authorIsBot: entry.actorIsBot ?? false,
+        payload: entry,
+        createdAt: new Date(entry.createdAt),
+      })),
+    )
+    .onConflictDoNothing();
+
+  const channelId = await getChannelId(first.guildId, first.category);
+  if (channelId === null) return;
+
+  await sendToChannel(channelId, {
+    content: summary(entries),
+    suppressMentions: true,
+  });
+}
