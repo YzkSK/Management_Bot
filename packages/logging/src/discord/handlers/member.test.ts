@@ -58,9 +58,24 @@ describe("member category mappers", () => {
 });
 
 describe("toMemberUpdateLogEntries", () => {
-  test("ニックネーム変更のみならnicknameChangeを1件返す", () => {
-    const entries = toMemberUpdateLogEntries(fakeMember({ nickname: "old" }), fakeMember({ nickname: "new" }));
-    expect(entries).toEqual([expect.objectContaining({ action: "nicknameChange" })]);
+  test("ニックネーム設定時に変更前後の値を含むnicknameChangeを返す", () => {
+    const entries = toMemberUpdateLogEntries(fakeMember({ nickname: null }), fakeMember({ nickname: "new" }));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        action: "nicknameChange",
+        changes: { nickname: { before: null, after: "new" } },
+      }),
+    ]);
+  });
+
+  test("ニックネーム解除時に変更前後の値を含むnicknameChangeを返す", () => {
+    const entries = toMemberUpdateLogEntries(fakeMember({ nickname: "old" }), fakeMember({ nickname: null }));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        action: "nicknameChange",
+        changes: { nickname: { before: "old", after: null } },
+      }),
+    ]);
   });
 
   test("タイムアウト付与ならtimeoutを1件返す", () => {
