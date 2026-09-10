@@ -108,7 +108,7 @@ const rolesOf = () => async (): Promise<RoleOption[]> => [];
 const membersPageOf = () => async (): Promise<MemberPage> => ({ members: [], nextAfter: undefined });
 
 describe("loggingRouter.listLogEntries", () => {
-  test("VIEW_LOGSのみを持つ場合はcontentがマスクされる", async () => {
+  test("VIEW_LOGSのみを持つ場合はcontentを返し、previousContentをマスクする", async () => {
     await db.insert(capabilityGrants).values({
       id: randomUUID(),
       guildId,
@@ -134,7 +134,7 @@ describe("loggingRouter.listLogEntries", () => {
 
     expect(result.hasRawAccess).toBe(false);
     expect(result.entries).toHaveLength(1);
-    expect((result.entries[0]?.entry as { content?: string }).content).toBeUndefined();
+    expect((result.entries[0]?.entry as { content?: string }).content).toBe("secret message");
     expect(
       (result.entries[0]?.entry as { previousContent?: string }).previousContent,
     ).toBeUndefined();

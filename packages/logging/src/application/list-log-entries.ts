@@ -88,8 +88,8 @@ export async function listLogEntries(
  * voiceのchanges(selfMute等のフラグon/off)は本文相当の生データを含まないため対象外。
  */
 const RAW_FIELDS: Record<LogCategory, readonly string[]> = {
-  message: ["content", "previousContent"],
-  thread: ["content"],
+  message: ["previousContent"],
+  thread: [],
   channel: ["changes"],
   guild: ["changes"],
   role: ["changes"],

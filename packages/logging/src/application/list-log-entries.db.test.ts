@@ -173,7 +173,7 @@ describe("listLogEntries", () => {
 });
 
 describe("maskSensitiveFields", () => {
-  test("messageカテゴリのcontentを取り除く", () => {
+  test("messageカテゴリのcontentを残す", () => {
     const entry: LogEntry = {
       category: "message",
       guildId,
@@ -186,7 +186,7 @@ describe("maskSensitiveFields", () => {
 
     const masked = maskSensitiveFields(entry);
 
-    expect((masked as { content?: string }).content).toBeUndefined();
+    expect((masked as { content?: string }).content).toBe("secret message");
   });
 
   test("messageカテゴリのpreviousContent(編集前本文)も取り除く(issue #207)", () => {
@@ -203,11 +203,11 @@ describe("maskSensitiveFields", () => {
 
     const masked = maskSensitiveFields(entry);
 
-    expect((masked as { content?: string }).content).toBeUndefined();
+    expect((masked as { content?: string }).content).toBe("new message");
     expect((masked as { previousContent?: string }).previousContent).toBeUndefined();
   });
 
-  test("threadカテゴリのcontent(スターターメッセージ本文)も取り除く", () => {
+  test("threadカテゴリのcontent(スターターメッセージ本文)を残す", () => {
     const entry: LogEntry = {
       category: "thread",
       guildId,
@@ -220,7 +220,7 @@ describe("maskSensitiveFields", () => {
 
     const masked = maskSensitiveFields(entry);
 
-    expect((masked as { content?: string }).content).toBeUndefined();
+    expect((masked as { content?: string }).content).toBe("secret starter message");
   });
 
   test("channelカテゴリのchanges(topic等の変更前後)も取り除く", () => {
