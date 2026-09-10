@@ -311,6 +311,7 @@ export async function correlateAuditLogEntry(
         createdAt: entry.createdAt,
         integrationId: entry.targetId,
         executorId: entry.executorId,
+        executorName: entry.executorName,
         action: integrationAction,
       },
       `integration:${entry.id}`,

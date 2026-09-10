@@ -382,6 +382,31 @@ describe("429リトライ(discordGet共通)", () => {
     }
   });
 
+  test("429がリトライ上限に到達した最終試行もログに残す(原因調査用、issue #211)", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guilds/g1/members/u1")) {
+        return new Response(JSON.stringify({ message: "rate limited" }), {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      await fetchGuildMemberNames("test-bot-token", "g1", ["u1"]);
+
+      // 初回1回 + MAX_RATE_LIMIT_RETRIES(5)回のリトライ = 6回warnされる(最終試行分も含む)
+      expect(warnSpy).toHaveBeenCalledTimes(6);
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   test("429がリトライ上限を超えて続く場合はエラーになりMapに含めない", async () => {
     const errorSpy = spyOn(console, "error").mockImplementation(() => {});
     let calls = 0;

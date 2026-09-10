@@ -92,6 +92,8 @@ export function LogListPage() {
             new Set(
               logsQuery.data.entries.flatMap(({ entry }) =>
                 USER_ID_FIELDS.flatMap((key) => {
+                  // executorNameスナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
+                  if (key === "executorId" && "executorName" in entry && entry.executorName) return [];
                   const value = entry[key as keyof typeof entry];
                   return typeof value === "string" ? [value] : [];
                 }),

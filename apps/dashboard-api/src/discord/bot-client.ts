@@ -88,13 +88,21 @@ async function discordGet<T>(
     if (response.status === 403 || response.status === 404) {
       return "not_found";
     }
-    if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+    if (response.status === 429) {
+      const willRetry = attempt < MAX_RATE_LIMIT_RETRIES;
       const retryAfterSeconds = Number(response.headers.get("Retry-After"));
       const delayMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 1000;
       // Dashboardの体感遅延がレート制限のリトライ待ちによるものか判断するための観測用ログ(issue #211)。
-      console.warn(`Discord API rate limited (${path}): retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES} after ${delayMs}ms`);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      continue;
+      // リトライ上限に到達した最終試行も、原因調査から漏れないよう記録する。
+      console.warn(
+        willRetry
+          ? `Discord API rate limited (${path}): retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES} after ${delayMs}ms`
+          : `Discord API rate limited (${path}): retry limit reached, giving up`,
+      );
+      if (willRetry) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
     }
     if (!response.ok) {
       throw new Error(`Discord API request failed (${path}): ${response.status}`);

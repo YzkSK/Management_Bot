@@ -85,6 +85,44 @@ describe("LogListPage", () => {
     expect(html).not.toContain("こんにちは");
   });
 
+  test("executorNameスナップショットがあるログのexecutorIdはresolveDisplayNamesの対象から除外する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({
+        guildId: "g1",
+        category: undefined,
+        limit: 50,
+        cursor: undefined,
+      }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "u1",
+              executorId: "mod1",
+              executorName: "モデレーター太郎",
+              action: "delete",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    renderPage("g1", queryClient);
+
+    const namesQueryKey = trpc.logging.resolveDisplayNames.queryOptions({
+      guildId: "g1",
+      userIds: ["u1"],
+      channelIds: ["c1"],
+    }).queryKey;
+    expect(queryClient.getQueryCache().find({ queryKey: namesQueryKey, exact: true })).toBeDefined();
+  });
+
   test("executorIdがないmessageエントリはauthorIdを実行者列に表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
