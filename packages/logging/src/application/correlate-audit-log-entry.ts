@@ -323,23 +323,24 @@ export async function correlateAuditLogEntry(
   const windowStart = new Date(auditAt.getTime() - CORRELATION_WINDOW_MS);
   const windowEnd = new Date(auditAt.getTime() + CORRELATION_WINDOW_MS);
 
+  /**
+   * auditAt/windowStart/windowEndをクロージャで閉じ込め、category+extraConditionsのみで
+   * CorrelationJobを組み立てるヘルパー(issue #226)。5つ目以降の特殊ケースを追加する際も
+   * この関数を呼ぶだけでよく、window値の使い回しミスやrequireUniqueの付け忘れを防ぐ。
+   */
+  const makeJob = (category: LogCategory, extraConditions: SQL[], opts?: { requireUnique?: boolean }): CorrelationJob => ({
+    criteria: { guildId: entry.guildId, category, auditAt, windowStart, windowEnd, extraConditions, ...opts },
+  });
+
   if (entry.action === "MemberRoleUpdate") {
     if (!entry.targetId || !entry.roleChanges) return;
     const userId = entry.targetId;
-    const roleJob = (roleId: string, logAction: "memberAdd" | "memberRemove"): CorrelationJob => ({
-      criteria: {
-        guildId: entry.guildId,
-        category: "role",
-        auditAt,
-        windowStart,
-        windowEnd,
-        extraConditions: [
-          sql`${logEntries.payload} ->> 'action' = ${logAction}`,
-          sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
-          sql`${logEntries.payload} ->> 'userId' = ${userId}`,
-        ],
-      },
-    });
+    const roleJob = (roleId: string, logAction: "memberAdd" | "memberRemove") =>
+      makeJob("role", [
+        sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+        sql`${logEntries.payload} ->> 'roleId' = ${roleId}`,
+        sql`${logEntries.payload} ->> 'userId' = ${userId}`,
+      ]);
     const jobs = [
       ...entry.roleChanges.added.map((roleId) => roleJob(roleId, "memberAdd")),
       ...entry.roleChanges.removed.map((roleId) => roleJob(roleId, "memberRemove")),
@@ -355,20 +356,11 @@ export async function correlateAuditLogEntry(
       entry.executorId,
       entry.executorName,
       [
-        {
-          criteria: {
-            guildId: entry.guildId,
-            category: "message",
-            auditAt,
-            windowStart,
-            windowEnd,
-            extraConditions: [
-              sql`${logEntries.payload} ->> 'action' = 'delete'`,
-              sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
-              sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
-            ],
-          },
-        },
+        makeJob("message", [
+          sql`${logEntries.payload} ->> 'action' = 'delete'`,
+          sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
+          sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
+        ]),
       ],
       retryDelayMs,
     );
@@ -385,24 +377,18 @@ export async function correlateAuditLogEntry(
       entry.executorId,
       entry.executorName,
       [
-        {
-          criteria: {
-            guildId: entry.guildId,
-            category: "voice",
-            auditAt,
-            windowStart,
-            windowEnd,
-            extraConditions: [
-              sql`${logEntries.payload} ->> 'action' = ${logAction}`,
-              ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
-            ],
-            /**
-             * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
-             * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
-             */
-            requireUnique: true,
-          },
-        },
+        makeJob(
+          "voice",
+          [
+            sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+            ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
+          ],
+          /**
+           * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
+           * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
+           */
+          { requireUnique: true },
+        ),
       ],
       retryDelayMs,
     );
@@ -417,20 +403,12 @@ export async function correlateAuditLogEntry(
      * 誤って拾い得る。mute/deafは別々のvoice update行(discord.jsのvoiceStateUpdateイベントが
      * 分かれて発火し得る)を指す可能性があるため、フラグごとに個別ジョブにする。
      */
-    const flagJob = (flag: "serverMute" | "serverDeaf", after: boolean): CorrelationJob => ({
-      criteria: {
-        guildId: entry.guildId,
-        category: "voice",
-        auditAt,
-        windowStart,
-        windowEnd,
-        extraConditions: [
-          sql`${logEntries.payload} ->> 'action' = 'update'`,
-          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
-          sql`${logEntries.payload} -> 'changes' -> ${flag} ->> 'after' = ${String(after)}`,
-        ],
-      },
-    });
+    const flagJob = (flag: "serverMute" | "serverDeaf", after: boolean) =>
+      makeJob("voice", [
+        sql`${logEntries.payload} ->> 'action' = 'update'`,
+        sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+        sql`${logEntries.payload} -> 'changes' -> ${flag} ->> 'after' = ${String(after)}`,
+      ]);
     const jobs = [
       ...(mute !== undefined ? [flagJob("serverMute", mute)] : []),
       ...(deaf !== undefined ? [flagJob("serverDeaf", deaf)] : []),
