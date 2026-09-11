@@ -41,6 +41,7 @@ try {
   await client.registerFeatures(FEATURES, {
     db,
     databaseUrl: env.DATABASE_URL,
+    redisUrl: env.REDIS_URL,
     eventBusFor: (feature) => eventBuses.get(feature.key)!,
   });
 
