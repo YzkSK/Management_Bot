@@ -61,7 +61,7 @@ describe("Sidebar", () => {
   test("管理者権限のないサーバーのみでもセレクトは無効化しない(issue #199, VIEW_LOGS等の閲覧capabilityは別途保持しうるため)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "非管理サーバー", isManaged: false },
+      { id: "g1", name: "非管理サーバー", isManaged: false, canViewLogs: true },
     ]);
     const html = renderSidebar(queryClient);
     expect(html).not.toContain("disabled=");
