@@ -1,7 +1,10 @@
 import { boolean, check, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
-import { MODERATION_VIOLATION_TYPES } from "@management-bot/shared";
+import { MODERATION_VIOLATION_TYPES, type ModerationViolationType } from "@management-bot/shared";
 import { guilds } from "./core.js";
+
+type ModerationPreset = "weak" | "medium" | "strong";
+type ModerationWhitelistTargetType = "user" | "role";
 
 function violationTypeCheck(column: Column): SQL {
   return sql`${column} IN (${sql.join(
@@ -16,8 +19,8 @@ export const moderationThresholds = pgTable(
     guildId: text("guild_id")
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
-    violationType: text("violation_type").notNull(),
-    preset: text("preset").notNull(),
+    violationType: text("violation_type").$type<ModerationViolationType>().notNull(),
+    preset: text("preset").$type<ModerationPreset>().notNull(),
     enabled: boolean("enabled").notNull().default(false),
   },
   (table) => [
@@ -34,7 +37,7 @@ export const moderationEscalationState = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    violationType: text("violation_type").notNull(),
+    violationType: text("violation_type").$type<ModerationViolationType>().notNull(),
     strikeCount: integer("strike_count").notNull().default(0),
     lastViolationAt: timestamp("last_violation_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -44,6 +47,7 @@ export const moderationEscalationState = pgTable(
       "moderation_escalation_state_violation_type_check",
       violationTypeCheck(table.violationType),
     ),
+    check("moderation_escalation_state_strike_count_check", sql`${table.strikeCount} >= 0`),
   ],
 );
 
@@ -53,7 +57,7 @@ export const moderationWhitelist = pgTable(
     guildId: text("guild_id")
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
-    targetType: text("target_type").notNull(),
+    targetType: text("target_type").$type<ModerationWhitelistTargetType>().notNull(),
     targetId: text("target_id").notNull(),
   },
   (table) => [

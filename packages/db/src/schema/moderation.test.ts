@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { createDb, type Db } from "../client.ts";
 import { guilds, moderationEscalationState, moderationThresholds, moderationWhitelist } from "./index.ts";
 
+const INVALID = "unknown" as never;
+
 interface PgErrorCause {
   code?: string;
   constraint_name?: string;
@@ -45,11 +47,11 @@ describe("moderation schema", () => {
       "moderation_thresholds_guild_id_violation_type_pk",
     );
     await expectConstraintViolation(
-      db.insert(moderationThresholds).values({ guildId, violationType: "unknown", preset: "weak" }),
+      db.insert(moderationThresholds).values({ guildId, violationType: INVALID, preset: "weak" }),
       "moderation_thresholds_violation_type_check",
     );
     await expectConstraintViolation(
-      db.insert(moderationThresholds).values({ guildId, violationType: "duplicate_content", preset: "unknown" }),
+      db.insert(moderationThresholds).values({ guildId, violationType: "duplicate_content", preset: INVALID }),
       "moderation_thresholds_preset_check",
     );
   });
@@ -63,8 +65,14 @@ describe("moderation schema", () => {
       "moderation_escalation_state_guild_id_user_id_violation_type_pk",
     );
     await expectConstraintViolation(
-      db.insert(moderationEscalationState).values({ guildId, userId, violationType: "unknown" }),
+      db.insert(moderationEscalationState).values({ guildId, userId, violationType: INVALID }),
       "moderation_escalation_state_violation_type_check",
+    );
+    await expectConstraintViolation(
+      db
+        .insert(moderationEscalationState)
+        .values({ guildId, userId: `${userId}-2`, violationType: "flood", strikeCount: -1 }),
+      "moderation_escalation_state_strike_count_check",
     );
   });
 
@@ -77,7 +85,7 @@ describe("moderation schema", () => {
       "moderation_whitelist_guild_id_target_type_target_id_pk",
     );
     await expectConstraintViolation(
-      db.insert(moderationWhitelist).values({ guildId, targetType: "unknown", targetId }),
+      db.insert(moderationWhitelist).values({ guildId, targetType: INVALID, targetId }),
       "moderation_whitelist_target_type_check",
     );
   });

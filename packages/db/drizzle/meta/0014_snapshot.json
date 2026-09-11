@@ -1,5 +1,5 @@
 {
-  "id": "4b92ab49-673c-482e-a933-1d2764c05174",
+  "id": "24c21ccc-6aea-4610-a68a-b788555547f8",
   "prevId": "1051cc4b-26cb-46a5-91cd-d66bda9c0d20",
   "version": "7",
   "dialect": "postgresql",
@@ -771,6 +771,10 @@
         "moderation_escalation_state_violation_type_check": {
           "name": "moderation_escalation_state_violation_type_check",
           "value": "\"moderation_escalation_state\".\"violation_type\" IN ('flood', 'duplicate_content')"
+        },
+        "moderation_escalation_state_strike_count_check": {
+          "name": "moderation_escalation_state_strike_count_check",
+          "value": "\"moderation_escalation_state\".\"strike_count\" >= 0"
         }
       },
       "isRLSEnabled": false

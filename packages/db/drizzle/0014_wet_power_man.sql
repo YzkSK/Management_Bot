@@ -5,7 +5,8 @@ CREATE TABLE "moderation_escalation_state" (
 	"strike_count" integer DEFAULT 0 NOT NULL,
 	"last_violation_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "moderation_escalation_state_guild_id_user_id_violation_type_pk" PRIMARY KEY("guild_id","user_id","violation_type"),
-	CONSTRAINT "moderation_escalation_state_violation_type_check" CHECK ("moderation_escalation_state"."violation_type" IN ('flood', 'duplicate_content'))
+	CONSTRAINT "moderation_escalation_state_violation_type_check" CHECK ("moderation_escalation_state"."violation_type" IN ('flood', 'duplicate_content')),
+	CONSTRAINT "moderation_escalation_state_strike_count_check" CHECK ("moderation_escalation_state"."strike_count" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "moderation_thresholds" (
