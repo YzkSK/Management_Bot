@@ -24,7 +24,8 @@ CREATE TABLE "moderation_whitelist" (
 	"target_type" text NOT NULL,
 	"target_id" text NOT NULL,
 	CONSTRAINT "moderation_whitelist_guild_id_target_type_target_id_pk" PRIMARY KEY("guild_id","target_type","target_id"),
-	CONSTRAINT "moderation_whitelist_target_type_check" CHECK ("moderation_whitelist"."target_type" IN ('user', 'role'))
+	CONSTRAINT "moderation_whitelist_target_type_check" CHECK ("moderation_whitelist"."target_type" IN ('user', 'role')),
+	CONSTRAINT "moderation_whitelist_no_everyone_check" CHECK (NOT ("moderation_whitelist"."target_type" = 'role' AND "moderation_whitelist"."target_id" = "moderation_whitelist"."guild_id"))
 );
 --> statement-breakpoint
 ALTER TABLE "moderation_escalation_state" ADD CONSTRAINT "moderation_escalation_state_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

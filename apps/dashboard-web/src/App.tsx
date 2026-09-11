@@ -6,6 +6,7 @@ import { Layout } from "./Layout.js";
 import { AccessPage } from "./pages/AccessPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
+import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -54,6 +55,7 @@ export function App() {
         >
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
+          <Route path="moderation" element={<ModerationPage />} />
           <Route path="access" element={<AccessPage />} />
         </Route>
       </Routes>
