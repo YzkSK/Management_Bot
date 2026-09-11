@@ -17,6 +17,10 @@ describe("similarity", () => {
   test("全く異なる文字列は類似度が低い", () => {
     expect(similarity("abcdef", "zzzzzz")).toBeLessThan(0.2);
   });
+
+  test("全角/半角・連続空白の差異はNFKC正規化で無視される", () => {
+    expect(similarity("Ｆｏｏ   bar", "foo bar")).toBe(1);
+  });
 });
 
 describe("isDuplicateContent", () => {
@@ -31,5 +35,10 @@ describe("isDuplicateContent", () => {
   test("類似度が閾値をわずかに超える場合はヒットする", () => {
     // "hello world" (11文字) から1文字違いなので類似度は 1 - 1/11 ≈ 0.909
     expect(isDuplicateContent("hello world", "hallo world", 0.9)).toBe(true);
+  });
+
+  test("similarityThresholdが0〜1の範囲外はRangeError", () => {
+    expect(() => isDuplicateContent("a", "b", -0.01)).toThrow(RangeError);
+    expect(() => isDuplicateContent("a", "b", 1.01)).toThrow(RangeError);
   });
 });

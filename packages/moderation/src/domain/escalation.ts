@@ -9,6 +9,9 @@ export function decideEscalationAction(
   strikeCount: number,
   escalationSteps: Readonly<Record<number, ModerationActionType>>,
 ): ModerationActionType | null {
+  if (!Number.isInteger(strikeCount) || strikeCount < 0) {
+    throw new RangeError(`strikeCount must be a non-negative integer, got ${strikeCount}`);
+  }
   const applicableKeys = Object.keys(escalationSteps)
     .map(Number)
     .filter((key) => key <= strikeCount)
