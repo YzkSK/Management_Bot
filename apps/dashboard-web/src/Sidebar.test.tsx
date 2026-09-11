@@ -6,11 +6,11 @@ import { MemoryRouter } from "react-router-dom";
 import { trpc } from "./trpc.js";
 import { Sidebar } from "./Sidebar.js";
 
-function renderSidebar(queryClient: QueryClient, guildId?: string): string {
+function renderSidebar(queryClient: QueryClient, guildId?: string, open?: boolean): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <Sidebar guildId={guildId} />
+        <Sidebar guildId={guildId} open={open} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -65,5 +65,17 @@ describe("Sidebar", () => {
     ]);
     const html = renderSidebar(queryClient);
     expect(html).not.toContain("disabled=");
+  });
+
+  test("open未指定(モバイルドロワー閉)ではtranslate-x-fullクラスが付く(issue #267)", () => {
+    const html = renderSidebar(new QueryClient());
+    expect(html).toContain("-translate-x-full");
+    // md:translate-x-0(デスクトップ用)は常に付くため、それとは別の独立したtranslate-x-0クラスが無いことを確認する。
+    expect(html).not.toMatch(/(^|\s)translate-x-0(\s|")/);
+  });
+
+  test("open指定時(モバイルドロワー開)は独立したtranslate-x-0クラスが付く(issue #267)", () => {
+    const html = renderSidebar(new QueryClient(), undefined, true);
+    expect(html).toMatch(/(^|\s)translate-x-0(\s|")/);
   });
 });

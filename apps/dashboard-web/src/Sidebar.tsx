@@ -14,15 +14,23 @@ const FEATURE_PATHS: Record<string, (guildId: string) => string> = {
 
 interface SidebarProps {
   guildId?: string;
+  /** モバイル幅でのドロワー開閉状態。デスクトップ幅(md以上)では常に表示するため参照しない。 */
+  open?: boolean;
 }
 
-export function Sidebar({ guildId }: SidebarProps) {
+export function Sidebar({ guildId, open = false }: SidebarProps) {
   const navigate = useNavigate();
   const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
   const guilds = guildsQuery.data ?? [];
 
   return (
-    <nav aria-label="機能メニュー" className="w-56 shrink-0 border-r p-2">
+    <nav
+      aria-label="機能メニュー"
+      className={cn(
+        "bg-background fixed inset-y-0 left-0 z-40 w-64 -translate-x-full border-r p-2 transition-transform duration-200 md:static md:z-auto md:w-56 md:shrink-0 md:translate-x-0",
+        open && "translate-x-0",
+      )}
+    >
       <div className="mb-3">
         <Select
           value={guildId ?? ""}

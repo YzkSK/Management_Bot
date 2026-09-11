@@ -6,7 +6,12 @@ import { Header } from "./Header.js";
 function renderHeader(avatarUrl: string | null = null): string {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} />
+      <Header
+        discordUsername="yuzuki_nom1"
+        avatarUrl={avatarUrl}
+        onLogout={() => {}}
+        onToggleSidebar={() => {}}
+      />
     </MemoryRouter>,
   );
 }
@@ -31,5 +36,10 @@ describe("Header", () => {
   test("avatarUrlがnullなら画像を描画しない", () => {
     const html = renderHeader(null);
     expect(html).not.toContain("<img");
+  });
+
+  test("モバイル幅用のメニュー開閉ボタンを描画する(issue #267)", () => {
+    const html = renderHeader();
+    expect(html).toContain('aria-label="メニューを開閉"');
   });
 });
