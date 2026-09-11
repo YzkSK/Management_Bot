@@ -337,10 +337,16 @@ export function ModerationPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">スパム対策</h1>
 
+      {permissionStatusQuery.data?.accessStatus === "not_found" && (
+        <Alert variant="destructive">
+          <AlertDescription>このサーバーにBotが参加していません。</AlertDescription>
+        </Alert>
+      )}
       {permissionStatusQuery.data && !permissionStatusQuery.data.hasRequiredPermissions && (
         <Alert variant="destructive">
           <AlertDescription>
-            Botにメッセージ削除・タイムアウト・キック/BANの権限がないため、検知しても処罰を実行できません。
+            Botの基本権限(メッセージ削除・タイムアウト・キック/BAN)が不足しています。
+            対象のロール階層やチャンネル個別設定によっては、権限を満たしていても実行に失敗する場合があります。
             {permissionStatusQuery.data.reauthorizeUrl && (
               <>
                 {" "}
@@ -354,6 +360,13 @@ export function ModerationPage() {
                 </a>
               </>
             )}
+          </AlertDescription>
+        </Alert>
+      )}
+      {roleOptionsQuery.data?.accessStatus === "forbidden" && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Botに権限がないため、ロール一覧を取得できません。サーバー設定でBotの権限を確認してください。
           </AlertDescription>
         </Alert>
       )}

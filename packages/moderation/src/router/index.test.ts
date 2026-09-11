@@ -152,13 +152,14 @@ describe("moderationRouter.listWhitelist / addToWhitelist / removeFromWhitelist"
     expect(error).toBeDefined();
   });
 
-  test("@everyoneロール(targetId===guildId)の追加はverifyGuildRoleの結果によらず許可する", async () => {
+  test("@everyoneロール(targetId===guildId)の追加はBAD_REQUEST(全メンバーが除外されるモデレーション全停止を防ぐ)", async () => {
     await grant(CAPABILITIES.MANAGE_MODERATION);
-    const caller = createCaller(buildContext({ verifyGuildRole: async () => false }));
+    const caller = createCaller(buildContext({ verifyGuildRole: async () => true }));
 
-    await caller.addToWhitelist({ guildId, targetType: "role", targetId: guildId });
+    const error = await captureRejection(caller.addToWhitelist({ guildId, targetType: "role", targetId: guildId }));
 
-    expect(await caller.listWhitelist({ guildId })).toEqual([{ targetType: "role", targetId: guildId }]);
+    expect(error).toBeDefined();
+    expect(await caller.listWhitelist({ guildId })).toEqual([]);
   });
 });
 

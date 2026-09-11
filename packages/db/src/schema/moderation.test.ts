@@ -89,4 +89,11 @@ describe("moderation schema", () => {
       "moderation_whitelist_target_type_check",
     );
   });
+
+  test("moderation_whitelistは`@everyone`(targetType=role, targetId=guildId)をCHECK制約で拒否する", async () => {
+    await expectConstraintViolation(
+      db.insert(moderationWhitelist).values({ guildId, targetType: "role", targetId: guildId }),
+      "moderation_whitelist_no_everyone_check",
+    );
+  });
 });
