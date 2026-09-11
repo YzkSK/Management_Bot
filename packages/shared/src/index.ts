@@ -29,6 +29,7 @@ export {
   MODERATION_VIOLATION_TYPES,
   type ModerationViolationType,
 } from "./moderation-violation-type.js";
+export { MODERATION_PRESETS, type ModerationPreset } from "./moderation-preset.js";
 export {
   LOG_ENTRY_SCHEMAS,
   messageLogEntrySchema,
