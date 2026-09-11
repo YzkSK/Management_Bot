@@ -1,5 +1,5 @@
 {
-  "id": "24c21ccc-6aea-4610-a68a-b788555547f8",
+  "id": "b8b61c01-6b70-40e6-aa40-c990cef25b4a",
   "prevId": "1051cc4b-26cb-46a5-91cd-d66bda9c0d20",
   "version": "7",
   "dialect": "postgresql",
@@ -903,6 +903,10 @@
         "moderation_whitelist_target_type_check": {
           "name": "moderation_whitelist_target_type_check",
           "value": "\"moderation_whitelist\".\"target_type\" IN ('user', 'role')"
+        },
+        "moderation_whitelist_no_everyone_check": {
+          "name": "moderation_whitelist_no_everyone_check",
+          "value": "NOT (\"moderation_whitelist\".\"target_type\" = 'role' AND \"moderation_whitelist\".\"target_id\" = \"moderation_whitelist\".\"guild_id\")"
         }
       },
       "isRLSEnabled": false

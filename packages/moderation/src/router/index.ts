@@ -41,7 +41,10 @@ const whitelistTargetInput = z.object({
  * targetがguild内に実在するかをサーバー側で検証する(dashboard-accessのcapabilityGrantsRouter
  * と同じ理由: Dashboard UIはセレクター経由のみでtargetIdを渡す設計だが、tRPC呼び出し自体は
  * その制約を経由しないため、存在しないIDが誤って保存されないようserver側でも検証する)。
- * roleは`@everyone`(targetId===guildId)も許容する。
+ * `@everyone`(targetId===guildId)のroleは許可しない。全メンバーがroles.cacheに
+ * `@everyone`を含むため、ホワイトリスト化するとモデレーション機能が実質的に全停止してしまう
+ * (capabilityGrantsのcapability grantとは異なり、ホワイトリストは「判定を丸ごとスキップする」
+ * 機能のため@everyoneへの適用が破壊的、codexレビュー対応)。
  */
 async function assertWhitelistTargetExists(
   ctx: { verifyGuildRole: (guildId: string, roleId: string) => Promise<boolean>; isGuildMember: (guildId: string, userId: string) => Promise<boolean> },
@@ -50,7 +53,9 @@ async function assertWhitelistTargetExists(
   targetId: string,
 ): Promise<void> {
   if (targetType === "role") {
-    if (targetId === guildId) return;
+    if (targetId === guildId) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "@everyone cannot be whitelisted" });
+    }
     if (!(await ctx.verifyGuildRole(guildId, targetId))) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "targetId is not a role of this guild" });
     }

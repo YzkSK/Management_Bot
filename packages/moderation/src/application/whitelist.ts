@@ -42,11 +42,15 @@ export async function isWhitelisted(
   userId: string,
   roleIds: readonly string[],
 ): Promise<boolean> {
+  // `@everyone`(roleId===guildId)は全メンバーが持つロールのため、万一ホワイトリストに
+  // 登録されていても一致対象から除外する(router側でも追加自体を拒否しているが、
+  // モデレーション機能全停止という影響の大きさから二重に防御する)。
+  const applicableRoleIds = roleIds.filter((roleId) => roleId !== guildId);
   const targetMatch = or(
     and(eq(moderationWhitelist.targetType, "user"), eq(moderationWhitelist.targetId, userId)),
-    ...(roleIds.length === 0
+    ...(applicableRoleIds.length === 0
       ? []
-      : [and(eq(moderationWhitelist.targetType, "role"), inArray(moderationWhitelist.targetId, [...roleIds]))]),
+      : [and(eq(moderationWhitelist.targetType, "role"), inArray(moderationWhitelist.targetId, applicableRoleIds))]),
   );
 
   const [row] = await db

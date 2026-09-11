@@ -1,13 +1,18 @@
 import { boolean, check, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
-import { MODERATION_VIOLATION_TYPES, type ModerationPreset, type ModerationViolationType } from "@management-bot/shared";
+import {
+  MODERATION_PRESETS,
+  MODERATION_VIOLATION_TYPES,
+  type ModerationPreset,
+  type ModerationViolationType,
+} from "@management-bot/shared";
 import { guilds } from "./core.js";
 
 type ModerationWhitelistTargetType = "user" | "role";
 
-function violationTypeCheck(column: Column): SQL {
+function enumCheck(column: Column, values: readonly string[]): SQL {
   return sql`${column} IN (${sql.join(
-    MODERATION_VIOLATION_TYPES.map((v) => sql.raw(`'${v.replace(/'/g, "''")}'`)),
+    values.map((v) => sql.raw(`'${v.replace(/'/g, "''")}'`)),
     sql.raw(", "),
   )})`;
 }
@@ -24,8 +29,11 @@ export const moderationThresholds = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.violationType] }),
-    check("moderation_thresholds_violation_type_check", violationTypeCheck(table.violationType)),
-    check("moderation_thresholds_preset_check", sql`${table.preset} IN ('weak', 'medium', 'strong')`),
+    check(
+      "moderation_thresholds_violation_type_check",
+      enumCheck(table.violationType, MODERATION_VIOLATION_TYPES),
+    ),
+    check("moderation_thresholds_preset_check", enumCheck(table.preset, MODERATION_PRESETS)),
   ],
 );
 
@@ -44,7 +52,7 @@ export const moderationEscalationState = pgTable(
     primaryKey({ columns: [table.guildId, table.userId, table.violationType] }),
     check(
       "moderation_escalation_state_violation_type_check",
-      violationTypeCheck(table.violationType),
+      enumCheck(table.violationType, MODERATION_VIOLATION_TYPES),
     ),
     check("moderation_escalation_state_strike_count_check", sql`${table.strikeCount} >= 0`),
   ],
@@ -61,6 +69,15 @@ export const moderationWhitelist = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.targetType, table.targetId] }),
-    check("moderation_whitelist_target_type_check", sql`${table.targetType} IN ('user', 'role')`),
+    check("moderation_whitelist_target_type_check", enumCheck(table.targetType, ["user", "role"])),
+    /**
+     * `@everyone`(targetType=role, targetId=guildId)は全メンバーが持つロールのため、
+     * ホワイトリスト化するとモデレーション機能が実質的に全停止してしまう(codexレビュー対応)。
+     * router層でも追加を拒否しているが、直接のDB書き込みでも成立しないよう制約で防ぐ。
+     */
+    check(
+      "moderation_whitelist_no_everyone_check",
+      sql`NOT (${table.targetType} = 'role' AND ${table.targetId} = ${table.guildId})`,
+    ),
   ],
 );
