@@ -13,11 +13,25 @@ export type DiscordTokenResponse = z.infer<typeof tokenResponseSchema>;
 const userResponseSchema = z.object({
   id: z.string(),
   username: z.string(),
+  avatar: z.string().nullable(),
 });
 
 export interface DiscordUser {
   id: string;
   username: string;
+  /** アバターハッシュ。未設定(デフォルトアバター)ならnull。 */
+  avatar: string | null;
+}
+
+/** ユーザーの実際のアバター、または未設定時のDiscordデフォルトアバターのCDN URLを組み立てる。 */
+export function buildAvatarUrl(user: Pick<DiscordUser, "id" | "avatar">): string {
+  if (user.avatar) {
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
+  }
+  // 新Discord IDシステムでのデフォルトアバターの決定方法(discriminator廃止後)。
+  // https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints
+  const defaultIndex = Number((BigInt(user.id) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
 }
 
 export interface ExchangeCodeInput {
