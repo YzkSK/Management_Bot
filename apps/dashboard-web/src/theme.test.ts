@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { applyTheme, getStoredTheme, setTheme } from "./theme.js";
+import { applyTheme, getStoredTheme, setTheme, watchSystemTheme } from "./theme.js";
 
 function mockLocalStorage(): Storage {
   const store = new Map<string, string>();
@@ -17,13 +17,21 @@ function mockLocalStorage(): Storage {
 
 let toggleDark: ReturnType<typeof mock>;
 let matchesDark: boolean;
+let mediaListeners: Array<() => void>;
+let addEventListener: ReturnType<typeof mock>;
+let removeEventListener: ReturnType<typeof mock>;
 
 beforeEach(() => {
   matchesDark = false;
   toggleDark = mock();
+  mediaListeners = [];
+  addEventListener = mock((_event: string, listener: () => void) => void mediaListeners.push(listener));
+  removeEventListener = mock((_event: string, listener: () => void) => {
+    mediaListeners = mediaListeners.filter((l) => l !== listener);
+  });
   Object.defineProperty(globalThis, "localStorage", { value: mockLocalStorage(), configurable: true });
   Object.defineProperty(globalThis, "window", {
-    value: { matchMedia: () => ({ matches: matchesDark }) },
+    value: { matchMedia: () => ({ matches: matchesDark, addEventListener, removeEventListener }) },
     configurable: true,
   });
   Object.defineProperty(globalThis, "document", {
@@ -80,5 +88,30 @@ describe("setTheme", () => {
     setTheme("dark");
     expect(localStorage.getItem("theme")).toBe("dark");
     expect(toggleDark).toHaveBeenCalledWith("dark", true);
+  });
+});
+
+describe("watchSystemTheme(codexレビュー対応: OS配色設定の変更への追従)", () => {
+  test("system以外では購読せず、解除関数は何もしない", () => {
+    const unwatch = watchSystemTheme("dark");
+    expect(addEventListener).not.toHaveBeenCalled();
+    expect(() => unwatch()).not.toThrow();
+  });
+
+  test("system選択中はOS設定変更(change)のたびにdarkクラスを再適用する", () => {
+    watchSystemTheme("system");
+    expect(addEventListener).toHaveBeenCalledTimes(1);
+
+    matchesDark = true;
+    mediaListeners.forEach((listener) => listener());
+
+    expect(toggleDark).toHaveBeenCalledWith("dark", true);
+  });
+
+  test("解除関数を呼ぶとリスナーが外れる", () => {
+    const unwatch = watchSystemTheme("system");
+    unwatch();
+
+    expect(removeEventListener).toHaveBeenCalledTimes(1);
   });
 });

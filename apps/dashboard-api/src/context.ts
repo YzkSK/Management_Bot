@@ -240,7 +240,12 @@ function createListMyGuilds(
   };
 }
 
-function createGetMyAvatarUrl(
+/**
+ * アバターは装飾的な情報であり、meの必須データ(discordUserId/discordUsername)ではないため、
+ * Discord API側の一時的な障害・トークン失効(codexレビュー対応)でme procedure自体を
+ * 失敗させないよう、取得に失敗した場合は例外を投げずnullにフォールバックする。
+ */
+export function createGetMyAvatarUrl(
   db: Db,
   sessionId: string | undefined,
   sessionSecret: string,
@@ -250,12 +255,16 @@ function createGetMyAvatarUrl(
       return null;
     }
     return avatarUrlCache(sessionId, async () => {
-      const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
-      if (!accessToken) {
+      try {
+        const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
+        if (!accessToken) {
+          return null;
+        }
+        const user = await fetchDiscordUser(accessToken);
+        return buildAvatarUrl(user);
+      } catch {
         return null;
       }
-      const user = await fetchDiscordUser(accessToken);
-      return buildAvatarUrl(user);
     });
   };
 }
