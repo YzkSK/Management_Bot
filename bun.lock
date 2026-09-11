@@ -221,9 +221,12 @@
       "dependencies": {
         "@management-bot/core": "workspace:*",
         "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/db": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@trpc/server": "^11.0.0",
+        "drizzle-orm": "^0.44.0",
         "fastest-levenshtein": "^1.0.16",
+        "ioredis": "^5.4.0",
       },
       "devDependencies": {
         "@types/bun": "^1.4.0",
