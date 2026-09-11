@@ -278,6 +278,7 @@ export function SettingsPage() {
   );
   const isPending = queries.some((query) => query.isPending);
   const isError = queries.some((query) => query.isError);
+  const isBotAccessForbidden = channelOptionsQuery.data?.accessStatus === "forbidden";
 
   return (
     <div className="flex flex-col gap-4">
@@ -299,6 +300,13 @@ export function SettingsPage() {
           <AlertDescription>設定の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
         </Alert>
       )}
+      {isBotAccessForbidden && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Botに権限がないため、チャンネル一覧を取得できません。サーバー設定でBotの権限を確認してください。
+          </AlertDescription>
+        </Alert>
+      )}
 
       {retentionQuery.data && channelSettingsQuery.data && channelOptionsQuery.data && (
         <>
@@ -312,7 +320,7 @@ export function SettingsPage() {
             <BulkChannelControl
               guildId={guildId}
               channelIdList={channelSettingsQuery.data.map((s) => s.channelId)}
-              options={channelOptionsQuery.data}
+              options={channelOptionsQuery.data.channels}
               onPendingChange={setBulkChannelPending}
             />
             {displaySettingsQuery.data && (
@@ -376,7 +384,7 @@ export function SettingsPage() {
                           guildId={guildId}
                           category={setting.category}
                           channelId={channelSetting?.channelId ?? null}
-                          options={channelOptionsQuery.data}
+                          options={channelOptionsQuery.data.channels}
                           disabled={bulkChannelPending}
                         />
                       </TableCell>

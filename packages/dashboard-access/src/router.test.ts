@@ -4,7 +4,13 @@ import { CAPABILITIES } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { capabilityGrantsRouter } from "./router.js";
-import { createCallerFactory, type GuildMembership, type MemberPage, type RoleOption } from "./trpc.js";
+import {
+  createCallerFactory,
+  type GuildAccessStatus,
+  type GuildMembership,
+  type MemberPage,
+  type RoleOption,
+} from "./trpc.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -51,6 +57,8 @@ function buildContext(
     isGuildMember?: (guildId: string, userId: string) => Promise<boolean>;
     /** 表示用のrole一覧(listRoleOptions)。デフォルトは空配列。 */
     getGuildRoles?: () => Promise<RoleOption[]>;
+    /** listRoleOptions等がBot権限不足を判別するための状態(issue #214)。デフォルトは"ok"。 */
+    getGuildAccessStatus?: () => Promise<GuildAccessStatus>;
     /**
      * targetIdの実在検証(verifyGuildRole)。表示用のgetGuildRolesとは独立に指定できる
      * (実装がgetGuildRoles(キャッシュ経由)を誤って検証に使い回す退行を検出するため、
@@ -71,6 +79,7 @@ function buildContext(
     getGuildMemberNames: overrides.getGuildMemberNames ?? (async () => new Map<string, string>()),
     getBotPermissions: async () => 0n,
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
+    getGuildAccessStatus: overrides.getGuildAccessStatus ?? (async () => "ok" as const),
     verifyGuildRole: overrides.verifyGuildRole ?? (async () => true),
     getGuildMembersPage: membersPageOf(),
     isGuildMember: overrides.isGuildMember ?? (async () => true),
@@ -371,7 +380,16 @@ describe("capabilityGrantsRouter.listRoleOptions / listMemberOptions", () => {
 
     const result = await caller.listRoleOptions({ guildId });
 
-    expect(result).toEqual([{ id: guildId, name: "@everyone" }]);
+    expect(result).toEqual({ roles: [{ id: guildId, name: "@everyone" }], accessStatus: "ok" });
+  });
+
+  test("listRoleOptionsはctx.getGuildAccessStatusの結果もそのまま返す(issue #214)", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    const caller = createCaller(buildContext({ getGuildAccessStatus: async () => "forbidden" }));
+
+    const result = await caller.listRoleOptions({ guildId });
+
+    expect(result).toEqual({ roles: [], accessStatus: "forbidden" });
   });
 
   test("listMemberOptionsはMANAGE_ACCESSを要求する", async () => {

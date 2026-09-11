@@ -121,11 +121,22 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .query(({ ctx, input }) => listChannelSettings(ctx.db, input.guildId)),
 
-  /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在チャンネル)をこのprocedure経由で提供する。 */
+  /**
+   * Dashboard UIでのID直接入力を禁止するため、選択肢(実在チャンネル)をこのprocedure経由で提供する。
+   * getGuildChannelsは403(Bot権限・Privileged Intent不足)と404(Bot未参加)を区別せず空配列に
+   * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるようにする
+   * (issue #214)。
+   */
   listChannelOptions: protectedProcedure
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
-    .query(({ ctx, input }) => ctx.getGuildChannels(input.guildId)),
+    .query(async ({ ctx, input }) => {
+      const [channels, accessStatus] = await Promise.all([
+        ctx.getGuildChannels(input.guildId),
+        ctx.getGuildAccessStatus(input.guildId),
+      ]);
+      return { channels, accessStatus };
+    }),
 
   setChannelSetting: protectedProcedure
     .input(setChannelSettingInput)
@@ -206,7 +217,10 @@ export const loggingRouter = router({
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .query(async ({ ctx, input }) => {
-      const permissions = await ctx.getBotPermissions(input.guildId);
+      const [permissions, accessStatus] = await Promise.all([
+        ctx.getBotPermissions(input.guildId),
+        ctx.getGuildAccessStatus(input.guildId),
+      ]);
       const hasViewAuditLog =
         (permissions & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator ||
         (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
@@ -216,6 +230,12 @@ export const loggingRouter = router({
         reauthorizeUrl: hasViewAuditLog
           ? null
           : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS, { guildId: input.guildId }),
+        /**
+         * hasViewAuditLog=falseの理由がBot権限不足(forbidden)なのかBot未参加(not_found)なのかを
+         * UIへ伝える(issue #214)。fetchBotGuildPermissionsは403/404を区別せず0nに倒すため、
+         * 従来はUIから権限不足を判別できなかった。
+         */
+        accessStatus,
       };
     }),
 });

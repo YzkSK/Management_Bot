@@ -94,11 +94,22 @@ export const capabilityGrantsRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
     .query(({ ctx }) => ({ capabilities: ctx.capabilities })),
 
-  /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在ロール)をこのprocedure経由で提供する。 */
+  /**
+   * Dashboard UIでのID直接入力を禁止するため、選択肢(実在ロール)をこのprocedure経由で提供する。
+   * getGuildRolesは403(Bot権限・Privileged Intent不足)と404(Bot未参加)を区別せず空配列に
+   * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるように
+   * する(issue #214)。
+   */
   listRoleOptions: protectedProcedure
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
-    .query(({ ctx, input }) => ctx.getGuildRoles(input.guildId)),
+    .query(async ({ ctx, input }) => {
+      const [roles, accessStatus] = await Promise.all([
+        ctx.getGuildRoles(input.guildId),
+        ctx.getGuildAccessStatus(input.guildId),
+      ]);
+      return { roles, accessStatus };
+    }),
 
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在メンバー)をこのprocedure経由で提供する。 */
   listMemberOptions: protectedProcedure

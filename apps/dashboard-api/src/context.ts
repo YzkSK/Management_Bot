@@ -1,6 +1,7 @@
 import type {
   ChannelOption,
   DashboardAccessContext,
+  GuildAccessStatus,
   GuildMembership,
   ManagedGuild,
   MemberPage,
@@ -20,6 +21,7 @@ import { getCookie } from "hono/cookie";
 import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
+  fetchGuildAccessStatus,
   fetchGuildChannels,
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
@@ -48,6 +50,7 @@ const guildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS
 const allGuildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
+const guildAccessStatusCache = createTtlCache<GuildAccessStatus>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
 const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
 /**
@@ -123,6 +126,15 @@ function createVerifyGuildChannel(botToken: string): (guildId: string, channelId
 
 function createGetBotPermissions(botToken: string): (guildId: string) => Promise<bigint> {
   return (guildId) => botPermissionsCache(guildId, () => fetchBotGuildPermissions(botToken, guildId));
+}
+
+/**
+ * チャンネル/ロールセレクター・監査ログ権限表示が空/0nを返した理由(Bot権限不足かguild未参加か)を
+ * UIへ伝えるための状態取得(issue #214)。表示専用なのでgetGuildChannels等と同じ短命TTLで
+ * キャッシュしてよい。
+ */
+function createGetGuildAccessStatus(botToken: string): (guildId: string) => Promise<GuildAccessStatus> {
+  return (guildId) => guildAccessStatusCache(guildId, () => fetchGuildAccessStatus(botToken, guildId));
 }
 
 function createGetGuildRoles(botToken: string): (guildId: string) => Promise<readonly RoleOption[]> {
@@ -279,6 +291,7 @@ export function createContext(
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
       getGuildRoles: createGetGuildRoles(botToken),
+      getGuildAccessStatus: createGetGuildAccessStatus(botToken),
       verifyGuildRole: createVerifyGuildRole(botToken),
       getGuildMembersPage: createGetGuildMembersPage(botToken),
       isGuildMember: createIsGuildMember(botToken),

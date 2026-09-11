@@ -35,4 +35,5 @@ export {
   type MemberOption,
   type MemberPage,
   type ManagedGuild,
+  type GuildAccessStatus,
 } from "./trpc.js";
