@@ -1,9 +1,8 @@
 import { boolean, check, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
-import { MODERATION_VIOLATION_TYPES, type ModerationViolationType } from "@management-bot/shared";
+import { MODERATION_VIOLATION_TYPES, type ModerationPreset, type ModerationViolationType } from "@management-bot/shared";
 import { guilds } from "./core.js";
 
-type ModerationPreset = "weak" | "medium" | "strong";
 type ModerationWhitelistTargetType = "user" | "role";
 
 function violationTypeCheck(column: Column): SQL {
