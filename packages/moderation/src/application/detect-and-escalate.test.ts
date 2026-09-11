@@ -60,6 +60,8 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await db.delete(moderationThresholds).where(eq(moderationThresholds.guildId, guildId));
     await db.delete(moderationWhitelist).where(eq(moderationWhitelist.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
+    const keys = await redis.keys(`moderation:*:${guildId}:*`);
+    if (keys.length > 0) await redis.del(...keys);
   });
 
   function fakeEventBus() {
@@ -122,6 +124,59 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       action: "create",
       actionType: "messageDelete",
     });
+
+    const [row] = await db
+      .select()
+      .from(moderationEscalationState)
+      .where(eq(moderationEscalationState.userId, userId));
+    expect(row?.strikeCount).toBe(1);
+  });
+
+  test("ホワイトリスト対象ロールを持つユーザーは連投してもstrikeCountが増加しない", async () => {
+    const userId = `u-${randomUUID()}`;
+    const roleId = `r-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await db.insert(moderationWhitelist).values({ guildId, targetType: "role", targetId: roleId });
+
+    const eventBus = fakeEventBus();
+    for (let i = 0; i < 5; i++) {
+      await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, roleIds: [roleId] }));
+    }
+
+    expect(eventBus.published).toEqual([]);
+    const rows = await db
+      .select()
+      .from(moderationEscalationState)
+      .where(eq(moderationEscalationState.userId, userId));
+    expect(rows).toEqual([]);
+  });
+
+  test("同一messageIdの再処理(再配送・ハンドラ再試行)はstrikeCountを進めない", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const duplicated = message({ guildId, userId });
+    const now = new Date();
+
+    // 1, 2件目で閾値未達(strong: messageThreshold=3)、3件目と同一のduplicatedを2回送る
+    await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, createdAt: now }));
+    await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, createdAt: new Date(now.getTime() + 1000) }),
+    );
+    const first = await detectAndEscalate(
+      { db, redis, eventBus },
+      { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
+    );
+    const retry = await detectAndEscalate(
+      { db, redis, eventBus },
+      { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
+    );
+
+    expect(first).toHaveLength(1);
+    expect(retry).toEqual([]);
+    expect(eventBus.published).toHaveLength(1);
 
     const [row] = await db
       .select()

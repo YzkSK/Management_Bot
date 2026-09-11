@@ -12,6 +12,22 @@ function bufferKey(guildId: string, userId: string): string {
   return `moderation:flood:${guildId}:${userId}`;
 }
 
+function processedKey(guildId: string, messageId: string): string {
+  return `moderation:processed:${guildId}:${messageId}`;
+}
+
+/**
+ * messageIdを一度だけ処理済みとしてマークする(SETNX)。trueなら初回処理、falseなら
+ * 再配送・ハンドラ再試行による重複処理なので呼び出し側は判定・strike加算をスキップすること。
+ * ponytail: バッファ更新(pushAndReadBuffer)とは別コマンドのため、同一ユーザーの
+ * 異なるメッセージが同時に処理されるとバッファのpush/trim/expireの間に競合が起き得る。
+ * 実運用で問題化したらLuaスクリプトで単一操作にまとめる。
+ */
+export async function claimMessage(redis: Redis, guildId: string, messageId: string, ttlSeconds: number): Promise<boolean> {
+  const result = await redis.set(processedKey(guildId, messageId), "1", "EX", ttlSeconds, "NX");
+  return result === "OK";
+}
+
 interface SerializedMessage {
   messageId: string;
   content: string;
