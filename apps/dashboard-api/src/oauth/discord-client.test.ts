@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { DiscordTokenInvalidError, fetchDiscordUser, fetchUserGuilds } from "./discord-client.ts";
+import { buildAvatarUrl, DiscordTokenInvalidError, fetchDiscordUser, fetchUserGuilds } from "./discord-client.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -18,22 +18,38 @@ function mockFetch(response: { status: number; body?: unknown }): void {
 }
 
 describe("fetchDiscordUser", () => {
-  test("Bearerトークンをヘッダーに付与してid・usernameを取得する", async () => {
+  test("Bearerトークンをヘッダーに付与してid・username・avatarを取得する", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://discord.com/api/v10/users/@me");
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
-      return new Response(JSON.stringify({ id: "u1", username: "yuzuki_nom1" }), { status: 200 });
+      return new Response(JSON.stringify({ id: "u1", username: "yuzuki_nom1", avatar: "abc123" }), { status: 200 });
     }) as typeof fetch;
 
     const result = await fetchDiscordUser("test-token");
 
-    expect(result).toEqual({ id: "u1", username: "yuzuki_nom1" });
+    expect(result).toEqual({ id: "u1", username: "yuzuki_nom1", avatar: "abc123" });
   });
 
   test("失敗レスポンスはErrorを投げる", async () => {
     globalThis.fetch = (async () => new Response(undefined, { status: 500 })) as typeof fetch;
 
     await expect(fetchDiscordUser("test-token")).rejects.toThrow();
+  });
+});
+
+describe("buildAvatarUrl", () => {
+  test("avatarハッシュがあればアバターCDN URLを返す", () => {
+    expect(buildAvatarUrl({ id: "u1", avatar: "abc123" })).toBe("https://cdn.discordapp.com/avatars/u1/abc123.png");
+  });
+
+  test("avatarハッシュがなければデフォルトアバターURLを返す(userIdから決定的に算出)", () => {
+    const url = buildAvatarUrl({ id: "123456789012345678", avatar: null });
+    expect(url).toMatch(/^https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png$/);
+  });
+
+  test("同じuserIdなら常に同じデフォルトアバターを返す", () => {
+    const userId = "987654321098765432";
+    expect(buildAvatarUrl({ id: userId, avatar: null })).toBe(buildAvatarUrl({ id: userId, avatar: null }));
   });
 });
 
