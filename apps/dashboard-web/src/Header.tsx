@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getStoredTheme, setTheme, type Theme } from "./theme.js";
+import { getStoredTheme, setTheme, watchSystemTheme, type Theme } from "./theme.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,8 @@ const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
 
 export function Header({ discordUsername, avatarUrl, onLogout }: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
+
+  useEffect(() => watchSystemTheme(theme), [theme]);
 
   return (
     <header className="flex items-center justify-between border-b px-4 py-3">

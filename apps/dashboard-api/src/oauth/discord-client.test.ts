@@ -51,6 +51,10 @@ describe("buildAvatarUrl", () => {
     const userId = "987654321098765432";
     expect(buildAvatarUrl({ id: userId, avatar: null })).toBe(buildAvatarUrl({ id: userId, avatar: null }));
   });
+
+  test("avatarハッシュがa_始まり(アニメーション)ならgif拡張子になる(codexレビュー対応)", () => {
+    expect(buildAvatarUrl({ id: "u1", avatar: "a_abc123" })).toBe("https://cdn.discordapp.com/avatars/u1/a_abc123.gif");
+  });
 });
 
 describe("fetchUserGuilds", () => {

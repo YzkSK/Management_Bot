@@ -26,7 +26,9 @@ export interface DiscordUser {
 /** ユーザーの実際のアバター、または未設定時のDiscordデフォルトアバターのCDN URLを組み立てる。 */
 export function buildAvatarUrl(user: Pick<DiscordUser, "id" | "avatar">): string {
   if (user.avatar) {
-    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
+    // "a_"始まりはアニメーションアバター(GIF)であることを表す(Discord CDNの仕様)。
+    const extension = user.avatar.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}`;
   }
   // 新Discord IDシステムでのデフォルトアバターの決定方法(discriminator廃止後)。
   // https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints
