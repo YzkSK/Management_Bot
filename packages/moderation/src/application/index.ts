@@ -8,4 +8,4 @@ export {
 export { isWhitelisted } from "./whitelist.js";
 export { getEnabledThresholds, type EnabledThreshold } from "./thresholds.js";
 export { incrementStrike } from "./escalation-state.js";
-export { pushAndReadBuffer, type BufferedMessage } from "./message-buffer.js";
+export { claimAndPushMessage, type BufferedMessage } from "./message-buffer.js";
