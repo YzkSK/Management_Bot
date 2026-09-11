@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "@management-bot/db";
 import { moderationThresholds } from "@management-bot/db";
 import type { ModerationViolationType } from "@management-bot/shared";
@@ -15,12 +15,9 @@ export async function getEnabledThresholds(db: Db, guildId: string): Promise<Ena
     .select({
       violationType: moderationThresholds.violationType,
       preset: moderationThresholds.preset,
-      enabled: moderationThresholds.enabled,
     })
     .from(moderationThresholds)
-    .where(eq(moderationThresholds.guildId, guildId));
+    .where(and(eq(moderationThresholds.guildId, guildId), eq(moderationThresholds.enabled, true)));
 
-  return rows
-    .filter((row) => row.enabled)
-    .map((row) => ({ violationType: row.violationType, preset: row.preset }));
+  return rows;
 }

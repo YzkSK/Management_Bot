@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { Db } from "@management-bot/db";
 import { moderationWhitelist } from "@management-bot/db";
 
@@ -9,14 +9,18 @@ export async function isWhitelisted(
   userId: string,
   roleIds: readonly string[],
 ): Promise<boolean> {
-  const rows = await db
-    .select({ targetType: moderationWhitelist.targetType, targetId: moderationWhitelist.targetId })
-    .from(moderationWhitelist)
-    .where(eq(moderationWhitelist.guildId, guildId));
-
-  return rows.some(
-    (row) =>
-      (row.targetType === "user" && row.targetId === userId) ||
-      (row.targetType === "role" && roleIds.includes(row.targetId)),
+  const targetMatch = or(
+    and(eq(moderationWhitelist.targetType, "user"), eq(moderationWhitelist.targetId, userId)),
+    ...(roleIds.length === 0
+      ? []
+      : [and(eq(moderationWhitelist.targetType, "role"), inArray(moderationWhitelist.targetId, [...roleIds]))]),
   );
+
+  const [row] = await db
+    .select({ targetId: moderationWhitelist.targetId })
+    .from(moderationWhitelist)
+    .where(and(eq(moderationWhitelist.guildId, guildId), targetMatch))
+    .limit(1);
+
+  return row !== undefined;
 }
