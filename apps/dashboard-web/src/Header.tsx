@@ -16,6 +16,7 @@ interface HeaderProps {
   discordUsername: string;
   avatarUrl: string | null;
   onLogout: () => void;
+  isSidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
 
@@ -25,15 +26,29 @@ const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
   { value: "system", label: "システムに合わせる" },
 ];
 
-export function Header({ discordUsername, avatarUrl, onLogout, onToggleSidebar }: HeaderProps) {
+export function Header({
+  discordUsername,
+  avatarUrl,
+  onLogout,
+  isSidebarOpen,
+  onToggleSidebar,
+}: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
 
   useEffect(() => watchSystemTheme(theme), [theme]);
 
   return (
-    <header className="bg-background sticky top-0 z-50 flex items-center justify-between border-b px-4 py-3">
+    <header className="bg-background sticky top-0 z-50 flex h-14 items-center justify-between border-b px-4">
       <div className="flex min-w-0 items-center gap-2">
-        <Button variant="ghost" size="icon" className="shrink-0 md:hidden" onClick={onToggleSidebar} aria-label="メニューを開閉">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 md:hidden"
+          onClick={onToggleSidebar}
+          aria-label="メニューを開閉"
+          aria-expanded={isSidebarOpen}
+          aria-controls="mobile-sidebar"
+        >
           <Menu className="size-5" />
         </Button>
         <Link to="/" className="truncate text-sm font-semibold hover:underline">

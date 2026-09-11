@@ -18,19 +18,9 @@ interface SidebarProps {
   open?: boolean;
 }
 
-export function Sidebar({ guildId, open = false }: SidebarProps) {
-  const navigate = useNavigate();
-  const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
-  const guilds = guildsQuery.data ?? [];
-
+function SidebarNav({ guildId, guilds, navigate }: { guildId?: string; guilds: readonly { id: string; name: string }[]; navigate: (path: string) => void }) {
   return (
-    <nav
-      aria-label="機能メニュー"
-      className={cn(
-        "bg-background fixed inset-y-0 left-0 z-40 w-64 -translate-x-full border-r p-2 transition-transform duration-200 md:static md:z-auto md:w-56 md:shrink-0 md:translate-x-0",
-        open && "translate-x-0",
-      )}
-    >
+    <>
       <div className="mb-3">
         <Select
           value={guildId ?? ""}
@@ -103,6 +93,34 @@ export function Sidebar({ guildId, open = false }: SidebarProps) {
           )}
         </li>
       </ul>
-    </nav>
+    </>
+  );
+}
+
+export function Sidebar({ guildId, open = false }: SidebarProps) {
+  const navigate = useNavigate();
+  const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
+  const guilds = guildsQuery.data ?? [];
+
+  return (
+    <>
+      {/* デスクトップ幅では常設。モバイルドロワー(下記)と二重表示にならないようhiddenで隠す。 */}
+      <nav aria-label="機能メニュー" className="hidden border-r p-2 md:block md:w-56 md:shrink-0">
+        <SidebarNav guildId={guildId} guilds={guilds} navigate={navigate} />
+      </nav>
+      {/*
+        モバイルドロワーはopen時のみDOMに描画する。CSSのtranslateで隠すだけだと、閉じていても
+        Tabキーでリンク/セレクトへフォーカスが移動できてしまうため(codexレビュー対応)。
+      */}
+      {open && (
+        <nav
+          id="mobile-sidebar"
+          aria-label="機能メニュー"
+          className="bg-background fixed top-14 bottom-0 left-0 z-40 w-64 overflow-y-auto border-r p-2 md:hidden"
+        >
+          <SidebarNav guildId={guildId} guilds={guilds} navigate={navigate} />
+        </nav>
+      )}
+    </>
   );
 }

@@ -21,6 +21,16 @@ export function Layout({ discordUsername, avatarUrl, onLogout }: LayoutProps) {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  // Escキーでもモバイルのドロワーを閉じられるようにする(codexレビュー対応)。
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSidebarOpen]);
+
   return (
     <div className="flex min-h-screen flex-col">
       <Toaster richColors position="top-right" />
@@ -28,6 +38,7 @@ export function Layout({ discordUsername, avatarUrl, onLogout }: LayoutProps) {
         discordUsername={discordUsername}
         avatarUrl={avatarUrl}
         onLogout={onLogout}
+        isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
       />
       <div className="flex flex-1">

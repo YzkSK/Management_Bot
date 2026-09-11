@@ -67,15 +67,13 @@ describe("Sidebar", () => {
     expect(html).not.toContain("disabled=");
   });
 
-  test("open未指定(モバイルドロワー閉)ではtranslate-x-fullクラスが付く(issue #267)", () => {
+  test("open未指定(モバイルドロワー閉)ではモバイル用ドロワーをDOMに描画しない(issue #267, 閉時でもTabで到達できてしまう問題への対応)", () => {
     const html = renderSidebar(new QueryClient());
-    expect(html).toContain("-translate-x-full");
-    // md:translate-x-0(デスクトップ用)は常に付くため、それとは別の独立したtranslate-x-0クラスが無いことを確認する。
-    expect(html).not.toMatch(/(^|\s)translate-x-0(\s|")/);
+    expect(html).not.toContain('id="mobile-sidebar"');
   });
 
-  test("open指定時(モバイルドロワー開)は独立したtranslate-x-0クラスが付く(issue #267)", () => {
+  test("open指定時(モバイルドロワー開)はモバイル用ドロワーを描画する(issue #267)", () => {
     const html = renderSidebar(new QueryClient(), undefined, true);
-    expect(html).toMatch(/(^|\s)translate-x-0(\s|")/);
+    expect(html).toContain('id="mobile-sidebar"');
   });
 });
