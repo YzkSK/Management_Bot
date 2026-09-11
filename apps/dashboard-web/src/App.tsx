@@ -44,13 +44,17 @@ export function App() {
       <Routes>
         <Route
           path="/"
-          element={<Layout discordUsername={me.data.discordUsername} onLogout={handleLogout} />}
+          element={
+            <Layout discordUsername={me.data.discordUsername} avatarUrl={me.data.avatarUrl} onLogout={handleLogout} />
+          }
         >
           <Route index element={<GuildListPage />} />
         </Route>
         <Route
           path="/guilds/:guildId"
-          element={<Layout discordUsername={me.data.discordUsername} onLogout={handleLogout} />}
+          element={
+            <Layout discordUsername={me.data.discordUsername} avatarUrl={me.data.avatarUrl} onLogout={handleLogout} />
+          }
         >
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
