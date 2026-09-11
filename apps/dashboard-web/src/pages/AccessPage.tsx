@@ -93,7 +93,8 @@ function TargetSelect({
   });
   const memberOptions = useMemberOptions(guildId, targetType === "user");
 
-  const options: readonly TargetOption[] = targetType === "role" ? (roleOptionsQuery.data ?? []) : memberOptions.options;
+  const options: readonly TargetOption[] =
+    targetType === "role" ? (roleOptionsQuery.data?.roles ?? []) : memberOptions.options;
   const isLoading = targetType === "role" ? roleOptionsQuery.isPending : memberOptions.isPending;
   const isError = targetType === "role" ? roleOptionsQuery.isError : memberOptions.isError;
 
@@ -345,7 +346,7 @@ export function AccessPage() {
     );
   }
 
-  const roleNameById = new Map((roleOptionsQuery.data ?? []).map((role) => [role.id, role.name]));
+  const roleNameById = new Map((roleOptionsQuery.data?.roles ?? []).map((role) => [role.id, role.name]));
   const granterCapabilities = myCapabilitiesQuery.data.capabilities;
   const grants: readonly CapabilityGrantData[] = grantsQuery.data;
 

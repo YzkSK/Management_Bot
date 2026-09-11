@@ -13,6 +13,7 @@ import { CAPABILITIES } from "@management-bot/shared";
 import {
   createCallerFactory,
   type ChannelOption,
+  type GuildAccessStatus,
   type GuildMembership,
   type MemberPage,
   type RoleOption,
@@ -105,6 +106,8 @@ const botPermissionsOf = (permissions = 0n) => async (): Promise<bigint> => perm
 
 const rolesOf = () => async (): Promise<RoleOption[]> => [];
 
+const accessStatusOf = (status: GuildAccessStatus = "ok") => async (): Promise<GuildAccessStatus> => status;
+
 const membersPageOf = () => async (): Promise<MemberPage> => ({ members: [], nextAfter: undefined });
 
 describe("loggingRouter.listLogEntries", () => {
@@ -126,6 +129,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -158,6 +162,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -182,6 +187,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -225,6 +231,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -243,6 +250,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -272,6 +280,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -294,6 +303,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -315,6 +325,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -338,6 +349,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -356,6 +368,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -374,6 +387,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -403,13 +417,36 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
     const result = await caller.listChannelOptions({ guildId });
 
-    expect(result).toEqual([{ id: "c1", name: "general" }]);
+    expect(result).toEqual({ channels: [{ id: "c1", name: "general" }], accessStatus: "ok" });
+  });
+
+  test("listChannelOptionsはgetGuildAccessStatusの結果もそのまま返す(issue #214)", async () => {
+    await grantManageLoggingSettings();
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getAllGuildChannels: channelsOf(),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf("forbidden"),
+      getGuildMembersPage: membersPageOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.listChannelOptions({ guildId });
+
+    expect(result).toEqual({ channels: [], accessStatus: "forbidden" });
   });
 
   test("実在するチャンネルは設定でき、取得・削除もできる", async () => {
@@ -424,6 +461,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -451,6 +489,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -474,6 +513,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -503,6 +543,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -525,6 +566,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -547,6 +589,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -569,6 +612,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -601,6 +645,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -628,6 +673,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -655,6 +701,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -711,6 +758,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -734,6 +782,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -772,6 +821,7 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildMemberNames: memberNamesOf({ u1: "解決された名前" }),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -795,6 +845,7 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -822,13 +873,14 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(LOGGING_REQUIRED_PERMISSIONS),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
     const result = await caller.getAuditLogPermissionStatus({ guildId });
 
-    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null });
+    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null, accessStatus: "ok" });
   });
 
   test("ADMINISTRATORを持つ場合もhasViewAuditLog:trueかつreauthorizeUrl:null", async () => {
@@ -849,13 +901,14 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(PermissionFlagsBits.Administrator),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
     const result = await caller.getAuditLogPermissionStatus({ guildId });
 
-    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null });
+    expect(result).toEqual({ hasViewAuditLog: true, reauthorizeUrl: null, accessStatus: "ok" });
   });
 
   test("ViewAuditLog権限がない場合は必要な権限のみを含む再認可URLを返す", async () => {
@@ -876,6 +929,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(0n),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
@@ -901,10 +955,39 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildMemberNames: memberNamesOf({}),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
       discordClientId: "test-client-id",
     });
 
     await expect(caller.getAuditLogPermissionStatus({ guildId })).rejects.toThrow(TRPCError);
+  });
+
+  test("getGuildAccessStatusがforbiddenの場合、UIが権限不足を判別できるようそのまま伝播する(issue #214)", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.MANAGE_LOGGING_SETTINGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getAllGuildChannels: channelsOf(),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(0n),
+      getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf("forbidden"),
+      getGuildMembersPage: membersPageOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.getAuditLogPermissionStatus({ guildId });
+
+    expect(result.accessStatus).toBe("forbidden");
   });
 });

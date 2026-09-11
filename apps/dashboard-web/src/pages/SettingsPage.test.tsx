@@ -24,6 +24,24 @@ describe("SettingsPage", () => {
     expect(html).toContain("読み込み中");
   });
 
+  test("channelOptionsのaccessStatusがforbiddenならBot権限不足メッセージを表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", retentionDays: 30 },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
+      { category: "message", channelId: "c1" },
+    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [],
+      accessStatus: "forbidden",
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("Botに権限がないため");
+  });
+
   test("取得成功時はカテゴリごとの保持期間・出力先チャンネルを描画する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
@@ -32,9 +50,10 @@ describe("SettingsPage", () => {
     queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
 
     const html = renderPage("g1", queryClient);
 
@@ -52,9 +71,10 @@ describe("SettingsPage", () => {
     queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
 
     const html = renderPage("g1", queryClient);
 
@@ -76,9 +96,10 @@ describe("SettingsPage", () => {
       { category: "message", channelId: "c1" },
       { category: "member", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
 
     const html = renderPage("g1", queryClient);
 
@@ -97,9 +118,10 @@ describe("SettingsPage", () => {
       { category: "message", channelId: "c1" },
       { category: "member", channelId: null },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
 
     const html = renderPage("g1", queryClient);
 
@@ -119,9 +141,10 @@ describe("SettingsPage", () => {
     queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
     queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
       hideAuditLogCorrelation: true,
       hideBotEvents: true,
@@ -143,9 +166,10 @@ describe("SettingsPage", () => {
     queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
     queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
       hideAuditLogCorrelation: false,
       hideBotEvents: true,
@@ -166,9 +190,10 @@ describe("SettingsPage", () => {
     queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
       { category: "message", channelId: "c1" },
     ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, [
-      { id: "c1", name: "general" },
-    ]);
+    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      channels: [{ id: "c1", name: "general" }],
+      accessStatus: "ok",
+    });
     queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
       hideAuditLogCorrelation: true,
       hideBotEvents: true,

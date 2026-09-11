@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ChannelOption, MemberOption, RoleOption } from "@management-bot/dashboard-access";
+import type { ChannelOption, GuildAccessStatus, MemberOption, RoleOption } from "@management-bot/dashboard-access";
 import { mapWithConcurrency } from "@management-bot/shared";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
@@ -237,6 +237,28 @@ export async function fetchGuildRoles(botToken: string, guildId: string): Promis
     return [];
   }
   return roles.map((role) => ({ id: role.id, name: role.name }));
+}
+
+/**
+ * fetchGuildChannels/fetchBotGuildPermissions等が内部で参照するBot自身のguild内メンバー情報
+ * (`/guilds/{id}/members/{me.id}`)が取得できるかを判定する。このエンドポイントはGUILD_MEMBERS
+ * Privileged Intent未設定でも403になり得るため(issue #198)、これらの関数は403/404を
+ * 区別せず空配列/0nに倒している。結果としてUIからは「Botに権限がない」のか「単に空」なのか
+ * 判別できなかった(issue #214)。この関数は同じエンドポイントを403のみ例外として呼び直し、
+ * "forbidden"(権限・Intent不足)/"not_found"(guild未参加)/"ok"を区別して返す。
+ * 表示専用の判定なのでfetchGuildChannels等とは別に呼び出し、結果はUIの補助メッセージにのみ使う
+ * (実際のチャンネル一覧・権限計算には影響しない)。
+ */
+export async function fetchGuildAccessStatus(botToken: string, guildId: string): Promise<GuildAccessStatus> {
+  const me = await getMe(botToken);
+  if (me === "not_found") return "not_found";
+  try {
+    const member = await discordGet(botToken, `/guilds/${guildId}/members/${me.id}`, guildMemberSchema, "throw");
+    return member === "not_found" ? "not_found" : "ok";
+  } catch (error) {
+    if (error instanceof DiscordAccessForbiddenError) return "forbidden";
+    throw error;
+  }
 }
 
 /**

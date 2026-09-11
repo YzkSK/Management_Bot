@@ -3,6 +3,7 @@ import {
   DiscordAccessForbiddenError,
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
+  fetchGuildAccessStatus,
   fetchGuildChannels,
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
@@ -925,5 +926,50 @@ describe("fetchGuildMemberNames", () => {
     expect(result.get("u1")).toBe("user-u1");
     expect(result.get("u2")).toBe("user-u2");
     expect(individualCalled).toEqual(["u2"]);
+  });
+});
+
+describe("fetchGuildAccessStatus", () => {
+  test("Bot自身のguildメンバー情報が取得できれば\"ok\"を返す", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) return jsonResponse(200, { id: "bot1" });
+      if (url.endsWith("/guilds/g1/members/bot1")) return jsonResponse(200, { roles: [] });
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    expect(await fetchGuildAccessStatus("access-status-token-1", "g1")).toBe("ok");
+  });
+
+  test("/users/@meが404なら\"not_found\"を返す", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) return jsonResponse(404);
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    expect(await fetchGuildAccessStatus("access-status-token-2", "g1")).toBe("not_found");
+  });
+
+  test("guildメンバー情報が404(Bot未参加)なら\"not_found\"を返す", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) return jsonResponse(200, { id: "bot1" });
+      if (url.endsWith("/guilds/g1/members/bot1")) return jsonResponse(404);
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    expect(await fetchGuildAccessStatus("access-status-token-3", "g1")).toBe("not_found");
+  });
+
+  test("guildメンバー情報が403(権限・Intent不足)なら\"forbidden\"を返す", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/users/@me")) return jsonResponse(200, { id: "bot1" });
+      if (url.endsWith("/guilds/g1/members/bot1")) return jsonResponse(403);
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    expect(await fetchGuildAccessStatus("access-status-token-4", "g1")).toBe("forbidden");
   });
 });

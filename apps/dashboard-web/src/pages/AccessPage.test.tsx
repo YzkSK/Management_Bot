@@ -24,10 +24,13 @@ function seedBaseQueries(
   guildId: string,
   options: { myCapabilities?: number; grants?: unknown[] } = {},
 ): void {
-  queryClient.setQueryData(trpc.access.listRoleOptions.queryOptions({ guildId }).queryKey, [
-    { id: guildId, name: "@everyone" },
-    { id: "r1", name: "Admin" },
-  ]);
+  queryClient.setQueryData(trpc.access.listRoleOptions.queryOptions({ guildId }).queryKey, {
+    roles: [
+      { id: guildId, name: "@everyone" },
+      { id: "r1", name: "Admin" },
+    ],
+    accessStatus: "ok",
+  });
   queryClient.setQueryData(trpc.access.listMemberOptions.queryOptions({ guildId, after: undefined }).queryKey, {
     members: [
       { id: "u1", name: "user-one" },

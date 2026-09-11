@@ -1,5 +1,5 @@
 import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
-import { buildInviteUrl, CAPABILITIES, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
+import { buildInviteUrl, CAPABILITIES, discordIdSchema, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import {
 import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const listLogEntriesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   /** 前回レスポンスのnextCursorをそのまま渡す不透明なトークン。 */
@@ -26,39 +26,39 @@ const listLogEntriesInput = z.object({
 });
 
 const guildIdInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
 });
 
 /** 100年。無期限保存(0)以外の実運用上限として設定し、DBのinteger範囲外の値を弾く。 */
 const MAX_RETENTION_DAYS = 36_500;
 
 const setRetentionSettingInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES),
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
 const setRetentionSettingForAllCategoriesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   retentionDays: z.number().int().min(0).max(MAX_RETENTION_DAYS),
 });
 
 const setChannelSettingInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.enum(LOG_CATEGORIES),
   /** nullで出力先未設定に戻す(該当カテゴリの送信を停止)。 */
-  channelId: z.string().min(1).nullable(),
+  channelId: discordIdSchema.nullable(),
 });
 
 const setChannelSettingForAllCategoriesInput = z.object({
-  guildId: z.string().min(1),
-  channelId: z.string().min(1).nullable(),
+  guildId: discordIdSchema,
+  channelId: discordIdSchema.nullable(),
 });
 
 /** 呼び出し側が変更したいフィールドのみ送る(部分更新)。未指定フィールドは既存値を維持する。 */
 const setDisplaySettingInput = z
   .object({
-    guildId: z.string().min(1),
+    guildId: discordIdSchema,
     hideAuditLogCorrelation: z.boolean().optional(),
     hideBotEvents: z.boolean().optional(),
   })
@@ -69,7 +69,7 @@ const setDisplaySettingInput = z
   );
 
 const resolveDisplayNamesInput = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   userIds: z.array(z.string()).default([]),
   channelIds: z.array(z.string()).default([]),
 });
@@ -121,11 +121,22 @@ export const loggingRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .query(({ ctx, input }) => listChannelSettings(ctx.db, input.guildId)),
 
-  /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在チャンネル)をこのprocedure経由で提供する。 */
+  /**
+   * Dashboard UIでのID直接入力を禁止するため、選択肢(実在チャンネル)をこのprocedure経由で提供する。
+   * getGuildChannelsは403(Bot権限・Privileged Intent不足)と404(Bot未参加)を区別せず空配列に
+   * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるようにする
+   * (issue #214)。
+   */
   listChannelOptions: protectedProcedure
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
-    .query(({ ctx, input }) => ctx.getGuildChannels(input.guildId)),
+    .query(async ({ ctx, input }) => {
+      const [channels, accessStatus] = await Promise.all([
+        ctx.getGuildChannels(input.guildId),
+        ctx.getGuildAccessStatus(input.guildId),
+      ]);
+      return { channels, accessStatus };
+    }),
 
   setChannelSetting: protectedProcedure
     .input(setChannelSettingInput)
@@ -206,7 +217,10 @@ export const loggingRouter = router({
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
     .query(async ({ ctx, input }) => {
-      const permissions = await ctx.getBotPermissions(input.guildId);
+      const [permissions, accessStatus] = await Promise.all([
+        ctx.getBotPermissions(input.guildId),
+        ctx.getGuildAccessStatus(input.guildId),
+      ]);
       const hasViewAuditLog =
         (permissions & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator ||
         (permissions & LOGGING_REQUIRED_PERMISSIONS) === LOGGING_REQUIRED_PERMISSIONS;
@@ -216,6 +230,12 @@ export const loggingRouter = router({
         reauthorizeUrl: hasViewAuditLog
           ? null
           : buildInviteUrl(ctx.discordClientId, LOGGING_REQUIRED_PERMISSIONS, { guildId: input.guildId }),
+        /**
+         * hasViewAuditLog=falseの理由がBot権限不足(forbidden)なのかBot未参加(not_found)なのかを
+         * UIへ伝える(issue #214)。fetchBotGuildPermissionsは403/404を区別せず0nに倒すため、
+         * 従来はUIから権限不足を判別できなかった。
+         */
+        accessStatus,
       };
     }),
 });

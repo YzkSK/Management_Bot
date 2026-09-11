@@ -58,3 +58,4 @@ export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
 export { DISCORD_PERMISSION_LABELS } from "./discord-permissions.js";
+export { discordIdSchema } from "./discord-id.js";

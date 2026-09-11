@@ -1,3 +1,4 @@
+import { discordIdSchema } from "@management-bot/shared";
 import postgres from "postgres";
 import { z } from "zod";
 
@@ -7,7 +8,7 @@ export interface LogEntryInsertNotification {
 }
 
 const notificationSchema = z.object({
-  guildId: z.string().min(1),
+  guildId: discordIdSchema,
   category: z.string().min(1),
 });
 

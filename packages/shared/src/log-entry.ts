@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { discordIdSchema } from "./discord-id.js";
 import { LOG_CATEGORIES } from "./log-category.js";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 
-const nonEmptyString = z.string().min(1);
+/** LogEntryのID系フィールド(userId/channelId等)はほぼ全てDiscord IDのため、共通スキーマをそのまま使う(issue #227)。 */
+const nonEmptyString = discordIdSchema;
 
 const base = {
   guildId: nonEmptyString,

@@ -22,6 +22,13 @@ export interface RoleOption {
   name: string;
 }
 
+/**
+ * "forbidden": Bot権限・Privileged Intent不足でguild内情報を取得できない。
+ * "not_found": Botがそのguildに未参加(または対象自体が存在しない)。
+ * "ok": 問題なく取得できる。
+ */
+export type GuildAccessStatus = "ok" | "forbidden" | "not_found";
+
 export interface MemberOption {
   id: string;
   name: string;
@@ -101,6 +108,13 @@ export interface DashboardAccessContext {
    * 短命キャッシュしてよい。
    */
   getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
+  /**
+   * getGuildChannels/getGuildRoles/getBotPermissionsは403(Bot権限・Privileged Intent不足)と
+   * 404(guild未参加)を区別せず空配列/0nに倒すため、UIから「Botに権限がないため取得できません」を
+   * 表示するにはこの状態を別途取得する必要がある(issue #214)。表示専用なので他のgetGuildXxxと
+   * 同じくdashboard-api側で短命キャッシュしてよい。
+   */
+  getGuildAccessStatus: (guildId: string) => Promise<GuildAccessStatus>;
   /**
    * guildId直下でroleIdが実在するかをキャッシュを介さず確認する。capability grantのtargetId
    * 実在検証専用(issue #198)。getGuildRolesは表示用に短命キャッシュされうるため、削除直後の
