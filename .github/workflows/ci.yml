@@ -25,8 +25,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     env:
       DATABASE_URL: postgres://management_bot:management_bot@localhost:5432/management_bot
+      REDIS_URL: redis://localhost:6379
       VITE_API_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
