@@ -168,7 +168,7 @@ function GrantForm({
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4">
       <h2 className="text-sm font-semibold">権限の付与・更新</h2>
-      <div className="flex items-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium">付与先の種類</label>
           <Select
