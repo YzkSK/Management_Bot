@@ -26,4 +26,9 @@ describe("decideEscalationAction", () => {
   test("escalationStepsが空ならnull", () => {
     expect(decideEscalationAction(10, {})).toBeNull();
   });
+
+  test("strikeCountが負数・非整数はRangeError", () => {
+    expect(() => decideEscalationAction(-1, steps)).toThrow(RangeError);
+    expect(() => decideEscalationAction(1.5, steps)).toThrow(RangeError);
+  });
 });

@@ -30,4 +30,12 @@ describe("hasFloodHit", () => {
     const timestamps = [beforeWindow, new Date("2026-01-01T00:00:05.000Z"), new Date("2026-01-01T00:00:08.000Z")];
     expect(hasFloodHit(timestamps, now, config)).toBe(false);
   });
+
+  test("windowSecondsが0以下はRangeError", () => {
+    expect(() => hasFloodHit([], now, { windowSeconds: 0, messageThreshold: 3 })).toThrow(RangeError);
+  });
+
+  test("messageThresholdが1未満はRangeError", () => {
+    expect(() => hasFloodHit([], now, { windowSeconds: 10, messageThreshold: 0 })).toThrow(RangeError);
+  });
 });
