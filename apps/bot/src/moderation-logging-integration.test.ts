@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import { DomainEventBus } from "@management-bot/core";
 import {
   createDb,
@@ -12,11 +12,11 @@ import {
 } from "@management-bot/db";
 import { handleModerationEvent } from "@management-bot/logging";
 import { detectAndEscalate, type IncomingMessage } from "@management-bot/moderation";
+import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
-const STREAM = "domain-events:moderation.action.recorded";
 
 async function isRedisAvailable(): Promise<boolean> {
   const probe = new Redis(REDIS_URL, { retryStrategy: () => null, lazyConnect: true });
@@ -58,53 +58,43 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
  * 記録する」までを、moderation/loggingそれぞれのpackageを実際にimportし、Redis Streams経由の
  * 疎結合連携を含めて検証する(feature間の直接importは行わず、DomainEventBusのみを介する)。
  * この2機能をまたぐ検証はどちらのpackageにも属さないため、両方を実際に組み立てるapps/botに置く。
+ * 検証範囲はapplication層の連携まで(publish→subscribe→ログ書き込み)であり、
+ * registerDiscordHandlers/BotClient.registerFeaturesによる実際の登録配線までは対象外。
+ *
+ * moderation.action.recordedはlogging自身の他のテスト(packages/logging)とも同一stream
+ * (domain-events:moderation.action.recorded)を共有し、ローカル開発中は実行中のbotプロセスとも
+ * 共有し得る。streamそのものは削除せず、テストごとに一意なguildIdを使い、購読側でも
+ * そのguildId宛てのイベントだけを処理することで、他テスト・他プロセスの残留イベントの
+ * 混入(consumer groupが起点ID"0"で作成され過去イベントを再配信すること含む)から隔離する。
  */
 describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テスト", () => {
-  let db: Db;
-  let close: () => Promise<void>;
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is required");
+  const { db, close }: { db: Db; close: () => Promise<void> } = createDb(databaseUrl);
   const redis = new Redis(REDIS_URL);
-  const guildId = `test-guild-${randomUUID()}`;
-
-  beforeAll(async () => {
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error("DATABASE_URL is required");
-    ({ db, close } = createDb(databaseUrl));
-    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
-    // 他のテストファイル・過去の失敗実行が残したストリームの取りこぼしを防ぐ。
-    await redis.del(STREAM);
-  });
 
   afterAll(async () => {
-    await db.delete(guilds).where(eq(guilds.id, guildId));
     await close();
     redis.disconnect();
   });
 
-  afterEach(async () => {
-    await db.delete(moderationThresholds).where(eq(moderationThresholds.guildId, guildId));
-    await db.delete(moderationWhitelist).where(eq(moderationWhitelist.guildId, guildId));
-    await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
-    await db.delete(logEntries).where(eq(logEntries.guildId, guildId));
-    const keys = await redis.keys(`moderation:*:${guildId}:*`);
-    if (keys.length > 0) await redis.del(...keys);
-    // DomainEventBus.subscribeは新規consumer groupを起点ID"0"で作成するため、streamを
-    // 消さないと前のテストで発行済みのイベントを次のテストの新しいgroupへ再配信してしまう。
-    await redis.del(STREAM);
-  });
-
   test("連投→エスカレーション→moderation.action.recorded発行→loggingへのmoderationCase記録まで一気通貫で行われる", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
     const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
     // strong preset: windowSeconds=8, messageThreshold=3, strike1でmessageDelete
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
 
-    const group = randomUUID();
-    const moderationEventBus = new DomainEventBus(REDIS_URL, group);
-    const loggingEventBus = new DomainEventBus(REDIS_URL, group);
+    const runId = randomUUID();
+    // 本番同様、機能ごとに別consumer groupを使う(同じgroupだと配信を取り合ってしまう)。
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
     const sendToChannel = mock(() => Promise.resolve());
     const written = Promise.withResolvers<void>();
 
     try {
       await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return; // 他テスト・他プロセスの残留イベントは無視する
         await handleModerationEvent({ db, sendToChannel })(event, entryId);
         written.resolve();
       });
@@ -144,22 +134,28 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       expect(state?.strikeCount).toBe(1);
     } finally {
       await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId)); // cascadeで関連行も削除される
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
     }
   });
 
   test("ホワイトリスト対象ユーザーは連投してもstrikeCount・ログのどちらも増加しない", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
     const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
     await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: userId });
 
-    const group = randomUUID();
-    const moderationEventBus = new DomainEventBus(REDIS_URL, group);
-    const loggingEventBus = new DomainEventBus(REDIS_URL, group);
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
     const sendToChannel = mock(() => Promise.resolve());
-    const received: unknown[] = [];
+    const received: ModerationActionRecordedEvent[] = [];
 
     try {
       await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return; // 他テスト・他プロセスの残留イベントは無視する
         received.push(event);
         await handleModerationEvent({ db, sendToChannel })(event, entryId);
       });
@@ -178,6 +174,9 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
     } finally {
       await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
     }
   });
 });
