@@ -30,7 +30,13 @@ import {
   isGuildMember,
   verifyGuildRole,
 } from "./discord/bot-client.js";
-import { DiscordTokenInvalidError, fetchUserGuilds, type DiscordUserGuild } from "./oauth/discord-client.js";
+import {
+  buildAvatarUrl,
+  DiscordTokenInvalidError,
+  fetchDiscordUser,
+  fetchUserGuilds,
+  type DiscordUserGuild,
+} from "./oauth/discord-client.js";
 import { SESSION_COOKIE } from "./oauth/routes.js";
 
 /**
@@ -40,6 +46,13 @@ import { SESSION_COOKIE } from "./oauth/routes.js";
  */
 const USER_GUILDS_TTL_MS = 30_000;
 const userGuildsCache = createTtlCache<readonly DiscordUserGuild[] | null>(USER_GUILDS_TTL_MS);
+
+/**
+ * セッションID単位でDiscordアバターURLを短命キャッシュする。ヘッダー描画のたびにDiscord APIへ
+ * 問い合わせないようにする(issue #265。userGuildsCacheと同じ考え方)。
+ */
+const AVATAR_URL_TTL_MS = 30_000;
+const avatarUrlCache = createTtlCache<string | null>(AVATAR_URL_TTL_MS);
 
 /**
  * guildId単位でBotトークン側の問い合わせ(チャンネル一覧・実効権限)を短命キャッシュする。
@@ -228,6 +241,35 @@ function createListMyGuilds(
 }
 
 /**
+ * アバターは装飾的な情報であり、meの必須データ(discordUserId/discordUsername)ではないため、
+ * Discord API側の一時的な障害・トークン失効(codexレビュー対応)でme procedure自体を
+ * 失敗させないよう、取得に失敗した場合は例外を投げずnullにフォールバックする。
+ */
+export function createGetMyAvatarUrl(
+  db: Db,
+  sessionId: string | undefined,
+  sessionSecret: string,
+): () => Promise<string | null> {
+  return async () => {
+    if (!sessionId) {
+      return null;
+    }
+    return avatarUrlCache(sessionId, async () => {
+      try {
+        const accessToken = await getSessionAccessToken(db, sessionId, sessionSecret);
+        if (!accessToken) {
+          return null;
+        }
+        const user = await fetchDiscordUser(accessToken);
+        return buildAvatarUrl(user);
+      } catch {
+        return null;
+      }
+    });
+  };
+}
+
+/**
  * ダッシュボードの独自capability(VIEW_LOGS等)は、onboardGuild時に発行される
  * オーナー(全capability)と@everyone(roleId===guildId、閲覧系ベースライン)の2種類の
  * capabilityGrantに加え、capability付与画面(issue #198)で個別に付与されたuser/role grantに基づく。
@@ -296,6 +338,7 @@ export function createContext(
       getGuildMembersPage: createGetGuildMembersPage(botToken),
       isGuildMember: createIsGuildMember(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
+      getMyAvatarUrl: createGetMyAvatarUrl(db, sessionId, sessionSecret),
     };
     return ctx as unknown as Record<string, unknown>;
   };

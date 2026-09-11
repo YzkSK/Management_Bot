@@ -7,9 +7,10 @@ import { guildSettingsRouter } from "./routers/guild-settings.js";
 // tRPC名前空間としての公開は実装着手時まで見送る(issue #222)。パッケージ自体・
 // feature-moduleへの登録は将来機能の予約枠として残す。
 export const appRouter = router({
-  me: protectedProcedure.query(({ ctx }) => ({
+  me: protectedProcedure.query(async ({ ctx }) => ({
     discordUserId: ctx.discordUserId,
     discordUsername: ctx.discordUsername,
+    avatarUrl: await ctx.getMyAvatarUrl(),
   })),
   guildSettings: guildSettingsRouter,
   activity: activityRouter,

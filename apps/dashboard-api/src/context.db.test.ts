@@ -4,7 +4,7 @@ import { encryptToken } from "@management-bot/dashboard-access";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { DiscordAccessForbiddenError } from "./discord/bot-client.ts";
-import { createGetGuildMembership, fetchCurrentUserGuilds, resolveGuildMembership } from "./context.ts";
+import { createGetGuildMembership, createGetMyAvatarUrl, fetchCurrentUserGuilds, resolveGuildMembership } from "./context.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -226,5 +226,41 @@ describe("createGetGuildMembership (短命キャッシュ)", () => {
     await getGuildMembership(guildId, "user-2");
 
     expect(fetchState.memberApiCalls).toBe(2);
+  });
+});
+
+describe("createGetMyAvatarUrl", () => {
+  test("avatarハッシュがあればアバターCDN URLを返す", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ id: "user-1", username: "user-1-name", avatar: "abc123" }), { status: 200 })) as typeof fetch;
+    const getMyAvatarUrl = createGetMyAvatarUrl(db, sessionId, sessionSecret);
+
+    expect(await getMyAvatarUrl()).toBe("https://cdn.discordapp.com/avatars/user-1/abc123.png");
+  });
+
+  test("Discord APIが5xxを返してもnullにフォールバックし、例外を投げない(装飾情報のためme procedure全体を壊さない。codexレビュー対応)", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    globalThis.fetch = (async () => new Response(undefined, { status: 500 })) as typeof fetch;
+    const getMyAvatarUrl = createGetMyAvatarUrl(db, sessionId, sessionSecret);
+
+    expect(await getMyAvatarUrl()).toBeNull();
+  });
+
+  test("同一セッションIDへの複数回呼び出しはDiscord APIを1回しか叩かない(短命キャッシュ)", async () => {
+    const sessionId = `session-${randomUUID()}`;
+    await insertSession(sessionId);
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ id: "user-1", username: "user-1-name", avatar: "abc123" }), { status: 200 });
+    }) as typeof fetch;
+    const getMyAvatarUrl = createGetMyAvatarUrl(db, sessionId, sessionSecret);
+
+    await Promise.all([getMyAvatarUrl(), getMyAvatarUrl(), getMyAvatarUrl()]);
+
+    expect(calls).toBe(1);
   });
 });

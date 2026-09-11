@@ -65,6 +65,11 @@ export interface DashboardAccessContext {
    */
   listMyGuilds: () => Promise<readonly ManagedGuild[]>;
   /**
+   * ログインユーザーのDiscordアバターURL(未設定時はデフォルトアバターURL)を返す(issue #265)。
+   * 未ログイン・セッション切れの場合はnull。dashboard-api側でDiscord APIから短命キャッシュ付きで供給する。
+   */
+  getMyAvatarUrl: () => Promise<string | null>;
+  /**
    * guildIdにおけるdiscordUserIdの在籍状態を返す。非在籍(脱退・キック済み等)はnull。
    * dashboard-api側でDiscord APIやキャッシュから供給する。
    */
