@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FEATURE_METADATA } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -33,6 +34,11 @@ function SidebarNav({
   /** リンク/セレクトでの遷移後に呼ばれる(モバイルドロワーを閉じるため)。 */
   onNavigate?: () => void;
 }) {
+  // クリック/キー確定されたguild(Escや選択肢外クリックでのキャンセルではnull)。
+  // 同一guildの再選択時はRadix SelectPrimitiveのonValueChangeが発火しないため、
+  // SelectItem側で直接どのguildが押されたかを記録する。
+  const pickedGuildRef = useRef<ManagedGuildWithAccess | null>(null);
+
   return (
     <>
       <div className="mb-3">
@@ -47,10 +53,11 @@ function SidebarNav({
             navigate(`/guilds/${value}/logs`);
           }}
           onOpenChange={(selectOpen) => {
-            // 現在選択中のguildを再選択(またはEscでキャンセル)した場合、
-            // Radix SelectのonValueChangeは発火しない。マウス/キーボードどちらの操作でも
-            // 閉じるタイミングは共通なので、ここでモバイルドロワーを閉じる。
-            if (!selectOpen) onNavigate?.();
+            if (selectOpen) {
+              pickedGuildRef.current = null;
+              return;
+            }
+            if (pickedGuildRef.current?.canViewLogs) onNavigate?.();
           }}
           disabled={guilds.length === 0}
         >
@@ -63,6 +70,12 @@ function SidebarNav({
                 key={guild.id}
                 value={guild.id}
                 className={!guild.canViewLogs ? "text-muted-foreground opacity-50" : undefined}
+                onPointerUp={() => {
+                  pickedGuildRef.current = guild;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") pickedGuildRef.current = guild;
+                }}
               >
                 {guild.name}
                 {!guild.canViewLogs && "(権限なし)"}
