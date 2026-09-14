@@ -6,6 +6,7 @@ import {
   grantCapabilities,
   listCapabilityGrants,
   revokeCapabilityGrant,
+  revokeCapabilityGrants,
   type CapabilityGrantTargetType,
 } from "./capability-grants.js";
 import type { DashboardAccessContext } from "./trpc.js";
@@ -27,6 +28,15 @@ const revokeCapabilityGrantInput = z.object({
   guildId: discordIdSchema,
   targetType: targetTypeSchema,
   targetId: discordIdSchema,
+});
+
+const bulkRevokeCapabilityGrantsInput = z.object({
+  guildId: discordIdSchema,
+  /** Dashboard UIの一覧からの一括操作を想定した上限。 */
+  targets: z
+    .array(z.object({ targetType: targetTypeSchema, targetId: discordIdSchema }))
+    .min(1)
+    .max(100),
 });
 
 const listMemberOptionsInput = z.object({
@@ -179,5 +189,33 @@ export const capabilityGrantsRouter = router({
         });
       }
       await revokeCapabilityGrant(ctx.db, input);
+    }),
+
+  /**
+   * Dashboard UIの「すべての付与状況」一覧からの一括剥奪用(issue #269)。
+   * 個別revokeCapabilityGrantをクライアントから並列発行すると部分成功が起こり得るため、
+   * サーバー側で1トランザクションにまとめてall-or-nothingにする。
+   * 昇格防止チェックは対象全件について行い、1件でも自分の保有範囲外ならリクエスト全体を拒否する。
+   */
+  bulkRevokeCapabilityGrants: protectedProcedure
+    .input(bulkRevokeCapabilityGrantsInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+    .mutation(async ({ ctx, input }) => {
+      const existingGrants = await Promise.all(
+        input.targets.map((target) => getCapabilityGrant(ctx.db, { guildId: input.guildId, ...target })),
+      );
+      for (const existing of existingGrants) {
+        if (existing && !canGrantCapabilities(ctx.capabilities, existing.capabilities)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "cannot revoke capabilities you do not have yourself",
+          });
+        }
+      }
+      const targetsToRevoke = input.targets.filter((_, index) => existingGrants[index] !== null);
+      await revokeCapabilityGrants(
+        ctx.db,
+        targetsToRevoke.map((target) => ({ guildId: input.guildId, ...target })),
+      );
     }),
 });

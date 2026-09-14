@@ -100,3 +100,27 @@ export async function revokeCapabilityGrant(db: Db, input: RevokeCapabilityGrant
       ),
     );
 }
+
+/**
+ * 複数targetへのcapability grantを1トランザクションでまとめて削除する(Dashboard UIの一括剥奪用)。
+ * 個別revokeを並列発行すると部分成功が起こり得るため、all-or-nothingにする。
+ * (tx単体の型はDbと互換ではないため、revokeCapabilityGrantを呼び回さずクエリをインライン化する)
+ */
+export async function revokeCapabilityGrants(db: Db, inputs: readonly RevokeCapabilityGrantInput[]): Promise<void> {
+  if (inputs.length === 0) {
+    return;
+  }
+  await db.transaction(async (tx) => {
+    for (const { guildId, targetType, targetId } of inputs) {
+      await tx
+        .delete(capabilityGrants)
+        .where(
+          and(
+            eq(capabilityGrants.guildId, guildId),
+            eq(capabilityGrants.targetType, targetType),
+            eq(capabilityGrants.targetId, targetId),
+          ),
+        );
+    }
+  });
+}

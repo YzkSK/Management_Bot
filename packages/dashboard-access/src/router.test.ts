@@ -373,6 +373,74 @@ describe("capabilityGrantsRouter.revokeCapabilityGrant", () => {
   });
 });
 
+describe("capabilityGrantsRouter.bulkRevokeCapabilityGrants", () => {
+  test("自分が持つcapabilityの範囲内のgrantを複数まとめて剥奪できる", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS);
+    await grant("user", "u2", CAPABILITIES.VIEW_LOGS);
+    await grant("role", "r1", CAPABILITIES.VIEW_LOGS);
+    const caller = createCaller(buildContext());
+
+    await caller.bulkRevokeCapabilityGrants({
+      guildId,
+      targets: [
+        { targetType: "user", targetId: "u2" },
+        { targetType: "role", targetId: "r1" },
+      ],
+    });
+
+    const rows = await db.select().from(capabilityGrants).where(eq(capabilityGrants.guildId, guildId));
+    expect(rows.map((r) => r.targetId).sort()).toEqual(["user-1"]);
+  });
+
+  test("1件でも自分が持たないcapabilityを含む場合はFORBIDDENで全件剥奪されない(all-or-nothing)", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    await grant("user", "u2", CAPABILITIES.MANAGE_ACCESS);
+    await grant("user", "u3", CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(
+      caller.bulkRevokeCapabilityGrants({
+        guildId,
+        targets: [
+          { targetType: "user", targetId: "u2" },
+          { targetType: "user", targetId: "u3" },
+        ],
+      }),
+    );
+
+    expect(error).toBeDefined();
+    const rows = await db.select().from(capabilityGrants).where(eq(capabilityGrants.guildId, guildId));
+    expect(rows.map((r) => r.targetId).sort()).toEqual(["u2", "u3", "user-1"]);
+  });
+
+  test("未付与のtargetが含まれていても、それ以外は正常に剥奪される", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    await grant("user", "u2", CAPABILITIES.MANAGE_ACCESS);
+    const caller = createCaller(buildContext());
+
+    await caller.bulkRevokeCapabilityGrants({
+      guildId,
+      targets: [
+        { targetType: "user", targetId: "u2" },
+        { targetType: "user", targetId: "not-granted" },
+      ],
+    });
+
+    const rows = await db.select().from(capabilityGrants).where(eq(capabilityGrants.guildId, guildId));
+    expect(rows.map((r) => r.targetId).sort()).toEqual(["user-1"]);
+  });
+
+  test("MANAGE_ACCESSを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(
+      caller.bulkRevokeCapabilityGrants({ guildId, targets: [{ targetType: "user", targetId: "u2" }] }),
+    );
+
+    expect(error).toBeDefined();
+  });
+});
+
 describe("capabilityGrantsRouter.listRoleOptions / listMemberOptions", () => {
   test("listRoleOptionsはctx.getGuildRolesの結果をそのまま返す", async () => {
     await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
