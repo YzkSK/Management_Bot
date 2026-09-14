@@ -82,8 +82,10 @@ export class DomainEventBus {
     private readonly minIdleMsForClaim: number = DEFAULT_MIN_IDLE_MS_FOR_CLAIM,
   ) {
     this.consumerName = randomUUID();
-    this.publisher = new Redis(redisUrl);
-    this.subscriber = new Redis(redisUrl);
+    // maxRetriesPerRequestを明示し、Redis障害時に個々のコマンドが無限に
+    // キューイングされ続けるのを防ぐ(BLOCK中のXREADGROUPはこの上限の影響を受けない)。
+    this.publisher = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
+    this.subscriber = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
   }
 
   async publish<T extends DomainEventType>(event: Extract<DomainEvent, { type: T }>): Promise<void> {
