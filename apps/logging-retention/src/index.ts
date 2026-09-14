@@ -15,7 +15,8 @@ if (!cron.validate(env.LOGGING_RETENTION_CRON)) {
   throw new Error(`Invalid LOGGING_RETENTION_CRON: ${env.LOGGING_RETENTION_CRON}`);
 }
 
-const { db, close } = createDb(env.DATABASE_URL);
+// cronで日次1回DELETEを実行するのみのプロセスのため、コネクションプールは最小限でよい。
+const { db, close } = createDb(env.DATABASE_URL, { max: 2 });
 const runner = createPurgeRunner(db);
 
 const task = cron.schedule(env.LOGGING_RETENTION_CRON, () => void runner.run(), { timezone: TIMEZONE });
