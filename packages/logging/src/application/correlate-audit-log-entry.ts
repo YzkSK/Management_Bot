@@ -77,7 +77,7 @@ interface CorrelationRule {
  * role所属変更(MemberRoleUpdate)はroleId+userIdの複合一致が必要でこのテーブルの単一フィールド
  * 一致では表現できないため、correlateAuditLogEntry内で別処理として扱う。
  */
-const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
+export const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
   GuildUpdate: { category: "guild", field: null, logActions: ["update"] },
   ChannelCreate: { category: "channel", field: "channelId", logActions: ["create"] },
   ChannelUpdate: { category: "channel", field: "channelId", logActions: ["update"] },
