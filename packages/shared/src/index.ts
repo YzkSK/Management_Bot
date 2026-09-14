@@ -54,6 +54,14 @@ export {
   type VoiceStateFlagName,
 } from "./log-entry.js";
 export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
+export { CATEGORY_LABELS } from "./category-labels.js";
+export {
+  summarizeLogEntry,
+  type LogEntrySummary,
+  type LogEntryFieldChange,
+  type LogEntryAttachment,
+} from "./log-entry-summary.js";
+export { formatLogMessage } from "./format-log-message.js";
 export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";

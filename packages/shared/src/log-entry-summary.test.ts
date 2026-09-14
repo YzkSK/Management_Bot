@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { summarizeLogEntry } from "./log-entry-summary.js";
-import type { LogEntry } from "@management-bot/shared";
+import type { LogEntry } from "./log-entry.js";
 
 describe("summarizeLogEntry", () => {
   test("executorIdがあればexecutorIdをsubjectIdとして使う", () => {

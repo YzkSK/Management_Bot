@@ -1,4 +1,4 @@
-import type { LogEntry, VoiceStateFlagName } from "@management-bot/shared";
+import type { LogEntry, VoiceStateFlagName } from "./log-entry.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 

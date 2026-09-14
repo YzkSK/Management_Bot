@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { formatLogMessage } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
-import type { LogEntry } from "@management-bot/shared";
+import type { LogEntry } from "./log-entry.js";
 
 const noNames = { users: {}, channels: {} };
 

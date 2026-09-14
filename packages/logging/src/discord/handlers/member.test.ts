@@ -51,6 +51,16 @@ describe("member category mappers", () => {
     expect(toMemberJoinLogEntry(fakeMember({ bot: true })).actorIsBot).toBe(true);
   });
 
+  test("flags未指定ならisRejoin/hasModerationHistoryは未設定", () => {
+    const entry = toMemberJoinLogEntry(fakeMember());
+    expect(entry).toMatchObject({ isRejoin: undefined, hasModerationHistory: undefined });
+  });
+
+  test("flagsを渡すとisRejoin/hasModerationHistoryに反映される", () => {
+    const entry = toMemberJoinLogEntry(fakeMember(), { isRejoin: true, hasModerationHistory: true });
+    expect(entry).toMatchObject({ isRejoin: true, hasModerationHistory: true });
+  });
+
   test("ban/unbanのuserIdは実行者ではなく対象のため、対象がBotでもactor" + "IsBotは設定しない", () => {
     expect(toMemberBanLogEntry(fakeBan(true)).actorIsBot).toBeUndefined();
     expect(toMemberUnbanLogEntry(fakeBan(true)).actorIsBot).toBeUndefined();

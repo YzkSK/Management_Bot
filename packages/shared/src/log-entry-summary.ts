@@ -1,4 +1,5 @@
-import { getLogEntrySubjectId, getLogEntrySubjectField, type LogEntry } from "@management-bot/shared";
+import { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
+import type { LogEntry } from "./log-entry.js";
 
 export interface LogEntryFieldChange {
   before: string | number | boolean | null;

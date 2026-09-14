@@ -77,6 +77,10 @@ export const memberLogEntrySchema = z.object({
       nickname: z.object({ before: z.string().nullable(), after: z.string().nullable() }),
     })
     .optional(),
+  /** action=joinのみ設定する。同一guild×userIdでjoin/leaveの過去ログが存在した場合true(再入室)。 */
+  isRejoin: z.boolean().optional(),
+  /** action=joinのみ設定する。同一guild×userIdでmoderationCase(kick/ban)の過去ログが存在した場合true。 */
+  hasModerationHistory: z.boolean().optional(),
 });
 
 export const roleLogEntrySchema = z.object({
