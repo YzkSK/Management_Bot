@@ -122,6 +122,45 @@ describe("toMessageUpdateLogEntry", () => {
     ).toBeUndefined();
   });
 
+  test("本文は同一でも添付ファイルが追加されればupdateエントリを返す", () => {
+    const entry = toMessageUpdateLogEntry(
+      fakeMessage({ content: "same" }),
+      fakeMessage({
+        content: "same",
+        attachments: [{ url: "https://cdn.discordapp.com/x.png", name: "x.png", contentType: "image/png" }],
+      }),
+      BOT_USER_ID,
+    );
+    expect(entry?.action).toBe("update");
+    expect(entry && "attachments" in entry ? entry.attachments : undefined).toEqual([
+      { url: "https://cdn.discordapp.com/x.png", filename: "x.png", contentType: "image/png" },
+    ]);
+  });
+
+  test("本文は同一でも添付ファイルが削除されればupdateエントリを返す", () => {
+    const entry = toMessageUpdateLogEntry(
+      fakeMessage({
+        content: "same",
+        attachments: [{ url: "https://cdn.discordapp.com/x.png", name: "x.png", contentType: "image/png" }],
+      }),
+      fakeMessage({ content: "same" }),
+      BOT_USER_ID,
+    );
+    expect(entry?.action).toBe("update");
+    expect(entry && "attachments" in entry ? entry.attachments : undefined).toBeUndefined();
+  });
+
+  test("本文・添付ファイルどちらも変化していなければundefinedを返す", () => {
+    const attachments = [{ url: "https://cdn.discordapp.com/x.png", name: "x.png", contentType: "image/png" }];
+    expect(
+      toMessageUpdateLogEntry(
+        fakeMessage({ content: "same", attachments }),
+        fakeMessage({ content: "same", attachments }),
+        BOT_USER_ID,
+      ),
+    ).toBeUndefined();
+  });
+
   test("oldMessageがpartialならcontent比較をせずundefinedを返す(誤ったupdateログ防止)", () => {
     expect(
       toMessageUpdateLogEntry(

@@ -84,7 +84,8 @@ export function toMessageCreateLogEntry(
 }
 
 /**
- * 本文が変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。
+ * 本文・添付ファイルが両方とも変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。
+ * 添付のみの追加・削除(本文は同一)もログ対象に含めるため、contentだけでなくattachmentsも比較する。
  * oldMessageがpartial(contentが未取得でnull)の場合、実際は本文が変わっていなくても
  * content比較が常に不一致になり誤ったupdateログを生成するため、比較前にスキップする。
  */
@@ -96,7 +97,9 @@ export function toMessageUpdateLogEntry(
   const base = baseFields(newMessage, botUserId);
   if (!base) return undefined;
   if (oldMessage.partial) return undefined;
-  if (oldMessage.content === newMessage.content) return undefined;
+  const contentChanged = oldMessage.content !== newMessage.content;
+  const attachmentsChanged = JSON.stringify(toAttachments(oldMessage)) !== JSON.stringify(toAttachments(newMessage));
+  if (!contentChanged && !attachmentsChanged) return undefined;
   return {
     category: "message",
     ...base,
