@@ -10,6 +10,14 @@ export const ACCENT_COLORS: Record<AccentKind, number> = {
   neutral: 0x80848e,
 };
 
+/** タイトル行に付けるaccent連動の絵文字アイコン。個別action単位では持たず、accent4種の意味(作成/削除/変更/中立)に揃える。 */
+export const ACCENT_ICONS: Record<AccentKind, string> = {
+  positive: "✅",
+  negative: "🗑️",
+  warning: "✏️",
+  neutral: "ℹ️",
+};
+
 /**
  * (category, action)ごとのアクセント分類とタイトル文言。全カテゴリ×actionを明示的に列挙する
  * (命名規則からの推測は「archive」「resolve」のような分類が曖昧な語で誤判定するため避ける)。

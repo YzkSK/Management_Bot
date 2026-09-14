@@ -81,6 +81,10 @@ export const memberLogEntrySchema = z.object({
   isRejoin: z.boolean().optional(),
   /** action=joinのみ設定する。同一guild×userIdでmoderationCase(kick/ban)の過去ログが存在した場合true。 */
   hasModerationHistory: z.boolean().optional(),
+  /** action=joinのみ設定する。イベント発生時点のDiscordアバター画像URL(displayAvatarURL())。Discordログのサムネイル表示に使う。 */
+  avatarUrl: z.url().optional(),
+  /** action=joinのみ設定する。Discordアカウントの作成日時(user.createdAt)。新規アカウント判定・警告表示に使う。 */
+  accountCreatedAt: z.iso.datetime().optional(),
 });
 
 export const roleLogEntrySchema = z.object({

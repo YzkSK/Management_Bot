@@ -25,7 +25,11 @@ function fakeMember(
     guild: { id: "g1" },
     nickname: null,
     communicationDisabledUntilTimestamp: null,
-    user: { bot },
+    user: {
+      bot,
+      displayAvatarURL: () => "https://cdn.example.com/avatar.png",
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+    },
     displayName,
     partial,
     ...rest,

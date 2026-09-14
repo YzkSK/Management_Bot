@@ -17,6 +17,8 @@ export function toMemberJoinLogEntry(member: GuildMember, flags?: MemberJoinFlag
     actorIsBot: member.user.bot,
     isRejoin: flags?.isRejoin,
     hasModerationHistory: flags?.hasModerationHistory,
+    avatarUrl: member.user.displayAvatarURL({ size: 128 }),
+    accountCreatedAt: member.user.createdAt.toISOString(),
   };
 }
 

@@ -7,7 +7,7 @@ import {
 } from "@management-bot/shared";
 import { ContainerBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import type { LogEntry } from "../domain/index.js";
-import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
+import { ACCENT_COLORS, ACCENT_ICONS, getPresentation } from "./log-entry-presentation.js";
 
 /**
  * Discord送信ではuserName/channelNameの解決テーブルを引く代わりに、常にメンション記法
@@ -29,6 +29,11 @@ function fitTextDisplay(content: string): string {
   return content.slice(0, MAX_TEXT_DISPLAY_LENGTH - TEXT_DISPLAY_TRUNCATION_SUFFIX.length) + TEXT_DISPLAY_TRUNCATION_SUFFIX;
 }
 
+/** ラベル(小文字のsubtext)+値の2行1組。モックアップのラベル付きフィールド表示に対応する。 */
+function formatField(label: string, value: string): string {
+  return `-# ${label}\n${value}`;
+}
+
 function formatChangesLine(field: string, change: { before: unknown; after: unknown }): string {
   const label = CHANGE_FIELD_LABELS[field] ?? field;
   if (field === "permissions" && typeof change.before === "string" && typeof change.after === "string") {
@@ -38,21 +43,34 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
         ...diff.removed.map((name) => `−${name}`),
         ...diff.added.map((name) => `+${name}`),
       ];
-      return lines.length > 0 ? `**${label}**\n${lines.join("\n")}` : `**${label}**: 変更なし`;
+      return formatField(label, lines.length > 0 ? lines.join("\n") : "変更なし");
     }
   }
   const before = formatChangeValue(field, change.before as string | number | boolean | null, {});
   const after = formatChangeValue(field, change.after as string | number | boolean | null, {});
-  return `**${label}**: −${before} → +${after}`;
+  return formatField(label, `−${before} → +${after}`);
 }
 
 /** 警告バッジ(再入室・モデレーション履歴)。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
 function buildWarningLines(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const lines: string[] = [];
-  if (entry.hasModerationHistory) lines.push("⚠️ 過去にモデレーション対応(キック/BAN)の履歴があります");
-  if (entry.isRejoin) lines.push("🔁 再入室です");
+  if (entry.hasModerationHistory) lines.push("> ⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
+  if (entry.isRejoin) lines.push("> 🔁 **再入室です**");
   return lines;
+}
+
+/** account作成日等、member/joinカード限定のフィールド。 */
+function buildMemberJoinFields(entry: LogEntry): string[] {
+  if (entry.category !== "member" || entry.action !== "join") return [];
+  const fields: string[] = [];
+  if (entry.accountCreatedAt) {
+    const createdAt = new Date(entry.accountCreatedAt);
+    const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
+    fields.push(formatField("アカウント作成日", `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)`));
+  }
+  fields.push(formatField("ユーザーID", entry.userId));
+  return fields;
 }
 
 /**
@@ -66,28 +84,46 @@ export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
 
   const container = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
-  const headerLines = [`### ${title}`, description];
-  const warnings = buildWarningLines(entry);
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(headerLines.join("\n"))));
+  const headerLines = [`### ${ACCENT_ICONS[accent]} ${title}`, description];
+  const headerText = new TextDisplayBuilder().setContent(fitTextDisplay(headerLines.join("\n")));
 
+  // member/joinはアバターをサムネイルとして右側に添える(モックアップ準拠)。それ以外のカテゴリはヘッダーのみ。
+  const avatarUrl = entry.category === "member" && entry.action === "join" ? entry.avatarUrl : undefined;
+  if (avatarUrl) {
+    container.addSectionComponents((section) =>
+      section
+        .addTextDisplayComponents(headerText)
+        .setThumbnailAccessory((thumbnail) => thumbnail.setURL(avatarUrl)),
+    );
+  } else {
+    container.addTextDisplayComponents(headerText);
+  }
+
+  const warnings = buildWarningLines(entry);
   if (warnings.length > 0) {
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(warnings.join("\n"))));
   }
 
   const bodyLines: string[] = [];
   if (summary.previousContent !== null) {
-    bodyLines.push(`**編集前**\n> ${summary.previousContent.replaceAll("\n", "\n> ") || "(本文なし)"}`);
+    bodyLines.push(formatField("編集前", `> ${summary.previousContent.replaceAll("\n", "\n> ") || "(本文なし)"}`));
   }
   if (summary.content !== null) {
-    bodyLines.push(`**${summary.previousContent !== null ? "編集後" : "本文"}**\n> ${summary.content.replaceAll("\n", "\n> ") || "(本文なし)"}`);
+    bodyLines.push(
+      formatField(
+        summary.previousContent !== null ? "編集後" : "本文",
+        `> ${summary.content.replaceAll("\n", "\n> ") || "(本文なし)"}`,
+      ),
+    );
   }
+  bodyLines.push(...buildMemberJoinFields(entry));
   if (summary.changes !== null) {
     for (const [field, change] of Object.entries(summary.changes)) {
       bodyLines.push(formatChangesLine(field, change));
     }
   }
   if (summary.attachments !== null && summary.attachments.length > 0) {
-    bodyLines.push(`**添付ファイル**\n${summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")}`);
+    bodyLines.push(formatField("添付ファイル", summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")));
   }
 
   if (bodyLines.length > 0) {
