@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FEATURE_METADATA } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,15 @@ interface SidebarProps {
   open?: boolean;
 }
 
-function SidebarNav({ guildId, guilds, navigate }: { guildId?: string; guilds: readonly { id: string; name: string }[]; navigate: (path: string) => void }) {
+function SidebarNav({
+  guildId,
+  guilds,
+  navigate,
+}: {
+  guildId?: string;
+  guilds: readonly ManagedGuildWithAccess[];
+  navigate: (path: string) => void;
+}) {
   return (
     <>
       <div className="mb-3">
