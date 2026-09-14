@@ -45,7 +45,12 @@ function SidebarNav({
               return;
             }
             navigate(`/guilds/${value}/logs`);
-            onNavigate?.();
+          }}
+          onOpenChange={(selectOpen) => {
+            // 現在選択中のguildを再選択(またはEscでキャンセル)した場合、
+            // Radix SelectのonValueChangeは発火しない。マウス/キーボードどちらの操作でも
+            // 閉じるタイミングは共通なので、ここでモバイルドロワーを閉じる。
+            if (!selectOpen) onNavigate?.();
           }}
           disabled={guilds.length === 0}
         >
@@ -58,11 +63,6 @@ function SidebarNav({
                 key={guild.id}
                 value={guild.id}
                 className={!guild.canViewLogs ? "text-muted-foreground opacity-50" : undefined}
-                onClick={() => {
-                  // 現在選択中のguildを再選択した場合、Radix SelectはonValueChangeを発火しない。
-                  // その場合もドロワーは閉じるべきなのでここで明示的に処理する。
-                  if (guild.id === guildId && guild.canViewLogs) onNavigate?.();
-                }}
               >
                 {guild.name}
                 {!guild.canViewLogs && "(権限なし)"}
