@@ -62,8 +62,13 @@ export {
   type LogEntryAttachment,
 } from "./log-entry-summary.js";
 export { formatLogMessage } from "./format-log-message.js";
+export {
+  CHANGE_FIELD_LABELS,
+  CHANNEL_REFERENCE_CHANGE_FIELDS,
+  formatChangeValue,
+} from "./log-entry-changes.js";
 export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
-export { DISCORD_PERMISSION_LABELS } from "./discord-permissions.js";
+export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
 export { discordIdSchema } from "./discord-id.js";
