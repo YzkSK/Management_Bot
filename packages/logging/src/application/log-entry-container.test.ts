@@ -246,17 +246,19 @@ describe("buildLogEntryContainers", () => {
     }
   });
 
-  test("タイトルにaccent連動の絵文字アイコンを含む", () => {
-    const positive: LogEntry = {
+  test("タイトルにaction固有の絵文字アイコンを含む", () => {
+    const join: LogEntry = {
       category: "member",
       guildId: "g1",
       createdAt: "2026-08-31T00:00:00.000Z",
       userId: "u1",
       action: "join",
     };
-    const negative: LogEntry = { ...positive, action: "ban" };
-    expect(textOf(buildLogEntryContainers(positive))).toContain("### ✅");
-    expect(textOf(buildLogEntryContainers(negative))).toContain("### 🗑️");
+    const ban: LogEntry = { ...join, action: "ban" };
+    const kick: LogEntry = { ...join, action: "kick" };
+    expect(textOf(buildLogEntryContainers(join))).toContain("### 📥");
+    expect(textOf(buildLogEntryContainers(ban))).toContain("### 🔨");
+    expect(textOf(buildLogEntryContainers(kick))).toContain("### 👢");
   });
 
   test("member/joinでavatarUrlがあればSectionのThumbnailアクセサリとして添える", () => {

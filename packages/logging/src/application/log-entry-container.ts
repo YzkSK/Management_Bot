@@ -7,7 +7,7 @@ import {
 } from "@management-bot/shared";
 import { ContainerBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import type { LogEntry } from "../domain/index.js";
-import { ACCENT_COLORS, ACCENT_ICONS, getPresentation } from "./log-entry-presentation.js";
+import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
 
 /**
  * Discord送信ではuserName/channelNameの解決テーブルを引く代わりに、常にメンション記法
@@ -102,12 +102,12 @@ function buildMemberJoinFields(entry: LogEntry): string[] {
  */
 export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   const summary = summarizeLogEntry(entry);
-  const { accent, title } = getPresentation(entry);
+  const { accent, title, icon } = getPresentation(entry);
   const description = formatLogMessage(entry, summary, MENTION_NAMES);
 
   const mainContainer = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
-  const headerLines = [`### ${ACCENT_ICONS[accent]} ${title}`, description, `-# ${formatTimestamp(entry.createdAt)}`];
+  const headerLines = [`### ${icon} ${title}`, description, `-# ${formatTimestamp(entry.createdAt)}`];
   const memberJoinFields = buildMemberJoinFields(entry);
   // アバターSectionの右にできる余白を抑えるため、フィールドもヘッダーと同じTextDisplayに含めて高さを稼ぐ。
   const headerText = new TextDisplayBuilder().setContent(

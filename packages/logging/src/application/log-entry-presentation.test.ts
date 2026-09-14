@@ -18,12 +18,13 @@ function actionsOf(category: keyof typeof LOG_ENTRY_SCHEMAS): string[] {
 }
 
 describe("getPresentation", () => {
-  test("auditLogCorrelation以外の全カテゴリ×actionでフォールバックにならない", () => {
+  test("auditLogCorrelation以外の全カテゴリ×actionでフォールバックにならず、個別のiconを持つ", () => {
     for (const category of Object.keys(LOG_ENTRY_SCHEMAS) as (keyof typeof LOG_ENTRY_SCHEMAS)[]) {
       if (category === "auditLogCorrelation") continue;
       for (const action of actionsOf(category)) {
         const presentation = getPresentation({ category, action } as never);
         expect(presentation.title, `${category}/${action}`).not.toBe("ログイベント");
+        expect(presentation.icon, `${category}/${action}`).not.toBe("ℹ️");
       }
     }
   });
@@ -32,6 +33,7 @@ describe("getPresentation", () => {
     expect(getPresentation({ category: "auditLogCorrelation", action: "correlate" } as never)).toEqual({
       accent: "neutral",
       title: "ログイベント",
+      icon: "ℹ️",
     });
   });
 
