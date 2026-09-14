@@ -45,13 +45,24 @@ export class BotClient extends SapphireClient {
       partials: [Partials.Message, Partials.Reaction],
       loadMessageCommandListeners: false,
       // messagesキャッシュは長期稼働で無制限に増え続けるため、古いエントリを定期的に間引く。
+      // intervalをlifetimeと同じにすると、sweep直後に受信したメッセージは
+      // 次のsweepまで残り続け実効保持期間がほぼ2倍になるため、intervalは短くする。
       sweepers: {
-        messages: { interval: 3_600, lifetime: 3_600 },
+        messages: { interval: 300, lifetime: 3_600 },
       },
     });
 
-    this.rest.on("rateLimited", (info) => {
-      console.warn("Discord API rate limited", info);
+    this.rest.on("rateLimited", ({ global, scope, method, hash, limit, retryAfter, timeToReset }) => {
+      // urlはWebhook/InteractionトークンなどRESTルートの機微情報を含みうるため出力しない。
+      console.warn("Discord API rate limited", {
+        global,
+        scope,
+        method,
+        bucket: hash,
+        limit,
+        retryAfterMs: retryAfter,
+        timeToResetMs: timeToReset,
+      });
     });
   }
 

@@ -83,7 +83,9 @@ export class DomainEventBus {
   ) {
     this.consumerName = randomUUID();
     // maxRetriesPerRequestを明示し、Redis障害時に個々のコマンドが無限に
-    // キューイングされ続けるのを防ぐ(BLOCK中のXREADGROUPはこの上限の影響を受けない)。
+    // キューイングされ続けるのを防ぐ。接続断時、BLOCK中のXREADGROUPを含む
+    // 未完了コマンドは再接続後に再送されるが、この回数だけ再接続に失敗すると
+    // MaxRetriesPerRequestErrorで失敗する(runConsumerLoopのcatchで再試行される)。
     this.publisher = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
     this.subscriber = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
   }
