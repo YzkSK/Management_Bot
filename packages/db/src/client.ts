@@ -3,7 +3,10 @@ import postgres from "postgres";
 import * as schema from "./schema/index.js";
 
 export function createDb(databaseUrl: string, options?: { max?: number }) {
-  const client = options?.max === undefined ? postgres(databaseUrl) : postgres(databaseUrl, { max: options.max });
+  if (options?.max !== undefined && (!Number.isInteger(options.max) || options.max < 1)) {
+    throw new RangeError("createDb options.max must be a positive integer");
+  }
+  const client = postgres(databaseUrl, options);
   return {
     db: drizzle(client, { schema }),
     close: () => client.end({ timeout: 5 }),
