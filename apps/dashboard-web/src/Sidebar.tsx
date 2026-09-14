@@ -141,7 +141,10 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
   return (
     <>
       {/* デスクトップ幅では常設。モバイルドロワー(Dialog)と二重表示にならないようhiddenで隠す。 */}
-      <nav aria-label="機能メニュー" className="hidden border-r p-2 md:block md:w-56 md:shrink-0">
+      <nav
+        aria-label="機能メニュー"
+        className="hidden overflow-y-auto border-r p-2 md:block md:w-56 md:shrink-0"
+      >
         <SidebarNav guildId={guildId} guilds={guilds} navigate={navigate} />
       </nav>
       {/*

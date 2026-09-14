@@ -18,12 +18,12 @@ export function Layout({ discordUsername, avatarUrl, onLogout }: LayoutProps) {
 
   return (
     <Dialog open={isSidebarOpen} onOpenChange={setSidebarOpen}>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex h-dvh flex-col overflow-hidden">
         <Toaster richColors position="top-right" />
         <Header discordUsername={discordUsername} avatarUrl={avatarUrl} onLogout={onLogout} isSidebarOpen={isSidebarOpen} />
-        <div className="flex flex-1">
+        <div className="flex min-h-0 flex-1">
           <Sidebar guildId={guildId} open={isSidebarOpen} onOpenChange={setSidebarOpen} />
-          <main className="min-w-0 flex-1 p-4">
+          <main className="min-w-0 flex-1 overflow-y-auto p-4">
             <Outlet />
           </main>
         </div>
