@@ -7,11 +7,9 @@ import { trpc } from "../trpc.js";
 import { CAPABILITY_GROUPS, CAPABILITY_OPTIONS, CAPABILITY_PRESETS } from "./capability-labels.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type TargetType = "user" | "role";
 
@@ -375,105 +373,6 @@ function TargetEditor({
   );
 }
 
-function AllGrantsSection({
-  guildId,
-  grantsWithName,
-  granterCapabilities,
-}: {
-  guildId: string;
-  grantsWithName: readonly { grant: CapabilityGrantData; targetName: string }[];
-  granterCapabilities: number;
-}) {
-  const queryClient = useQueryClient();
-  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
-
-  const bulkRevokeMutation = useMutation({
-    ...trpc.access.bulkRevokeCapabilityGrants.mutationOptions(),
-    onSuccess: async () => {
-      await refreshAccessQueries(queryClient, guildId);
-      setSelectedKeys(new Set());
-    },
-  });
-
-  const selectedTargets = grantsWithName
-    .map(({ grant }) => grant)
-    .filter((grant) => selectedKeys.has(targetKey(grant)));
-
-  return (
-    <details className="flex flex-col gap-3 rounded-lg border p-4" open>
-      <summary className="cursor-pointer text-sm font-semibold">
-        すべての付与状況({grantsWithName.length}件)
-      </summary>
-
-      {selectedTargets.length > 0 && (
-        <div className="bg-muted flex items-center justify-between gap-2 rounded-lg border px-4 py-2">
-          <span className="text-sm font-medium">{selectedTargets.length}件選択中</span>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            disabled={bulkRevokeMutation.isPending}
-            onClick={() =>
-              bulkRevokeMutation.mutate({
-                guildId,
-                targets: selectedTargets.map(({ targetType, targetId }) => ({ targetType, targetId })),
-              })
-            }
-          >
-            選択した権限をまとめて剥奪
-          </Button>
-        </div>
-      )}
-      {bulkRevokeMutation.isError && <p className="text-destructive text-xs">剥奪に失敗しました。</p>}
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead />
-            <TableHead>種類</TableHead>
-            <TableHead>対象</TableHead>
-            <TableHead>権限</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {grantsWithName.map(({ grant, targetName }) => {
-            const key = targetKey(grant);
-            const canRevoke = canGrantCapabilities(granterCapabilities, grant.capabilities);
-            const names = capabilitiesToNames(grant.capabilities);
-            return (
-              <TableRow key={key}>
-                <TableCell>
-                  <Checkbox
-                    checked={selectedKeys.has(key)}
-                    disabled={!canRevoke}
-                    onCheckedChange={(checked) =>
-                      setSelectedKeys((prev) => {
-                        const next = new Set(prev);
-                        if (checked === true) {
-                          next.add(key);
-                        } else {
-                          next.delete(key);
-                        }
-                        return next;
-                      })
-                    }
-                    aria-label={`${targetName}を選択`}
-                  />
-                </TableCell>
-                <TableCell>{grant.targetType === "role" ? "ロール" : "ユーザー"}</TableCell>
-                <TableCell>{targetName}</TableCell>
-                <TableCell>
-                  {names.map((name) => CAPABILITY_OPTIONS.find((o) => o.value === name)?.label).join(", ")}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </details>
-  );
-}
-
 export function AccessPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [selectedTarget, setSelectedTarget] = useState<SidebarTarget | undefined>(undefined);
@@ -541,7 +440,6 @@ export function AccessPage() {
   const granterCapabilities = myCapabilitiesQuery.data.capabilities;
   const grants: readonly CapabilityGrantData[] = grantsQuery.data;
   const grantByKey = new Map(grants.map((grant) => [targetKey(grant), grant.capabilities]));
-  const roleNameById = new Map((roleOptionsQuery.data?.roles ?? []).map((role) => [role.id, role.name]));
 
   // ロールはサーバーに実在する全件(未付与も含む)を、ユーザーは既に付与済みのものだけを一覧に出す
   // (全メンバー一覧はlistMemberOptionsのページングAPIしかなく、サイドバー常設には重いため)。
@@ -559,14 +457,6 @@ export function AccessPage() {
     }));
 
   const activeTarget = selectedTarget ?? roles[0] ?? grantedUsers[0];
-
-  const grantsWithName = grants.map((grant) => ({
-    grant,
-    targetName:
-      grant.targetType === "role"
-        ? (roleNameById.get(grant.targetId) ?? (grant.targetId === guildId ? "@everyone" : grant.targetId))
-        : (targetUserNamesQuery.data?.[grant.targetId] ?? grant.targetId),
-  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -593,8 +483,6 @@ export function AccessPage() {
           <p className="text-muted-foreground text-sm">対象を選択してください。</p>
         )}
       </div>
-
-      <AllGrantsSection guildId={guildId} grantsWithName={grantsWithName} granterCapabilities={granterCapabilities} />
     </div>
   );
 }

@@ -155,7 +155,7 @@ describe("AccessPage", () => {
     expect(html).toContain("ロール・ユーザーを検索");
   });
 
-  test("すべての付与状況の一覧に、種類・対象・権限のチェックボックス付き行が表示される", () => {
+  test("すべての付与状況の一覧は表示しない", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", {
       myCapabilities: CAPABILITIES.MANAGE_ACCESS,
@@ -167,10 +167,7 @@ describe("AccessPage", () => {
 
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("すべての付与状況");
-    expect(html).toContain("user-1-name");
-    expect(html).toContain("Admin");
-    expect(html).toContain('aria-label="user-1-nameを選択"');
+    expect(html).not.toContain("すべての付与状況");
   });
 
   test("必須クエリ(grants/myCapabilities)が未取得の間はlistRoleOptions/resolveTargetUserNamesを発火しない", () => {
