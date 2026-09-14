@@ -2,11 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { Db } from "@management-bot/db";
 import { logChannelSettings, logEntries } from "@management-bot/db";
 import { createTtlCache } from "@management-bot/shared";
+import { ContainerBuilder } from "discord.js";
 import { eq, and } from "drizzle-orm";
 import type { LogEntry } from "../domain/index.js";
+import { buildLogEntryContainer } from "./log-entry-container.js";
 
 export interface ChannelMessage {
-  content: string;
+  /** writeLogEntriesBulkのサマリ通知等、Components V2化していない送信経路が使う旧来のプレーンテキスト。componentsと排他。 */
+  content?: string;
+  /** Components V2 (MessageFlags.IsComponentsV2)で送るコンテナ本体。指定時はcontentを無視する。 */
+  components?: ContainerBuilder[];
   suppressMentions: true;
 }
 
@@ -126,7 +131,7 @@ export async function writeLogEntry(
   if (channelId === null) return;
 
   await sendToChannel(channelId, {
-    content: formatLogEntry(entry),
+    components: [buildLogEntryContainer(entry)],
     suppressMentions: true,
   });
 }

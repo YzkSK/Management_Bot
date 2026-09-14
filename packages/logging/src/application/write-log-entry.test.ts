@@ -4,6 +4,7 @@ import { logChannelSettings, logEntries } from "@management-bot/db";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { LogEntry } from "../domain/index.js";
+import { buildLogEntryContainer } from "./log-entry-container.js";
 import { createChannelSettingResolver, formatLogEntry, writeLogEntriesBulk, writeLogEntry } from "./write-log-entry.js";
 
 const pgDialect = new PgDialect();
@@ -82,7 +83,7 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel }, memberJoinEntry);
 
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
-      content: formatLogEntry(memberJoinEntry),
+      components: [buildLogEntryContainer(memberJoinEntry)],
       suppressMentions: true,
     });
   });
@@ -163,7 +164,7 @@ describe("writeLogEntry", () => {
 
     expect(getChannelId).toHaveBeenCalledWith("g1", "member");
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
-      content: formatLogEntry(memberJoinEntry),
+      components: [buildLogEntryContainer(memberJoinEntry)],
       suppressMentions: true,
     });
   });

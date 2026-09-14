@@ -120,5 +120,6 @@ const PRESENTATION: { [C in LogEntry["category"]]?: Partial<Record<string, { acc
 const FALLBACK = { accent: "neutral" as const, title: "ログイベント" };
 
 export function getPresentation(entry: LogEntry): { accent: AccentKind; title: string } {
+  if (entry.category === "auditLogCorrelation") return FALLBACK;
   return PRESENTATION[entry.category]?.[entry.action] ?? FALLBACK;
 }
