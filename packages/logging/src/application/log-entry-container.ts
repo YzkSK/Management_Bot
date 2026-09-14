@@ -35,6 +35,14 @@ function formatField(label: string, value: string): string {
 }
 
 /**
+ * entry.createdAtをDiscordのタイムスタンプ記法(<t:unix:f>)に変換する。クライアント側が
+ * 閲覧者のタイムゾーン・言語設定に合わせて「2026年8月31日 9:00」のような形式に自動整形する。
+ */
+function formatTimestamp(createdAt: string): string {
+  return `<t:${Math.floor(new Date(createdAt).getTime() / 1000)}:f>`;
+}
+
+/**
  * 複数フィールドを1つのsubtext行に横並びさせる(モックアップの2カラムグリッド相当)。
  * Components V2にtableやinlineフィールドは無いため、ラベル行・値行をそれぞれ全角スペース区切りで
  * 1行にまとめる疑似横並び表現にする。
@@ -99,7 +107,7 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
 
   const mainContainer = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
-  const headerLines = [`### ${ACCENT_ICONS[accent]} ${title}`, description];
+  const headerLines = [`### ${ACCENT_ICONS[accent]} ${title}`, description, `-# ${formatTimestamp(entry.createdAt)}`];
   const memberJoinFields = buildMemberJoinFields(entry);
   // アバターSectionの右にできる余白を抑えるため、フィールドもヘッダーと同じTextDisplayに含めて高さを稼ぐ。
   const headerText = new TextDisplayBuilder().setContent(

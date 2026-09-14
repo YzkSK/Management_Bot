@@ -60,6 +60,19 @@ describe("buildLogEntryContainers", () => {
     expect(text).toContain("<@u1> がサーバーに参加しました");
   });
 
+  test("ヘッダーにentry.createdAtのDiscordタイムスタンプ記法(<t:unix:f>)を含む", () => {
+    const entry: LogEntry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-08-31T12:34:56.000Z",
+      userId: "u1",
+      action: "join",
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    const expectedUnix = Math.floor(new Date("2026-08-31T12:34:56.000Z").getTime() / 1000);
+    expect(text).toContain(`-# <t:${expectedUnix}:f>`);
+  });
+
   test("member/join かつ isRejoin=trueなら赤アクセントの警告Containerを別途追加する", () => {
     const entry: LogEntry = {
       category: "member",
