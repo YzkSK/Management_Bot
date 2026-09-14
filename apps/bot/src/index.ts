@@ -1,8 +1,20 @@
+import { createRequire } from "node:module";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
 import { buildInviteUrl, mapWithConcurrency } from "@management-bot/shared";
 import { FEATURES } from "./features.js";
+
+const getReleaseVersion = (): string => {
+  try {
+    const manifest = createRequire(import.meta.url)("../../../package.json") as { version?: unknown };
+    return typeof manifest.version === "string" && manifest.version !== "" ? manifest.version : "unknown";
+  } catch (error) {
+    console.warn("Failed to read release version", error);
+    return "unknown";
+  }
+};
+const RELEASE_VERSION = getReleaseVersion();
 
 /**
  * 起動時に多数のguildへ同時にonboardGuild(3 INSERTのトランザクション)を実行すると
@@ -18,6 +30,8 @@ const botEnvSchema = envSchema.pick({
 });
 
 const env = parseEnv(botEnvSchema);
+
+console.info(`Starting bot v${RELEASE_VERSION}`);
 
 const { db, close } = createDb(env.DATABASE_URL);
 const client = new BotClient();
