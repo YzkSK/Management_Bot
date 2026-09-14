@@ -58,6 +58,11 @@ function SidebarNav({
                 key={guild.id}
                 value={guild.id}
                 className={!guild.canViewLogs ? "text-muted-foreground opacity-50" : undefined}
+                onClick={() => {
+                  // 現在選択中のguildを再選択した場合、Radix SelectはonValueChangeを発火しない。
+                  // その場合もドロワーは閉じるべきなのでここで明示的に処理する。
+                  if (guild.id === guildId && guild.canViewLogs) onNavigate?.();
+                }}
               >
                 {guild.name}
                 {!guild.canViewLogs && "(権限なし)"}
@@ -132,7 +137,6 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
       */}
       {open && (
         <DialogContent
-          onOpenAutoFocus={(e) => e.preventDefault()}
           className="top-14 left-0 h-[calc(100dvh-3.5rem)] w-64 translate-x-0 translate-y-0 overflow-y-auto border-r p-2 md:hidden"
           aria-label="機能メニュー"
         >
