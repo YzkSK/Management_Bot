@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# release bot自身のversion bump pushによる再実行を防ぐ(将来PAT/GitHub Appに切り替えた場合の無限ループ対策)。
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Determine release version
+        id: version
+        run: |
+          set -euo pipefail
+          pkg_version=$(node -p "require('./package.json').version")
+
+          if ! [[ "$pkg_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::package.jsonのversionはMAJOR.MINOR.PATCH形式である必要があります: $pkg_version"
+            exit 1
+          fi
+
+          if git rev-parse --verify --quiet "refs/tags/v${pkg_version}^{commit}" >/dev/null; then
+            # package.jsonのversionが前回リリース済み(=手動で節目バージョンに更新されていない)なら、patchを自動で+1する
+            IFS='.' read -r major minor patch <<< "$pkg_version"
+            new_version="${major}.${minor}.$((patch + 1))"
+
+            node -e '
+              const fs = require("node:fs");
+              const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+              pkg.version = process.argv[1];
+              fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+            ' "$new_version"
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore: bump version to ${new_version}"
+
+            # 待機中にmainが進んでいた場合はrebaseしてからpushする(non-fast-forward対策)。
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+
+            echo "version=${new_version}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${pkg_version}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists, skipping."
+            exit 0
+          fi
+
+          gh release create "$tag" \
+            --target main \
+            --title "$tag" \
+            --generate-notes
