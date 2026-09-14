@@ -44,6 +44,14 @@ export class BotClient extends SapphireClient {
        */
       partials: [Partials.Message, Partials.Reaction],
       loadMessageCommandListeners: false,
+      // messagesキャッシュは長期稼働で無制限に増え続けるため、古いエントリを定期的に間引く。
+      sweepers: {
+        messages: { interval: 3_600, lifetime: 3_600 },
+      },
+    });
+
+    this.rest.on("rateLimited", (info) => {
+      console.warn("Discord API rate limited", info);
     });
   }
 
