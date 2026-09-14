@@ -61,27 +61,29 @@ describe("AccessPage", () => {
     expect(html).toContain("読み込み中");
   });
 
-  test("取得成功時はgrant一覧を種類・対象・権限で描画する", () => {
+  test("取得成功時はサイドバーに全ロールと付与済みユーザーを表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", {
       myCapabilities: CAPABILITIES.MANAGE_ACCESS,
       grants: [
         { id: "grant-1", targetType: "user", targetId: "user-1", capabilities: CAPABILITIES.MANAGE_ACCESS },
-        { id: "grant-2", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.VIEW_LOGS },
+        { id: "grant-2", targetType: "role", targetId: "r1", capabilities: CAPABILITIES.VIEW_LOGS },
       ],
     });
 
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("user-1-name");
+    // ロールは未付与のものも含め全件(listRoleOptions由来)表示する。
     expect(html).toContain("@everyone");
-    expect(html).toContain(CAPABILITY_LABELS.MANAGE_ACCESS);
-    expect(html).toContain(CAPABILITY_LABELS.VIEW_LOGS);
+    expect(html).toContain("Admin");
+    // ユーザーは付与済みのもの(grantsWithName由来)のみ表示する。
+    expect(html).toContain("user-1-name");
   });
 
   test("targetNameが解決できないuserはtargetIdをそのまま表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
       grants: [{ id: "grant-1", targetType: "user", targetId: "unknown-user", capabilities: CAPABILITIES.VIEW_LOGS }],
     });
 
@@ -90,34 +92,37 @@ describe("AccessPage", () => {
     expect(html).toContain("unknown-user");
   });
 
+  test("初期選択は先頭のロールで、権限タブにそのロールの権限グループが描画される", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("@everyone を編集");
+    expect(html).toContain(CAPABILITY_LABELS.VIEW_LOGS);
+  });
+
   test("getMyCapabilitiesが保有するcapabilityのスイッチは有効、保有しないものはdisabledになる", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.MANAGE_ACCESS }],
+    });
 
     const html = renderPage("g1", queryClient);
 
     const manageAccessLabelIndex = html.indexOf(CAPABILITY_LABELS.MANAGE_ACCESS);
-    const manageAccessSwitchStart = html.lastIndexOf('role="switch"', manageAccessLabelIndex);
+    const manageAccessSwitchStart = html.indexOf('role="switch"', manageAccessLabelIndex);
     const manageAccessSwitchEnd = html.indexOf(">", manageAccessSwitchStart);
     expect(html.slice(manageAccessSwitchStart, manageAccessSwitchEnd)).not.toContain('disabled=""');
 
     const viewLogsLabelIndex = html.indexOf(CAPABILITY_LABELS.VIEW_LOGS);
-    const viewLogsSwitchStart = html.lastIndexOf('role="switch"', viewLogsLabelIndex);
+    const viewLogsSwitchStart = html.indexOf('role="switch"', viewLogsLabelIndex);
     const viewLogsSwitchEnd = html.indexOf(">", viewLogsSwitchStart);
     expect(html.slice(viewLogsSwitchStart, viewLogsSwitchEnd)).toContain(`disabled=""`);
-  });
-
-  test("role経由でcapabilityを持つ場合もgetMyCapabilitiesの値どおりスイッチが有効になる(オーナー・role付与の反映)", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    // 直接grantは無いが、getMyCapabilitiesはrole経由で計算済みの値を返す想定。
-    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS });
-
-    const html = renderPage("g1", queryClient);
-
-    const viewLogsLabelIndex = html.indexOf(CAPABILITY_LABELS.VIEW_LOGS);
-    const viewLogsSwitchStart = html.lastIndexOf('role="switch"', viewLogsLabelIndex);
-    const viewLogsSwitchEnd = html.indexOf(">", viewLogsSwitchStart);
-    expect(html.slice(viewLogsSwitchStart, viewLogsSwitchEnd)).not.toContain(`disabled=""`);
   });
 
   test("自分自身が保有capabilities=0の場合は全スイッチをdisabledにする", () => {
@@ -126,10 +131,46 @@ describe("AccessPage", () => {
 
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("権限の付与・更新");
     const switchIndex = html.indexOf('role="switch"');
     const switchTagEnd = html.indexOf(">", switchIndex);
     expect(html.slice(switchIndex, switchTagEnd)).toContain(`disabled=""`);
+  });
+
+  test("権限プリセットのボタンが表示される", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("モデレーター");
+    expect(html).toContain("フル管理者");
+  });
+
+  test("サイドバーの検索ボックスが表示される", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("ロール・ユーザーを検索");
+  });
+
+  test("すべての付与状況の一覧に、種類・対象・権限のチェックボックス付き行が表示される", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [
+        { id: "grant-1", targetType: "user", targetId: "user-1", capabilities: CAPABILITIES.MANAGE_ACCESS },
+        { id: "grant-2", targetType: "role", targetId: "r1", capabilities: CAPABILITIES.VIEW_LOGS },
+      ],
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("すべての付与状況");
+    expect(html).toContain("user-1-name");
+    expect(html).toContain("Admin");
+    expect(html).toContain('aria-label="user-1-nameを選択"');
   });
 
   test("必須クエリ(grants/myCapabilities)が未取得の間はlistRoleOptions/resolveTargetUserNamesを発火しない", () => {
