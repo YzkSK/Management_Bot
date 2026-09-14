@@ -34,6 +34,17 @@ function formatField(label: string, value: string): string {
   return `-# ${label}\n${value}`;
 }
 
+/**
+ * 複数フィールドを1つのsubtext行に横並びさせる(モックアップの2カラムグリッド相当)。
+ * Components V2にtableやinlineフィールドは無いため、ラベル行・値行をそれぞれ全角スペース区切りで
+ * 1行にまとめる疑似横並び表現にする。
+ */
+function formatFieldsRow(fields: readonly { label: string; value: string }[]): string {
+  const labels = fields.map((f) => f.label).join("　　");
+  const values = fields.map((f) => f.value).join("　　");
+  return `-# ${labels}\n${values}`;
+}
+
 function formatChangesLine(field: string, change: { before: unknown; after: unknown }): string {
   const label = CHANGE_FIELD_LABELS[field] ?? field;
   if (field === "permissions" && typeof change.before === "string" && typeof change.after === "string") {
@@ -51,57 +62,59 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
   return formatField(label, `−${before} → +${after}`);
 }
 
-/** 警告バッジ(再入室・モデレーション履歴)。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
+/** 警告バッジ(再入室・モデレーション履歴)の本文行。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
 function buildWarningLines(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const lines: string[] = [];
-  if (entry.hasModerationHistory) lines.push("> ⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
-  if (entry.isRejoin) lines.push("> 🔁 **再入室です**");
+  if (entry.hasModerationHistory) lines.push("⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
+  if (entry.isRejoin) lines.push("🔁 **再入室です**");
   return lines;
 }
 
-/** account作成日等、member/joinカード限定のフィールド。 */
+/** account作成日・ユーザーID等、member/joinカード限定のフィールド。モックアップに合わせ横並び1行にまとめる。 */
 function buildMemberJoinFields(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
-  const fields: string[] = [];
+  const fields: { label: string; value: string }[] = [];
   if (entry.accountCreatedAt) {
     const createdAt = new Date(entry.accountCreatedAt);
     const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
-    fields.push(formatField("アカウント作成日", `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)`));
+    fields.push({ label: "アカウント作成日", value: `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)` });
   }
-  fields.push(formatField("ユーザーID", entry.userId));
-  return fields;
+  fields.push({ label: "ユーザーID", value: entry.userId });
+  return [formatFieldsRow(fields)];
 }
 
 /**
- * LogEntryをComponents V2のContainer 1件に整形する。channel.send側でMessageFlags.IsComponentsV2を
+ * LogEntryをComponents V2のContainer群に整形する。channel.send側でMessageFlags.IsComponentsV2を
  * 付与すること(このBuilder単体ではフラグは持たない)。
+ *
+ * member/joinで警告(再入室・モデレーション履歴)がある場合、赤アクセントの別Containerとして
+ * メインカードの下に追加する(codexレビュー指摘: 引用ブロックのみでは警告の緊急性が伝わりにくい)。
+ * Discordは1メッセージに複数のtop-level components(Container)を並べられる。
  */
-export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
+export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   const summary = summarizeLogEntry(entry);
   const { accent, title } = getPresentation(entry);
   const description = formatLogMessage(entry, summary, MENTION_NAMES);
 
-  const container = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
+  const mainContainer = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
   const headerLines = [`### ${ACCENT_ICONS[accent]} ${title}`, description];
-  const headerText = new TextDisplayBuilder().setContent(fitTextDisplay(headerLines.join("\n")));
+  const memberJoinFields = buildMemberJoinFields(entry);
+  // アバターSectionの右にできる余白を抑えるため、フィールドもヘッダーと同じTextDisplayに含めて高さを稼ぐ。
+  const headerText = new TextDisplayBuilder().setContent(
+    fitTextDisplay([...headerLines, ...memberJoinFields].join("\n\n")),
+  );
 
-  // member/joinはアバターをサムネイルとして右側に添える(モックアップ準拠)。それ以外のカテゴリはヘッダーのみ。
   const avatarUrl = entry.category === "member" && entry.action === "join" ? entry.avatarUrl : undefined;
   if (avatarUrl) {
-    container.addSectionComponents((section) =>
+    mainContainer.addSectionComponents((section) =>
       section
         .addTextDisplayComponents(headerText)
         .setThumbnailAccessory((thumbnail) => thumbnail.setURL(avatarUrl)),
     );
   } else {
-    container.addTextDisplayComponents(headerText);
-  }
-
-  const warnings = buildWarningLines(entry);
-  if (warnings.length > 0) {
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(warnings.join("\n"))));
+    mainContainer.addTextDisplayComponents(headerText);
   }
 
   const bodyLines: string[] = [];
@@ -116,7 +129,7 @@ export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
       ),
     );
   }
-  bodyLines.push(...buildMemberJoinFields(entry));
+  if (avatarUrl === undefined) bodyLines.push(...memberJoinFields);
   if (summary.changes !== null) {
     for (const [field, change] of Object.entries(summary.changes)) {
       bodyLines.push(formatChangesLine(field, change));
@@ -127,9 +140,19 @@ export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
   }
 
   if (bodyLines.length > 0) {
-    container.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
+    mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
+    mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
   }
 
-  return container;
+  const containers = [mainContainer];
+
+  const warningLines = buildWarningLines(entry);
+  if (warningLines.length > 0) {
+    const warningContainer = new ContainerBuilder()
+      .setAccentColor(ACCENT_COLORS.negative)
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(warningLines.join("\n"))));
+    containers.push(warningContainer);
+  }
+
+  return containers;
 }

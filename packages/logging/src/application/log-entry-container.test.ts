@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LogEntry } from "../domain/index.js";
-import { buildLogEntryContainer } from "./log-entry-container.js";
+import { buildLogEntryContainers } from "./log-entry-container.js";
 import { ACCENT_COLORS } from "./log-entry-presentation.js";
 
 interface TextDisplayJSON {
@@ -8,33 +8,43 @@ interface TextDisplayJSON {
   content: string;
 }
 
+type ContainerJSON = ReturnType<ReturnType<typeof buildLogEntryContainers>[number]["toJSON"]>;
+
 /** TextDisplayはContainer直下だけでなくSection(アバター付きヘッダー)の中にも入り得るため、両方から集める。 */
-function textOf(container: ReturnType<typeof buildLogEntryContainer>): string {
+function textOf(containers: ReturnType<typeof buildLogEntryContainers>): string {
   const texts: string[] = [];
-  for (const component of container.toJSON().components) {
-    if (component.type === 10) {
-      texts.push((component as TextDisplayJSON).content);
-    } else if (component.type === 9) {
-      const section = component as { components: TextDisplayJSON[] };
-      texts.push(...section.components.map((c) => c.content));
+  for (const container of containers) {
+    for (const component of container.toJSON().components) {
+      if (component.type === 10) {
+        texts.push((component as TextDisplayJSON).content);
+      } else if (component.type === 9) {
+        const section = component as { components: TextDisplayJSON[] };
+        texts.push(...section.components.map((c) => c.content));
+      }
     }
   }
   return texts.join("\n---\n");
 }
 
-function allTextDisplayContents(container: ReturnType<typeof buildLogEntryContainer>): string[] {
+function allTextDisplayContents(containers: ReturnType<typeof buildLogEntryContainers>): string[] {
   const contents: string[] = [];
-  for (const component of container.toJSON().components) {
-    if (component.type === 10) contents.push((component as TextDisplayJSON).content);
-    else if (component.type === 9) {
-      contents.push(...(component as { components: TextDisplayJSON[] }).components.map((c) => c.content));
+  for (const container of containers) {
+    for (const component of container.toJSON().components) {
+      if (component.type === 10) contents.push((component as TextDisplayJSON).content);
+      else if (component.type === 9) {
+        contents.push(...(component as { components: TextDisplayJSON[] }).components.map((c) => c.content));
+      }
     }
   }
   return contents;
 }
 
-describe("buildLogEntryContainer", () => {
-  test("member/joinはpositiveアクセントでタイトル・説明文を含む", () => {
+function mainContainerOf(containers: ReturnType<typeof buildLogEntryContainers>): ContainerJSON {
+  return containers[0]!.toJSON();
+}
+
+describe("buildLogEntryContainers", () => {
+  test("member/joinはメインContainerがpositiveアクセントでタイトル・説明文を含む", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -43,14 +53,14 @@ describe("buildLogEntryContainer", () => {
       userName: "たろう",
       action: "join",
     };
-    const container = buildLogEntryContainer(entry);
-    expect(container.toJSON().accent_color).toBe(ACCENT_COLORS.positive);
-    const text = textOf(container);
+    const containers = buildLogEntryContainers(entry);
+    expect(mainContainerOf(containers).accent_color).toBe(ACCENT_COLORS.positive);
+    const text = textOf(containers);
     expect(text).toContain("ユーザーが参加しました");
     expect(text).toContain("<@u1> がサーバーに参加しました");
   });
 
-  test("member/join かつ isRejoin=trueなら再入室の警告行を含む", () => {
+  test("member/join かつ isRejoin=trueなら赤アクセントの警告Containerを別途追加する", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -59,10 +69,13 @@ describe("buildLogEntryContainer", () => {
       action: "join",
       isRejoin: true,
     };
-    expect(textOf(buildLogEntryContainer(entry))).toContain("再入室");
+    const containers = buildLogEntryContainers(entry);
+    expect(containers).toHaveLength(2);
+    expect(containers[1]!.toJSON().accent_color).toBe(ACCENT_COLORS.negative);
+    expect(textOf(containers)).toContain("再入室");
   });
 
-  test("member/join かつ hasModerationHistory=trueならモデレーション履歴の警告行を含む", () => {
+  test("member/join かつ hasModerationHistory=trueなら警告Containerにモデレーション履歴の文言を含む", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -71,10 +84,29 @@ describe("buildLogEntryContainer", () => {
       action: "join",
       hasModerationHistory: true,
     };
-    expect(textOf(buildLogEntryContainer(entry))).toContain("モデレーション対応");
+    const containers = buildLogEntryContainers(entry);
+    expect(containers).toHaveLength(2);
+    expect(textOf(containers)).toContain("モデレーション対応");
   });
 
-  test("警告フラグがfalse/undefinedなら警告行を含まない", () => {
+  test("isRejoin/hasModerationHistory両方trueなら1つの警告Containerに両方の文言を含む", () => {
+    const entry: LogEntry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      userId: "u1",
+      action: "join",
+      isRejoin: true,
+      hasModerationHistory: true,
+    };
+    const containers = buildLogEntryContainers(entry);
+    expect(containers).toHaveLength(2);
+    const text = textOf(containers);
+    expect(text).toContain("⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
+    expect(text).toContain("🔁 **再入室です**");
+  });
+
+  test("警告フラグがfalse/undefinedなら警告Containerを追加しない", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -82,12 +114,11 @@ describe("buildLogEntryContainer", () => {
       userId: "u1",
       action: "join",
     };
-    const text = textOf(buildLogEntryContainer(entry));
-    expect(text).not.toContain("再入室");
-    expect(text).not.toContain("モデレーション対応");
+    const containers = buildLogEntryContainers(entry);
+    expect(containers).toHaveLength(1);
   });
 
-  test("member/leaveはnegativeアクセントになる", () => {
+  test("member/leave等join以外のactionでは警告Containerを作らない", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -95,7 +126,9 @@ describe("buildLogEntryContainer", () => {
       userId: "u1",
       action: "leave",
     };
-    expect(buildLogEntryContainer(entry).toJSON().accent_color).toBe(ACCENT_COLORS.negative);
+    const containers = buildLogEntryContainers(entry);
+    expect(containers).toHaveLength(1);
+    expect(mainContainerOf(containers).accent_color).toBe(ACCENT_COLORS.negative);
   });
 
   test("messageカテゴリの説明文はチャンネルメンション(<#channelId>)を含む(どこで発生したか分かるように)", () => {
@@ -108,7 +141,7 @@ describe("buildLogEntryContainer", () => {
       action: "create",
       content: "こんにちは",
     };
-    const text = textOf(buildLogEntryContainer(entry));
+    const text = textOf(buildLogEntryContainers(entry));
     expect(text).toContain("<#c1>");
     expect(text).toContain("<@u1>");
   });
@@ -123,7 +156,7 @@ describe("buildLogEntryContainer", () => {
       action: "delete",
       content: "こんにちは",
     };
-    const text = textOf(buildLogEntryContainer(entry));
+    const text = textOf(buildLogEntryContainers(entry));
     expect(text).toContain("> こんにちは");
   });
 
@@ -137,7 +170,7 @@ describe("buildLogEntryContainer", () => {
       action: "delete",
       attachments: [{ url: "https://cdn.example.com/a.png", filename: "a.png" }],
     };
-    const text = textOf(buildLogEntryContainer(entry));
+    const text = textOf(buildLogEntryContainers(entry));
     expect(text).toContain("[a.png](https://cdn.example.com/a.png)");
   });
 
@@ -150,7 +183,7 @@ describe("buildLogEntryContainer", () => {
       action: "update",
       changes: { permissions: { before: "0", after: (1n << 5n).toString() } },
     };
-    const text = textOf(buildLogEntryContainer(entry));
+    const text = textOf(buildLogEntryContainers(entry));
     expect(text).toContain("+サーバーの管理");
   });
 
@@ -163,7 +196,7 @@ describe("buildLogEntryContainer", () => {
       action: "update",
       changes: { color: { before: 16711680, after: 65280 } },
     };
-    const text = textOf(buildLogEntryContainer(entry));
+    const text = textOf(buildLogEntryContainers(entry));
     expect(text).toContain("-# 色\n−16711680 → +65280");
   });
 
@@ -177,12 +210,11 @@ describe("buildLogEntryContainer", () => {
       action: "delete",
       content: "x".repeat(5_000),
     };
-    const container = buildLogEntryContainer(entry);
-    for (const content of allTextDisplayContents(container)) {
+    const containers = buildLogEntryContainers(entry);
+    for (const content of allTextDisplayContents(containers)) {
       expect(content.length).toBeLessThanOrEqual(4_000);
     }
-    const text = textOf(container);
-    expect(text).toContain("(省略)");
+    expect(textOf(containers)).toContain("(省略)");
   });
 
   test("改行を大量に含む長文でも切り詰め後に上限を超えない", () => {
@@ -195,8 +227,8 @@ describe("buildLogEntryContainer", () => {
       action: "delete",
       content: "line\n".repeat(2_000),
     };
-    const container = buildLogEntryContainer(entry);
-    for (const content of allTextDisplayContents(container)) {
+    const containers = buildLogEntryContainers(entry);
+    for (const content of allTextDisplayContents(containers)) {
       expect(content.length).toBeLessThanOrEqual(4_000);
     }
   });
@@ -210,8 +242,8 @@ describe("buildLogEntryContainer", () => {
       action: "join",
     };
     const negative: LogEntry = { ...positive, action: "ban" };
-    expect(textOf(buildLogEntryContainer(positive))).toContain("### ✅");
-    expect(textOf(buildLogEntryContainer(negative))).toContain("### 🗑️");
+    expect(textOf(buildLogEntryContainers(positive))).toContain("### ✅");
+    expect(textOf(buildLogEntryContainers(negative))).toContain("### 🗑️");
   });
 
   test("member/joinでavatarUrlがあればSectionのThumbnailアクセサリとして添える", () => {
@@ -223,7 +255,7 @@ describe("buildLogEntryContainer", () => {
       action: "join",
       avatarUrl: "https://cdn.example.com/avatar.png",
     };
-    const components = buildLogEntryContainer(entry).toJSON().components;
+    const components = mainContainerOf(buildLogEntryContainers(entry)).components;
     const section = components.find((c) => c.type === 9) as
       | { type: 9; accessory: { media: { url: string } } }
       | undefined;
@@ -239,7 +271,7 @@ describe("buildLogEntryContainer", () => {
       userId: "u1",
       action: "join",
     };
-    const components = buildLogEntryContainer(entry).toJSON().components;
+    const components = mainContainerOf(buildLogEntryContainers(entry)).components;
     expect(components.some((c) => c.type === 9)).toBe(false);
   });
 
@@ -251,11 +283,11 @@ describe("buildLogEntryContainer", () => {
       userId: "u1",
       action: "leave",
     };
-    const components = buildLogEntryContainer(entry).toJSON().components;
+    const components = mainContainerOf(buildLogEntryContainers(entry)).components;
     expect(components.some((c) => c.type === 9)).toBe(false);
   });
 
-  test("member/joinはアカウント作成日・ユーザーIDのフィールドを含む", () => {
+  test("member/joinはアカウント作成日・ユーザーIDを同じ行に横並びで含む", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -264,24 +296,9 @@ describe("buildLogEntryContainer", () => {
       action: "join",
       accountCreatedAt: "2020-01-01T00:00:00.000Z",
     };
-    const text = textOf(buildLogEntryContainer(entry));
-    expect(text).toContain("-# アカウント作成日");
-    expect(text).toContain("-# ユーザーID\nu1");
-  });
-
-  test("警告バッジは引用ブロックと太字で目立たせる", () => {
-    const entry: LogEntry = {
-      category: "member",
-      guildId: "g1",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      userId: "u1",
-      action: "join",
-      isRejoin: true,
-      hasModerationHistory: true,
-    };
-    const text = textOf(buildLogEntryContainer(entry));
-    expect(text).toContain("> ⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
-    expect(text).toContain("> 🔁 **再入室です**");
+    const text = textOf(buildLogEntryContainers(entry));
+    expect(text).toContain("-# アカウント作成日　　ユーザーID");
+    expect(text).toMatch(/<t:\d+:D>\(\d+日前\)　　u1/);
   });
 
   test("auditLogCorrelationはneutralアクセントかつフォールバックタイトルにならない(専用扱い)", () => {
@@ -292,6 +309,6 @@ describe("buildLogEntryContainer", () => {
       auditLogEntryId: "a1",
       actionType: "ChannelDelete",
     };
-    expect(buildLogEntryContainer(entry).toJSON().accent_color).toBe(ACCENT_COLORS.neutral);
+    expect(mainContainerOf(buildLogEntryContainers(entry)).accent_color).toBe(ACCENT_COLORS.neutral);
   });
 });

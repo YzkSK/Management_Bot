@@ -5,7 +5,7 @@ import { createTtlCache } from "@management-bot/shared";
 import { ContainerBuilder } from "discord.js";
 import { eq, and } from "drizzle-orm";
 import type { LogEntry } from "../domain/index.js";
-import { buildLogEntryContainer } from "./log-entry-container.js";
+import { buildLogEntryContainers } from "./log-entry-container.js";
 
 export interface ChannelMessage {
   /** writeLogEntriesBulkのサマリ通知等、Components V2化していない送信経路が使う旧来のプレーンテキスト。componentsと排他。 */
@@ -131,7 +131,7 @@ export async function writeLogEntry(
   if (channelId === null) return;
 
   await sendToChannel(channelId, {
-    components: [buildLogEntryContainer(entry)],
+    components: buildLogEntryContainers(entry),
     suppressMentions: true,
   });
 }
