@@ -6,6 +6,7 @@ import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
+type MessageAttachments = Extract<LogEntry, { category: "message" }>["attachments"];
 
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
@@ -31,6 +32,16 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  */
 function isThreadStarterMessage(message: AnyMessage): boolean {
   return message.id === message.channelId;
+}
+
+/** 添付ファイルの実体は保存せずDiscord CDNのURL・ファイル名・content typeのみ抽出する(ストレージ節約)。 */
+function toAttachments(message: AnyMessage): MessageAttachments {
+  if (message.attachments.size === 0) return undefined;
+  return message.attachments.map((attachment) => ({
+    url: attachment.url,
+    filename: attachment.name,
+    contentType: attachment.contentType ?? undefined,
+  }));
 }
 
 function baseFields(
@@ -68,6 +79,7 @@ export function toMessageCreateLogEntry(
     createdAt: message.createdAt.toISOString(),
     action: "create",
     content: message.content || undefined,
+    attachments: toAttachments(message),
   };
 }
 
@@ -92,6 +104,7 @@ export function toMessageUpdateLogEntry(
     action: "update",
     content: newMessage.content || undefined,
     previousContent: oldMessage.content,
+    attachments: toAttachments(newMessage),
   };
 }
 
@@ -126,6 +139,7 @@ export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string |
     createdAt: new Date().toISOString(),
     action: "delete",
     content: message.content || undefined,
+    attachments: toAttachments(message),
   };
 }
 
@@ -138,7 +152,14 @@ export function toMessageBulkDeleteLogEntries(
   for (const message of messages.values()) {
     const base = baseFields(message, botUserId);
     if (!base) continue;
-    entries.push({ category: "message", ...base, createdAt, action: "bulkDelete", content: message.content || undefined });
+    entries.push({
+      category: "message",
+      ...base,
+      createdAt,
+      action: "bulkDelete",
+      content: message.content || undefined,
+      attachments: toAttachments(message),
+    });
   }
   return entries;
 }

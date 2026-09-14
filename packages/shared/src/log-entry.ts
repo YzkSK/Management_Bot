@@ -24,6 +24,16 @@ const base = {
   actorIsBot: z.boolean().optional(),
 };
 
+/**
+ * 添付ファイルの実体は保存せずDiscord CDNのURLのみ保持する(ストレージ節約、Oracle Cloud A1 Flexの限られた容量を考慮)。
+ * DiscordのCDN URLは一定期間・メッセージ削除後に失効しうるが、直近ログの確認用途としては許容する。
+ */
+const messageAttachmentSchema = z.object({
+  url: z.url(),
+  filename: z.string(),
+  contentType: z.string().optional(),
+});
+
 export const messageLogEntrySchema = z.object({
   ...base,
   category: z.literal("message"),
@@ -37,6 +47,8 @@ export const messageLogEntrySchema = z.object({
   previousContent: z.string().optional().meta({ sensitive: true }),
   /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
+  /** create/update/delete/bulkDeleteで添付ファイルがある場合のみ設定する。 */
+  attachments: z.array(messageAttachmentSchema).optional(),
 });
 
 export const reactionLogEntrySchema = z.object({

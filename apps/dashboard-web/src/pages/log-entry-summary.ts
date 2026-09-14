@@ -5,6 +5,12 @@ export interface LogEntryFieldChange {
   after: string | number | boolean | null;
 }
 
+export interface LogEntryAttachment {
+  url: string;
+  filename: string;
+  contentType?: string;
+}
+
 export interface LogEntrySummary {
   category: string;
   createdAt: string;
@@ -21,6 +27,8 @@ export interface LogEntrySummary {
   previousContent: string | null;
   /** action=updateのフィールドごとの変更前後(role)。対象外カテゴリ・差分なしではnull。 */
   changes: Record<string, LogEntryFieldChange> | null;
+  /** メッセージの添付ファイル(message)。対象外カテゴリ・添付なしではnull。 */
+  attachments: LogEntryAttachment[] | null;
   /** 上記以外のcategory固有フィールド。一覧では隠し、詳細展開時のみJSONで描画する。 */
   details: Record<string, unknown>;
 }
@@ -38,6 +46,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
   let content: string | null = null;
   let previousContent: string | null = null;
   let changes: Record<string, LogEntryFieldChange> | null = null;
+  let attachments: LogEntryAttachment[] | null = null;
   for (const [key, value] of Object.entries(entry)) {
     if (key === "action" && typeof value === "string") {
       action = value;
@@ -55,6 +64,10 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
       changes = value as Record<string, LogEntryFieldChange>;
       continue;
     }
+    if (key === "attachments" && Array.isArray(value)) {
+      attachments = value as LogEntryAttachment[];
+      continue;
+    }
     if (!BASE_FIELDS.has(key) && key !== subjectField) {
       details[key] = value;
     }
@@ -69,6 +82,7 @@ export function summarizeLogEntry(entry: LogEntry): LogEntrySummary {
     content,
     previousContent,
     changes,
+    attachments,
     details,
   };
 }

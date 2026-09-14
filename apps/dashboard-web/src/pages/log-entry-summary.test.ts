@@ -26,6 +26,7 @@ describe("summarizeLogEntry", () => {
       content: null,
       previousContent: null,
       changes: null,
+      attachments: null,
       details: { channelId: "c1", authorId: "a1" },
     });
   });
@@ -170,6 +171,37 @@ describe("summarizeLogEntry", () => {
     const summary = summarizeLogEntry(entry);
     expect(summary.changes).toEqual({ name: { before: "old", after: "new" } });
     expect(summary.details).toEqual({ roleId: "r1" });
+  });
+
+  test("attachmentsはdetailsに埋めずそのまま取り出す", () => {
+    const entry = {
+      category: "message",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      channelId: "c1",
+      authorId: "a1",
+      action: "create",
+      attachments: [{ url: "https://cdn.discordapp.com/x.png", filename: "x.png", contentType: "image/png" }],
+    } as unknown as LogEntry;
+
+    const summary = summarizeLogEntry(entry);
+    expect(summary.attachments).toEqual([
+      { url: "https://cdn.discordapp.com/x.png", filename: "x.png", contentType: "image/png" },
+    ]);
+    expect(summary.details).toEqual({ channelId: "c1" });
+  });
+
+  test("attachments未設定の場合はnullになる", () => {
+    const entry = {
+      category: "message",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      guildId: "g1",
+      channelId: "c1",
+      authorId: "a1",
+      action: "create",
+    } as unknown as LogEntry;
+
+    expect(summarizeLogEntry(entry).attachments).toBeNull();
   });
 
   test("changes未設定の場合はnullになる", () => {

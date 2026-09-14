@@ -21,8 +21,10 @@ function fakeMessage(
     partial: boolean;
     pinned: boolean;
     system: boolean;
+    attachments: { url: string; name: string; contentType: string | null }[];
   }> = {},
 ) {
+  const attachments = overrides.attachments ?? [];
   return {
     id: "m1",
     guildId: "g1",
@@ -33,6 +35,7 @@ function fakeMessage(
     pinned: false,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
+    attachments: { size: attachments.length, map: (fn: (a: (typeof attachments)[number]) => unknown) => attachments.map(fn) },
   } as never;
 }
 
@@ -50,6 +53,18 @@ describe("toMessageCreateLogEntry", () => {
       content: "hello",
       actorIsBot: false,
     });
+  });
+
+  test("添付ファイルがあればurl/filename/contentTypeを記録する", () => {
+    const entry = toMessageCreateLogEntry(
+      fakeMessage({ attachments: [{ url: "https://cdn.discordapp.com/x.png", name: "x.png", contentType: "image/png" }] }),
+      BOT_USER_ID,
+    );
+    expect(entry?.attachments).toEqual([{ url: "https://cdn.discordapp.com/x.png", filename: "x.png", contentType: "image/png" }]);
+  });
+
+  test("添付ファイルがなければattachmentsはundefined", () => {
+    expect(toMessageCreateLogEntry(fakeMessage(), BOT_USER_ID)?.attachments).toBeUndefined();
   });
 
   test("システムメッセージ(スレッド作成時のThreadCreated等)はundefinedを返す(threadCreateログと重複するため)", () => {

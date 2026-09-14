@@ -344,6 +344,32 @@ export function LogListPage() {
                           </div>
                         )}
 
+                        {summary.attachments !== null && summary.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 rounded-md border bg-card p-3">
+                            {summary.attachments.map((attachment) =>
+                              attachment.contentType?.startsWith("image/") ? (
+                                <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
+                                  <img
+                                    src={attachment.url}
+                                    alt={attachment.filename}
+                                    className="h-24 w-24 rounded-md border object-cover"
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={attachment.url}
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sm text-primary underline"
+                                >
+                                  {attachment.filename}
+                                </a>
+                              ),
+                            )}
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-3 gap-3 text-xs">
                           {summary.executorId !== null && (
                             <div className="flex flex-col gap-0.5">
