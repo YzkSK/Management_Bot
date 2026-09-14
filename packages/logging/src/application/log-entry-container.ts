@@ -107,7 +107,7 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
 
   const mainContainer = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
-  const headerLines = [`### ${icon} ${title}`, description, `-# ${formatTimestamp(entry.createdAt)}`];
+  const headerLines = [`### ${icon} ${title}`, description];
   const memberJoinFields = buildMemberJoinFields(entry);
   // アバターSectionの右にできる余白を抑えるため、フィールドもヘッダーと同じTextDisplayに含めて高さを稼ぐ。
   const headerText = new TextDisplayBuilder().setContent(
@@ -146,11 +146,11 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   if (summary.attachments !== null && summary.attachments.length > 0) {
     bodyLines.push(formatField("添付ファイル", summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")));
   }
+  // イベント発生日時は本文・フィールドの一番下に表示する(見た目のフィードバック反映)。
+  bodyLines.push(`-# ${formatTimestamp(entry.createdAt)}`);
 
-  if (bodyLines.length > 0) {
-    mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
-    mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
-  }
+  mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
+  mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
 
   const containers = [mainContainer];
 

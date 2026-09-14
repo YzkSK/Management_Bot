@@ -60,17 +60,23 @@ describe("buildLogEntryContainers", () => {
     expect(text).toContain("<@u1> がサーバーに参加しました");
   });
 
-  test("ヘッダーにentry.createdAtのDiscordタイムスタンプ記法(<t:unix:f>)を含む", () => {
+  test("本文の一番下にentry.createdAtのDiscordタイムスタンプ記法(<t:unix:f>)を含む(ヘッダーより下)", () => {
     const entry: LogEntry = {
-      category: "member",
+      category: "message",
       guildId: "g1",
       createdAt: "2026-08-31T12:34:56.000Z",
-      userId: "u1",
-      action: "join",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      content: "こんにちは",
     };
-    const text = textOf(buildLogEntryContainers(entry));
     const expectedUnix = Math.floor(new Date("2026-08-31T12:34:56.000Z").getTime() / 1000);
-    expect(text).toContain(`-# <t:${expectedUnix}:f>`);
+    const contents = allTextDisplayContents(buildLogEntryContainers(entry));
+    const [headerContent, bodyContent] = contents;
+    expect(headerContent).not.toContain(`<t:${expectedUnix}:f>`);
+    expect(bodyContent).toContain(`-# <t:${expectedUnix}:f>`);
+    // 時刻は本文中の他フィールド(本文・changes・添付)より後ろ(末尾)に来る。
+    expect(bodyContent?.trimEnd().endsWith(`-# <t:${expectedUnix}:f>`)).toBe(true);
   });
 
   test("member/join かつ isRejoin=trueなら赤アクセントの警告Containerを別途追加する", () => {
