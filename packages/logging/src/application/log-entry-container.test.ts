@@ -308,7 +308,7 @@ describe("buildLogEntryContainers", () => {
     expect(components.some((c) => c.type === 9)).toBe(false);
   });
 
-  test("member/joinはアカウント作成日・ユーザーIDを同じ行に横並びで含む", () => {
+  test("member/joinはアカウント作成日・ユーザーIDのフィールドをそれぞれラベル付きで含む", () => {
     const entry: LogEntry = {
       category: "member",
       guildId: "g1",
@@ -318,8 +318,9 @@ describe("buildLogEntryContainers", () => {
       accountCreatedAt: "2020-01-01T00:00:00.000Z",
     };
     const text = textOf(buildLogEntryContainers(entry));
-    expect(text).toContain("-# アカウント作成日　　ユーザーID");
-    expect(text).toMatch(/<t:\d+:D>\(\d+日前\)　　u1/);
+    expect(text).toContain("-# アカウント作成日");
+    expect(text).toMatch(/<t:\d+:D>\(\d+日前\)/);
+    expect(text).toContain("-# ユーザーID\nu1");
   });
 
   test("auditLogCorrelationはneutralアクセントかつフォールバックタイトルにならない(専用扱い)", () => {

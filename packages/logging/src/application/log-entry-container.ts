@@ -42,17 +42,6 @@ function formatTimestamp(createdAt: string): string {
   return `<t:${Math.floor(new Date(createdAt).getTime() / 1000)}:f>`;
 }
 
-/**
- * 複数フィールドを1つのsubtext行に横並びさせる(モックアップの2カラムグリッド相当)。
- * Components V2にtableやinlineフィールドは無いため、ラベル行・値行をそれぞれ全角スペース区切りで
- * 1行にまとめる疑似横並び表現にする。
- */
-function formatFieldsRow(fields: readonly { label: string; value: string }[]): string {
-  const labels = fields.map((f) => f.label).join("　　");
-  const values = fields.map((f) => f.value).join("　　");
-  return `-# ${labels}\n${values}`;
-}
-
 function formatChangesLine(field: string, change: { before: unknown; after: unknown }): string {
   const label = CHANGE_FIELD_LABELS[field] ?? field;
   if (field === "permissions" && typeof change.before === "string" && typeof change.after === "string") {
@@ -79,17 +68,22 @@ function buildWarningLines(entry: LogEntry): string[] {
   return lines;
 }
 
-/** account作成日・ユーザーID等、member/joinカード限定のフィールド。モックアップに合わせ横並び1行にまとめる。 */
+/**
+ * account作成日・ユーザーID等、member/joinカード限定のフィールド。
+ * Components V2にinline(横並び)フィールドは存在せず(Discord公式でも未実装と明言されている)、
+ * SectionのTextDisplay+accessoryも「テキスト vs サムネイル/ボタン」の横並びであって
+ * テキスト同士の横並びには使えないため、通常のラベル+値の縦積みで表示する。
+ */
 function buildMemberJoinFields(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
-  const fields: { label: string; value: string }[] = [];
+  const fields: string[] = [];
   if (entry.accountCreatedAt) {
     const createdAt = new Date(entry.accountCreatedAt);
     const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
-    fields.push({ label: "アカウント作成日", value: `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)` });
+    fields.push(formatField("アカウント作成日", `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)`));
   }
-  fields.push({ label: "ユーザーID", value: entry.userId });
-  return [formatFieldsRow(fields)];
+  fields.push(formatField("ユーザーID", entry.userId));
+  return fields;
 }
 
 /**
