@@ -3,6 +3,7 @@ import { Menu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getStoredTheme, setTheme, watchSystemTheme, type Theme } from "./theme.js";
 import { Button } from "@/components/ui/button";
+import { DialogTrigger } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,6 @@ interface HeaderProps {
   avatarUrl: string | null;
   onLogout: () => void;
   isSidebarOpen: boolean;
-  onToggleSidebar: () => void;
 }
 
 const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
@@ -26,13 +26,7 @@ const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
   { value: "system", label: "システムに合わせる" },
 ];
 
-export function Header({
-  discordUsername,
-  avatarUrl,
-  onLogout,
-  isSidebarOpen,
-  onToggleSidebar,
-}: HeaderProps) {
+export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen }: HeaderProps) {
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
 
   useEffect(() => watchSystemTheme(theme), [theme]);
@@ -40,17 +34,17 @@ export function Header({
   return (
     <header className="bg-background sticky top-0 z-50 flex h-14 items-center justify-between border-b px-4">
       <div className="flex min-w-0 items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 md:hidden"
-          onClick={onToggleSidebar}
-          aria-label="メニューを開閉"
-          aria-expanded={isSidebarOpen}
-          aria-controls="mobile-sidebar"
-        >
-          <Menu className="size-5" />
-        </Button>
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 md:hidden"
+            aria-label="メニューを開閉"
+            aria-expanded={isSidebarOpen}
+          >
+            <Menu className="size-5" />
+          </Button>
+        </DialogTrigger>
         <Link to="/" className="truncate text-sm font-semibold hover:underline">
           Management Bot Dashboard
         </Link>

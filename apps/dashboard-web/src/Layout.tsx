@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Outlet, useLocation, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Outlet, useParams } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Header } from "./Header.js";
 import { Sidebar } from "./Sidebar.js";
 import { Footer } from "./Footer.js";
+import { Dialog } from "@/components/ui/dialog";
 
 interface LayoutProps {
   discordUsername: string;
@@ -13,48 +14,21 @@ interface LayoutProps {
 
 export function Layout({ discordUsername, avatarUrl, onLogout }: LayoutProps) {
   const { guildId } = useParams<{ guildId?: string }>();
-  const location = useLocation();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
-  // ページ遷移時にモバイルのドロワーを自動で閉じる。
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
-
-  // Escキーでもモバイルのドロワーを閉じられるようにする(codexレビュー対応)。
-  useEffect(() => {
-    if (!isSidebarOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isSidebarOpen]);
-
   return (
-    <div className="flex min-h-screen flex-col">
-      <Toaster richColors position="top-right" />
-      <Header
-        discordUsername={discordUsername}
-        avatarUrl={avatarUrl}
-        onLogout={onLogout}
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-      />
-      <div className="flex flex-1">
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/50 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-hidden="true"
-          />
-        )}
-        <Sidebar guildId={guildId} open={isSidebarOpen} />
-        <main className="min-w-0 flex-1 p-4">
-          <Outlet />
-        </main>
+    <Dialog open={isSidebarOpen} onOpenChange={setSidebarOpen}>
+      <div className="flex min-h-screen flex-col">
+        <Toaster richColors position="top-right" />
+        <Header discordUsername={discordUsername} avatarUrl={avatarUrl} onLogout={onLogout} isSidebarOpen={isSidebarOpen} />
+        <div className="flex flex-1">
+          <Sidebar guildId={guildId} open={isSidebarOpen} onOpenChange={setSidebarOpen} />
+          <main className="min-w-0 flex-1 p-4">
+            <Outlet />
+          </main>
+        </div>
+        <Footer />
       </div>
-      <Footer />
-    </div>
+    </Dialog>
   );
 }

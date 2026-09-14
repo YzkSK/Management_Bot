@@ -55,12 +55,14 @@ export function GuildListPage() {
               <Button
                 type="button"
                 variant="outline"
-                aria-disabled="true"
+                aria-describedby={`guild-access-note-${guild.id}`}
                 className="w-full justify-start text-muted-foreground opacity-50"
                 onClick={() => toast.error(NO_ACCESS_MESSAGE)}
               >
                 {guild.name}
-                <span className="ml-auto text-xs">アクセス権限がありません</span>
+                <span id={`guild-access-note-${guild.id}`} className="ml-auto text-xs">
+                  アクセス権限がありません
+                </span>
               </Button>
             </li>
           ),
