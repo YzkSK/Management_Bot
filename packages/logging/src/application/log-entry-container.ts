@@ -12,6 +12,19 @@ import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
 /** チャンネルID解決なしで送るため、formatLogMessageのnames引数は常に空(スナップショットフィールドのみで解決される)。 */
 const NO_NAMES = { users: {}, channels: {} };
 
+/**
+ * DiscordのTextDisplayコンポーネントは1つ4,000文字が上限(Discord API仕様)。超過分をそのまま
+ * addTextDisplayComponentsに渡すと送信自体が例外になり、writeLogEntrySafelyが握りつぶすため
+ * ログがDBに保存されたままチャンネルに一切届かなくなる。超過時は切り詰めて必ず上限内に収める。
+ */
+const MAX_TEXT_DISPLAY_LENGTH = 4_000;
+const TEXT_DISPLAY_TRUNCATION_SUFFIX = "\n…(省略)";
+
+function fitTextDisplay(content: string): string {
+  if (content.length <= MAX_TEXT_DISPLAY_LENGTH) return content;
+  return content.slice(0, MAX_TEXT_DISPLAY_LENGTH - TEXT_DISPLAY_TRUNCATION_SUFFIX.length) + TEXT_DISPLAY_TRUNCATION_SUFFIX;
+}
+
 function formatChangesLine(field: string, change: { before: unknown; after: unknown }): string {
   const label = CHANGE_FIELD_LABELS[field] ?? field;
   if (field === "permissions" && typeof change.before === "string" && typeof change.after === "string") {
@@ -51,10 +64,10 @@ export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
 
   const headerLines = [`### ${title}`, description];
   const warnings = buildWarningLines(entry);
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerLines.join("\n")));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(headerLines.join("\n"))));
 
   if (warnings.length > 0) {
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(warnings.join("\n")));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(warnings.join("\n"))));
   }
 
   const bodyLines: string[] = [];
@@ -75,7 +88,7 @@ export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
 
   if (bodyLines.length > 0) {
     container.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(bodyLines.join("\n\n")));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
   }
 
   return container;

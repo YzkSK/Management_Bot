@@ -130,6 +130,44 @@ describe("buildLogEntryContainer", () => {
     expect(text).toContain("**色**: −16711680 → +65280");
   });
 
+  test("本文が4000文字を超える場合は切り詰めて上限内に収める(TextDisplayの上限4000文字対応)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "delete",
+      content: "x".repeat(5_000),
+    };
+    const container = buildLogEntryContainer(entry);
+    for (const component of container.toJSON().components) {
+      if (component.type === 10) {
+        expect(component.content.length).toBeLessThanOrEqual(4_000);
+      }
+    }
+    const text = textOf(container);
+    expect(text).toContain("(省略)");
+  });
+
+  test("改行を大量に含む長文でも切り詰め後に上限を超えない", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "delete",
+      content: "line\n".repeat(2_000),
+    };
+    const container = buildLogEntryContainer(entry);
+    for (const component of container.toJSON().components) {
+      if (component.type === 10) {
+        expect(component.content.length).toBeLessThanOrEqual(4_000);
+      }
+    }
+  });
+
   test("auditLogCorrelationはneutralアクセントかつフォールバックタイトルにならない(専用扱い)", () => {
     const entry: LogEntry = {
       category: "auditLogCorrelation",
