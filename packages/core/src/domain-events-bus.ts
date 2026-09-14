@@ -6,6 +6,8 @@ const STREAM_PREFIX = "domain-events:";
 const BLOCK_MS = 1000;
 const DEFAULT_MIN_IDLE_MS_FOR_CLAIM = 30_000;
 const CLAIM_COUNT = 10;
+const STREAM_MAXLEN = 10_000;
+const RECLAIM_INTERVAL_MS = 30_000;
 
 type EventHandler<T extends DomainEventType> = (
   event: Extract<DomainEvent, { type: T }>,
@@ -53,9 +55,6 @@ function parseXAutoClaimResponse(raw: unknown): { cursor: string; entries: Strea
  * 同じstreamを複数機能が購読する場合、Streamsの仕様上group単位で独立して
  * 配送されるため、機能ごとに別groupを持たないと同じイベントを取り合ってしまう。
  *
- * ponytail: XTRIMによるストリーム肥大化対策は未実装(閾値要件が未確定のため)。
- * 運用で問題化したらXTRIM MAXLEN ~ <N>を publish 時に追加する。
- *
  * ponytail: type毎に同一subscriber接続上でXREADGROUP BLOCKを直列実行するため、
  * 1インスタンスが多数のtypeを購読するとBLOCK待機が後続typeの応答を遅らせる。
  * 購読type数が増えて問題化したらtype毎に専用接続を持つか、1回のXREADGROUPで
@@ -68,6 +67,7 @@ export class DomainEventBus {
   private readonly handlers = new Map<DomainEventType, Set<EventHandler<DomainEventType>>>();
   private readonly consumerLoops = new Map<DomainEventType, Promise<void>>();
   private readonly claimCursors = new Map<DomainEventType, string>();
+  private readonly lastReclaimAt = new Map<DomainEventType, number>();
   private closing = false;
 
   constructor(
@@ -85,7 +85,15 @@ export class DomainEventBus {
   async publish<T extends DomainEventType>(event: Extract<DomainEvent, { type: T }>): Promise<void> {
     const schema = DOMAIN_EVENT_SCHEMAS[event.type];
     const parsed = schema.parse(event);
-    await this.publisher.xadd(STREAM_PREFIX + event.type, "*", "payload", JSON.stringify(parsed));
+    await this.publisher.xadd(
+      STREAM_PREFIX + event.type,
+      "MAXLEN",
+      "~",
+      STREAM_MAXLEN,
+      "*",
+      "payload",
+      JSON.stringify(parsed),
+    );
   }
 
   async subscribe<T extends DomainEventType>(type: T, handler: EventHandler<T>): Promise<void> {
@@ -120,12 +128,16 @@ export class DomainEventBus {
     const stream = STREAM_PREFIX + type;
     while (!this.closing) {
       try {
-        // 起動時・定期的に他consumerが未ACKのまま放置したエントリを回収する。
+        // 起動時・RECLAIM_INTERVAL_MS間隔で他consumerが未ACKのまま放置したエントリを回収する。
         // cursorが"0-0"に戻るまでPEL全体を走査し切ってから新規分の読み取りに移る。
-        const reclaimed = await this.reclaimPending(type, stream);
-        if (reclaimed.length > 0) {
-          await this.processEntries(type, stream, reclaimed);
-          continue;
+        const lastReclaim = this.lastReclaimAt.get(type) ?? 0;
+        if (Date.now() - lastReclaim >= RECLAIM_INTERVAL_MS) {
+          this.lastReclaimAt.set(type, Date.now());
+          const reclaimed = await this.reclaimPending(type, stream);
+          if (reclaimed.length > 0) {
+            await this.processEntries(type, stream, reclaimed);
+            continue;
+          }
         }
 
         const raw = await this.subscriber.xreadgroup(
@@ -175,9 +187,8 @@ export class DomainEventBus {
   }
 
   private async processEntries(type: DomainEventType, stream: string, entries: StreamEntry[]): Promise<void> {
-    for (const [id, fields] of entries) {
-      await this.handleEntry(type, stream, id, fields);
-    }
+    // 各エントリの処理・XACKは独立しているため並列実行してよい。
+    await Promise.allSettled(entries.map(([id, fields]) => this.handleEntry(type, stream, id, fields)));
   }
 
   private async handleEntry(type: DomainEventType, stream: string, id: string, fields: string[]): Promise<void> {
