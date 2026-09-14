@@ -29,8 +29,13 @@ function fitTextDisplay(content: string): string {
   return content.slice(0, MAX_TEXT_DISPLAY_LENGTH - TEXT_DISPLAY_TRUNCATION_SUFFIX.length) + TEXT_DISPLAY_TRUNCATION_SUFFIX;
 }
 
-/** ラベル(小文字のsubtext)+値の2行1組。モックアップのラベル付きフィールド表示に対応する。 */
+/** 「ラベル: 値」の1行フィールド。1行に収まる単純な値(ID・日付・diff済みの短い値)向け。 */
 function formatField(label: string, value: string): string {
+  return `**${label}**: ${value}`;
+}
+
+/** ラベル(小文字のsubtext)+値の2行1組。引用ブロックや複数行リストなど、1行に収まらない値向け。 */
+function formatMultilineField(label: string, value: string): string {
   return `-# ${label}\n${value}`;
 }
 
@@ -51,7 +56,7 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
         ...diff.removed.map((name) => `−${name}`),
         ...diff.added.map((name) => `+${name}`),
       ];
-      return formatField(label, lines.length > 0 ? lines.join("\n") : "変更なし");
+      return lines.length > 0 ? formatMultilineField(label, lines.join("\n")) : formatField(label, "変更なし");
     }
   }
   const before = formatChangeValue(field, change.before as string | number | boolean | null, {});
@@ -121,11 +126,11 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
 
   const bodyLines: string[] = [];
   if (summary.previousContent !== null) {
-    bodyLines.push(formatField("編集前", `> ${summary.previousContent.replaceAll("\n", "\n> ") || "(本文なし)"}`));
+    bodyLines.push(formatMultilineField("編集前", `> ${summary.previousContent.replaceAll("\n", "\n> ") || "(本文なし)"}`));
   }
   if (summary.content !== null) {
     bodyLines.push(
-      formatField(
+      formatMultilineField(
         summary.previousContent !== null ? "編集後" : "本文",
         `> ${summary.content.replaceAll("\n", "\n> ") || "(本文なし)"}`,
       ),
@@ -138,7 +143,9 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
     }
   }
   if (summary.attachments !== null && summary.attachments.length > 0) {
-    bodyLines.push(formatField("添付ファイル", summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")));
+    bodyLines.push(
+      formatMultilineField("添付ファイル", summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")),
+    );
   }
   // イベント発生日時は本文・フィールドの一番下に表示する(見た目のフィードバック反映)。
   bodyLines.push(`-# ${formatTimestamp(entry.createdAt)}`);

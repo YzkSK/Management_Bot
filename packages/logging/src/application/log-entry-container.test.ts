@@ -216,7 +216,7 @@ describe("buildLogEntryContainers", () => {
       changes: { color: { before: 16711680, after: 65280 } },
     };
     const text = textOf(buildLogEntryContainers(entry));
-    expect(text).toContain("-# 色\n−16711680 → +65280");
+    expect(text).toContain("**色**: −16711680 → +65280");
   });
 
   test("本文が4000文字を超える場合は切り詰めて上限内に収める(TextDisplayの上限4000文字対応)", () => {
@@ -318,9 +318,9 @@ describe("buildLogEntryContainers", () => {
       accountCreatedAt: "2020-01-01T00:00:00.000Z",
     };
     const text = textOf(buildLogEntryContainers(entry));
-    expect(text).toContain("-# アカウント作成日");
+    expect(text).toContain("**アカウント作成日**:");
     expect(text).toMatch(/<t:\d+:D>\(\d+日前\)/);
-    expect(text).toContain("-# ユーザーID\nu1");
+    expect(text).toContain("**ユーザーID**: u1");
   });
 
   test("auditLogCorrelationはneutralアクセントかつフォールバックタイトルにならない(専用扱い)", () => {
