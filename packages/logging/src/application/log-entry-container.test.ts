@@ -25,7 +25,7 @@ describe("buildLogEntryContainer", () => {
     expect(container.toJSON().accent_color).toBe(ACCENT_COLORS.positive);
     const text = textOf(container);
     expect(text).toContain("ユーザーが参加しました");
-    expect(text).toContain("たろう がサーバーに参加しました");
+    expect(text).toContain("<@u1> がサーバーに参加しました");
   });
 
   test("member/join かつ isRejoin=trueなら再入室の警告行を含む", () => {
@@ -74,6 +74,21 @@ describe("buildLogEntryContainer", () => {
       action: "leave",
     };
     expect(buildLogEntryContainer(entry).toJSON().accent_color).toBe(ACCENT_COLORS.negative);
+  });
+
+  test("messageカテゴリの説明文はチャンネルメンション(<#channelId>)を含む(どこで発生したか分かるように)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      content: "こんにちは",
+    };
+    const text = textOf(buildLogEntryContainer(entry));
+    expect(text).toContain("<#c1>");
+    expect(text).toContain("<@u1>");
   });
 
   test("message/deleteは本文を引用ブロックで含む", () => {

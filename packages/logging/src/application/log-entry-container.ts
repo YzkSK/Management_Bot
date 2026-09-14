@@ -9,8 +9,12 @@ import { ContainerBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "disc
 import type { LogEntry } from "../domain/index.js";
 import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
 
-/** チャンネルID解決なしで送るため、formatLogMessageのnames引数は常に空(スナップショットフィールドのみで解決される)。 */
-const NO_NAMES = { users: {}, channels: {} };
+/**
+ * Discord送信ではuserName/channelNameの解決テーブルを引く代わりに、常にメンション記法
+ * (<@id>/<#id>)を使う。Discordクライアント側が表示名・チャンネル名を自動で解決してくれるため、
+ * dashboard-web(表示名の平文)と違いnames.users/channelsを埋める必要がない。
+ */
+const MENTION_NAMES = { users: {}, channels: {}, mention: true };
 
 /**
  * DiscordのTextDisplayコンポーネントは1つ4,000文字が上限(Discord API仕様)。超過分をそのまま
@@ -58,7 +62,7 @@ function buildWarningLines(entry: LogEntry): string[] {
 export function buildLogEntryContainer(entry: LogEntry): ContainerBuilder {
   const summary = summarizeLogEntry(entry);
   const { accent, title } = getPresentation(entry);
-  const description = formatLogMessage(entry, summary, NO_NAMES);
+  const description = formatLogMessage(entry, summary, MENTION_NAMES);
 
   const container = new ContainerBuilder().setAccentColor(ACCENT_COLORS[accent]);
 
