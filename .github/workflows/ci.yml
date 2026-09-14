@@ -37,7 +37,7 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run --cwd packages/db db:migrate
-      - run: bunx turbo run test -- --parallel=1
+      - run: bunx turbo run test --concurrency=1 -- --parallel=1
 
   docker-build:
     runs-on: ubuntu-latest
