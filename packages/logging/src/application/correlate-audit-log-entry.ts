@@ -2,6 +2,7 @@ import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { LogCategory } from "../domain/index.js";
+import { emitCorrelated } from "./correlation-events.js";
 import { writeLogEntry, type WriteLogEntryDeps } from "./write-log-entry.js";
 
 /**
@@ -225,7 +226,11 @@ async function annotateRow(
     .set({ payload: sql`${logEntries.payload} || ${patch}` })
     .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`))
     .returning({ id: logEntries.id });
-  return updated.length > 0;
+  const success = updated.length > 0;
+  // writeLogEntry側(同一プロセス)がisCorrelatable判定でこの行の送信を待っている場合、
+  // 3秒の固定待機を待たず、実行者が確定した直後に送信できるようにする。
+  if (success) emitCorrelated(id);
+  return success;
 }
 
 /**

@@ -3,7 +3,9 @@ import type { Db } from "@management-bot/db";
 import { logChannelSettings, logEntries } from "@management-bot/db";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
+import { emitCorrelated } from "./correlation-events.js";
 import { buildLogEntryContainers } from "./log-entry-container.js";
 import { createChannelSettingResolver, formatLogEntry, writeLogEntriesBulk, writeLogEntry } from "./write-log-entry.js";
 
@@ -214,13 +216,17 @@ const voiceUpdateEntry: LogEntry = {
   changes: { serverMute: { before: false, after: true } },
 };
 
-describe("writeLogEntry (監査ログ相関を待つ送信遅延)", () => {
-  test("相関対象(voice/update)は送信前に少し待ち、DBの最新payload(executorId付き)で送信する", async () => {
+describe("writeLogEntry (監査ログ相関の確定を待つ送信)", () => {
+  test("相関対象(voice/update)は、emitCorrelatedで確定が通知され次第DBの最新payload(executorId付き)で送信する", async () => {
     const correlated: LogEntry = { ...voiceUpdateEntry, executorId: "mod1", executorName: "Yuzuki" };
     const db = fakeDb([], { channelId: "c1" }, undefined, true, correlated);
     const sendToChannel = mock(() => Promise.resolve());
+    const id = randomUUID();
 
-    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 0 }, voiceUpdateEntry, "fixed-id");
+    // annotateRow成功と同じタイミングで確定を通知する(correlateAuditLogEntry側の挙動を模す)。
+    emitCorrelated(id);
+
+    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 1_000 }, voiceUpdateEntry, id);
 
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
       components: buildLogEntryContainers(correlated),
@@ -228,11 +234,11 @@ describe("writeLogEntry (監査ログ相関を待つ送信遅延)", () => {
     });
   });
 
-  test("相関対象でも待った後にDB行が見つからなければ元のentryのまま送信する", async () => {
+  test("相関対象でもタイムアウトまでに確定が通知されなければ元のentryのまま送信する", async () => {
     const db = fakeDb([], { channelId: "c1" }, undefined, true, undefined);
     const sendToChannel = mock(() => Promise.resolve());
 
-    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 0 }, voiceUpdateEntry, "fixed-id");
+    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 0 }, voiceUpdateEntry, randomUUID());
 
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
       components: buildLogEntryContainers(voiceUpdateEntry),

@@ -6,6 +6,7 @@ import { ContainerBuilder } from "discord.js";
 import { eq, and } from "drizzle-orm";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
 import { isCorrelatable } from "./correlatable-actions.js";
+import { waitForCorrelated } from "./correlation-events.js";
 import { buildLogEntryContainers } from "./log-entry-container.js";
 
 export interface ChannelMessage {
@@ -34,7 +35,11 @@ export interface WriteLogEntryDeps {
    * 短命キャッシュ付きの実装を注入すると、DB往復を削減できる(パフォーマンス改善)。
    */
   getChannelId?: GetChannelId;
-  /** テスト用: CORRELATION_SEND_DELAY_MSを上書きする。省略時は既定の3秒。 */
+  /**
+   * 監査ログ相関の確定を待つ最大時間(ms)。テスト用にCORRELATION_SEND_DELAY_MSを
+   * 上書きする。省略時は既定の3秒。相関が確定次第それより早く送信されるため、
+   * これは「相関が間に合わなかった場合に諦めるまでの上限」であって固定待機時間ではない。
+   */
   correlationDelayMs?: number;
 }
 
@@ -42,17 +47,14 @@ const MAX_MESSAGE_LENGTH = 1_900;
 const TRUNCATION_SUFFIX = "…";
 
 /**
- * 監査ログ相関(correlateAuditLogEntry)によるexecutorId付記を待つための送信遅延。
- * 監査ログは通常元イベントの数秒以内に届くため、この程度の遅延でDiscordログの
- * リアルタイム性を大きく損なわずに実行者情報を含められる。相関はDBのUPDATEのみで
- * Discord送信をトリガーしないため、これを待たずに送るとexecutorIdが永久に欠落する
- * (「サーバーミュートを解除しました」のように実行者が誰か分からない文になる)。
+ * 監査ログ相関(correlateAuditLogEntry)によるexecutorId付記を待つ、送信の最大タイムアウト。
+ * correlation-events.tsのemitCorrelated/waitForCorrelatedで実行者確定を検知でき次第
+ * 即座に送信するため、この値は「相関が間に合わなかった場合に諦めて送る」上限として働く。
+ * 相関はDBのUPDATEのみでDiscord送信をトリガーしないため、これを待たずに送ると
+ * executorIdが永久に欠落する(「サーバーミュートを解除しました」のように実行者が
+ * 誰か分からない文になる)。
  */
 const CORRELATION_SEND_DELAY_MS = 3_000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function selectChannelId(db: Db, guildId: string, category: LogEntry["category"]): Promise<string | null> {
   const [channelSetting] = await db
@@ -167,12 +169,13 @@ export async function writeLogEntry(
 }
 
 /**
- * 監査ログ相関(correlateAuditLogEntry)がexecutorIdを付記するのを少し待ってから、
- * 現時点の最新payloadを取得する。待っても相関が間に合わなければ元のentryのまま送る
- * (executorId欠落は許容し、送信自体を無期限に止めない)。
+ * 監査ログ相関(correlateAuditLogEntry)がexecutorIdを付記するのを待つ。emitCorrelatedで
+ * 確定を検知できればその時点で即座にDBから最新payloadを取得し、timeoutMs以内に確定しなければ
+ * 諦めて元のentryのまま返す(executorId欠落は許容し、送信自体を無期限に止めない)。
  */
-async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, delayMs: number): Promise<LogEntry> {
-  await delay(delayMs);
+async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, timeoutMs: number): Promise<LogEntry> {
+  const correlated = await waitForCorrelated(id, timeoutMs);
+  if (!correlated) return fallback;
   const [row] = await db.select({ payload: logEntries.payload }).from(logEntries).where(eq(logEntries.id, id));
   if (!row) return fallback;
   const parsed = parseLogEntry(row.payload);
