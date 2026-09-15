@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LogEntry } from "../domain/index.js";
-import { buildLogEntryContainers } from "./log-entry-container.js";
+import { buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
 import { ACCENT_COLORS } from "./log-entry-presentation.js";
 
 interface TextDisplayJSON {
@@ -360,5 +360,24 @@ describe("buildLogEntryContainers", () => {
       actionType: "ChannelDelete",
     };
     expect(mainContainerOf(buildLogEntryContainers(entry)).accent_color).toBe(ACCENT_COLORS.neutral);
+  });
+});
+
+describe("buildBulkDeleteSummaryContainers", () => {
+  test("赤アクセントの一括削除カードに見出し・件数・チャンネル・時刻を入れる", () => {
+    const [container] = buildBulkDeleteSummaryContainers({
+      count: 5,
+      channelId: "c1",
+      createdAt: "2026-09-16T00:50:00.000Z",
+    });
+
+    expect(container!.toJSON()).toMatchObject({
+      accent_color: 0xf23f42,
+      components: expect.arrayContaining([
+        expect.objectContaining({ content: expect.stringContaining("🧹 メッセージが一括削除されました") }),
+        expect.objectContaining({ content: expect.stringContaining("5件のメッセージが<#c1>で一括削除されました") }),
+        expect.objectContaining({ content: expect.stringContaining("<t:1789519800:f>") }),
+      ]),
+    });
   });
 });
