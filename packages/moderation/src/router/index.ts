@@ -10,9 +10,11 @@ import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
   addToWhitelist,
+  listStrikes,
   listThresholds,
   listWhitelist,
   removeFromWhitelist,
+  resetStrike,
   setThreshold,
 } from "../application/index.js";
 import { MODERATION_PRESETS } from "../domain/index.js";
@@ -35,6 +37,12 @@ const whitelistTargetInput = z.object({
   guildId: discordIdSchema,
   targetType: targetTypeSchema,
   targetId: discordIdSchema,
+});
+
+const strikeTargetInput = z.object({
+  guildId: discordIdSchema,
+  userId: discordIdSchema,
+  violationType: violationTypeSchema,
 });
 
 /**
@@ -118,6 +126,29 @@ export const moderationRouter = router({
     .input(whitelistTargetInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => removeFromWhitelist(ctx.db, input)),
+
+  /**
+   * ユーザーIDをそのまま見せず名前表示するため、logging.resolveDisplayNamesと同様に
+   * ページ内のuserIdをまとめて解決する。解決できなかったIDはレスポンスに含めない
+   * (呼び出し側でIDへフォールバック表示する)。
+   */
+  listStrikes: protectedProcedure
+    .input(guildIdInput.extend({ after: z.string().min(1).optional() }))
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(async ({ ctx, input }) => {
+      const page = await listStrikes(ctx.db, input.guildId, input.after);
+      const uniqueUserIds = [...new Set(page.rows.map((r) => r.userId))];
+      const userNames =
+        uniqueUserIds.length > 0
+          ? await ctx.getGuildMemberNames(input.guildId, uniqueUserIds)
+          : new Map<string, string>();
+      return { ...page, userNames: Object.fromEntries(userNames) };
+    }),
+
+  resetStrike: protectedProcedure
+    .input(strikeTargetInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => resetStrike(ctx.db, input.guildId, input.userId, input.violationType)),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。

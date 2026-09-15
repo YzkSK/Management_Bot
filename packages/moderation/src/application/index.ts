@@ -20,5 +20,12 @@ export {
   type EnabledThreshold,
   type ThresholdSetting,
 } from "./thresholds.js";
-export { incrementStrike } from "./escalation-state.js";
+export {
+  decayStrikes,
+  incrementStrike,
+  listStrikes,
+  resetStrike,
+  type StrikePage,
+  type StrikeRow,
+} from "./escalation-state.js";
 export { claimAndPushMessage, type BufferedMessage } from "./message-buffer.js";

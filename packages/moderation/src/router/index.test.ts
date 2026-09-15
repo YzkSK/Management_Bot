@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { capabilityGrants, createDb, guilds, moderationThresholds, moderationWhitelist, sessions } from "@management-bot/db";
+import {
+  capabilityGrants,
+  createDb,
+  guilds,
+  moderationEscalationState,
+  moderationThresholds,
+  moderationWhitelist,
+  sessions,
+} from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type GuildAccessStatus, type GuildMembership, type MemberPage, type RoleOption } from "@management-bot/dashboard-access";
 import { eq } from "drizzle-orm";
@@ -52,6 +60,7 @@ function buildContext(
     verifyGuildRole?: (guildId: string, roleId: string) => Promise<boolean>;
     getGuildMembersPage?: () => Promise<MemberPage>;
     getBotPermissions?: () => Promise<bigint>;
+    getGuildMemberNames?: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   } = {},
 ) {
   return {
@@ -62,7 +71,7 @@ function buildContext(
     getGuildChannels: async () => [],
     getAllGuildChannels: async () => [],
     verifyGuildChannel: async () => false,
-    getGuildMemberNames: async () => new Map<string, string>(),
+    getGuildMemberNames: overrides.getGuildMemberNames ?? (async () => new Map<string, string>()),
     getBotPermissions: overrides.getBotPermissions ?? (async () => 0n),
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
     getGuildAccessStatus: overrides.getGuildAccessStatus ?? (async () => "ok" as const),
@@ -160,6 +169,44 @@ describe("moderationRouter.listWhitelist / addToWhitelist / removeFromWhitelist"
 
     expect(error).toBeDefined();
     expect(await caller.listWhitelist({ guildId })).toEqual([]);
+  });
+});
+
+describe("moderationRouter.listStrikes / resetStrike", () => {
+  test("MANAGE_MODERATIONを持たない場合listStrikesはFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.listStrikes({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("resetStrikeで該当行が削除され、listStrikesに反映される", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 3 });
+    const caller = createCaller(buildContext());
+
+    expect(await caller.listStrikes({ guildId })).toEqual({
+      rows: [{ userId, violationType: "flood", strikeCount: 3, lastViolationAt: expect.any(Date) }],
+      nextAfter: undefined,
+      userNames: {},
+    });
+
+    await caller.resetStrike({ guildId, userId, violationType: "flood" });
+
+    expect(await caller.listStrikes({ guildId })).toEqual({ rows: [], nextAfter: undefined, userNames: {} });
+  });
+
+  test("listStrikesはgetGuildMemberNamesでuserIdを名前解決して返す", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
+    const caller = createCaller(
+      buildContext({ getGuildMemberNames: async () => new Map([[userId, "テストユーザー"]]) }),
+    );
+
+    const result = await caller.listStrikes({ guildId });
+
+    expect(result.userNames).toEqual({ [userId]: "テストユーザー" });
   });
 });
 
