@@ -7,9 +7,13 @@ describe("appRouter", () => {
     expect(mountedKeys).toEqual(expect.arrayContaining(["activity", "logging"]));
   });
 
-  test("moderation/temp-voiceはdomain実装が未着手のため公開しない(issue #222)", () => {
+  test("moderationはrouter実装済みのため公開する(issue #175)", () => {
     const mountedKeys = Object.keys(appRouter._def.record);
-    expect(mountedKeys).not.toContain("moderation");
+    expect(mountedKeys).toContain("moderation");
+  });
+
+  test("temp-voiceはdomain実装が未着手のため公開しない(issue #222)", () => {
+    const mountedKeys = Object.keys(appRouter._def.record);
     expect(mountedKeys).not.toContain("tempVoice");
   });
 });
