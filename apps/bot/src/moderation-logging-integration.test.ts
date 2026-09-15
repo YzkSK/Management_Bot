@@ -33,6 +33,7 @@ async function isRedisAvailable(): Promise<boolean> {
 function message(overrides: Partial<IncomingMessage> & Pick<IncomingMessage, "guildId" | "userId">): IncomingMessage {
   return {
     messageId: randomUUID(),
+    channelId: "channel-1",
     content: `msg-${randomUUID()}`,
     createdAt: new Date(),
     roleIds: [],
@@ -110,7 +111,13 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       }
 
       expect(lastOutcomes).toEqual([
-        { violationType: "flood", strikeCount: 1, actionType: "messageDelete", caseId: expect.any(String) },
+        {
+          violationType: "flood",
+          strikeCount: 1,
+          actionType: "messageDelete",
+          caseId: expect.any(String),
+          bufferedMessageIds: expect.any(Array),
+        },
       ]);
 
       await withTimeout(written.promise, 5_000, "logging handler");

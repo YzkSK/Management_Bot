@@ -25,11 +25,13 @@ function fakeMessage(overrides: {
   guildId: string;
   userId: string;
   content: string;
+  channelId?: string;
   bot?: boolean;
   hasGuild?: boolean;
   hasMember?: boolean;
 }) {
   const deleteFn = mock(() => Promise.resolve());
+  const bulkDelete = mock(() => Promise.resolve());
   const timeout = mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
@@ -38,10 +40,13 @@ function fakeMessage(overrides: {
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
     id: randomUUID(),
+    channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
     createdAt: new Date(),
     delete: deleteFn,
     deleteFn,
+    channel: { bulkDelete },
+    bulkDelete,
     timeout,
     kick,
     ban,
@@ -104,11 +109,11 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    expect(last?.deleteFn).toHaveBeenCalledTimes(1);
+    expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
     expect(eventBus.published).toHaveLength(1);
   });
 
-  test("flood/duplicate_contentが同時にヒットしても、実行される処罰は最も重い1件に集約される", async () => {
+  test("flood/duplicate_contentが同時にヒットしても、それぞれ同一バースト中は1回しかstrikeが進まない", async () => {
     const userId = `u-${randomUUID()}`;
     // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85, strike1でmessageDelete)
     await db.insert(moderationThresholds).values([
@@ -124,12 +129,43 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    // 2件目: duplicate_content(strike1=messageDelete)のみヒット。
-    // 3件目: flood(strike1=messageDelete)とduplicate_content(strike2=timeout)が同時にヒットし、
-    // moderation.action.recordedは両方publishされるが、Discord側の実行はより重いtimeoutに集約され、
-    // messageDeleteは実行されない。
-    expect(eventBus.published).toHaveLength(3);
+    // 2件目: duplicate_content(strike1=messageDelete)のみヒットし、以降8秒間はduplicate_contentのロックを保持。
+    // 3件目: flood(strike1=messageDelete)がヒット。duplicate_contentも閾値には達し続けるが、
+    // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
+    expect(eventBus.published).toHaveLength(2);
+    expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
+    expect(last?.timeout).not.toHaveBeenCalled();
+  });
+
+  test("同一メッセージでflood(messageDelete)とduplicate_content(timeout)が同時にヒットした場合、より重い処罰へ集約される", async () => {
+    const userId = `u-${randomUUID()}`;
+    // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85)
+    await db.insert(moderationThresholds).values([
+      { guildId, violationType: "flood", preset: "strong", enabled: true },
+      { guildId, violationType: "duplicate_content", preset: "strong", enabled: true },
+    ]);
+    // duplicate_contentのstrikeCountを1でseedし、次のヒットでstrike2=timeoutに到達させる
+    // (異なる内容のメッセージで1バーストを消化させ、3件目で新しいバーストとして
+    // flood(strike1=messageDelete)とduplicate_content(strike2=timeout)を同時に成立させる)。
+    await db.insert(moderationEscalationState).values({
+      guildId,
+      userId,
+      violationType: "duplicate_content",
+      strikeCount: 1,
+    });
+
+    const eventBus = fakeEventBus();
+    let last: ReturnType<typeof fakeMessage> | undefined;
+    for (const content of ["A", "B", "B"]) {
+      last = fakeMessage({ guildId, userId, content });
+      await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
+    }
+
+    // 3件目: floodが3件目で閾値到達しstrike1=messageDelete。duplicate_content("B"が2連続)も
+    // 新バーストとしてヒットしstrike2=timeout。moderation.action.recordedは両方publishされるが、
+    // Discord側の実行はより重いtimeoutに集約され、messageDeleteは実行されない。
+    expect(eventBus.published).toHaveLength(2);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
-    expect(last?.deleteFn).not.toHaveBeenCalled();
+    expect(last?.bulkDelete).not.toHaveBeenCalled();
   });
 });
