@@ -292,7 +292,149 @@ function WhitelistTableRow({
   );
 }
 
-type ModerationTab = "thresholds" | "whitelist";
+interface StrikeEntry {
+  userId: string;
+  violationType: ModerationViolationType;
+  strikeCount: number;
+  lastViolationAt: string | Date;
+}
+
+function StrikeTableRow({
+  guildId,
+  after,
+  entry,
+  userName,
+}: {
+  guildId: string;
+  after: string | undefined;
+  entry: StrikeEntry;
+  userName: string;
+}) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    ...trpc.moderation.resetStrike.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
+      }),
+  });
+
+  return (
+    <TableRow>
+      <TableCell>{userName}</TableCell>
+      <TableCell>{VIOLATION_TYPE_LABELS[entry.violationType]}</TableCell>
+      <TableCell>{entry.strikeCount}</TableCell>
+      <TableCell>{new Date(entry.lastViolationAt).toLocaleString("ja-JP")}</TableCell>
+      <TableCell>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ guildId, userId: entry.userId, violationType: entry.violationType })}
+        >
+          リセット
+        </Button>
+        {mutation.isError && <p className="text-destructive text-xs">失敗しました</p>}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果をカーソル単位で保持する。 */
+function useStrikePages(guildId: string) {
+  const [after, setAfter] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState<Record<string, { rows: StrikeEntry[]; userNames: Record<string, string> }>>({});
+
+  useEffect(() => {
+    setAfter(undefined);
+    setPages({});
+  }, [guildId]);
+
+  const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
+
+  useEffect(() => {
+    if (!query.data) return;
+    const pageKey = after ?? FIRST_PAGE_KEY;
+    setPages((prev) => ({ ...prev, [pageKey]: { rows: query.data.rows, userNames: query.data.userNames } }));
+  }, [after, query.data]);
+
+  const rows = Object.values(pages).flatMap((p) => p.rows);
+  const userNames = Object.assign({}, ...Object.values(pages).map((p) => p.userNames)) as Record<string, string>;
+
+  return {
+    rows,
+    userNames,
+    after,
+    isPending: rows.length === 0 && query.isPending,
+    isError: query.isError,
+    nextAfter: query.data?.nextAfter,
+    isFetchingNextPage: query.isFetching,
+    loadNextPage: () => setAfter(query.data?.nextAfter),
+  };
+}
+
+function StrikeTab({ guildId }: { guildId: string }) {
+  const { rows, userNames, after, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
+    useStrikePages(guildId);
+
+  if (isPending) {
+    return <div className="text-sm">読み込み中...</div>;
+  }
+
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>警告回数の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground text-sm">警告履歴はありません。</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ユーザー</TableHead>
+            <TableHead>種別</TableHead>
+            <TableHead>警告回数</TableHead>
+            <TableHead>最終違反日時</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((entry) => (
+            <StrikeTableRow
+              key={`${entry.userId}-${entry.violationType}`}
+              guildId={guildId}
+              after={after}
+              entry={entry}
+              userName={userNames[entry.userId] ?? entry.userId}
+            />
+          ))}
+        </TableBody>
+      </Table>
+      {nextAfter && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          disabled={isFetchingNextPage}
+          onClick={loadNextPage}
+        >
+          さらに読み込む
+        </Button>
+      )}
+    </div>
+  );
+}
+
+type ModerationTab = "thresholds" | "whitelist" | "strikes";
 
 export function ModerationPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -390,6 +532,7 @@ export function ModerationPage() {
         <TabsList aria-label="スパム対策の設定">
           <TabsTrigger value="thresholds">検知設定</TabsTrigger>
           <TabsTrigger value="whitelist">ホワイトリスト</TabsTrigger>
+          <TabsTrigger value="strikes">警告回数</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds">
@@ -443,6 +586,10 @@ export function ModerationPage() {
               </TableBody>
             </Table>
           )}
+        </TabsContent>
+
+        <TabsContent value="strikes">
+          <StrikeTab guildId={guildId} />
         </TabsContent>
       </Tabs>
     </div>
