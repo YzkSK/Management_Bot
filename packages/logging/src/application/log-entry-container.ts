@@ -47,6 +47,31 @@ function formatTimestamp(createdAt: string): string {
   return `<t:${Math.floor(new Date(createdAt).getTime() / 1000)}:f>`;
 }
 
+export interface BulkDeleteSummaryCardInput {
+  count: number;
+  channelId: string;
+  createdAt: string;
+}
+
+/** 一括削除の通知を、個別ログと同じComponents V2カードとして表示する。 */
+export function buildBulkDeleteSummaryContainers({
+  count,
+  channelId,
+  createdAt,
+}: BulkDeleteSummaryCardInput): ContainerBuilder[] {
+  const container = new ContainerBuilder().setAccentColor(ACCENT_COLORS.negative);
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      fitTextDisplay(
+        `### 🧹 メッセージが一括削除されました\n${count}件のメッセージが<#${channelId}>で一括削除されました`,
+      ),
+    ),
+  );
+  container.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${formatTimestamp(createdAt)}`));
+  return [container];
+}
+
 function formatChangesLine(field: string, change: { before: unknown; after: unknown }): string {
   const label = CHANGE_FIELD_LABELS[field] ?? field;
   if (field === "permissions" && typeof change.before === "string" && typeof change.after === "string") {
