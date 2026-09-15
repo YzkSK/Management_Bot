@@ -26,4 +26,10 @@ describe("mapWithConcurrency", () => {
     const result = await mapWithConcurrency([], 3, (n: number) => Promise.resolve(n));
     expect(result).toEqual([]);
   });
+
+  test("0以下のlimitは処理開始前に拒否する", async () => {
+    await expect(mapWithConcurrency([1], 0, (n) => Promise.resolve(n))).rejects.toThrow(
+      "limit must be a positive integer",
+    );
+  });
 });

@@ -4,6 +4,10 @@ export async function mapWithConcurrency<T, R>(
   limit: number,
   fn: (value: T) => Promise<R>,
 ): Promise<R[]> {
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new RangeError("limit must be a positive integer");
+  }
+
   const results: R[] = [];
   for (let i = 0; i < values.length; i += limit) {
     results.push(...(await Promise.all(values.slice(i, i + limit).map(fn))));
