@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { createDb, type Db } from "../client.ts";
-import { guilds, moderationEscalationState, moderationThresholds, moderationWhitelist } from "./index.ts";
+import {
+  guilds,
+  moderationEscalationSettings,
+  moderationEscalationState,
+  moderationThresholds,
+  moderationWhitelist,
+} from "./index.ts";
 
 const INVALID = "unknown" as never;
 
@@ -95,5 +101,32 @@ describe("moderation schema", () => {
       db.insert(moderationWhitelist).values({ guildId, targetType: "role", targetId: guildId }),
       "moderation_whitelist_no_everyone_check",
     );
+  });
+
+  test("moderation_escalation_settingsはguild_idを主キーに持ち、presetはCHECK制約で検証される", async () => {
+    await db.insert(moderationEscalationSettings).values({ guildId, preset: "medium" });
+
+    await expectConstraintViolation(
+      db.insert(moderationEscalationSettings).values({ guildId, preset: "strong" }),
+      "moderation_escalation_settings_pkey",
+    );
+    await expectConstraintViolation(
+      db.insert(moderationEscalationSettings).values({ guildId: `test-guild-${randomUUID()}`, preset: INVALID }),
+      "moderation_escalation_settings_preset_check",
+    );
+  });
+
+  test("moderation_escalation_settingsはguild削除時にカスケード削除される", async () => {
+    const cascadeGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: cascadeGuildId, name: "Cascade Test" });
+    await db.insert(moderationEscalationSettings).values({ guildId: cascadeGuildId, preset: "weak" });
+
+    await db.delete(guilds).where(eq(guilds.id, cascadeGuildId));
+
+    const rows = await db
+      .select()
+      .from(moderationEscalationSettings)
+      .where(eq(moderationEscalationSettings.guildId, cascadeGuildId));
+    expect(rows).toHaveLength(0);
   });
 });

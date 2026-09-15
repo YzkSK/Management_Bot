@@ -81,3 +81,19 @@ export const moderationWhitelist = pgTable(
     ),
   ],
 );
+
+export const moderationEscalationSettings = pgTable(
+  "moderation_escalation_settings",
+  {
+    guildId: text("guild_id")
+      .primaryKey()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    preset: text("preset").$type<ModerationPreset>().notNull().default("medium"),
+  },
+  (table) => [
+    check(
+      "moderation_escalation_settings_preset_check",
+      enumCheck(table.preset, MODERATION_PRESETS),
+    ),
+  ],
+);
