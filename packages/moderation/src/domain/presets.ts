@@ -1,7 +1,6 @@
-import type { ModerationActionType } from "@management-bot/shared";
+import { MODERATION_PRESETS, type ModerationActionType, type ModerationPreset } from "@management-bot/shared";
 
-export const MODERATION_PRESETS = ["weak", "medium", "strong"] as const;
-export type ModerationPreset = (typeof MODERATION_PRESETS)[number];
+export { MODERATION_PRESETS, type ModerationPreset };
 
 export interface FloodPresetConfig {
   /** 直近windowSeconds秒間にmessageThreshold件以上でヒット。 */
