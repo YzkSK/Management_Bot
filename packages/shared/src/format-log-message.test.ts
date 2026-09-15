@@ -235,6 +235,46 @@ describe("formatLogMessage", () => {
     expect(message).toBe("Sora がミュートしました、画面共有を開始しました");
   });
 
+  test("ボイス状態変化(スピーカーミュートはselfMuteの連動表示を省く)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        selfMute: { before: false, after: true },
+        selfDeaf: { before: false, after: true },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora" }, channels: {} });
+
+    expect(message).toBe("Sora がスピーカーミュートしました");
+  });
+
+  test("ボイス状態変化(スピーカーミュート解除もselfMuteの連動表示を省く)", () => {
+    const entry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: {
+        selfMute: { before: true, after: false },
+        selfDeaf: { before: true, after: false },
+      },
+    } as unknown as LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, { users: { u1: "Sora" }, channels: {} });
+
+    expect(message).toBe("Sora がスピーカーミュートを解除しました");
+  });
+
   test("ボイス状態変化(モデレーターによるサーバーミュート、実行者判明)", () => {
     const entry = {
       category: "voice",
