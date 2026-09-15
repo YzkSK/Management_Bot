@@ -1,5 +1,9 @@
 export interface TtlCache<T> {
   (key: string, load: () => Promise<T>): Promise<T>;
+  /** TTL内にある値をloaderを実行せず取得する。 */
+  peek(key: string): Promise<T> | undefined;
+  /** 取得済みの値をTTLキャッシュへ登録する。 */
+  set(key: string, value: T): void;
   /** keyのエントリを即座に破棄する。次回呼び出しはTTL満了を待たずloadし直す。 */
   invalidate(key: string): void;
 }
@@ -13,15 +17,8 @@ export interface TtlCache<T> {
 export function createTtlCache<T>(ttlMs: number, now: () => number = Date.now): TtlCache<T> {
   const entries = new Map<string, { expiresAt: number; value: Promise<T> }>();
 
-  const cache = ((key, load) => {
-    const nowMs = now();
-    const entry = entries.get(key);
-    if (entry && entry.expiresAt > nowMs) {
-      return entry.value;
-    }
-
-    const value = load();
-    entries.set(key, { expiresAt: nowMs + ttlMs, value });
+  const setEntry = (key: string, value: Promise<T>): void => {
+    entries.set(key, { expiresAt: now() + ttlMs, value });
 
     const deleteIfCurrent = (): void => {
       if (entries.get(key)?.value === value) {
@@ -30,10 +27,26 @@ export function createTtlCache<T>(ttlMs: number, now: () => number = Date.now): 
     };
     value.catch(deleteIfCurrent);
     setTimeout(deleteIfCurrent, ttlMs).unref?.();
+  };
+
+  const cache = ((key, load) => {
+    const nowMs = now();
+    const entry = entries.get(key);
+    if (entry && entry.expiresAt > nowMs) {
+      return entry.value;
+    }
+
+    const value = load();
+    setEntry(key, value);
 
     return value;
   }) as TtlCache<T>;
 
+  cache.peek = (key) => {
+    const entry = entries.get(key);
+    return entry && entry.expiresAt > now() ? entry.value : undefined;
+  };
+  cache.set = (key, value) => setEntry(key, Promise.resolve(value));
   cache.invalidate = (key) => entries.delete(key);
 
   return cache;

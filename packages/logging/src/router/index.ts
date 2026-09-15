@@ -70,8 +70,8 @@ const setDisplaySettingInput = z
 
 const resolveDisplayNamesInput = z.object({
   guildId: discordIdSchema,
-  userIds: z.array(z.string()).default([]),
-  channelIds: z.array(z.string()).default([]),
+  userIds: z.array(discordIdSchema).max(100).default([]),
+  channelIds: z.array(discordIdSchema).max(100).default([]),
 });
 
 export const loggingRouter = router({

@@ -803,6 +803,36 @@ describe("loggingRouter.listLogEntries + display settings", () => {
 });
 
 describe("loggingRouter.resolveDisplayNames", () => {
+  test("userIdsが100件を超える場合は入力を拒否する", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS,
+    });
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getAllGuildChannels: channelsOf(),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
+      getGuildMembersPage: membersPageOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const thrown = await captureRejection(
+      caller.resolveDisplayNames({ guildId, userIds: Array.from({ length: 101 }, () => "123456789012345678"), channelIds: [] }),
+    );
+
+    expect(thrown).toBeInstanceOf(TRPCError);
+  });
+
   test("resolveDisplayNamesはgetGuildMemberNames/getAllGuildChannelsを介してid→nameを返す(ボイスチャンネル含む)", async () => {
     await db.insert(capabilityGrants).values({
       id: randomUUID(),
@@ -816,9 +846,12 @@ describe("loggingRouter.resolveDisplayNames", () => {
       sessionId: "session-1",
       getGuildMembership: memberOf(guildId),
       getGuildChannels: channelsOf(),
-      getAllGuildChannels: channelsOf({ id: "c1", name: "general" }, { id: "c2", name: "voice" }),
-      verifyGuildChannel: verifyGuildChannelOf({ id: "c1", name: "general" }),
-      getGuildMemberNames: memberNamesOf({ u1: "解決された名前" }),
+      getAllGuildChannels: channelsOf(
+        { id: "123456789012345679", name: "general" },
+        { id: "123456789012345680", name: "voice" },
+      ),
+      verifyGuildChannel: verifyGuildChannelOf({ id: "123456789012345679", name: "general" }),
+      getGuildMemberNames: memberNamesOf({ "123456789012345678": "解決された名前" }),
       getBotPermissions: botPermissionsOf(),
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
@@ -826,11 +859,15 @@ describe("loggingRouter.resolveDisplayNames", () => {
       discordClientId: "test-client-id",
     });
 
-    const result = await caller.resolveDisplayNames({ guildId, userIds: ["u1"], channelIds: ["c1", "c2"] });
+    const result = await caller.resolveDisplayNames({
+      guildId,
+      userIds: ["123456789012345678"],
+      channelIds: ["123456789012345679", "123456789012345680"],
+    });
 
     expect(result).toEqual({
-      users: { u1: "解決された名前" },
-      channels: { c1: "general", c2: "voice" },
+      users: { "123456789012345678": "解決された名前" },
+      channels: { "123456789012345679": "general", "123456789012345680": "voice" },
     });
   });
 
