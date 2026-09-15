@@ -76,33 +76,46 @@ describe("executeEscalationAction", () => {
     expect(message.channel.bulkDelete).not.toHaveBeenCalled();
   });
 
-  test("timeoutはmember.timeout()を呼ぶ", async () => {
+  test("timeoutはmember.timeout()を呼ぶとともにbufferedMessageIdsを削除する(連投が続いてもメッセージ削除が漏れないようにするため)", async () => {
     const timeout = mock(() => Promise.resolve());
     const message = fakeMessage({ timeout });
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" }));
     expect(timeout).toHaveBeenCalledTimes(1);
+    expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
-  test("kickはmember.kick()を呼ぶ", async () => {
+  test("kickはmember.kick()を呼ぶとともにbufferedMessageIdsを削除する", async () => {
     const kick = mock(() => Promise.resolve());
     const message = fakeMessage({ kick });
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "kick" }));
     expect(kick).toHaveBeenCalledTimes(1);
+    expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
-  test("banはmember.ban()を呼ぶ", async () => {
+  test("banはmember.ban()を呼ぶとともにbufferedMessageIdsを削除する", async () => {
     const ban = mock(() => Promise.resolve());
     const message = fakeMessage({ ban });
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "ban" }));
     expect(ban).toHaveBeenCalledTimes(1);
+    expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
-  test("memberがnull(既に退出済み等)の場合、処罰もDM送信も行わない", async () => {
+  test("timeout実行時にメッセージ削除が失敗しても、timeout自体とDM送信は実行される(削除失敗が処罰をブロックしない)", async () => {
+    const timeout = mock(() => Promise.resolve());
+    const message = fakeMessage({ timeout });
+    message.channel.bulkDelete = mock(() => Promise.reject(new Error("missing permissions")));
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" }));
+    expect(timeout).toHaveBeenCalledTimes(1);
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("memberがnull(既に退出済み等)の場合、処罰もメッセージ削除もDM送信も行わない", async () => {
     const message = fakeMessage(null);
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" })),
     ).resolves.toBeUndefined();
     expect(message.author.send).not.toHaveBeenCalled();
+    expect(message.channel.bulkDelete).not.toHaveBeenCalled();
   });
 
   test("Discord API呼び出しが失敗した場合、例外を投げず警告DMも送らない", async () => {

@@ -137,7 +137,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(last?.timeout).not.toHaveBeenCalled();
   });
 
-  test("同一メッセージでflood(messageDelete)とduplicate_content(timeout)が同時にヒットした場合、より重い処罰へ集約される", async () => {
+  test("同一メッセージでflood(messageDelete)とduplicate_content(timeout)が同時にヒットした場合、処罰はより重い方に集約されるがメッセージ削除は必ず実行される", async () => {
     const userId = `u-${randomUUID()}`;
     // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85)
     await db.insert(moderationThresholds).values([
@@ -162,10 +162,11 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     }
 
     // 3件目: floodが3件目で閾値到達しstrike1=messageDelete。duplicate_content("B"が2連続)も
-    // 新バーストとしてヒットしstrike2=timeout。moderation.action.recordedは両方publishされるが、
-    // Discord側の実行はより重いtimeoutに集約され、messageDeleteは実行されない。
+    // 新バーストとしてヒットしstrike2=timeout。moderation.action.recordedは両方publishされ、
+    // Discord側の処罰実行はより重いtimeoutに集約されるが、messageDelete相当の削除は
+    // 処罰の集約とは関係なく実行される(連投メッセージが削除されずに残らないようにするため)。
     expect(eventBus.published).toHaveLength(2);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
-    expect(last?.bulkDelete).not.toHaveBeenCalled();
+    expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
   });
 });
