@@ -6,7 +6,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
 import { emitCorrelated } from "./correlation-events.js";
-import { buildLogEntryContainers } from "./log-entry-container.js";
+import { buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
 import { createChannelSettingResolver, formatLogEntry, writeLogEntriesBulk, writeLogEntry } from "./write-log-entry.js";
 
 const pgDialect = new PgDialect();
@@ -287,7 +287,7 @@ describe("writeLogEntriesBulk", () => {
     const db = fakeDb(inserts, { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
 
-    await writeLogEntriesBulk({ db, sendToChannel }, [], () => "summary");
+    await writeLogEntriesBulk({ db, sendToChannel }, [], () => ({ content: "summary" }));
 
     expect(inserts).toHaveLength(0);
     expect(sendToChannel).not.toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe("writeLogEntriesBulk", () => {
     const db = fakeDb(inserts, undefined);
     const sendToChannel = mock(() => Promise.resolve());
 
-    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1, bulkDeleteEntry2], () => "summary");
+    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1, bulkDeleteEntry2], () => ({ content: "summary" }));
 
     expect(inserts).toHaveLength(1);
     expect(inserts[0]?.values).toHaveLength(2);
@@ -308,17 +308,24 @@ describe("writeLogEntriesBulk", () => {
     ]);
   });
 
-  test("出力先チャンネル設定があればsummaryの戻り値を1回だけ送信する", async () => {
+  test("出力先チャンネル設定があればコンポーネント形式のsummaryを1回だけ送信する", async () => {
     const db = fakeDb([], { channelId: "c1" });
     const sendToChannel = mock(() => Promise.resolve());
-    const summary = mock(() => "2メッセージが#c1で一括削除されました");
+    const summaryMessage = {
+      components: buildBulkDeleteSummaryContainers({
+        count: 2,
+        channelId: "c1",
+        createdAt: bulkDeleteEntry1.createdAt,
+      }),
+    };
+    const summary = mock(() => summaryMessage);
 
     await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1, bulkDeleteEntry2], summary);
 
     expect(summary).toHaveBeenCalledWith([bulkDeleteEntry1, bulkDeleteEntry2]);
     expect(sendToChannel).toHaveBeenCalledTimes(1);
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
-      content: "2メッセージが#c1で一括削除されました",
+      ...summaryMessage,
       suppressMentions: true,
     });
   });
@@ -327,7 +334,7 @@ describe("writeLogEntriesBulk", () => {
     const db = fakeDb([], undefined);
     const sendToChannel = mock(() => Promise.resolve());
 
-    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1], () => "summary");
+    await writeLogEntriesBulk({ db, sendToChannel }, [bulkDeleteEntry1], () => ({ content: "summary" }));
 
     expect(sendToChannel).not.toHaveBeenCalled();
   });
