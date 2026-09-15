@@ -10,11 +10,14 @@ import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
   addToWhitelist,
+  getEscalationPreset,
   listStrikes,
   listThresholds,
   listWhitelist,
   removeFromWhitelist,
+  resetAllStrikes,
   resetStrike,
+  setEscalationPreset,
   setThreshold,
 } from "../application/index.js";
 import { MODERATION_PRESETS } from "../domain/index.js";
@@ -44,6 +47,9 @@ const strikeTargetInput = z.object({
   userId: discordIdSchema,
   violationType: violationTypeSchema,
 });
+
+const setEscalationPresetInput = z.object({ guildId: discordIdSchema, preset: presetSchema });
+const resetAllStrikesInput = z.object({ guildId: discordIdSchema, userId: discordIdSchema });
 
 /**
  * targetがguild内に実在するかをサーバー側で検証する(dashboard-accessのcapabilityGrantsRouter
@@ -149,6 +155,21 @@ export const moderationRouter = router({
     .input(strikeTargetInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => resetStrike(ctx.db, input.guildId, input.userId, input.violationType)),
+
+  getEscalationPreset: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(({ ctx, input }) => getEscalationPreset(ctx.db, input.guildId)),
+
+  setEscalationPreset: protectedProcedure
+    .input(setEscalationPresetInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => setEscalationPreset(ctx.db, input.guildId, input.preset)),
+
+  resetAllStrikes: protectedProcedure
+    .input(resetAllStrikesInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => resetAllStrikes(ctx.db, input.guildId, input.userId)),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。

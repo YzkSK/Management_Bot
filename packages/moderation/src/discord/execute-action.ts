@@ -4,8 +4,9 @@ import type { EscalationOutcome } from "../application/index.js";
 /** タイムアウトの固定時間。強度プリセットによらず一律とする(初期実装、過剰な設定項目を避ける)。 */
 const TIMEOUT_DURATION_MS = 10 * 60 * 1000;
 
+/** strikeCountは違反種別を跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
 function reasonFor(outcome: EscalationOutcome): string {
-  return `moderation: ${outcome.violationType} strike ${outcome.strikeCount} (case ${outcome.caseId})`;
+  return `moderation: ${outcome.violationType} total strike ${outcome.strikeCount} (case ${outcome.caseId})`;
 }
 
 const VIOLATION_LABELS = {

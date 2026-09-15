@@ -22,10 +22,13 @@ export {
 } from "./thresholds.js";
 export {
   decayStrikes,
+  getTotalStrikeCount,
   incrementStrike,
   listStrikes,
+  resetAllStrikes,
   resetStrike,
   type StrikePage,
   type StrikeRow,
 } from "./escalation-state.js";
 export { claimAndPushMessage, type BufferedMessage } from "./message-buffer.js";
+export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";

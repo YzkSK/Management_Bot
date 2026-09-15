@@ -17,6 +17,8 @@ import {
   type IncomingMessage,
   SYSTEM_MODERATOR_ID,
 } from "./detect-and-escalate.js";
+import { incrementStrike } from "./escalation-state.js";
+import { setEscalationPreset } from "./escalation-settings.js";
 import type { BufferedMessage } from "./message-buffer.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -107,8 +109,9 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
   test("連投がstrong presetの頻度閾値に達するとstrikeCountが増加しアクションがpublishされる", async () => {
     const userId = `u-${randomUUID()}`;
-    // strong preset: windowSeconds=8, messageThreshold=3, 1件目でescalationSteps[1]=messageDelete
+    // strong preset: windowSeconds=8, messageThreshold=3, 合計strikeCount=1でESCALATION_STEPS.strong[1]=messageDelete
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
 
     const eventBus = fakeEventBus();
     const now = new Date();
@@ -150,6 +153,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const userId = `u-${randomUUID()}`;
     // strong preset: windowSeconds=8, messageThreshold=3
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
 
     const eventBus = fakeEventBus();
     const now = new Date();
@@ -279,6 +283,58 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       .from(moderationEscalationState)
       .where(eq(moderationEscalationState.userId, userId));
     expect(row?.strikeCount).toBe(1);
+  });
+
+  test("duplicate_contentのstrikeを既存状態としてseedした後にfloodがヒットすると、strikeCountは合計値でエスカレーション判定される", async () => {
+    const eventBus = fakeEventBus();
+    await db.insert(moderationThresholds).values([
+      { guildId, violationType: "flood", preset: "strong", enabled: true },
+    ]);
+    // strong: 合計strikeCount>=1でmessageDelete、>=2でtimeout(ESCALATION_STEPS.strong)
+    await setEscalationPreset(db, guildId, "strong");
+
+    // duplicate_contentのstrikeCountを1で既存状態としてseedする(このテストではduplicate_content
+    // 自体の検知は有効化しない。合計値の算出だけを検証する)。
+    const userId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "duplicate_content");
+
+    // strong preset: frequency = { windowSeconds: 8, messageThreshold: 3 } のため、
+    // 同一ユーザーが3通連投するとflood側がヒットしstrikeCount(flood)が1になる。
+    // この時点で合計は duplicate_content(1) + flood(1) = 2 となり、
+    // ESCALATION_STEPS.strongでは2以上はtimeoutが対応する。
+    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    for (let i = 0; i < 3; i++) {
+      lastOutcomes = await detectAndEscalate(
+        { db, redis, eventBus },
+        { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
+      );
+    }
+
+    const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
+    expect(floodOutcome?.strikeCount).toBe(2); // duplicate_content(1) + flood(1)の合計
+    expect(floodOutcome?.actionType).toBe("timeout"); // ESCALATION_STEPS.strong[2] === "timeout"
+  });
+
+  test("エスカレーション強度(preset)を変えると、同じ合計strikeCountでも異なるactionTypeになる", async () => {
+    const eventBus = fakeEventBus();
+    await db.insert(moderationThresholds).values([
+      { guildId, violationType: "flood", preset: "strong", enabled: true },
+    ]);
+    // weak: ESCALATION_STEPS.weak = { 1: warn, 3: messageDelete, 5: timeout, 7: kick }
+    await setEscalationPreset(db, guildId, "weak");
+
+    const userId = `u-${randomUUID()}`;
+    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    for (let i = 0; i < 3; i++) {
+      lastOutcomes = await detectAndEscalate(
+        { db, redis, eventBus },
+        { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
+      );
+    }
+
+    const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
+    expect(floodOutcome?.strikeCount).toBe(1);
+    expect(floodOutcome?.actionType).toBe("warn"); // ESCALATION_STEPS.weak[1] === "warn"(strongなら"messageDelete"になり結果が変わる)
   });
 });
 

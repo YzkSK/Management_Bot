@@ -11,7 +11,7 @@ import {
   moderationWhitelist,
 } from "@management-bot/db";
 import { handleModerationEvent } from "@management-bot/logging";
-import { detectAndEscalate, type IncomingMessage } from "@management-bot/moderation";
+import { detectAndEscalate, type IncomingMessage, setEscalationPreset } from "@management-bot/moderation";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
@@ -83,8 +83,11 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
     const guildId = `test-guild-${randomUUID()}`;
     const userId = `u-${randomUUID()}`;
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
-    // strong preset: windowSeconds=8, messageThreshold=3, strike1でmessageDelete
+    // strong preset: windowSeconds=8, messageThreshold=3(検知条件)。
+    // エスカレーション段階(統一ストライクカウンター、#311)はguild単位のescalationPresetで
+    // 別管理されるため、こちらもstrongに設定する(strong: strikeCount>=1でmessageDelete)。
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
 
     const runId = randomUUID();
     // 本番同様、機能ごとに別consumer groupを使う(同じgroupだと配信を取り合ってしまう)。
