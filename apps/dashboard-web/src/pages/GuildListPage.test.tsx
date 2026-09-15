@@ -58,6 +58,6 @@ describe("GuildListPage", () => {
     expect(html).toContain("権限なしサーバー");
     expect(html).toContain("アクセス権限がありません");
     expect(html).not.toContain('href="/guilds/g1/logs"');
-    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('aria-describedby="guild-access-note-g1"');
   });
 });

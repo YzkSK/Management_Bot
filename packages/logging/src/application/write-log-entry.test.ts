@@ -3,7 +3,10 @@ import type { Db } from "@management-bot/db";
 import { logChannelSettings, logEntries } from "@management-bot/db";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
+import { emitCorrelated } from "./correlation-events.js";
+import { buildLogEntryContainers } from "./log-entry-container.js";
 import { createChannelSettingResolver, formatLogEntry, writeLogEntriesBulk, writeLogEntry } from "./write-log-entry.js";
 
 const pgDialect = new PgDialect();
@@ -19,6 +22,8 @@ function fakeDb(
   captureWhere?: (condition: SQL | undefined) => void,
   /** falseにすると、insertが既存行との競合で0件になったこと(onConflictDoNothingが実際に発動)をシミュレートする。 */
   insertSucceeds = true,
+  /** waitForCorrelationがlogEntriesテーブルを再SELECTした際に返すpayload。未指定ならlogEntriesへのSELECTは空配列。 */
+  correlatedPayload?: LogEntry,
 ): Db {
   return {
     insert: (table: unknown) => ({
@@ -35,7 +40,9 @@ function fakeDb(
       from: (table: unknown) => ({
         where: (condition: SQL | undefined) => {
           captureWhere?.(condition);
-          return Promise.resolve(table === logChannelSettings && channelSetting ? [channelSetting] : []);
+          if (table === logChannelSettings) return Promise.resolve(channelSetting ? [channelSetting] : []);
+          if (table === logEntries) return Promise.resolve(correlatedPayload ? [{ payload: correlatedPayload }] : []);
+          return Promise.resolve([]);
         },
       }),
     }),
@@ -82,7 +89,7 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel }, memberJoinEntry);
 
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
-      content: formatLogEntry(memberJoinEntry),
+      components: buildLogEntryContainers(memberJoinEntry),
       suppressMentions: true,
     });
   });
@@ -163,7 +170,7 @@ describe("writeLogEntry", () => {
 
     expect(getChannelId).toHaveBeenCalledWith("g1", "member");
     expect(sendToChannel).toHaveBeenCalledWith("c1", {
-      content: formatLogEntry(memberJoinEntry),
+      components: buildLogEntryContainers(memberJoinEntry),
       suppressMentions: true,
     });
   });
@@ -176,6 +183,82 @@ describe("writeLogEntry", () => {
     await writeLogEntry({ db, sendToChannel, getChannelId }, memberJoinEntry);
 
     expect(sendToChannel).not.toHaveBeenCalled();
+  });
+
+  test("category=auditLogCorrelationはDB保存はするがDiscordへは送信しない(内部専用ログ)", async () => {
+    const auditLogCorrelationEntry: LogEntry = {
+      category: "auditLogCorrelation",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      auditLogEntryId: "a1",
+      actionType: "ChannelDelete",
+    };
+    const inserts: RecordedInsert[] = [];
+    const db = fakeDb(inserts, { channelId: "c1" });
+    const sendToChannel = mock(() => Promise.resolve());
+    const getChannelId = mock(() => Promise.resolve("c1"));
+
+    await writeLogEntry({ db, sendToChannel, getChannelId }, auditLogCorrelationEntry);
+
+    expect(inserts).toHaveLength(1);
+    expect(sendToChannel).not.toHaveBeenCalled();
+    expect(getChannelId).not.toHaveBeenCalled();
+  });
+});
+
+const voiceUpdateEntry: LogEntry = {
+  category: "voice",
+  guildId: "g1",
+  createdAt: "2026-08-31T00:00:00.000Z",
+  userId: "u1",
+  channelId: "c-voice",
+  action: "update",
+  changes: { serverMute: { before: false, after: true } },
+};
+
+describe("writeLogEntry (監査ログ相関の確定を待つ送信)", () => {
+  test("相関対象(voice/update)は、emitCorrelatedで確定が通知され次第DBの最新payload(executorId付き)で送信する", async () => {
+    const correlated: LogEntry = { ...voiceUpdateEntry, executorId: "mod1", executorName: "Yuzuki" };
+    const db = fakeDb([], { channelId: "c1" }, undefined, true, correlated);
+    const sendToChannel = mock(() => Promise.resolve());
+    const id = randomUUID();
+
+    // annotateRow成功と同じタイミングで確定を通知する(correlateAuditLogEntry側の挙動を模す)。
+    emitCorrelated(id);
+
+    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 1_000 }, voiceUpdateEntry, id);
+
+    expect(sendToChannel).toHaveBeenCalledWith("c1", {
+      components: buildLogEntryContainers(correlated),
+      suppressMentions: true,
+    });
+  });
+
+  test("相関対象でもタイムアウトまでに確定が通知されなければ元のentryのまま送信する", async () => {
+    const db = fakeDb([], { channelId: "c1" }, undefined, true, undefined);
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 0 }, voiceUpdateEntry, randomUUID());
+
+    expect(sendToChannel).toHaveBeenCalledWith("c1", {
+      components: buildLogEntryContainers(voiceUpdateEntry),
+      suppressMentions: true,
+    });
+  });
+
+  test("相関対象外(member/join)は遅延せず即座に送信する(元のentryのまま)", async () => {
+    const db = fakeDb([], { channelId: "c1" }, undefined, true, {
+      ...memberJoinEntry,
+      executorId: "should-not-be-used",
+    });
+    const sendToChannel = mock(() => Promise.resolve());
+
+    await writeLogEntry({ db, sendToChannel, correlationDelayMs: 0 }, memberJoinEntry, "fixed-id");
+
+    expect(sendToChannel).toHaveBeenCalledWith("c1", {
+      components: buildLogEntryContainers(memberJoinEntry),
+      suppressMentions: true,
+    });
   });
 });
 

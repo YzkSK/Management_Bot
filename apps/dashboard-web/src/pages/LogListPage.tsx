@@ -3,12 +3,17 @@ import { TRPCClientError } from "@trpc/client";
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
+import {
+  CHANGE_FIELD_LABELS,
+  CHANNEL_REFERENCE_CHANGE_FIELDS,
+  diffPermissions,
+  formatChangeValue,
+  formatLogMessage,
+  summarizeLogEntry,
+} from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { CATEGORY_OPTIONS, CATEGORY_ACCENT } from "./category-labels.js";
-import { diffPermissions } from "./discord-permission-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
-import { formatLogMessage } from "./format-log-message.js";
-import { summarizeLogEntry } from "./log-entry-summary.js";
 import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,45 +25,6 @@ const ALL_CATEGORIES = "__all__";
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
   return hasRawAccess && Object.keys(details).length > 0;
-}
-
-/** role/channel updateのchangesキーを表示用の日本語ラベルに変換する。未知キーはそのまま表示する。 */
-const CHANGE_FIELD_LABELS: Record<string, string> = {
-  nickname: "ニックネーム",
-  name: "名前",
-  color: "色",
-  hoist: "表示を分離",
-  mentionable: "メンション許可",
-  permissions: "権限",
-  topic: "トピック",
-  nsfw: "年齢制限",
-  rateLimitPerUser: "スロー モード",
-  bitrate: "ビットレート",
-  userLimit: "ユーザー上限",
-  icon: "アイコン",
-  banner: "バナー",
-  description: "説明",
-  verificationLevel: "認証レベル",
-  explicitContentFilter: "不適切なコンテンツフィルター",
-  defaultMessageNotifications: "デフォルトの通知設定",
-  afkChannelId: "AFKチャンネル",
-  afkTimeout: "AFKタイムアウト",
-  systemChannelId: "システムチャンネル",
-  rulesChannelId: "ルールチャンネル",
-  publicUpdatesChannelId: "公開アップデートチャンネル",
-  preferredLocale: "優先言語",
-  widgetEnabled: "ウィジェット有効",
-  widgetChannelId: "ウィジェットチャンネル",
-};
-
-/** guild updateのchangesのうち、値がチャンネルIDであるフィールド。表示名解決の対象にする。 */
-const CHANNEL_REFERENCE_CHANGE_FIELDS = new Set(["afkChannelId", "systemChannelId", "rulesChannelId", "publicUpdatesChannelId", "widgetChannelId"]);
-
-/** changesのbefore/after値を表示用文字列に変換する。nullはtopic未設定等を表すため「未設定」と表示する。チャンネルIDフィールドは解決済み名称があれば使う。 */
-function formatChangeValue(field: string, value: string | number | boolean | null, channelNames: Record<string, string>): string {
-  if (value === null) return "未設定";
-  if (CHANNEL_REFERENCE_CHANGE_FIELDS.has(field) && typeof value === "string") return channelNames[value] ?? value;
-  return String(value);
 }
 
 const CONNECTION_STATUS_LABELS = {
@@ -341,6 +307,32 @@ export function LogListPage() {
                                 </div>
                               );
                             })}
+                          </div>
+                        )}
+
+                        {summary.attachments !== null && summary.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 rounded-md border bg-card p-3">
+                            {summary.attachments.map((attachment) =>
+                              attachment.contentType?.startsWith("image/") ? (
+                                <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
+                                  <img
+                                    src={attachment.url}
+                                    alt={attachment.filename}
+                                    className="h-24 w-24 rounded-md border object-cover"
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={attachment.url}
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sm text-primary underline"
+                                >
+                                  {attachment.filename}
+                                </a>
+                              ),
+                            )}
                           </div>
                         )}
 

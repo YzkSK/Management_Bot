@@ -2,11 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { Db } from "@management-bot/db";
 import { logChannelSettings, logEntries } from "@management-bot/db";
 import { createTtlCache } from "@management-bot/shared";
+import { ContainerBuilder } from "discord.js";
 import { eq, and } from "drizzle-orm";
-import type { LogEntry } from "../domain/index.js";
+import { parseLogEntry, type LogEntry } from "../domain/index.js";
+import { isCorrelatable } from "./correlatable-actions.js";
+import { waitForCorrelated } from "./correlation-events.js";
+import { buildLogEntryContainers } from "./log-entry-container.js";
 
 export interface ChannelMessage {
-  content: string;
+  /** writeLogEntriesBulkのサマリ通知等、Components V2化していない送信経路が使う旧来のプレーンテキスト。componentsと排他。 */
+  content?: string;
+  /** Components V2 (MessageFlags.IsComponentsV2)で送るコンテナ本体。指定時はcontentを無視する。 */
+  components?: ContainerBuilder[];
   suppressMentions: true;
 }
 
@@ -28,10 +35,26 @@ export interface WriteLogEntryDeps {
    * 短命キャッシュ付きの実装を注入すると、DB往復を削減できる(パフォーマンス改善)。
    */
   getChannelId?: GetChannelId;
+  /**
+   * 監査ログ相関の確定を待つ最大時間(ms)。テスト用にCORRELATION_SEND_DELAY_MSを
+   * 上書きする。省略時は既定の3秒。相関が確定次第それより早く送信されるため、
+   * これは「相関が間に合わなかった場合に諦めるまでの上限」であって固定待機時間ではない。
+   */
+  correlationDelayMs?: number;
 }
 
 const MAX_MESSAGE_LENGTH = 1_900;
 const TRUNCATION_SUFFIX = "…";
+
+/**
+ * 監査ログ相関(correlateAuditLogEntry)によるexecutorId付記を待つ、送信の最大タイムアウト。
+ * correlation-events.tsのemitCorrelated/waitForCorrelatedで実行者確定を検知でき次第
+ * 即座に送信するため、この値は「相関が間に合わなかった場合に諦めて送る」上限として働く。
+ * 相関はDBのUPDATEのみでDiscord送信をトリガーしないため、これを待たずに送ると
+ * executorIdが永久に欠落する(「サーバーミュートを解除しました」のように実行者が
+ * 誰か分からない文になる)。
+ */
+const CORRELATION_SEND_DELAY_MS = 3_000;
 
 async function selectChannelId(db: Db, guildId: string, category: LogEntry["category"]): Promise<string | null> {
   const [channelSetting] = await db
@@ -104,7 +127,12 @@ export async function writeLogEntry(
   id: string = randomUUID(),
   skipNotifyIfExists = false,
 ): Promise<void> {
-  const { db, sendToChannel, getChannelId = (guildId, category) => selectChannelId(db, guildId, category) } = deps;
+  const {
+    db,
+    sendToChannel,
+    getChannelId = (guildId, category) => selectChannelId(db, guildId, category),
+    correlationDelayMs = CORRELATION_SEND_DELAY_MS,
+  } = deps;
 
   const inserted = await db
     .insert(logEntries)
@@ -121,14 +149,37 @@ export async function writeLogEntry(
 
   if (skipNotifyIfExists && inserted.length === 0) return;
 
+  /**
+   * auditLogCorrelationは監査ログの生データをDB保存するための内部専用カテゴリで、
+   * ダッシュボードの通常表示にも出さない設計(correlateAuditLogEntryのコメント参照)。
+   * 1つの監査ログイベントごとに必ず発生しノイズが大きいため、Discordへは送信しない。
+   */
+  if (entry.category === "auditLogCorrelation") return;
+
   const channelId = await getChannelId(entry.guildId, entry.category);
 
   if (channelId === null) return;
 
+  const entryToSend = isCorrelatable(entry) ? await waitForCorrelation(db, id, entry, correlationDelayMs) : entry;
+
   await sendToChannel(channelId, {
-    content: formatLogEntry(entry),
+    components: buildLogEntryContainers(entryToSend),
     suppressMentions: true,
   });
+}
+
+/**
+ * 監査ログ相関(correlateAuditLogEntry)がexecutorIdを付記するのを待つ。emitCorrelatedで
+ * 確定を検知できればその時点で即座にDBから最新payloadを取得し、timeoutMs以内に確定しなければ
+ * 諦めて元のentryのまま返す(executorId欠落は許容し、送信自体を無期限に止めない)。
+ */
+async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, timeoutMs: number): Promise<LogEntry> {
+  const correlated = await waitForCorrelated(id, timeoutMs);
+  if (!correlated) return fallback;
+  const [row] = await db.select({ payload: logEntries.payload }).from(logEntries).where(eq(logEntries.id, id));
+  if (!row) return fallback;
+  const parsed = parseLogEntry(row.payload);
+  return parsed;
 }
 
 /**

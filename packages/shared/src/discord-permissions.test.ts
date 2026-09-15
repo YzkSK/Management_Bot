@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { diffPermissions } from "./discord-permission-labels.js";
+import { diffPermissions } from "./discord-permissions.js";
 
 describe("diffPermissions", () => {
   it("0→1056(manageGuild+viewChannel)を追加権限として返す", () => {

@@ -2,6 +2,7 @@ import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { LogCategory } from "../domain/index.js";
+import { emitCorrelated } from "./correlation-events.js";
 import { writeLogEntry, type WriteLogEntryDeps } from "./write-log-entry.js";
 
 /**
@@ -77,7 +78,7 @@ interface CorrelationRule {
  * role所属変更(MemberRoleUpdate)はroleId+userIdの複合一致が必要でこのテーブルの単一フィールド
  * 一致では表現できないため、correlateAuditLogEntry内で別処理として扱う。
  */
-const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
+export const CORRELATION_RULES: Partial<Record<string, CorrelationRule>> = {
   GuildUpdate: { category: "guild", field: null, logActions: ["update"] },
   ChannelCreate: { category: "channel", field: "channelId", logActions: ["create"] },
   ChannelUpdate: { category: "channel", field: "channelId", logActions: ["update"] },
@@ -225,7 +226,11 @@ async function annotateRow(
     .set({ payload: sql`${logEntries.payload} || ${patch}` })
     .where(and(eq(logEntries.id, id), sql`NOT (${logEntries.payload} ? 'executorId')`))
     .returning({ id: logEntries.id });
-  return updated.length > 0;
+  const success = updated.length > 0;
+  // writeLogEntry側(同一プロセス)がisCorrelatable判定でこの行の送信を待っている場合、
+  // 3秒の固定待機を待たず、実行者が確定した直後に送信できるようにする。
+  if (success) emitCorrelated(id);
+  return success;
 }
 
 /**

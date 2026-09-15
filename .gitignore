@@ -8,3 +8,6 @@ docs/superpowers/
 !.env.example
 !.env.dev.example
 .superpowers/
+.claude/settings.local.json
+.vscode/
+**/.vite/

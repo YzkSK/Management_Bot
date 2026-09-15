@@ -45,6 +45,16 @@ Management_Bot(マルチテナント対応Discord bot)のリポジトリ運用�
 - 機能間連携は直接importではなく`packages/shared/src/domain-events.ts` + Redis Streams(consumer group、at-least-once配送、イベントID等による冪等処理)経由で疎結合にする。
 - 拡張は型で縛った静的配列への明示登録に留める。過剰な動的プラグイン機構(ファイルスキャン・dynamic import)は採用しない(依頼されていない抽象化をしない)。
 
+## リリース運用
+
+- バージョンの正はルート`package.json`の`version`(Dashboard UIのフッターに`v{version}`として表示される)。各app配下の`package.json`の`version`はワークスペース定義上の値で固定(`0.0.0`)とし、リリース versionとしては使わない。
+- mainへのマージ時にCI(`.github/workflows/release.yml`)が自動でGitHub Releaseを作成する。
+  - 通常のマージ: ルート`package.json`の`version`が前回リリースと同じ(≒タグ`v{version}`が既存)なら、patchを自動で+1してリリースする。
+  - スタックドPRの統合など意味のある節目: PR側で事前にルート`package.json`の`version`を`1.0.0`のように手動で書き換えておけば、CIはその値をそのまま使ってリリースする(自動+1をスキップする)。
+- タグ名は`v{version}`(例: `v0.0.2`)。
+- 短時間に複数PRが連続でmainにマージされた場合、リリースワークフローが1回にまとめて処理し、patchが1つだけ上がることがある(要件上許容)。
+- mainのブランチ保護ルールで`github-actions[bot]`によるバージョンbump用の直接pushを許可しておくこと(保護が厳しいとリリースワークフローの自動pushが失敗する)。
+
 ## DB運用ルール
 
 - Discord IDは`text`型、タイムスタンプは`timestamptz`。

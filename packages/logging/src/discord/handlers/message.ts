@@ -6,6 +6,7 @@ import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
+type MessageAttachments = Extract<LogEntry, { category: "message" }>["attachments"];
 
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
@@ -31,6 +32,16 @@ type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
  */
 function isThreadStarterMessage(message: AnyMessage): boolean {
   return message.id === message.channelId;
+}
+
+/** 添付ファイルの実体は保存せずDiscord CDNのURL・ファイル名・content typeのみ抽出する(ストレージ節約)。 */
+function toAttachments(message: AnyMessage): MessageAttachments {
+  if (message.attachments.size === 0) return undefined;
+  return message.attachments.map((attachment) => ({
+    url: attachment.url,
+    filename: attachment.name,
+    contentType: attachment.contentType ?? undefined,
+  }));
 }
 
 function baseFields(
@@ -68,11 +79,13 @@ export function toMessageCreateLogEntry(
     createdAt: message.createdAt.toISOString(),
     action: "create",
     content: message.content || undefined,
+    attachments: toAttachments(message),
   };
 }
 
 /**
- * 本文が変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。
+ * 本文・添付ファイルが両方とも変化しないmessageUpdate(ピン留め・embed生成等)はログ対象外にする。
+ * 添付のみの追加・削除(本文は同一)もログ対象に含めるため、contentだけでなくattachmentsも比較する。
  * oldMessageがpartial(contentが未取得でnull)の場合、実際は本文が変わっていなくても
  * content比較が常に不一致になり誤ったupdateログを生成するため、比較前にスキップする。
  */
@@ -84,7 +97,9 @@ export function toMessageUpdateLogEntry(
   const base = baseFields(newMessage, botUserId);
   if (!base) return undefined;
   if (oldMessage.partial) return undefined;
-  if (oldMessage.content === newMessage.content) return undefined;
+  const contentChanged = oldMessage.content !== newMessage.content;
+  const attachmentsChanged = JSON.stringify(toAttachments(oldMessage)) !== JSON.stringify(toAttachments(newMessage));
+  if (!contentChanged && !attachmentsChanged) return undefined;
   return {
     category: "message",
     ...base,
@@ -92,6 +107,7 @@ export function toMessageUpdateLogEntry(
     action: "update",
     content: newMessage.content || undefined,
     previousContent: oldMessage.content,
+    attachments: toAttachments(newMessage),
   };
 }
 
@@ -126,6 +142,7 @@ export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string |
     createdAt: new Date().toISOString(),
     action: "delete",
     content: message.content || undefined,
+    attachments: toAttachments(message),
   };
 }
 
@@ -138,7 +155,14 @@ export function toMessageBulkDeleteLogEntries(
   for (const message of messages.values()) {
     const base = baseFields(message, botUserId);
     if (!base) continue;
-    entries.push({ category: "message", ...base, createdAt, action: "bulkDelete", content: message.content || undefined });
+    entries.push({
+      category: "message",
+      ...base,
+      createdAt,
+      action: "bulkDelete",
+      content: message.content || undefined,
+      attachments: toAttachments(message),
+    });
   }
   return entries;
 }

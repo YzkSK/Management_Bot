@@ -122,6 +122,30 @@ describe.skipIf(!(await isRedisAvailable()))("DomainEventBus", () => {
     await bus.close();
   });
 
+  test("PELが11件以上あってもintervalを待たず1回の起動で全件reclaimする", async () => {
+    const group = randomUUID();
+    const raw = new Redis(REDIS_URL);
+    await raw.xgroup("CREATE", STREAM, group, "0", "MKSTREAM");
+    for (let i = 0; i < 11; i++) {
+      await raw.xadd(STREAM, "*", "payload", JSON.stringify(sampleEvent({ userId: `u${i}` })));
+    }
+    // 別consumer名で読み取るがACKしない(異常終了を模擬)。CLAIM_COUNT(10)を超えるPELを作る。
+    await raw.xreadgroup("GROUP", group, "stale-consumer", "COUNT", 20, "STREAMS", STREAM, ">");
+    await raw.quit();
+
+    const receivedIds = new Set<string>();
+    const allReceived = Promise.withResolvers<void>();
+    const bus = new DomainEventBus(REDIS_URL, group, undefined, 0);
+    await bus.subscribe("voice.session.ended", (event) => {
+      receivedIds.add(event.userId);
+      if (receivedIds.size === 11) allReceived.resolve();
+    });
+
+    await allReceived.promise;
+    expect(receivedIds.size).toBe(11);
+    await bus.close();
+  });
+
   test("handlerにRedisのstream entry IDが渡される(冪等キーとして利用可能)", async () => {
     const group = randomUUID();
     const bus = new DomainEventBus(REDIS_URL, group);

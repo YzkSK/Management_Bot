@@ -1,4 +1,4 @@
-import type { LogEntry, VoiceStateFlagName } from "@management-bot/shared";
+import type { LogEntry, VoiceStateFlagName } from "./log-entry.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
@@ -49,17 +49,26 @@ const VOICE_MODERATOR_FLAGS = new Set<VoiceStateFlagName>(["serverMute", "server
 interface NameResolvers {
   users: Record<string, string>;
   channels: Record<string, string>;
+  /**
+   * trueの場合、userName/channelNameは表示名の代わりにDiscordのメンション記法(<@id>/<#id>)を返す。
+   * Discord送信(log-entry-container.ts)専用。dashboard-webの一覧テーブルは行内メンションが
+   * 不自然な平文表示のため、省略時(undefined)は従来通り表示名を返す。
+   */
+  mention?: boolean;
 }
 
 /**
  * snapshotは書き込み時点のDiscord表示名スナップショット(authorName/userName等)。
  * executorName/threadNameと同じ優先順位で、存在すればresolveDisplayNamesの結果より優先する。
+ * mention=trueの場合はスナップショットより<@id>を優先する(メンションはクライアント側が常に最新の表示名で描画するため)。
  */
 function userName(id: string, names: NameResolvers, snapshot?: string): string {
+  if (names.mention) return `<@${id}>`;
   return snapshot ?? names.users[id] ?? id;
 }
 
 function channelName(id: string, names: NameResolvers): string {
+  if (names.mention) return `<#${id}>`;
   const name = names.channels[id];
   return name ? `#${name}` : `#${id}`;
 }
@@ -77,22 +86,23 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
   switch (entry.category) {
     case "message": {
       const authorName = userName(entry.authorId, names, entry.authorName);
+      const channel = channelName(entry.channelId, names);
       switch (entry.action) {
         case "create":
-          return `${authorName} がメッセージを投稿しました`;
+          return `${channel} で ${authorName} がメッセージを投稿しました`;
         case "update":
-          return `${authorName} がメッセージを編集しました`;
+          return `${channel} で ${authorName} がメッセージを編集しました`;
         case "delete":
         case "bulkDelete": {
           const suffix = entry.action === "bulkDelete" ? "複数のメッセージを削除しました" : "メッセージを削除しました";
           return entry.authorId === entry.executorId || entry.executorId === undefined
-            ? `${authorName} が自分の${suffix}`
-            : `${executorName} が ${authorName} の${suffix}`;
+            ? `${channel} で ${authorName} が自分の${suffix}`
+            : `${channel} で ${executorName} が ${authorName} の${suffix}`;
         }
         case "pin":
-          return `${executorName} がメッセージをピン留めしました`;
+          return `${channel} で ${executorName} がメッセージをピン留めしました`;
         case "unpin":
-          return `${executorName} がメッセージのピン留めを解除しました`;
+          return `${channel} で ${executorName} がメッセージのピン留めを解除しました`;
       }
       break;
     }

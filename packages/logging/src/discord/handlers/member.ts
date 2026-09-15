@@ -1,11 +1,12 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { GuildBan, GuildMember, PartialGuildMember } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
+import type { GetChannelId, MemberJoinFlags, WriteLogEntryDeps } from "../../application/index.js";
+import { getMemberJoinFlags } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
-export function toMemberJoinLogEntry(member: GuildMember): LogEntry {
+export function toMemberJoinLogEntry(member: GuildMember, flags?: MemberJoinFlags): LogEntry {
   return {
     category: "member",
     guildId: member.guild.id,
@@ -14,6 +15,10 @@ export function toMemberJoinLogEntry(member: GuildMember): LogEntry {
     userName: member.displayName,
     action: "join",
     actorIsBot: member.user.bot,
+    isRejoin: flags?.isRejoin,
+    hasModerationHistory: flags?.hasModerationHistory,
+    avatarUrl: member.user.displayAvatarURL({ size: 128 }),
+    accountCreatedAt: member.user.createdAt.toISOString(),
   };
 }
 
@@ -122,7 +127,14 @@ export function toMemberUpdateLogEntries(oldMember: GuildMember | PartialGuildMe
 export function registerMemberHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
-  ctx.client.on("guildMemberAdd", (member) => writeLogEntrySafely(deps, toMemberJoinLogEntry(member)));
+  ctx.client.on("guildMemberAdd", (member) => {
+    void getMemberJoinFlags(ctx.db, member.guild.id, member.id)
+      .catch((error: unknown) => {
+        console.error(`Failed to resolve member join flags (guildId=${member.guild.id}, userId=${member.id})`, error);
+        return undefined;
+      })
+      .then((flags) => writeLogEntrySafely(deps, toMemberJoinLogEntry(member, flags)));
+  });
   ctx.client.on("guildMemberRemove", (member) => writeLogEntrySafely(deps, toMemberLeaveLogEntry(member)));
   ctx.client.on("guildBanAdd", (ban) => writeLogEntrySafely(deps, toMemberBanLogEntry(ban)));
   ctx.client.on("guildBanRemove", (ban) => writeLogEntrySafely(deps, toMemberUnbanLogEntry(ban)));

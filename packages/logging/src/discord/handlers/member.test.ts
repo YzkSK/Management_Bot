@@ -25,7 +25,11 @@ function fakeMember(
     guild: { id: "g1" },
     nickname: null,
     communicationDisabledUntilTimestamp: null,
-    user: { bot },
+    user: {
+      bot,
+      displayAvatarURL: () => "https://cdn.example.com/avatar.png",
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+    },
     displayName,
     partial,
     ...rest,
@@ -49,6 +53,16 @@ describe("member category mappers", () => {
 
   test("Botアカウントのjoinはactor" + "IsBot=trueとして記録する(除外はしない)", () => {
     expect(toMemberJoinLogEntry(fakeMember({ bot: true })).actorIsBot).toBe(true);
+  });
+
+  test("flags未指定ならisRejoin/hasModerationHistoryは未設定", () => {
+    const entry = toMemberJoinLogEntry(fakeMember());
+    expect(entry).toMatchObject({ isRejoin: undefined, hasModerationHistory: undefined });
+  });
+
+  test("flagsを渡すとisRejoin/hasModerationHistoryに反映される", () => {
+    const entry = toMemberJoinLogEntry(fakeMember(), { isRejoin: true, hasModerationHistory: true });
+    expect(entry).toMatchObject({ isRejoin: true, hasModerationHistory: true });
   });
 
   test("ban/unbanのuserIdは実行者ではなく対象のため、対象がBotでもactor" + "IsBotは設定しない", () => {

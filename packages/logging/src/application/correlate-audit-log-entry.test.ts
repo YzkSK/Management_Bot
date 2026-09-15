@@ -184,8 +184,9 @@ describe("correlateAuditLogEntry", () => {
     const { sql, params } = pgDialect.sqlToQuery(correlationWhereCall as Parameters<typeof pgDialect.sqlToQuery>[0]);
     expect(sql).toContain("'nickname'");
     expect(params).toContain("Yuzuki");
-    // 先頭はwriteLogEntryのlog_channel_settings照会、2件目だけがニックネーム相関の照会。
-    expect(selectWhereArgs).toHaveLength(2);
+    // auditLogCorrelationエントリはwriteLogEntryが早期returnしDiscordへ送信しない(log_channel_settings照会なし)ため、
+    // ニックネーム相関の照会1件のみ。
+    expect(selectWhereArgs).toHaveLength(1);
   });
 
   test("MemberUpdateのnick差分に既存ログがなければメンバーログを補完する", async () => {
@@ -353,8 +354,9 @@ describe("correlateAuditLogEntry", () => {
     await correlateAuditLogEntry({ db, sendToChannel: mock(() => Promise.resolve()) }, baseEntry, 0);
 
     expect(updates).toHaveLength(2);
-    // writeLogEntryのlogChannelSettings参照1回 + findUnannotatedRowの初回・リトライで2回 = 3回。
-    expect(selectCalls).toHaveLength(3);
+    // auditLogCorrelationエントリはwriteLogEntryが早期returnしlogChannelSettings参照が発生しないため、
+    // findUnannotatedRowの初回・リトライで2回。
+    expect(selectCalls).toHaveLength(2);
   });
 
   test("MessageDeleteはchannelId+authorId(targetId)で一致するmessage delete行に相関する", async () => {

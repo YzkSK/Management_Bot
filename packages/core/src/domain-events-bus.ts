@@ -6,6 +6,7 @@ const STREAM_PREFIX = "domain-events:";
 const BLOCK_MS = 1000;
 const DEFAULT_MIN_IDLE_MS_FOR_CLAIM = 30_000;
 const CLAIM_COUNT = 10;
+const RECLAIM_INTERVAL_MS = 5_000;
 
 type EventHandler<T extends DomainEventType> = (
   event: Extract<DomainEvent, { type: T }>,
@@ -53,8 +54,10 @@ function parseXAutoClaimResponse(raw: unknown): { cursor: string; entries: Strea
  * 同じstreamを複数機能が購読する場合、Streamsの仕様上group単位で独立して
  * 配送されるため、機能ごとに別groupを持たないと同じイベントを取り合ってしまう。
  *
- * ponytail: XTRIMによるストリーム肥大化対策は未実装(閾値要件が未確定のため)。
- * 運用で問題化したらXTRIM MAXLEN ~ <N>を publish 時に追加する。
+ * ponytail: XTRIMによるストリーム肥大化対策は未実装。MAXLENは古いエントリを
+ * 問答無用でevictするため、PEL上に未ACKの古いエントリがあるとpayloadを失い
+ * at-least-once配送を壊す(全consumer groupのACK状況を跨いだ安全なtrim方針が
+ * 必要)。運用で問題化したら consumer group横断でACK済みの範囲のみ落とす設計を検討する。
  *
  * ponytail: type毎に同一subscriber接続上でXREADGROUP BLOCKを直列実行するため、
  * 1インスタンスが多数のtypeを購読するとBLOCK待機が後続typeの応答を遅らせる。
@@ -68,6 +71,7 @@ export class DomainEventBus {
   private readonly handlers = new Map<DomainEventType, Set<EventHandler<DomainEventType>>>();
   private readonly consumerLoops = new Map<DomainEventType, Promise<void>>();
   private readonly claimCursors = new Map<DomainEventType, string>();
+  private readonly lastReclaimAt = new Map<DomainEventType, number>();
   private closing = false;
 
   constructor(
@@ -78,8 +82,12 @@ export class DomainEventBus {
     private readonly minIdleMsForClaim: number = DEFAULT_MIN_IDLE_MS_FOR_CLAIM,
   ) {
     this.consumerName = randomUUID();
-    this.publisher = new Redis(redisUrl);
-    this.subscriber = new Redis(redisUrl);
+    // maxRetriesPerRequestを明示し、Redis障害時に個々のコマンドが無限に
+    // キューイングされ続けるのを防ぐ。接続断時、BLOCK中のXREADGROUPを含む
+    // 未完了コマンドは再接続後に再送されるが、この回数だけ再接続に失敗すると
+    // MaxRetriesPerRequestErrorで失敗する(runConsumerLoopのcatchで再試行される)。
+    this.publisher = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
+    this.subscriber = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
   }
 
   async publish<T extends DomainEventType>(event: Extract<DomainEvent, { type: T }>): Promise<void> {
@@ -120,13 +128,10 @@ export class DomainEventBus {
     const stream = STREAM_PREFIX + type;
     while (!this.closing) {
       try {
-        // 起動時・定期的に他consumerが未ACKのまま放置したエントリを回収する。
-        // cursorが"0-0"に戻るまでPEL全体を走査し切ってから新規分の読み取りに移る。
-        const reclaimed = await this.reclaimPending(type, stream);
-        if (reclaimed.length > 0) {
-          await this.processEntries(type, stream, reclaimed);
-          continue;
-        }
+        // 起動時・RECLAIM_INTERVAL_MS間隔で他consumerが未ACKのまま放置したエントリを回収する。
+        // PEL全体をcursorが"0-0"に戻るまでdrainし切ってからintervalを更新する
+        // (drain完了前にintervalを更新すると、PELが多い時に回収が長時間止まる)。
+        if (await this.reclaimDuePending(type, stream)) continue;
 
         const raw = await this.subscriber.xreadgroup(
           "GROUP",
@@ -149,6 +154,25 @@ export class DomainEventBus {
         await new Promise((r) => setTimeout(r, BLOCK_MS));
       }
     }
+  }
+
+  // RECLAIM_INTERVAL_MSごとに、PEL全体をcursorが"0-0"に戻るまでdrainし切る。
+  // drain完了後にlastReclaimAtを更新するため、PELが多くても取りこぼさず、
+  // かつ正常系(PELがほぼ空)では無駄なXAUTOCLAIM往復をintervalの間だけ避けられる。
+  private async reclaimDuePending(type: DomainEventType, stream: string): Promise<boolean> {
+    const lastReclaim = this.lastReclaimAt.get(type) ?? 0;
+    if (Date.now() - lastReclaim < RECLAIM_INTERVAL_MS) return false;
+
+    let reclaimedAny = false;
+    for (;;) {
+      const entries = await this.reclaimPending(type, stream);
+      if (entries.length === 0) break;
+      reclaimedAny = true;
+      await this.processEntries(type, stream, entries);
+      if ((this.claimCursors.get(type) ?? "0-0") === "0-0") break;
+    }
+    this.lastReclaimAt.set(type, Date.now());
+    return reclaimedAny;
   }
 
   // cursorが"0-0"に戻る(PEL走査完了)か、エントリを回収できるまでXAUTOCLAIMを

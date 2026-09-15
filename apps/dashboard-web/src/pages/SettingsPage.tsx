@@ -98,7 +98,7 @@ function BulkRetentionControl({
   const parsed = parseRetentionDaysInput(value);
 
   return (
-    <div className="flex items-end gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <div className="flex flex-col gap-1">
         <label htmlFor="bulk-retention-days" className="text-sm font-medium">
           保持期間(日、0=無期限)
@@ -117,6 +117,7 @@ function BulkRetentionControl({
       </div>
       <Button
         type="button"
+        className="w-fit"
         disabled={parsed === null || mutation.isPending}
         onClick={() => {
           if (parsed !== null) {
@@ -126,9 +127,9 @@ function BulkRetentionControl({
       >
         全カテゴリに適用
       </Button>
-      {value !== "" && parsed === null && <p className="text-destructive text-xs self-center">0〜{MAX_RETENTION_DAYS}で入力してください</p>}
-      {mutation.isError && <p className="text-destructive text-xs self-center">保存に失敗しました</p>}
-      {mutation.isSuccess && <p className="text-muted-foreground text-xs self-center">適用しました</p>}
+      {value !== "" && parsed === null && <p className="text-destructive text-xs sm:self-center">0〜{MAX_RETENTION_DAYS}で入力してください</p>}
+      {mutation.isError && <p className="text-destructive text-xs sm:self-center">保存に失敗しました</p>}
+      {mutation.isSuccess && <p className="text-muted-foreground text-xs sm:self-center">適用しました</p>}
     </div>
   );
 }
@@ -160,7 +161,7 @@ function BulkChannelControl({
   useEffect(() => onPendingChange(mutation.isPending), [mutation.isPending, onPendingChange]);
 
   return (
-    <div className="flex items-end gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium">出力先チャンネル</label>
         <Select value={value} onValueChange={setValue} disabled={mutation.isPending}>
@@ -179,13 +180,14 @@ function BulkChannelControl({
       </div>
       <Button
         type="button"
+        className="w-fit"
         disabled={value === UNCHOSEN || mutation.isPending}
         onClick={() => mutation.mutate({ guildId, channelId: value === NO_CHANNEL ? null : value })}
       >
         全カテゴリに適用
       </Button>
-      {mutation.isError && <p className="text-destructive text-xs self-center">保存に失敗しました</p>}
-      {mutation.isSuccess && <p className="text-muted-foreground text-xs self-center">適用しました</p>}
+      {mutation.isError && <p className="text-destructive text-xs sm:self-center">保存に失敗しました</p>}
+      {mutation.isSuccess && <p className="text-muted-foreground text-xs sm:self-center">適用しました</p>}
     </div>
   );
 }

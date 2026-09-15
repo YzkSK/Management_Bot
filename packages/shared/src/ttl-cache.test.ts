@@ -2,6 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { createTtlCache } from "./ttl-cache.js";
 
 describe("createTtlCache", () => {
+  test("peekとsetで取得済みの値をloaderなしで共有できる", async () => {
+    const cache = createTtlCache<number>(10_000);
+
+    expect(cache.peek("k")).toBeUndefined();
+    cache.set("k", 42);
+
+    await expect(cache.peek("k")).resolves.toBe(42);
+  });
+
   test("TTL内の同時呼び出しはloadを1回しか実行しない(in-flight共有)", async () => {
     const cache = createTtlCache<number>(10_000);
     let calls = 0;

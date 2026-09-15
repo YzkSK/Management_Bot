@@ -71,7 +71,6 @@ const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
  * ログ一覧表示のたびに含まれる実行者IDの数だけDiscord APIへ個別問い合わせが発生していたため(issue #221)。
  * キーは`${guildId}:${userId}`。
  */
-const guildMemberNameCache = createTtlCache<string | undefined>(GUILD_TTL_MS);
 
 /**
  * requireCapabilityミドルウェアはprocedureごとにgetGuildMembershipを呼ぶため、
@@ -176,20 +175,34 @@ function createIsGuildMember(botToken: string): (guildId: string, userId: string
 export function createGetGuildMemberNamesWith(
   fetchNames: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>,
 ): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
+  const guildMemberNameCache = createTtlCache<string | undefined>(GUILD_TTL_MS);
   return async (guildId, userIds) => {
-    const resolved = await Promise.all(
-      userIds.map(
-        async (userId) =>
-          [
-            userId,
-            await guildMemberNameCache(`${guildId}:${userId}`, async () => {
-              const names = await fetchNames(guildId, [userId]);
-              return names.get(userId);
-            }),
-          ] as const,
-      ),
+    const uniqueUserIds = [...new Set(userIds)];
+    const resolved = new Map<string, string>();
+    const missingUserIds: string[] = [];
+
+    await Promise.all(
+      uniqueUserIds.map(async (userId) => {
+        const cached = guildMemberNameCache.peek(`${guildId}:${userId}`);
+        if (cached === undefined) {
+          missingUserIds.push(userId);
+          return;
+        }
+        const name = await cached;
+        if (name !== undefined) resolved.set(userId, name);
+      }),
     );
-    return new Map(resolved.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+
+    if (missingUserIds.length > 0) {
+      const names = await fetchNames(guildId, missingUserIds);
+      for (const userId of missingUserIds) {
+        const name = names.get(userId);
+        guildMemberNameCache.set(`${guildId}:${userId}`, name);
+        if (name !== undefined) resolved.set(userId, name);
+      }
+    }
+
+    return resolved;
   };
 }
 

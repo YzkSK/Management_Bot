@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { formatLogMessage } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
-import type { LogEntry } from "@management-bot/shared";
+import type { LogEntry } from "./log-entry.js";
 
 const noNames = { users: {}, channels: {} };
 
@@ -23,7 +23,7 @@ describe("formatLogMessage", () => {
       channels: { c1: "ログ-推奨" },
     });
 
-    expect(message).toBe("Yuzuki が自分のメッセージを削除しました");
+    expect(message).toBe("#ログ-推奨 で Yuzuki が自分のメッセージを削除しました");
   });
 
   test("メッセージ削除(第三者が削除): 実行者=モデレーター", () => {
@@ -44,7 +44,7 @@ describe("formatLogMessage", () => {
       channels: {},
     });
 
-    expect(message).toBe("Admin が Yuzuki のメッセージを削除しました");
+    expect(message).toBe("#c1 で Admin が Yuzuki のメッセージを削除しました");
   });
 
   test("メッセージ削除(実行者名スナップショットあり): resolveDisplayNamesの結果より優先する", () => {
@@ -66,7 +66,7 @@ describe("formatLogMessage", () => {
       channels: {},
     });
 
-    expect(message).toBe("モデレーター太郎 が Yuzuki のメッセージを削除しました");
+    expect(message).toBe("#c1 で モデレーター太郎 が Yuzuki のメッセージを削除しました");
   });
 
   test("メッセージ削除(投稿者名スナップショットあり): resolveDisplayNamesの結果より優先する", () => {
@@ -87,7 +87,7 @@ describe("formatLogMessage", () => {
       channels: {},
     });
 
-    expect(message).toBe("退室済みユーザー が自分のメッセージを削除しました");
+    expect(message).toBe("#c1 で 退室済みユーザー が自分のメッセージを削除しました");
   });
 
   test("メッセージ投稿", () => {
@@ -104,7 +104,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
-    expect(message).toBe("Yuzuki がメッセージを投稿しました");
+    expect(message).toBe("#c1 で Yuzuki がメッセージを投稿しました");
   });
 
   test("メッセージ編集", () => {
@@ -122,7 +122,7 @@ describe("formatLogMessage", () => {
 
     const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
-    expect(message).toBe("Yuzuki がメッセージを編集しました");
+    expect(message).toBe("#c1 で Yuzuki がメッセージを編集しました");
   });
 
   test("ボイス移動: from/toのチャンネル名を含む", () => {

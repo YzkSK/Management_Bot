@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { Header } from "./Header.js";
+import { Dialog } from "@/components/ui/dialog";
 
-function renderHeader(avatarUrl: string | null = null): string {
+function renderHeader(avatarUrl: string | null = null, isSidebarOpen = false): string {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} />
+      <Dialog open={isSidebarOpen} onOpenChange={() => {}}>
+        <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} isSidebarOpen={isSidebarOpen} />
+      </Dialog>
     </MemoryRouter>,
   );
 }
@@ -31,5 +34,17 @@ describe("Header", () => {
   test("avatarUrlがnullなら画像を描画しない", () => {
     const html = renderHeader(null);
     expect(html).not.toContain("<img");
+  });
+
+  test("モバイル幅用のメニュー開閉ボタンを描画する(issue #267)", () => {
+    const html = renderHeader();
+    expect(html).toContain('aria-label="メニューを開閉"');
+  });
+
+  test("メニュー開閉ボタンのaria-expandedはisSidebarOpenに追従する(issue #267)", () => {
+    const closedHtml = renderHeader(null, false);
+    const openHtml = renderHeader(null, true);
+    expect(closedHtml).toContain('aria-expanded="false"');
+    expect(openHtml).toContain('aria-expanded="true"');
   });
 });
