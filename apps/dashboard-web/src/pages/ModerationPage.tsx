@@ -9,12 +9,14 @@ import {
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
+import { describePreset, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type TargetType = "user" | "role";
 
@@ -59,29 +61,43 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
         />
       </TableCell>
       <TableCell>
-        <Select
-          value={row.preset}
-          disabled={mutation.isPending}
-          onValueChange={(value) =>
-            mutation.mutate({
-              guildId,
-              violationType: row.violationType,
-              preset: value as ModerationPreset,
-              enabled: row.enabled,
-            })
-          }
-        >
-          <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MODERATION_PRESETS.map((preset) => (
-              <SelectItem key={preset} value={preset}>
-                {PRESET_LABELS[preset]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select
+            value={row.preset}
+            disabled={mutation.isPending}
+            onValueChange={(value) =>
+              mutation.mutate({
+                guildId,
+                violationType: row.violationType,
+                preset: value as ModerationPreset,
+                enabled: row.enabled,
+              })
+            }
+          >
+            <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MODERATION_PRESETS.map((preset) => (
+                <SelectItem key={preset} value={preset}>
+                  {PRESET_LABELS[preset]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
+                aria-label={`${PRESET_LABELS[row.preset]}の検知条件を表示`}
+              >
+                詳細
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{describePreset(row.violationType, row.preset)}</TooltipContent>
+          </Tooltip>
+        </div>
       </TableCell>
       <TableCell className="text-destructive text-xs">{mutation.isError ? "保存に失敗しました" : null}</TableCell>
     </TableRow>
@@ -276,8 +292,12 @@ function WhitelistTableRow({
   );
 }
 
+type ModerationTab = "thresholds" | "whitelist";
+
 export function ModerationPage() {
   const { guildId } = useParams<{ guildId: string }>();
+  const [tab, setTab] = useState<ModerationTab>("thresholds");
+  const isWhitelistTab = tab === "whitelist";
 
   const thresholdsQuery = useQuery({
     ...trpc.moderation.listThresholds.queryOptions({ guildId: guildId ?? "" }),
@@ -285,7 +305,7 @@ export function ModerationPage() {
   });
   const whitelistQuery = useQuery({
     ...trpc.moderation.listWhitelist.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: Boolean(guildId) && isWhitelistTab,
   });
   const permissionStatusQuery = useQuery({
     ...trpc.moderation.getRequiredPermissionStatus.queryOptions({ guildId: guildId ?? "" }),
@@ -293,7 +313,7 @@ export function ModerationPage() {
   });
   const roleOptionsQuery = useQuery({
     ...trpc.moderation.listRoleOptions.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: Boolean(guildId) && isWhitelistTab,
   });
 
   if (!guildId) {
@@ -304,12 +324,7 @@ export function ModerationPage() {
     );
   }
 
-  const requiredQueries = [thresholdsQuery, whitelistQuery];
-  const isForbidden = requiredQueries.some(
-    (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
-  );
-  const isPending = requiredQueries.some((query) => query.isPending);
-  const isError = requiredQueries.some((query) => query.isError);
+  const isForbidden = thresholdsQuery.error instanceof TRPCClientError && thresholdsQuery.error.data?.code === "FORBIDDEN";
 
   if (isForbidden) {
     return (
@@ -319,11 +334,11 @@ export function ModerationPage() {
     );
   }
 
-  if (isPending) {
+  if (thresholdsQuery.isPending) {
     return <div className="text-sm">読み込み中...</div>;
   }
 
-  if (isError || !thresholdsQuery.data || !whitelistQuery.data) {
+  if (thresholdsQuery.isError || !thresholdsQuery.data) {
     return (
       <Alert variant="destructive">
         <AlertDescription>設定の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
@@ -371,52 +386,65 @@ export function ModerationPage() {
         </Alert>
       )}
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">検知種別</h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>種別</TableHead>
-              <TableHead>有効化</TableHead>
-              <TableHead>強度</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {withDefaults(thresholdsQuery.data).map((row) => (
-              <ThresholdTableRow key={row.violationType} guildId={guildId} row={row} />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
+        <TabsList aria-label="スパム対策の設定">
+          <TabsTrigger value="thresholds">検知設定</TabsTrigger>
+          <TabsTrigger value="whitelist">ホワイトリスト</TabsTrigger>
+        </TabsList>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">ホワイトリスト</h2>
-        <WhitelistForm guildId={guildId} />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>種類</TableHead>
-              <TableHead>対象</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {whitelistQuery.data.map((entry) => (
-              <WhitelistTableRow
-                key={`${entry.targetType}-${entry.targetId}`}
-                guildId={guildId}
-                entry={entry}
-                targetName={
-                  entry.targetType === "role"
-                    ? (roleNameById.get(entry.targetId) ?? (entry.targetId === guildId ? "@everyone" : entry.targetId))
-                    : entry.targetId
-                }
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+        <TabsContent value="thresholds">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>種別</TableHead>
+                <TableHead>有効化</TableHead>
+                <TableHead>強度</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {withDefaults(thresholdsQuery.data).map((row) => (
+                <ThresholdTableRow key={row.violationType} guildId={guildId} row={row} />
+              ))}
+            </TableBody>
+          </Table>
+        </TabsContent>
+
+        <TabsContent value="whitelist">
+          <WhitelistForm guildId={guildId} />
+          {whitelistQuery.isPending && <div className="text-sm">読み込み中...</div>}
+          {whitelistQuery.isError && (
+            <Alert variant="destructive">
+              <AlertDescription>ホワイトリストの取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+            </Alert>
+          )}
+          {whitelistQuery.data && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>種類</TableHead>
+                  <TableHead>対象</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {whitelistQuery.data.map((entry) => (
+                  <WhitelistTableRow
+                    key={`${entry.targetType}-${entry.targetId}`}
+                    guildId={guildId}
+                    entry={entry}
+                    targetName={
+                      entry.targetType === "role"
+                        ? (roleNameById.get(entry.targetId) ?? (entry.targetId === guildId ? "@everyone" : entry.targetId))
+                        : entry.targetId
+                    }
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
