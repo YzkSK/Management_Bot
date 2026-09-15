@@ -100,6 +100,15 @@ describe("executeEscalationAction", () => {
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
+  test("timeout実行時にメッセージ削除が失敗しても、timeout自体とDM送信は実行される(削除失敗が処罰をブロックしない)", async () => {
+    const timeout = mock(() => Promise.resolve());
+    const message = fakeMessage({ timeout });
+    message.channel.bulkDelete = mock(() => Promise.reject(new Error("missing permissions")));
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" }));
+    expect(timeout).toHaveBeenCalledTimes(1);
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
   test("memberがnull(既に退出済み等)の場合、処罰もメッセージ削除もDM送信も行わない", async () => {
     const message = fakeMessage(null);
     await expect(

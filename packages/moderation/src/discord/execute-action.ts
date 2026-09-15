@@ -51,6 +51,7 @@ async function sendWarningDm(message: Message, outcome: EscalationOutcome): Prom
  * 個別に削除する。チャンネルがbulkDeleteに対応していない(DM等)場合も同様に個別削除する。
  * bulkDeleteは14日を超えるメッセージを含むと失敗するが、bufferedMessageIdsは
  * windowSeconds(最大でも数十秒)以内のメッセージのみのため実質問題にならない。
+ * 失敗時は例外を投げる(呼び出し側の責務でハンドリングする)。
  */
 async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
   const channel = message.channel;
@@ -59,6 +60,20 @@ async function deleteBufferedMessages(message: Message, bufferedMessageIds: read
     return;
   }
   await message.delete();
+}
+
+/**
+ * timeout/kick/ban実行時の付随処理として削除を行う版。削除はあくまで連投バーストの後始末で
+ * あり本体アクションではないため、Manage Messages権限が無い等で削除だけが失敗しても、
+ * 後続の処罰(member.timeout()/kick()/ban())の実行を止めないよう例外を握りつぶす
+ * (Codexレビュー指摘: 削除失敗が処罰実行をブロックする退行を防ぐ)。
+ */
+async function deleteBufferedMessagesSafely(message: Message, outcome: EscalationOutcome): Promise<void> {
+  try {
+    await deleteBufferedMessages(message, outcome.bufferedMessageIds);
+  } catch (error) {
+    console.error(`moderation: failed to delete buffered messages for case ${outcome.caseId}`, error);
+  }
 }
 
 /**
@@ -84,17 +99,17 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
         break;
       case "timeout":
         if (!message.member) return;
-        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
+        await deleteBufferedMessagesSafely(message, outcome);
         await message.member.timeout(TIMEOUT_DURATION_MS, reasonFor(outcome));
         break;
       case "kick":
         if (!message.member) return;
-        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
+        await deleteBufferedMessagesSafely(message, outcome);
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
         if (!message.member) return;
-        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
+        await deleteBufferedMessagesSafely(message, outcome);
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }
