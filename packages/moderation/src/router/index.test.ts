@@ -14,6 +14,7 @@ import { createCallerFactory, type GuildAccessStatus, type GuildMembership, type
 import { eq } from "drizzle-orm";
 import { moderationRouter } from "./index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
+import { listStrikes } from "../application/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -207,6 +208,57 @@ describe("moderationRouter.listStrikes / resetStrike", () => {
     const result = await caller.listStrikes({ guildId });
 
     expect(result.userNames).toEqual({ [userId]: "テストユーザー" });
+  });
+});
+
+describe("moderationRouter.getEscalationPreset / setEscalationPreset", () => {
+  test("MANAGE_MODERATIONを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.getEscalationPreset({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("未設定時はmediumを返す", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    expect(await caller.getEscalationPreset({ guildId })).toBe("medium");
+  });
+
+  test("setEscalationPreset後は設定値を返す", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    await caller.setEscalationPreset({ guildId, preset: "strong" });
+
+    expect(await caller.getEscalationPreset({ guildId })).toBe("strong");
+  });
+});
+
+describe("moderationRouter.resetAllStrikes", () => {
+  test("MANAGE_MODERATIONを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const userId = `u-${randomUUID()}`;
+    const error = await captureRejection(caller.resetAllStrikes({ guildId, userId }));
+    expect(error).toBeDefined();
+  });
+
+  test("該当ユーザーの全violationTypeをリセットする", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 2 });
+    await db.insert(moderationEscalationState).values({
+      guildId,
+      userId,
+      violationType: "duplicate_content",
+      strikeCount: 1,
+    });
+    const caller = createCaller(buildContext());
+
+    await caller.resetAllStrikes({ guildId, userId });
+
+    const { rows } = await listStrikes(db, guildId);
+    expect(rows.some((r) => r.userId === userId)).toBe(false);
   });
 });
 
