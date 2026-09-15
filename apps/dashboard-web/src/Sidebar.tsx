@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { FEATURE_METADATA } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,14 +24,30 @@ export function Sidebar({ guildId }: SidebarProps) {
   return (
     <nav aria-label="機能メニュー" className="w-56 shrink-0 border-r p-2">
       <div className="mb-3">
-        <Select value={guildId ?? ""} onValueChange={(value) => navigate(`/guilds/${value}/logs`)} disabled={guilds.length === 0}>
+        <Select
+          value={guildId ?? ""}
+          onValueChange={(value) => {
+            const guild = guilds.find((g) => g.id === value);
+            if (!guild?.canViewLogs) {
+              toast.error(NO_ACCESS_MESSAGE);
+              return;
+            }
+            navigate(`/guilds/${value}/logs`);
+          }}
+          disabled={guilds.length === 0}
+        >
           <SelectTrigger className="w-full" aria-label="サーバーを選択">
             <SelectValue placeholder="サーバーを選択" />
           </SelectTrigger>
           <SelectContent>
             {guilds.map((guild) => (
-              <SelectItem key={guild.id} value={guild.id}>
+              <SelectItem
+                key={guild.id}
+                value={guild.id}
+                className={!guild.canViewLogs ? "text-muted-foreground opacity-50" : undefined}
+              >
                 {guild.name}
+                {!guild.canViewLogs && "(権限なし)"}
               </SelectItem>
             ))}
           </SelectContent>
