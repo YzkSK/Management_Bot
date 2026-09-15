@@ -8,7 +8,7 @@ import type {
 } from "@management-bot/shared";
 import { FLOOD_PRESETS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
 import { incrementStrike } from "./escalation-state.js";
-import { type BufferedMessage, claimMessage, pushAndReadBuffer } from "./message-buffer.js";
+import { type BufferedMessage, claimAndPushMessage } from "./message-buffer.js";
 import { getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
 
@@ -55,7 +55,7 @@ function isDuplicateHit(buffer: readonly BufferedMessage[], message: IncomingMes
  * flood/duplicate_contentが同一メッセージで同時にヒットした場合、outcomesには両方の
  * violationTypeが含まれ得る。1メッセージに対する実際のDiscord API実行は1回に集約するなど
  * 呼び出し側で冪等に扱うこと。
- * 同じmessageIdでの再配送・ハンドラ再試行は(claimMessageにより)判定・strike加算をスキップし、
+ * 同じmessageIdでの再配送・ハンドラ再試行は(claimAndPushMessageにより)判定・strike加算をスキップし、
  * 空配列を返す。
  */
 export async function detectAndEscalate(
@@ -66,20 +66,19 @@ export async function detectAndEscalate(
     return [];
   }
 
-  const claimed = await claimMessage(deps.redis, message.guildId, message.messageId, PROCESSED_MARKER_TTL_SECONDS);
-  if (!claimed) return [];
-
   const thresholds = await getEnabledThresholds(deps.db, message.guildId);
   if (thresholds.length === 0) return [];
 
   const windowSeconds = Math.max(...thresholds.map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds));
-  const buffer = await pushAndReadBuffer(
+  const buffer = await claimAndPushMessage(
     deps.redis,
     message.guildId,
     message.userId,
     { messageId: message.messageId, content: message.content, createdAt: message.createdAt },
+    PROCESSED_MARKER_TTL_SECONDS,
     windowSeconds,
   );
+  if (buffer === null) return [];
 
   const outcomes: EscalationOutcome[] = [];
   for (const threshold of thresholds) {

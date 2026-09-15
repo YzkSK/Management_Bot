@@ -68,7 +68,12 @@ export class BotClient extends SapphireClient {
 
   async registerFeatures(
     features: readonly FeatureModule[],
-    deps: { db: Db; databaseUrl: string; eventBusFor: (feature: FeatureModule) => DomainEventBus },
+    deps: {
+      db: Db;
+      databaseUrl: string;
+      redisUrl: string;
+      eventBusFor: (feature: FeatureModule) => DomainEventBus;
+    },
   ): Promise<void> {
     const seen = new Set<string>();
     for (const feature of features) {
@@ -84,6 +89,7 @@ export class BotClient extends SapphireClient {
           client: this,
           db: deps.db,
           databaseUrl: deps.databaseUrl,
+          redisUrl: deps.redisUrl,
           eventBus: deps.eventBusFor(feature),
           onShutdown: (cleanup) => this.shutdownCleanups.push(cleanup),
         });
