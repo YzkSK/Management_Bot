@@ -19,10 +19,26 @@ function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
 }
 
 /**
+ * 実行対象(mostSevereで選ばれた1件)のbufferedMessageIdsに、他のviolationType(例:
+ * flood=timeout・duplicate_content=messageDeleteが同時ヒットした場合のduplicate_content側)の
+ * bufferedMessageIdsもマージする。より重いアクションに集約されて実行されない側のoutcomeでも
+ * 削除対象だったメッセージは削除する(処罰の集約によって削除だけが漏れることを防ぐ)。
+ */
+function mergeBufferedMessageIds(outcomes: readonly EscalationOutcome[]): readonly string[] {
+  const ids = new Set<string>();
+  for (const outcome of outcomes) {
+    for (const id of outcome.bufferedMessageIds) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
  * messageCreateイベントを受けてdetectAndEscalateを呼び出し、判定結果に応じてDiscord API側の
  * アクションを実行する。flood/duplicate_contentが同一メッセージで同時にヒットした場合、
  * moderation.action.recordedはviolationTypeごとに独立してpublishされるが、
- * Discord側への実際の処罰実行は最も重いもの1件に集約する(同一メッセージへの二重実行を避ける)。
+ * Discord側への処罰(timeout/kick/ban)実行は最も重いもの1件に集約する(同一メッセージへの
+ * 二重実行を避ける)。メッセージ削除は集約対象と関係なく、ヒットした全violationTypeの
+ * bufferedMessageIdsをマージして実行する(処罰の集約によって削除だけが漏れることを防ぐ)。
  */
 export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
   if (message.author.bot) return;
@@ -40,5 +56,6 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
 
   if (outcomes.length === 0) return;
 
-  await executeEscalationAction(message, mostSevere(outcomes));
+  const target = mostSevere(outcomes);
+  await executeEscalationAction(message, { ...target, bufferedMessageIds: mergeBufferedMessageIds(outcomes) });
 }

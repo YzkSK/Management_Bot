@@ -63,7 +63,10 @@ async function deleteBufferedMessages(message: Message, bufferedMessageIds: read
 
 /**
  * エスカレーションアクションをDiscord API経由で実行する。
- * messageDeleteは検知の元になったバースト全体(bufferedMessageIds)を削除対象とする。
+ * bufferedMessageIds(検知の元になったバースト全体)は、strikeCountが進んでtimeout/kick/banに
+ * 到達した場合でも常に削除する。連投が続く限りstrikeCountはmessageDeleteの段階を過ぎて
+ * timeout以降に進むため、削除をmessageDeleteアクション時だけに限定すると、それ以降に
+ * 投稿され続けたバーストメッセージが一切削除されなくなる(元の連投が放置される)。
  * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時は例外を投げずログのみ行う。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
@@ -81,14 +84,17 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
         break;
       case "timeout":
         if (!message.member) return;
+        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
         await message.member.timeout(TIMEOUT_DURATION_MS, reasonFor(outcome));
         break;
       case "kick":
         if (!message.member) return;
+        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
         if (!message.member) return;
+        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }
