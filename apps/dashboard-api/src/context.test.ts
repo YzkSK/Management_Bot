@@ -71,6 +71,22 @@ describe("createResolveEffectiveCapabilities", () => {
 });
 
 describe("createGetGuildMemberNamesWith", () => {
+  test("別の依存生成は同じキーでもキャッシュを共有しない", async () => {
+    const firstFetchNames = mock((_guildId: string, userIds: readonly string[]) =>
+      Promise.resolve(new Map(userIds.map((id) => [id, `first-${id}`]))),
+    );
+    const secondFetchNames = mock((_guildId: string, userIds: readonly string[]) =>
+      Promise.resolve(new Map(userIds.map((id) => [id, `second-${id}`]))),
+    );
+
+    const first = createGetGuildMemberNamesWith(firstFetchNames);
+    const second = createGetGuildMemberNamesWith(secondFetchNames);
+
+    expect((await first("isolated-guild", ["isolated-user"])).get("isolated-user")).toBe("first-isolated-user");
+    expect((await second("isolated-guild", ["isolated-user"])).get("isolated-user")).toBe("second-isolated-user");
+    expect(secondFetchNames).toHaveBeenCalledTimes(1);
+  });
+
   test("未キャッシュの重複しないIDは1回の一括fetchで解決する", async () => {
     const fetchNames = mock((_guildId: string, userIds: readonly string[]) =>
       Promise.resolve(new Map(userIds.map((id) => [id, `name-${id}`]))),

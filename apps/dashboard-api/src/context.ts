@@ -71,7 +71,6 @@ const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
  * ログ一覧表示のたびに含まれる実行者IDの数だけDiscord APIへ個別問い合わせが発生していたため(issue #221)。
  * キーは`${guildId}:${userId}`。
  */
-const guildMemberNameCache = createTtlCache<string | undefined>(GUILD_TTL_MS);
 
 /**
  * requireCapabilityミドルウェアはprocedureごとにgetGuildMembershipを呼ぶため、
@@ -176,6 +175,7 @@ function createIsGuildMember(botToken: string): (guildId: string, userId: string
 export function createGetGuildMemberNamesWith(
   fetchNames: (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>>,
 ): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
+  const guildMemberNameCache = createTtlCache<string | undefined>(GUILD_TTL_MS);
   return async (guildId, userIds) => {
     const uniqueUserIds = [...new Set(userIds)];
     const resolved = new Map<string, string>();
