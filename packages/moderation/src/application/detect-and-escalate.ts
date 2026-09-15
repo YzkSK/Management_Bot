@@ -6,8 +6,9 @@ import type {
   ModerationActionType,
   ModerationViolationType,
 } from "@management-bot/shared";
-import { FLOOD_PRESETS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
-import { incrementStrike } from "./escalation-state.js";
+import { FLOOD_PRESETS, ESCALATION_STEPS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
+import { getEscalationPreset } from "./escalation-settings.js";
+import { getTotalStrikeCount, incrementStrike } from "./escalation-state.js";
 import { type BufferedMessage, claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
 import { getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
@@ -34,6 +35,7 @@ export interface DetectAndEscalateDeps {
 
 export interface EscalationOutcome {
   violationType: ModerationViolationType;
+  /** このエスカレーション判定時点の、violationTypeを跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
   strikeCount: number;
   actionType: ModerationActionType;
   caseId: string;
@@ -144,8 +146,13 @@ export async function detectAndEscalate(
     // エラーはSQL自体がcommit済みかどうか判別できないため、ここで解放して再試行を
     // 許すと(実はcommit済みだった場合に)二重にstrikeが進みうる。ロックはwindowSeconds
     // 経過後に自動的に次のstrikeを許可するため、最悪でも検知がその分遅れるだけで済む。
-    const strikeCount = await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
-    const actionType = decideEscalationAction(strikeCount, preset.escalationSteps);
+    await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
+    // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
+    // 検知条件(hasFloodHit/isDuplicateHitの閾値)はviolationTypeごとのプリセットのまま、
+    // アクション決定(何回目でwarn/messageDelete/timeout/kick/ban)だけをguild単位で統一する。
+    const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
+    const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
+    const actionType = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
     if (actionType === null) continue;
 
     const caseId = randomUUID();
@@ -162,7 +169,7 @@ export async function detectAndEscalate(
 
     outcomes.push({
       violationType: threshold.violationType,
-      strikeCount,
+      strikeCount: totalStrikeCount,
       actionType,
       caseId,
       bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, preset.frequency.windowSeconds),

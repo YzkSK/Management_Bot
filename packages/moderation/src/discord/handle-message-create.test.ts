@@ -5,6 +5,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
+import { setEscalationPreset } from "../application/escalation-settings.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -101,6 +102,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   test("連投でstrong presetの閾値に達するとmessageDeleteが実行される", async () => {
     const userId = `u-${randomUUID()}`;
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    // エスカレーション強度もstrongにしないと合計strikeCount=1がESCALATION_STEPS.medium[1]=warnになり
+    // messageDeleteが実行されない(統一ストライクカウンター、#311)。
+    await setEscalationPreset(db, guildId, "strong");
 
     const eventBus = fakeEventBus();
     let last: ReturnType<typeof fakeMessage> | undefined;
@@ -120,6 +124,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       { guildId, violationType: "flood", preset: "strong", enabled: true },
       { guildId, violationType: "duplicate_content", preset: "strong", enabled: true },
     ]);
+    await setEscalationPreset(db, guildId, "strong");
 
     const eventBus = fakeEventBus();
     const content = "spam spam spam";
@@ -129,24 +134,30 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    // 2件目: duplicate_content(strike1=messageDelete)のみヒットし、以降8秒間はduplicate_contentのロックを保持。
-    // 3件目: flood(strike1=messageDelete)がヒット。duplicate_contentも閾値には達し続けるが、
+    // 2件目: duplicate_content(合計strikeCount=1)がヒットしESCALATION_STEPS.strong[1]=messageDelete。
+    // 以降8秒間はduplicate_contentのロックを保持。
+    // 3件目: flood(合計strikeCount=2、duplicate_content分と合わせた統一カウンター、#311)がヒットし
+    // ESCALATION_STEPS.strong[2]=timeoutに到達する。duplicate_contentも閾値には達し続けるが、
     // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
+    // timeout実行時もdeleteBufferedMessagesSafely経由でバッファの削除は必ず行われる。
     expect(eventBus.published).toHaveLength(2);
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
-    expect(last?.timeout).not.toHaveBeenCalled();
+    expect(last?.timeout).toHaveBeenCalledTimes(1);
   });
 
-  test("同一メッセージでflood(messageDelete)とduplicate_content(timeout)が同時にヒットした場合、処罰はより重い方に集約されるがメッセージ削除は必ず実行される", async () => {
+  test("同一メッセージでflood(timeout)とduplicate_content(kick)が同時にヒットした場合、処罰はより重い方に集約されるがメッセージ削除は必ず実行される", async () => {
     const userId = `u-${randomUUID()}`;
     // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85)
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "flood", preset: "strong", enabled: true },
       { guildId, violationType: "duplicate_content", preset: "strong", enabled: true },
     ]);
-    // duplicate_contentのstrikeCountを1でseedし、次のヒットでstrike2=timeoutに到達させる
-    // (異なる内容のメッセージで1バーストを消化させ、3件目で新しいバーストとして
-    // flood(strike1=messageDelete)とduplicate_content(strike2=timeout)を同時に成立させる)。
+    await setEscalationPreset(db, guildId, "strong");
+    // duplicate_contentのstrikeCountを1でseedしておく(統一ストライクカウンター、#311)。
+    // 3件目で新バーストとしてflood/duplicate_contentが同時ヒットする際、
+    // 処理順(スレッショルド登録順: flood→duplicate_content)で合計strikeCountが積み上がる:
+    //   flood加算後の合計 = flood(1) + duplicate_content(1,seed) = 2 → ESCALATION_STEPS.strong[2]=timeout
+    //   duplicate_content加算後の合計 = flood(1) + duplicate_content(2) = 3 → ESCALATION_STEPS.strong[3]=kick
     await db.insert(moderationEscalationState).values({
       guildId,
       userId,
@@ -161,12 +172,13 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    // 3件目: floodが3件目で閾値到達しstrike1=messageDelete。duplicate_content("B"が2連続)も
-    // 新バーストとしてヒットしstrike2=timeout。moderation.action.recordedは両方publishされ、
-    // Discord側の処罰実行はより重いtimeoutに集約されるが、messageDelete相当の削除は
-    // 処罰の集約とは関係なく実行される(連投メッセージが削除されずに残らないようにするため)。
+    // 3件目: floodがtimeout(合計2)、duplicate_content("B"が2連続)がkick(合計3)に到達。
+    // moderation.action.recordedは両方publishされるが、Discord側の処罰実行はより重いkickに
+    // 集約される(mostSevere)。messageDelete相当の削除は処罰の集約とは関係なく実行される
+    // (連投メッセージが削除されずに残らないようにするため)。
     expect(eventBus.published).toHaveLength(2);
-    expect(last?.timeout).toHaveBeenCalledTimes(1);
+    expect(last?.kick).toHaveBeenCalledTimes(1);
+    expect(last?.timeout).not.toHaveBeenCalled();
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
   });
 });
