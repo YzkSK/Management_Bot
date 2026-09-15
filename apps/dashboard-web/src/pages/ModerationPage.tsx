@@ -104,6 +104,43 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
   );
 }
 
+function EscalationPresetSelector({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const query = useQuery(trpc.moderation.getEscalationPreset.queryOptions({ guildId }));
+  const mutation = useMutation({
+    ...trpc.moderation.setEscalationPreset.mutationOptions(),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.getEscalationPreset.queryOptions({ guildId }).queryKey,
+      }),
+  });
+
+  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border p-4">
+      <label className="text-sm font-medium">エスカレーション強度(何回目の違反で警告/削除/タイムアウト等になるか)</label>
+      <Select
+        value={query.data}
+        disabled={mutation.isPending}
+        onValueChange={(value) => mutation.mutate({ guildId, preset: value as ModerationPreset })}
+      >
+        <SelectTrigger className="w-24" aria-label="エスカレーション強度">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MODERATION_PRESETS.map((preset) => (
+            <SelectItem key={preset} value={preset}>
+              {PRESET_LABELS[preset]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました</p>}
+    </div>
+  );
+}
+
 interface TargetOption {
   id: string;
   name: string;
@@ -299,16 +336,98 @@ interface StrikeEntry {
   lastViolationAt: string | Date;
 }
 
-function StrikeTableRow({
+function groupStrikesByUser(
+  rows: readonly StrikeEntry[],
+): { userId: string; total: number; entries: StrikeEntry[] }[] {
+  const byUser = new Map<string, StrikeEntry[]>();
+  for (const row of rows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push(row);
+    byUser.set(row.userId, list);
+  }
+  return [...byUser.entries()].map(([userId, entries]) => ({
+    userId,
+    total: entries.reduce((sum, e) => sum + e.strikeCount, 0),
+    entries,
+  }));
+}
+
+function UserStrikeGroup({
   guildId,
   after,
-  entry,
+  group,
   userName,
 }: {
   guildId: string;
   after: string | undefined;
-  entry: StrikeEntry;
+  group: { userId: string; total: number; entries: StrikeEntry[] };
   userName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const queryClient = useQueryClient();
+  const resetAllMutation = useMutation({
+    ...trpc.moderation.resetAllStrikes.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
+      }),
+  });
+
+  return (
+    <>
+      <TableRow>
+        <TableCell>
+          <button type="button" className="underline decoration-dotted" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "▾" : "▸"} {userName}
+          </button>
+        </TableCell>
+        <TableCell>{group.total}</TableCell>
+        <TableCell>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={resetAllMutation.isPending}
+            onClick={() => resetAllMutation.mutate({ guildId, userId: group.userId })}
+          >
+            全種別リセット
+          </Button>
+          {resetAllMutation.isError && <p className="text-destructive text-xs">失敗しました</p>}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow>
+          <TableCell colSpan={3} className="bg-muted/30 p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-6">種別</TableHead>
+                  <TableHead>警告回数</TableHead>
+                  <TableHead>最終違反日時</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {group.entries.map((entry) => (
+                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} after={after} entry={entry} />
+                ))}
+              </TableBody>
+            </Table>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+function StrikeDetailRow({
+  guildId,
+  after,
+  entry,
+}: {
+  guildId: string;
+  after: string | undefined;
+  entry: StrikeEntry;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -321,8 +440,7 @@ function StrikeTableRow({
 
   return (
     <TableRow>
-      <TableCell>{userName}</TableCell>
-      <TableCell>{VIOLATION_TYPE_LABELS[entry.violationType]}</TableCell>
+      <TableCell className="pl-6">{VIOLATION_TYPE_LABELS[entry.violationType]}</TableCell>
       <TableCell>{entry.strikeCount}</TableCell>
       <TableCell>{new Date(entry.lastViolationAt).toLocaleString("ja-JP")}</TableCell>
       <TableCell>
@@ -394,26 +512,26 @@ function StrikeTab({ guildId }: { guildId: string }) {
     return <p className="text-muted-foreground text-sm">警告履歴はありません。</p>;
   }
 
+  const groups = groupStrikesByUser(rows);
+
   return (
     <div className="flex flex-col gap-2">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>ユーザー</TableHead>
-            <TableHead>種別</TableHead>
-            <TableHead>警告回数</TableHead>
-            <TableHead>最終違反日時</TableHead>
+            <TableHead>合計警告回数</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((entry) => (
-            <StrikeTableRow
-              key={`${entry.userId}-${entry.violationType}`}
+          {groups.map((group) => (
+            <UserStrikeGroup
+              key={group.userId}
               guildId={guildId}
               after={after}
-              entry={entry}
-              userName={userNames[entry.userId] ?? entry.userId}
+              group={group}
+              userName={userNames[group.userId] ?? group.userId}
             />
           ))}
         </TableBody>
@@ -536,6 +654,7 @@ export function ModerationPage() {
         </TabsList>
 
         <TabsContent value="thresholds">
+          <EscalationPresetSelector guildId={guildId} />
           <Table>
             <TableHeader>
               <TableRow>
