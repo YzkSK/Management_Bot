@@ -9,7 +9,7 @@ import {
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { describePreset, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
+import { describePreset, ESCALATION_DESCRIPTIONS, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -136,6 +136,20 @@ function EscalationPresetSelector({ guildId }: { guildId: string }) {
           ))}
         </SelectContent>
       </Select>
+      {query.data && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
+              aria-label={`${PRESET_LABELS[query.data]}のエスカレーション段階を表示`}
+            >
+              詳細
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{ESCALATION_DESCRIPTIONS[query.data]}</TooltipContent>
+        </Tooltip>
+      )}
       {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました</p>}
     </div>
   );
