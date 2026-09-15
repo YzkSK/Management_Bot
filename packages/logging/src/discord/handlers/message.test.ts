@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
+import { MessageFlags } from "discord.js";
 import {
   registerMessageHandlers,
   toMessageBulkDeleteLogEntries,
@@ -279,5 +280,47 @@ describe("registerMessageHandlers", () => {
 
     expect(insertCalls).toHaveLength(1);
     expect((insertCalls[0] as unknown[]).length).toBe(3);
+  });
+
+  test("messageDeleteBulkは一括削除サマリーをComponents V2カードとして送信する", async () => {
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    const on = mock((event: string, handler: (...args: never[]) => unknown) => {
+      handlers.set(event, handler);
+    });
+    const send = mock(() => Promise.resolve());
+    const db = {
+      insert: () => ({ values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([{ channelId: "log1" }]) }) }),
+    };
+    const ctx = {
+      client: {
+        on,
+        user: { id: BOT_USER_ID },
+        channels: {
+          fetch: mock(() =>
+            Promise.resolve({ isTextBased: () => true, isSendable: () => true, send }),
+          ),
+        },
+      },
+      db,
+    } as unknown as FeatureModuleContext;
+
+    registerMessageHandlers(ctx);
+    const messages = new Map([
+      ["1", fakeMessage({ id: "1", author: { id: "u1" } })],
+      ["2", fakeMessage({ id: "2", author: { id: "u2" } })],
+    ]) as unknown as Map<string, unknown> & { first: () => unknown };
+    messages.first = () => [...messages.values()][0];
+
+    await handlers.get("messageDeleteBulk")!(messages as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        components: expect.any(Array),
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] },
+      }),
+    );
   });
 });
