@@ -31,3 +31,4 @@ export {
   type StrikeRow,
 } from "./escalation-state.js";
 export { claimAndPushMessage, type BufferedMessage } from "./message-buffer.js";
+export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";
