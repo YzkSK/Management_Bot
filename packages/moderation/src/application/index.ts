@@ -22,8 +22,10 @@ export {
 } from "./thresholds.js";
 export {
   decayStrikes,
+  getTotalStrikeCount,
   incrementStrike,
   listStrikes,
+  resetAllStrikes,
   resetStrike,
   type StrikePage,
   type StrikeRow,

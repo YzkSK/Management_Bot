@@ -97,6 +97,28 @@ export async function resetStrike(
 }
 
 /**
+ * (guildId, userId)の全violationTypeのstrikeCountを合算して返す。エスカレーション判定
+ * (decideEscalationAction)は違反種別を跨いだこの合計値に対して行う(統一ストライク
+ * カウンター、#311)。内訳は合計値とは別カラム/テーブルにキャッシュせず、都度SUMする
+ * (二重管理による不整合を避けるため)。
+ */
+export async function getTotalStrikeCount(db: Db, guildId: string, userId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${moderationEscalationState.strikeCount}), 0)` })
+    .from(moderationEscalationState)
+    .where(and(eq(moderationEscalationState.guildId, guildId), eq(moderationEscalationState.userId, userId)));
+
+  return Number(row?.total ?? 0);
+}
+
+/** (guildId, userId)の全violationType行を削除する(Dashboardの一括リセット用)。 */
+export async function resetAllStrikes(db: Db, guildId: string, userId: string): Promise<void> {
+  await db
+    .delete(moderationEscalationState)
+    .where(and(eq(moderationEscalationState.guildId, guildId), eq(moderationEscalationState.userId, userId)));
+}
+
+/**
  * lastViolationAtからbaseHours×strikeCount時間が経過した行のstrikeCountを1減らす
  * (strikeCountが多いほど次の減少までの時間が長くなる)。lastViolationAtは減少のたびに
  * 現在時刻へ更新し、次の減少判定の起点とする。0になった行は削除する。

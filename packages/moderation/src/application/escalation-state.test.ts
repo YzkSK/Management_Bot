@@ -2,7 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { createDb, type Db, guilds, moderationEscalationState } from "@management-bot/db";
 import { and, eq } from "drizzle-orm";
-import { decayStrikes, incrementStrike, listStrikes, resetStrike } from "./escalation-state.js";
+import {
+  decayStrikes,
+  getTotalStrikeCount,
+  incrementStrike,
+  listStrikes,
+  resetAllStrikes,
+  resetStrike,
+} from "./escalation-state.js";
 
 describe("incrementStrike", () => {
   let db: Db;
@@ -252,5 +259,85 @@ describe("listStrikes", () => {
     expect(rows.some((r) => r.userId === userIds[0])).toBe(false);
     expect(rows.some((r) => r.userId === userIds[1])).toBe(true);
     expect(rows.some((r) => r.userId === userIds[2])).toBe(true);
+  });
+});
+
+describe("getTotalStrikeCount", () => {
+  let db: Db;
+  let close: () => Promise<void>;
+  const guildId = `test-guild-${randomUUID()}`;
+
+  beforeAll(async () => {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) throw new Error("DATABASE_URL is required");
+    ({ db, close } = createDb(databaseUrl));
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+  });
+
+  afterAll(async () => {
+    await db.delete(guilds).where(eq(guilds.id, guildId));
+    await close();
+  });
+
+  test("violationTypeを跨いで合計を返す", async () => {
+    const userId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "flood");
+    await incrementStrike(db, guildId, userId, "flood");
+    await incrementStrike(db, guildId, userId, "duplicate_content");
+
+    expect(await getTotalStrikeCount(db, guildId, userId)).toBe(3);
+  });
+
+  test("行が存在しない場合は0を返す", async () => {
+    const userId = `u-${randomUUID()}`;
+    expect(await getTotalStrikeCount(db, guildId, userId)).toBe(0);
+  });
+
+  test("他ユーザー・他guildの行は合算しない", async () => {
+    const userId = `u-${randomUUID()}`;
+    const otherUserId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "flood");
+    await incrementStrike(db, guildId, otherUserId, "flood");
+
+    expect(await getTotalStrikeCount(db, guildId, userId)).toBe(1);
+  });
+});
+
+describe("resetAllStrikes", () => {
+  let db: Db;
+  let close: () => Promise<void>;
+  const guildId = `test-guild-${randomUUID()}`;
+
+  beforeAll(async () => {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) throw new Error("DATABASE_URL is required");
+    ({ db, close } = createDb(databaseUrl));
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+  });
+
+  afterAll(async () => {
+    await db.delete(guilds).where(eq(guilds.id, guildId));
+    await close();
+  });
+
+  test("該当ユーザーの全violationType行を削除する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "flood");
+    await incrementStrike(db, guildId, userId, "duplicate_content");
+
+    await resetAllStrikes(db, guildId, userId);
+
+    expect(await getTotalStrikeCount(db, guildId, userId)).toBe(0);
+  });
+
+  test("他ユーザーの行は削除しない", async () => {
+    const userId = `u-${randomUUID()}`;
+    const otherUserId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "flood");
+    await incrementStrike(db, guildId, otherUserId, "flood");
+
+    await resetAllStrikes(db, guildId, userId);
+
+    expect(await getTotalStrikeCount(db, guildId, otherUserId)).toBe(1);
   });
 });
