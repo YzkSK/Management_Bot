@@ -99,6 +99,13 @@
       "when": 1788850513407,
       "tag": "0013_log-channel-settings-notify-trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789088524941,
+      "tag": "0014_wet_power_man",
+      "breakpoints": true
     }
   ]
 }
