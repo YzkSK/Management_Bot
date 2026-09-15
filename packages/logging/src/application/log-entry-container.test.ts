@@ -203,7 +203,35 @@ describe("buildLogEntryContainers", () => {
       changes: { permissions: { before: "0", after: (1n << 5n).toString() } },
     };
     const text = textOf(buildLogEntryContainers(entry));
-    expect(text).toContain("+サーバーの管理");
+    expect(text).toContain("```diff\n+サーバーの管理\n```");
+  });
+
+  test("role/updateのpermissions変更(剥奪+付与混在)は半角ハイフンの削除行を付与行より先に列挙する", () => {
+    const entry: LogEntry = {
+      category: "role",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      roleId: "r1",
+      action: "update",
+      changes: { permissions: { before: (1n << 1n).toString(), after: (1n << 5n).toString() } },
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    const diffBlock = text.match(/```diff\n([\s\S]*?)\n```/)?.[1];
+    expect(diffBlock?.split("\n")).toEqual(["-メンバーをキック", "+サーバーの管理"]);
+  });
+
+  test("voice/updateはdescriptionの文章のみでchangesの生の値行を表示しない", () => {
+    const entry: LogEntry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: { selfMute: { before: false, after: true } },
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    expect(text).not.toContain("selfMute");
   });
 
   test("role/updateの色変更はbefore→after形式で表示する", () => {

@@ -53,10 +53,12 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
     const diff = diffPermissions(change.before, change.after);
     if (diff) {
       const lines = [
-        ...diff.removed.map((name) => `−${name}`),
+        ...diff.removed.map((name) => `-${name}`),
         ...diff.added.map((name) => `+${name}`),
       ];
-      return lines.length > 0 ? formatMultilineField(label, lines.join("\n")) : formatField(label, "変更なし");
+      return lines.length > 0
+        ? formatMultilineField(label, `\`\`\`diff\n${lines.join("\n")}\n\`\`\``)
+        : formatField(label, "変更なし");
     }
   }
   const before = formatChangeValue(field, change.before as string | number | boolean | null, {});
@@ -137,7 +139,8 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
     );
   }
   if (avatarUrl === undefined) bodyLines.push(...memberJoinFields);
-  if (summary.changes !== null) {
+  // voice/updateのchangesはdescription(formatLogMessage)の文章側で既に状態変化を表現済みのため、生の値行は表示しない。
+  if (summary.changes !== null && entry.category !== "voice") {
     for (const [field, change] of Object.entries(summary.changes)) {
       bodyLines.push(formatChangesLine(field, change));
     }

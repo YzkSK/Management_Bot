@@ -35,14 +35,20 @@ const ACTION_LABELS: Record<string, string> = {
   resolve: "解決",
 };
 
-/** voice: action=updateのchangesキー(selfMute等)を日本語の状態変化表現に変換する。selfMute/selfDeaf/streamingは本人の操作、serverMute/serverDeafはモデレーターによる操作。 */
+/**
+ * voice: action=updateのchangesキー(selfMute等)を日本語の状態変化表現に変換する。
+ * selfMute/selfDeaf/streamingは本人の操作、serverMute/serverDeafはモデレーターによる操作。
+ * nounは動詞抜きの名詞句、verbはon/offで変わる動詞(mute系は「する/解除する」、streamingは「開始する/終了する」)。
+ * 同じ動詞になる項目は「ミュート、スピーカーミュートを解除しました」のように名詞句を読点連結し、
+ * 末尾に動詞を1回だけ付ける(「ミュートしました、スピーカーミュートしました」という連呼を避ける)。
+ */
 const VOICE_FLAG_LABELS = {
-  selfMute: { on: "ミュートしました", off: "ミュートを解除しました" },
-  selfDeaf: { on: "スピーカーミュートしました", off: "スピーカーミュートを解除しました" },
-  serverMute: { on: "サーバーミュートしました", off: "サーバーミュートを解除しました" },
-  serverDeaf: { on: "サーバースピーカーミュートしました", off: "サーバースピーカーミュートを解除しました" },
-  streaming: { on: "画面共有を開始しました", off: "画面共有を終了しました" },
-} satisfies Record<VoiceStateFlagName, { on: string; off: string }>;
+  selfMute: { noun: "ミュート", on: "しました", off: "を解除しました" },
+  selfDeaf: { noun: "スピーカーミュート", on: "しました", off: "を解除しました" },
+  serverMute: { noun: "サーバーミュート", on: "しました", off: "を解除しました" },
+  serverDeaf: { noun: "サーバースピーカーミュート", on: "しました", off: "を解除しました" },
+  streaming: { noun: "画面共有", on: "を開始しました", off: "を終了しました" },
+} satisfies Record<VoiceStateFlagName, { noun: string; on: string; off: string }>;
 
 const VOICE_MODERATOR_FLAGS = new Set<VoiceStateFlagName>(["serverMute", "serverDeaf"]);
 
@@ -127,9 +133,30 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
             : `${targetName} が ${from} から ${to} に移動しました`;
         }
         case "update": {
-          const changeEntries = Object.entries(entry.changes) as [VoiceStateFlagName, { after: boolean }][];
-          const describe = (items: typeof changeEntries) =>
-            items.map(([flag, { after }]) => (after ? VOICE_FLAG_LABELS[flag].on : VOICE_FLAG_LABELS[flag].off)).join("、");
+          // selfDeaf(スピーカーミュート)のON/OFFはDiscord仕様上selfMuteも連動させるため、
+          // 両方が同時に変化した場合はselfMuteを表示から省く(「ミュートしました、スピーカーミュートしました」の冗長化を避ける)。
+          const rawChanges = entry.changes as Record<VoiceStateFlagName, { after: boolean }>;
+          const changeEntries = Object.entries(rawChanges).filter(
+            ([flag]) => !(flag === "selfMute" && "selfDeaf" in rawChanges),
+          ) as [VoiceStateFlagName, { after: boolean }][];
+          // 同じ動詞にまとまる項目だけ名詞句を読点連結し、末尾に動詞を1回付ける
+          // (「ミュートしました、スピーカーミュートしました」のような動詞連呼を避ける)。
+          const describe = (items: typeof changeEntries) => {
+            const clauses: string[] = [];
+            let group: string[] = [];
+            let groupVerb: string | null = null;
+            for (const [flag, { after }] of items) {
+              const verb = after ? VOICE_FLAG_LABELS[flag].on : VOICE_FLAG_LABELS[flag].off;
+              if (groupVerb !== null && verb !== groupVerb) {
+                clauses.push(`${group.join("、")}${groupVerb}`);
+                group = [];
+              }
+              groupVerb = verb;
+              group.push(VOICE_FLAG_LABELS[flag].noun);
+            }
+            if (groupVerb !== null) clauses.push(`${group.join("、")}${groupVerb}`);
+            return clauses.join("、");
+          };
           // serverMute/serverDeaf(モデレーター操作)とそれ以外(本人操作)は主語が異なるため文を分ける。
           // 1回のupdateに両方が混在しても、モデレーター操作のみをexecutorName主語にする(codexレビュー指摘)。
           const moderatorEntries = changeEntries.filter(([flag]) => VOICE_MODERATOR_FLAGS.has(flag));
