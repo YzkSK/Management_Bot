@@ -4,6 +4,7 @@ export {
   formatLogEntry,
   createChannelSettingResolver,
   type ChannelMessage,
+  type ChannelMessagePayload,
   type ChannelSender,
   type WriteLogEntryDeps,
   type GetChannelId,

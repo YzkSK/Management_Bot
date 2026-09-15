@@ -17,6 +17,9 @@ export interface ChannelMessage {
   suppressMentions: true;
 }
 
+/** writeLogEntriesBulkのサマリー生成側が指定する送信内容。メンション抑制は送信側が必ず付与する。 */
+export type ChannelMessagePayload = Omit<ChannelMessage, "suppressMentions">;
+
 export type ChannelSender = (channelId: string, message: ChannelMessage) => Promise<void>;
 
 export interface GetChannelId {
@@ -192,7 +195,7 @@ async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, timeou
 export async function writeLogEntriesBulk(
   deps: WriteLogEntryDeps,
   entries: readonly LogEntry[],
-  summary: (entries: readonly LogEntry[]) => string,
+  summary: (entries: readonly LogEntry[]) => ChannelMessagePayload,
 ): Promise<void> {
   if (entries.length === 0) return;
   const { db, sendToChannel, getChannelId = (guildId, category) => selectChannelId(db, guildId, category) } = deps;
@@ -216,7 +219,7 @@ export async function writeLogEntriesBulk(
   if (channelId === null) return;
 
   await sendToChannel(channelId, {
-    content: summary(entries),
+    ...summary(entries),
     suppressMentions: true,
   });
 }

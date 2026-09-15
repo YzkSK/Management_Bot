@@ -195,7 +195,7 @@ export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId:
     writeLogEntriesBulkSafely(
       deps,
       entries,
-      (entries) => `${entries.length}件のメッセージが<#${channelId}>で一括削除されました`,
+      (entries) => ({ content: `${entries.length}件のメッセージが<#${channelId}>で一括削除されました` }),
     );
   });
 }
