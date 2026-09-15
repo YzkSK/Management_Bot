@@ -44,8 +44,26 @@ async function sendWarningDm(message: Message, outcome: EscalationOutcome): Prom
 }
 
 /**
+ * bufferedMessageIds(検知の元になった直近windowSeconds秒間・同一チャンネルのメッセージ)を
+ * まとめて削除する。Discordのbulk delete APIは2〜100件でしか実行できないため、
+ * 1件しかない場合(例: 検知がチャンネルを跨いで成立し、対象チャンネルへの投稿が
+ * トリガーメッセージのみだった場合)は検知をトリガーしたメッセージ自身をmessage.delete()で
+ * 個別に削除する。チャンネルがbulkDeleteに対応していない(DM等)場合も同様に個別削除する。
+ * bulkDeleteは14日を超えるメッセージを含むと失敗するが、bufferedMessageIdsは
+ * windowSeconds(最大でも数十秒)以内のメッセージのみのため実質問題にならない。
+ */
+async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
+  const channel = message.channel;
+  if ("bulkDelete" in channel && bufferedMessageIds.length >= 2) {
+    await channel.bulkDelete(bufferedMessageIds);
+    return;
+  }
+  await message.delete();
+}
+
+/**
  * エスカレーションアクションをDiscord API経由で実行する。
- * 削除対象は検知をトリガーしたメッセージ自身のみ(ウィンドウ内の遡及一括削除は行わない)。
+ * messageDeleteは検知の元になったバースト全体(bufferedMessageIds)を削除対象とする。
  * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時は例外を投げずログのみ行う。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
@@ -59,7 +77,7 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
       case "unban":
         return;
       case "messageDelete":
-        await message.delete();
+        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
         break;
       case "timeout":
         if (!message.member) return;

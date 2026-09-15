@@ -11,7 +11,13 @@ import {
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
-import { detectAndEscalate, type IncomingMessage, SYSTEM_MODERATOR_ID } from "./detect-and-escalate.js";
+import {
+  bufferedMessageIdsInWindow,
+  detectAndEscalate,
+  type IncomingMessage,
+  SYSTEM_MODERATOR_ID,
+} from "./detect-and-escalate.js";
+import type { BufferedMessage } from "./message-buffer.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 
@@ -30,12 +36,14 @@ async function isRedisAvailable(): Promise<boolean> {
 function message(overrides: Partial<IncomingMessage> & Pick<IncomingMessage, "guildId" | "userId">): IncomingMessage {
   return {
     messageId: randomUUID(),
+    channelId: "channel-1",
     content: `msg-${randomUUID()}`,
     createdAt: new Date(),
     roleIds: [],
     ...overrides,
   };
 }
+
 
 describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
   let db: Db;
@@ -113,7 +121,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     }
 
     expect(lastResult).toEqual([
-      { violationType: "flood", strikeCount: 1, actionType: "messageDelete", caseId: expect.any(String) },
+      {
+        violationType: "flood",
+        strikeCount: 1,
+        actionType: "messageDelete",
+        caseId: expect.any(String),
+        bufferedMessageIds: expect.any(Array),
+      },
     ]);
     expect(eventBus.published).toHaveLength(1);
     expect(eventBus.published[0]).toMatchObject({
@@ -130,6 +144,88 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       .from(moderationEscalationState)
       .where(eq(moderationEscalationState.userId, userId));
     expect(row?.strikeCount).toBe(1);
+  });
+
+  test("同一バースト中の連投は閾値超過後も追加でヒットし続けるが、strikeCountは1回しか加算されない", async () => {
+    const userId = `u-${randomUUID()}`;
+    // strong preset: windowSeconds=8, messageThreshold=3
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const results: Awaited<ReturnType<typeof detectAndEscalate>>[] = [];
+    // 8秒以内に7通連投。3通目以降は毎回messageThreshold(3件)を超過し続けるが、
+    // ロックにより2通目以降の超過ではstrikeCountを進めない想定。
+    for (let i = 0; i < 7; i++) {
+      results.push(
+        await detectAndEscalate(
+          { db, redis, eventBus },
+          message({ guildId, userId, createdAt: new Date(now.getTime() + i * 500) }),
+        ),
+      );
+    }
+
+    const hits = results.filter((r) => r.length > 0);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toEqual([
+      {
+        violationType: "flood",
+        strikeCount: 1,
+        actionType: "messageDelete",
+        caseId: expect.any(String),
+        bufferedMessageIds: expect.any(Array),
+      },
+    ]);
+    expect(eventBus.published).toHaveLength(1);
+
+    const [row] = await db
+      .select()
+      .from(moderationEscalationState)
+      .where(eq(moderationEscalationState.userId, userId));
+    expect(row?.strikeCount).toBe(1);
+  });
+
+  test("bufferedMessageIdsは検知トリガーと同一チャンネルかつwindowSeconds以内のメッセージのみに絞られる", async () => {
+    const userId = `u-${randomUUID()}`;
+    // strong preset: windowSeconds=8, messageThreshold=3
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // 1件目は別チャンネル(channel-other)、2・3件目はchannel-1。
+    // flood検知(件数)はチャンネルを跨いで動作する設計のため3件目でヒットするが、
+    // bufferedMessageIdsにはchannel-1の2件のみが残るべき(channel-otherの1件目は除外)。
+    const otherChannelMessageId = randomUUID();
+    await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, channelId: "channel-other", messageId: otherChannelMessageId, createdAt: now }),
+    );
+    const secondMessageId = randomUUID();
+    await detectAndEscalate(
+      { db, redis, eventBus },
+      message({
+        guildId,
+        userId,
+        channelId: "channel-1",
+        messageId: secondMessageId,
+        createdAt: new Date(now.getTime() + 1000),
+      }),
+    );
+    const thirdMessageId = randomUUID();
+    const result = await detectAndEscalate(
+      { db, redis, eventBus },
+      message({
+        guildId,
+        userId,
+        channelId: "channel-1",
+        messageId: thirdMessageId,
+        createdAt: new Date(now.getTime() + 2000),
+      }),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.bufferedMessageIds).not.toContain(otherChannelMessageId);
+    expect(new Set(result[0]?.bufferedMessageIds)).toEqual(new Set([secondMessageId, thirdMessageId]));
   });
 
   test("ホワイトリスト対象ロールを持つユーザーは連投してもstrikeCountが増加しない", async () => {
@@ -183,5 +279,52 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       .from(moderationEscalationState)
       .where(eq(moderationEscalationState.userId, userId));
     expect(row?.strikeCount).toBe(1);
+  });
+});
+
+describe("bufferedMessageIdsInWindow", () => {
+  function bufferedMessage(overrides: Partial<BufferedMessage> = {}): BufferedMessage {
+    return {
+      messageId: randomUUID(),
+      channelId: "channel-1",
+      content: "msg",
+      createdAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  test("同一チャンネル・windowSeconds以内のメッセージのみ残す", () => {
+    const now = new Date("2026-01-01T00:00:10.000Z");
+    const trigger = message({ guildId: "g", userId: "u", channelId: "channel-1", createdAt: now });
+    const inWindow = bufferedMessage({ messageId: "in-window", channelId: "channel-1", createdAt: now });
+    const otherChannel = bufferedMessage({
+      messageId: "other-channel",
+      channelId: "channel-2",
+      createdAt: now,
+    });
+    const tooOld = bufferedMessage({
+      messageId: "too-old",
+      channelId: "channel-1",
+      createdAt: new Date(now.getTime() - 20_000),
+    });
+
+    const result = bufferedMessageIdsInWindow([inWindow, otherChannel, tooOld], trigger, 8);
+
+    expect(result).toEqual(["in-window"]);
+  });
+
+  test("検知トリガーより後に作成されたメッセージ(配送順の入れ替わり)は含めない", () => {
+    const now = new Date("2026-01-01T00:00:10.000Z");
+    const trigger = message({ guildId: "g", userId: "u", channelId: "channel-1", createdAt: now });
+    const sameTime = bufferedMessage({ messageId: "same-time", channelId: "channel-1", createdAt: now });
+    const createdLater = bufferedMessage({
+      messageId: "created-later",
+      channelId: "channel-1",
+      createdAt: new Date(now.getTime() + 5000),
+    });
+
+    const result = bufferedMessageIdsInWindow([sameTime, createdLater], trigger, 8);
+
+    expect(result).toEqual(["same-time"]);
   });
 });

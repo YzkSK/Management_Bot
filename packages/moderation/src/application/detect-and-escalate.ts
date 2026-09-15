@@ -8,7 +8,7 @@ import type {
 } from "@management-bot/shared";
 import { FLOOD_PRESETS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
 import { incrementStrike } from "./escalation-state.js";
-import { type BufferedMessage, claimAndPushMessage } from "./message-buffer.js";
+import { type BufferedMessage, claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
 import { getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
 
@@ -18,6 +18,7 @@ export const SYSTEM_MODERATOR_ID = "system";
 export interface IncomingMessage {
   guildId: string;
   userId: string;
+  channelId: string;
   /** ホワイトリストのロール判定に使う、投稿者が持つロールID一覧。 */
   roleIds: readonly string[];
   messageId: string;
@@ -36,6 +37,15 @@ export interface EscalationOutcome {
   strikeCount: number;
   actionType: ModerationActionType;
   caseId: string;
+  /**
+   * この違反の判定に使ったRedisバッファのうち、検知トリガーメッセージと同一チャンネルかつ
+   * 直近windowSeconds秒以内のメッセージID一覧(新しい順)。actionTypeがmessageDeleteの場合、
+   * 呼び出し側はこれらをまとめて削除対象にできる(連投バースト全体を削除する場合)。
+   * バッファ自体は同一ユーザーのチャンネル横断・時刻フィルタなしの全件を保持しているため、
+   * ここで同一チャンネル・時間窓に絞り込んでいる(別チャンネルのメッセージはchannel.bulkDelete
+   * が対象にできず、時間窓外の古いメッセージは検知と無関係なため)。
+   */
+  bufferedMessageIds: readonly string[];
 }
 
 /** 処理済みメッセージのSETNXマーカーをどれだけ保持するか。実際のwindowSecondsより十分長く取る。 */
@@ -45,6 +55,29 @@ function isDuplicateHit(buffer: readonly BufferedMessage[], message: IncomingMes
   const previous = buffer.find((m) => m.messageId !== message.messageId);
   if (!previous) return false;
   return isDuplicateContent(message.content, previous.content, threshold);
+}
+
+/**
+ * bufferedMessageIds(削除対象)を、検知トリガーメッセージと同一チャンネルかつ直近windowSeconds
+ * 秒以内([windowStart, message.createdAt]の範囲)のものだけに絞り込む。バッファ自体は
+ * チャンネル横断・時刻フィルタなしで同一ユーザーの直近メッセージを保持しているため
+ * (連投・重複検知はチャンネルを跨いで動作させる設計)、削除対象だけはDiscordのbulkDeleteが
+ * チャンネル単位でしか実行できないことを踏まえてここで絞り込む。上限側(message.createdAt以下)
+ * も確認するのは、Redis Streams等での配送順の入れ替わりでバッファに検知トリガーより後に
+ * 作成されたメッセージが紛れていても削除対象に含めないため(hasFloodHitの判定と同様の範囲)。
+ */
+export function bufferedMessageIdsInWindow(
+  buffer: readonly BufferedMessage[],
+  message: IncomingMessage,
+  windowSeconds: number,
+): readonly string[] {
+  const windowStart = message.createdAt.getTime() - windowSeconds * 1000;
+  const windowEnd = message.createdAt.getTime();
+  return buffer
+    .filter(
+      (m) => m.channelId === message.channelId && m.createdAt.getTime() >= windowStart && m.createdAt.getTime() <= windowEnd,
+    )
+    .map((m) => m.messageId);
 }
 
 /**
@@ -74,7 +107,12 @@ export async function detectAndEscalate(
     deps.redis,
     message.guildId,
     message.userId,
-    { messageId: message.messageId, content: message.content, createdAt: message.createdAt },
+    {
+      messageId: message.messageId,
+      channelId: message.channelId,
+      content: message.content,
+      createdAt: message.createdAt,
+    },
     PROCESSED_MARKER_TTL_SECONDS,
     windowSeconds,
   );
@@ -93,6 +131,19 @@ export async function detectAndEscalate(
         : isDuplicateHit(buffer, message, preset.duplicateSimilarityThreshold);
     if (!hit) continue;
 
+    const canStrike = await markStrikeHitAndCheckNewBurst(
+      deps.redis,
+      message.guildId,
+      message.userId,
+      threshold.violationType,
+      preset.frequency.windowSeconds,
+    );
+    if (!canStrike) continue;
+
+    // incrementStrike失敗時、意図的にロックを解放しない。接続断絶やタイムアウト等の
+    // エラーはSQL自体がcommit済みかどうか判別できないため、ここで解放して再試行を
+    // 許すと(実はcommit済みだった場合に)二重にstrikeが進みうる。ロックはwindowSeconds
+    // 経過後に自動的に次のstrikeを許可するため、最悪でも検知がその分遅れるだけで済む。
     const strikeCount = await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
     const actionType = decideEscalationAction(strikeCount, preset.escalationSteps);
     if (actionType === null) continue;
@@ -109,7 +160,13 @@ export async function detectAndEscalate(
       createdAt: message.createdAt.toISOString(),
     });
 
-    outcomes.push({ violationType: threshold.violationType, strikeCount, actionType, caseId });
+    outcomes.push({
+      violationType: threshold.violationType,
+      strikeCount,
+      actionType,
+      caseId,
+      bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, preset.frequency.windowSeconds),
+    });
   }
 
   return outcomes;

@@ -2,6 +2,7 @@ import type { Redis } from "ioredis";
 
 export interface BufferedMessage {
   messageId: string;
+  channelId: string;
   content: string;
   createdAt: Date;
 }
@@ -16,8 +17,13 @@ function processedKey(guildId: string, messageId: string): string {
   return `moderation:processed:${guildId}:${messageId}`;
 }
 
+function strikeLockKey(guildId: string, userId: string, violationType: string): string {
+  return `moderation:strike-lock:${guildId}:${userId}:${violationType}`;
+}
+
 interface SerializedMessage {
   messageId: string;
+  channelId: string;
   content: string;
   createdAt: string;
 }
@@ -54,6 +60,7 @@ export async function claimAndPushMessage(
 ): Promise<BufferedMessage[] | null> {
   const serialized: SerializedMessage = {
     messageId: message.messageId,
+    channelId: message.channelId,
     content: message.content,
     createdAt: message.createdAt.toISOString(),
   };
@@ -74,4 +81,57 @@ export async function claimAndPushMessage(
     const parsed = JSON.parse(item) as SerializedMessage;
     return { ...parsed, createdAt: new Date(parsed.createdAt) };
   });
+}
+
+// KEYS[1]=strikeLockKey, ARGV[1]=windowSeconds(ミリ秒)
+// 値は次にstrikeしてよい時刻(nextAllowedAtMs)を保持する。
+// 現在時刻はアプリ側のDate.now()ではなく、Redisサーバーの時刻(TIMEコマンド)を唯一の時刻源とする
+// (複数プロセス/ホストのクロックずれで判定がずれることを防ぐため)。
+// 現在キーがない、またはnow>=nextAllowedAtMsなら「strike可能」と判定し、
+// nextAllowedAtMs=now+windowSecondsで更新して1を返す(連投が途切れなくてもwindowSecondsごとに
+// 必ずstrikeが進む)。まだnextAllowedAtMs未満なら0を返し、値は変更しない
+// (TTLだけ後続の掃除用に据え置きで延長する)。
+const MARK_STRIKE_HIT_SCRIPT = `
+local time = redis.call("TIME")
+local nowMs = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local raw = redis.call("GET", KEYS[1])
+local ttlSeconds = math.ceil(tonumber(ARGV[1]) / 1000)
+if raw then
+  local nextAllowedAtMs = tonumber(raw)
+  if nowMs < nextAllowedAtMs then
+    redis.call("EXPIRE", KEYS[1], ttlSeconds)
+    return 0
+  end
+end
+local nextAllowedAtMs = nowMs + tonumber(ARGV[1])
+redis.call("SET", KEYS[1], nextAllowedAtMs, "EX", ttlSeconds)
+return 1
+`;
+
+/**
+ * 連投バースト中の多重strike加算を、windowSecondsに1回のペースに制限するために違反ヒットを記録する。
+ * 最後にstrikeしてからwindowSeconds秒経過していれば(バーストが途切れたか、バーストが続いたまま
+ * windowSeconds経過したかを問わず)trueを返し、strikeを加算してよい。
+ * それ以外(直近のstrikeからwindowSeconds未満)はfalseを返す。
+ * これにより、連投が途切れない場合でもwindowSecondsごとに確実にエスカレーション段階が進む一方、
+ * 1回のバースト内でメッセージのたびに無条件でstrikeが進むことは防げる。
+ * strike加算(DB)が後続で失敗しても、この関数は状態を巻き戻さない
+ * (DB接続断絶等の失敗はcommit済みかどうか判別できないため、誤って巻き戻すと
+ * 実際にはcommit済みだった場合に二重strikeを許してしまう。windowSeconds経過後に
+ * 自動的に次のstrikeが可能になるため、実害は検知が最大windowSecondsぶん遅れる程度)。
+ */
+export async function markStrikeHitAndCheckNewBurst(
+  redis: Redis,
+  guildId: string,
+  userId: string,
+  violationType: string,
+  windowSeconds: number,
+): Promise<boolean> {
+  const result = await redis.eval(
+    MARK_STRIKE_HIT_SCRIPT,
+    1,
+    strikeLockKey(guildId, userId, violationType),
+    windowSeconds * 1000,
+  );
+  return result === 1;
 }

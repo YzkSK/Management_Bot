@@ -31,6 +31,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   const outcomes = await detectAndEscalate(deps, {
     guildId: message.guild.id,
     userId: message.author.id,
+    channelId: message.channelId,
     roleIds: [...message.member.roles.cache.keys()],
     messageId: message.id,
     content: message.content,
