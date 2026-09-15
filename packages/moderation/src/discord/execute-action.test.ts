@@ -13,18 +13,34 @@ function outcome(overrides: Partial<EscalationOutcome> = {}): EscalationOutcome 
   };
 }
 
-function fakeMessage(member: Record<string, unknown> | null = {}) {
+function fakeMessage(member: Record<string, unknown> | null = {}, author: Record<string, unknown> = {}) {
   return {
     delete: mock(() => Promise.resolve()),
     member,
+    author: { send: mock(() => Promise.resolve()), ...author },
   };
 }
 
 describe("executeEscalationAction", () => {
-  test("warnはDiscord APIを呼び出さない", async () => {
+  test("warnはDiscord APIを呼び出さないが、対象ユーザーにDMで警告を送る", async () => {
     const message = fakeMessage();
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
     expect(message.delete).not.toHaveBeenCalled();
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("messageDelete等の処罰実行時にも対象ユーザーにDMで警告を送る", async () => {
+    const message = fakeMessage();
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" }));
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("DM送信が失敗(ブロック等)しても例外を投げず、処罰アクションは実行される", async () => {
+    const message = fakeMessage({}, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
+    await expect(
+      executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" })),
+    ).resolves.toBeUndefined();
+    expect(message.delete).toHaveBeenCalledTimes(1);
   });
 
   test("messageDeleteはmessage.delete()を呼ぶ", async () => {
