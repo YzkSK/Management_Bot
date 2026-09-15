@@ -12,6 +12,7 @@
     { "path": "./packages/moderation" },
     { "path": "./apps/bot" },
     { "path": "./apps/dashboard-api" },
-    { "path": "./apps/dashboard-web" }
+    { "path": "./apps/dashboard-web" },
+    { "path": "./apps/moderation-decay" }
   ]
 }

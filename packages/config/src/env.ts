@@ -36,6 +36,9 @@ export const envSchema = z.object({
 
   // ログ保持期限ジョブ
   LOGGING_RETENTION_CRON: z.string().min(1).default("0 4 * * *"),
+
+  // モデレーションストライク減衰ジョブ
+  MODERATION_DECAY_CRON: z.string().min(1).default("0 * * * *"),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -97,6 +97,18 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  moderation-decay:
+    build:
+      context: .
+      dockerfile: apps/moderation-decay/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   dashboard-web:
     build:
       context: .
