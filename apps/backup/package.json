@@ -12,12 +12,11 @@
   },
   "dependencies": {
     "@management-bot/config": "workspace:*",
-    "node-cron": "^3.0.3"
+    "node-cron": "^4.6.0"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",
     "@types/node": "^26.4.0",
-    "@types/node-cron": "^3.0.11",
     "typescript": "^6.0.3"
   }
 }

@@ -14,13 +14,12 @@
     "@management-bot/config": "workspace:*",
     "@management-bot/db": "workspace:*",
     "@management-bot/logging": "workspace:*",
-    "drizzle-orm": "^0.44.0",
-    "node-cron": "^3.0.3"
+    "drizzle-orm": "^0.45.2",
+    "node-cron": "^4.6.0"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",
     "@types/node": "^26.4.0",
-    "@types/node-cron": "^3.0.11",
     "typescript": "^6.0.3"
   }
 }
