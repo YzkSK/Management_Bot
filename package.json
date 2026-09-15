@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:integration:local": "bun run scripts/test-integration-local.ts",
     "dev": "turbo run dev"
   },
   "devDependencies": {
