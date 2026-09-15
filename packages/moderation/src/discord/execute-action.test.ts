@@ -13,18 +13,39 @@ function outcome(overrides: Partial<EscalationOutcome> = {}): EscalationOutcome 
   };
 }
 
-function fakeMessage(member: Record<string, unknown> | null = {}) {
+function fakeMessage(member: Record<string, unknown> | null = {}, author: Record<string, unknown> = {}) {
   return {
     delete: mock(() => Promise.resolve()),
     member,
+    author: { send: mock(() => Promise.resolve()), ...author },
   };
 }
 
 describe("executeEscalationAction", () => {
-  test("warnはDiscord APIを呼び出さない", async () => {
+  test("warnは対象ユーザーにDMで警告を送るのみで、他のDiscord APIは呼び出さない", async () => {
     const message = fakeMessage();
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
     expect(message.delete).not.toHaveBeenCalled();
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("messageDelete成功後に対象ユーザーへDMで警告を送る(処罰が先)", async () => {
+    const calls: string[] = [];
+    const message = {
+      author: { send: mock(async () => void calls.push("dm")) },
+      delete: mock(async () => void calls.push("delete")),
+      member: {},
+    };
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" }));
+    expect(calls).toEqual(["delete", "dm"]);
+  });
+
+  test("DM送信が失敗(ブロック等)しても例外を投げない", async () => {
+    const message = fakeMessage({}, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
+    await expect(
+      executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" })),
+    ).resolves.toBeUndefined();
+    expect(message.delete).toHaveBeenCalledTimes(1);
   });
 
   test("messageDeleteはmessage.delete()を呼ぶ", async () => {
@@ -54,17 +75,26 @@ describe("executeEscalationAction", () => {
     expect(ban).toHaveBeenCalledTimes(1);
   });
 
-  test("memberがnull(既に退出済み等)でも例外を投げない", async () => {
+  test("memberがnull(既に退出済み等)の場合、処罰もDM送信も行わない", async () => {
     const message = fakeMessage(null);
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" })),
     ).resolves.toBeUndefined();
+    expect(message.author.send).not.toHaveBeenCalled();
   });
 
-  test("Discord API呼び出しが失敗しても例外を投げない", async () => {
-    const message = { delete: mock(() => Promise.reject(new Error("missing permissions"))), member: {} };
+  test("Discord API呼び出しが失敗した場合、例外を投げず警告DMも送らない", async () => {
+    const message = fakeMessage({}, {});
+    message.delete = mock(() => Promise.reject(new Error("missing permissions")));
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" })),
     ).resolves.toBeUndefined();
+    expect(message.author.send).not.toHaveBeenCalled();
+  });
+
+  test("unbanは処罰APIもDM送信も行わない", async () => {
+    const message = fakeMessage();
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "unban" }));
+    expect(message.author.send).not.toHaveBeenCalled();
   });
 });
