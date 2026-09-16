@@ -22,6 +22,7 @@ import {
   resetStrike,
   setEscalationPreset,
   setThreshold,
+  UnsafeNgwordRegexError,
 } from "../application/index.js";
 import { MODERATION_PRESETS } from "../domain/index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
@@ -188,11 +189,24 @@ export const moderationRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .query(({ ctx, input }) => listNgwords(ctx.db, input.guildId)),
 
-  /** matchType="regex"の場合、addNgword内でcheckRegexSafetyによる危険パターン検証を行いBAD_REQUESTで拒否する。 */
+  /**
+   * matchType="regex"の場合、addNgword内でcheckRegexSafetyによる危険パターン検証を行う。
+   * application層はtRPCに依存させない設計のため(Codexレビュー指摘)、application層が投げる
+   * UnsafeNgwordRegexErrorをここでTRPCError(BAD_REQUEST)にマップする。
+   */
   addNgword: protectedProcedure
     .input(addNgwordInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
-    .mutation(({ ctx, input }) => addNgword(ctx.db, input.guildId, input.matchType, input.pattern)),
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await addNgword(ctx.db, input.guildId, input.matchType, input.pattern);
+      } catch (error) {
+        if (error instanceof UnsafeNgwordRegexError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
+    }),
 
   removeNgword: protectedProcedure
     .input(removeNgwordInput)

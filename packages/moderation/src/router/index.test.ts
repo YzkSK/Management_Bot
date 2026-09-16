@@ -11,6 +11,7 @@ import {
 } from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type GuildAccessStatus, type GuildMembership, type MemberPage, type RoleOption } from "@management-bot/dashboard-access";
+import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { moderationRouter } from "./index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
@@ -197,7 +198,8 @@ describe("moderationRouter.listNgwords / addNgword / removeNgword", () => {
 
     const error = await captureRejection(caller.addNgword({ guildId, matchType: "regex", pattern: "(a+)+" }));
 
-    expect(error).toBeDefined();
+    expect(error).toBeInstanceOf(TRPCError);
+    expect((error as TRPCError).code).toBe("BAD_REQUEST");
     expect(await caller.listNgwords({ guildId })).toEqual([]);
   });
 });
