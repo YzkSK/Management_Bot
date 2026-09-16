@@ -8,7 +8,7 @@ function outcome(overrides: Partial<EscalationOutcome> = {}): EscalationOutcome 
   return {
     violationType: "flood",
     strikeCount: 1,
-    actionType: "messageDelete",
+    actionType: "warn",
     caseId: "case-1",
     bufferedMessageIds: ["m2", "m1"],
     ...overrides,
@@ -56,38 +56,27 @@ describe("executeEscalationAction", () => {
     expect(payload.components[0]).toBeInstanceOf(ContainerBuilder);
   });
 
-  test("messageDelete成功後に対象ユーザーへDMで警告を送る(処罰が先)", async () => {
-    const calls: string[] = [];
-    const message = {
-      author: { send: mock(async () => void calls.push("dm")) },
-      channel: { bulkDelete: mock(async () => void calls.push("delete")) },
-      member: {},
-    };
-    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" }));
-    expect(calls).toEqual(["delete", "dm"]);
-  });
-
   test("DM送信が失敗(ブロック等)しても例外を投げない", async () => {
     const message = fakeMessage({}, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
     await expect(
-      executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" })),
+      executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" })),
     ).resolves.toBeUndefined();
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
-  test("messageDeleteはbufferedMessageIds全件をchannel.bulkDelete()に渡す", async () => {
+  test("warnはbufferedMessageIds全件をchannel.bulkDelete()に渡す", async () => {
     const message = fakeMessage();
     await executeEscalationAction(
       message as unknown as Message,
-      outcome({ actionType: "messageDelete", bufferedMessageIds: ["m3", "m2", "m1"] }),
+      outcome({ actionType: "warn", bufferedMessageIds: ["m3", "m2", "m1"] }),
     );
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
     expect(message.channel.bulkDelete).toHaveBeenCalledWith(["m3", "m2", "m1"]);
   });
 
-  test("channelがbulkDeleteを持たない(DM等)場合、messageDeleteはmessage.delete()にフォールバックする", async () => {
+  test("channelがbulkDeleteを持たない(DM等)場合、warnの削除はmessage.delete()にフォールバックする", async () => {
     const message = { ...fakeMessage(), channel: {} };
-    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" }));
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
     expect(message.delete).toHaveBeenCalledTimes(1);
   });
 
@@ -95,7 +84,7 @@ describe("executeEscalationAction", () => {
     const message = fakeMessage();
     await executeEscalationAction(
       message as unknown as Message,
-      outcome({ actionType: "messageDelete", bufferedMessageIds: ["m1"] }),
+      outcome({ actionType: "warn", bufferedMessageIds: ["m1"] }),
     );
     expect(message.delete).toHaveBeenCalledTimes(1);
     expect(message.channel.bulkDelete).not.toHaveBeenCalled();
@@ -143,11 +132,11 @@ describe("executeEscalationAction", () => {
     expect(message.channel.bulkDelete).not.toHaveBeenCalled();
   });
 
-  test("Discord API呼び出しが失敗した場合、例外を投げず警告DMも送らない", async () => {
-    const message = fakeMessage({}, {});
-    message.channel.bulkDelete = mock(() => Promise.reject(new Error("missing permissions")));
+  test("Discord API呼び出し(member.kick())が失敗した場合、例外を投げず警告DMも送らない", async () => {
+    const kick = mock(() => Promise.reject(new Error("missing permissions")));
+    const message = fakeMessage({ kick });
     await expect(
-      executeEscalationAction(message as unknown as Message, outcome({ actionType: "messageDelete" })),
+      executeEscalationAction(message as unknown as Message, outcome({ actionType: "kick" })),
     ).resolves.toBeUndefined();
     expect(message.author.send).not.toHaveBeenCalled();
   });

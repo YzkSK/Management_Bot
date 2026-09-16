@@ -19,8 +19,8 @@ export const PRESET_LABELS: Record<ModerationPreset, string> = {
  * flood(連投)は件数条件、duplicate_content(内容重複)は類似度条件のみで判定される
  * (frequencyとduplicateSimilarityThresholdは独立した別々の検知ロジック)。
  *
- * 統一ストライクカウンター(#311)以降、何回目の違反でwarn/messageDelete/timeout等に
- * なるか(エスカレーション段階)は違反種別のプリセットではなくguild単位の
+ * 統一ストライクカウンター(#311)以降、何回目の違反でwarn/timeout等になるか
+ * (エスカレーション段階)は違反種別のプリセットではなくguild単位の
  * escalationPreset(EscalationPresetSelector)で決まるため、ここでは検知条件のみを説明する。
  */
 const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationPreset, string>> = {
@@ -40,11 +40,13 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
  * packages/moderation/src/domain/presets.ts のESCALATION_STEPSをUI表示用に説明文化したもの。
  * guild単位のエスカレーション強度セレクター(EscalationPresetSelector)の説明表示に使う。
  * ESCALATION_STEPSの値を変更した場合はこちらも合わせて更新すること。
+ * メッセージ削除は独立したアクション種別ではなく警告以降の全対応に付随して実行されるため、
+ * ここでは表示しない(#321)。
  */
 export const ESCALATION_DESCRIPTIONS: Record<ModerationPreset, string> = {
-  weak: "1回目:警告 → 3回目:メッセージ削除 → 5回目:タイムアウト → 7回目:キック",
-  medium: "1回目:警告 → 2回目:メッセージ削除 → 3回目:タイムアウト → 4回目:キック",
-  strong: "1回目:メッセージ削除 → 2回目:タイムアウト → 3回目:キック → 4回目:BAN",
+  weak: "1回目:警告 → 5回目:タイムアウト → 7回目:キック",
+  medium: "1回目:警告 → 3回目:タイムアウト → 4回目:キック",
+  strong: "1回目:警告 → 2回目:タイムアウト → 3回目:キック → 4回目:BAN",
 };
 
 export function describePreset(violationType: ModerationViolationType, preset: ModerationPreset): string {

@@ -27,11 +27,13 @@ export const FLOOD_PRESETS: Readonly<Record<ModerationPreset, FloodPresetConfig>
 /**
  * guild単位のエスカレーション強度プリセット。strikeCount(違反種別を跨いだ合計)ごとの
  * アクション種別を定義する。strikeCount以下で最大のキーのアクションを採用する
- * (decideEscalationActionの仕様、値はFLOOD_PRESETSと分離する前の各プリセットの
- * escalationStepsをそのまま移植したもの)。
+ * (decideEscalationActionの仕様)。
+ * メッセージ削除は独立したアクション種別ではなく、warn以降の全アクションに付随する
+ * 処理として実行される(executeEscalationAction参照、#321)。旧messageDelete段階は
+ * 隣接するwarn段階に統合した。
  */
 export const ESCALATION_STEPS: Readonly<Record<ModerationPreset, Readonly<Record<number, ModerationActionType>>>> = {
-  weak: { 1: "warn", 3: "messageDelete", 5: "timeout", 7: "kick" },
-  medium: { 1: "warn", 2: "messageDelete", 3: "timeout", 4: "kick" },
-  strong: { 1: "messageDelete", 2: "timeout", 3: "kick", 4: "ban" },
+  weak: { 1: "warn", 5: "timeout", 7: "kick" },
+  medium: { 1: "warn", 3: "timeout", 4: "kick" },
+  strong: { 1: "warn", 2: "timeout", 3: "kick", 4: "ban" },
 };

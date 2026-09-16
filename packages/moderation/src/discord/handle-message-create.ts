@@ -5,10 +5,9 @@ import { executeEscalationAction } from "./execute-action.js";
 
 const ACTION_SEVERITY: Record<ModerationActionType, number> = {
   warn: 0,
-  messageDelete: 1,
-  timeout: 2,
-  kick: 3,
-  ban: 4,
+  timeout: 1,
+  kick: 2,
+  ban: 3,
   unban: -1,
 };
 
@@ -20,7 +19,7 @@ function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
 
 /**
  * 実行対象(mostSevereで選ばれた1件)のbufferedMessageIdsに、他のviolationType(例:
- * flood=timeout・duplicate_content=messageDeleteが同時ヒットした場合のduplicate_content側)の
+ * flood=timeout・duplicate_content=warnが同時ヒットした場合のduplicate_content側)の
  * bufferedMessageIdsもマージする。より重いアクションに集約されて実行されない側のoutcomeでも
  * 削除対象だったメッセージは削除する(処罰の集約によって削除だけが漏れることを防ぐ)。
  */

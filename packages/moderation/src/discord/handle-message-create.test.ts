@@ -99,11 +99,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(eventBus.published).toEqual([]);
   });
 
-  test("連投でstrong presetの閾値に達するとmessageDeleteが実行される", async () => {
+  test("連投でstrong presetの閾値に達するとバッファ済みメッセージの削除が実行される", async () => {
     const userId = `u-${randomUUID()}`;
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
-    // エスカレーション強度もstrongにしないと合計strikeCount=1がESCALATION_STEPS.medium[1]=warnになり
-    // messageDeleteが実行されない(統一ストライクカウンター、#311)。
     await setEscalationPreset(db, guildId, "strong");
 
     const eventBus = fakeEventBus();
@@ -119,7 +117,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
   test("flood/duplicate_contentが同時にヒットしても、それぞれ同一バースト中は1回しかstrikeが進まない", async () => {
     const userId = `u-${randomUUID()}`;
-    // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85, strike1でmessageDelete)
+    // flood: strong(windowSeconds=8, messageThreshold=3) / duplicate_content: strong(閾値0.85, strike1でwarn)
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "flood", preset: "strong", enabled: true },
       { guildId, violationType: "duplicate_content", preset: "strong", enabled: true },
@@ -134,7 +132,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    // 2件目: duplicate_content(合計strikeCount=1)がヒットしESCALATION_STEPS.strong[1]=messageDelete。
+    // 2件目: duplicate_content(合計strikeCount=1)がヒットしESCALATION_STEPS.strong[1]=warn。
     // 以降8秒間はduplicate_contentのロックを保持。
     // 3件目: flood(合計strikeCount=2、duplicate_content分と合わせた統一カウンター、#311)がヒットし
     // ESCALATION_STEPS.strong[2]=timeoutに到達する。duplicate_contentも閾値には達し続けるが、
@@ -174,7 +172,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
     // 3件目: floodがtimeout(合計2)、duplicate_content("B"が2連続)がkick(合計3)に到達。
     // moderation.action.recordedは両方publishされるが、Discord側の処罰実行はより重いkickに
-    // 集約される(mostSevere)。messageDelete相当の削除は処罰の集約とは関係なく実行される
+    // 集約される(mostSevere)。バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
     // (連投メッセージが削除されずに残らないようにするため)。
     expect(eventBus.published).toHaveLength(2);
     expect(last?.kick).toHaveBeenCalledTimes(1);

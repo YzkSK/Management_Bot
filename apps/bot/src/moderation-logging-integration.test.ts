@@ -85,7 +85,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
     // strong preset: windowSeconds=8, messageThreshold=3(検知条件)。
     // エスカレーション段階(統一ストライクカウンター、#311)はguild単位のescalationPresetで
-    // 別管理されるため、こちらもstrongに設定する(strong: strikeCount>=1でmessageDelete)。
+    // 別管理されるため、こちらもstrongに設定する(strong: strikeCount>=1でwarn)。
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
     await setEscalationPreset(db, guildId, "strong");
 
@@ -117,7 +117,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
         {
           violationType: "flood",
           strikeCount: 1,
-          actionType: "messageDelete",
+          actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
         },
@@ -132,7 +132,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           category: "moderationCase",
           guildId,
           targetUserId: userId,
-          actionType: "messageDelete",
+          actionType: "warn",
           caseId: lastOutcomes[0]?.caseId,
         }),
       });

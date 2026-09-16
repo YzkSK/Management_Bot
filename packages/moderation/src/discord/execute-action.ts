@@ -20,7 +20,6 @@ const VIOLATION_LABELS = {
 
 const ACTION_LABELS = {
   warn: "警告",
-  messageDelete: "メッセージ削除",
   timeout: "10分間のタイムアウト",
   kick: "サーバーからの退出",
   ban: "サーバーからのBAN",
@@ -91,10 +90,8 @@ async function deleteBufferedMessagesSafely(message: Message, outcome: Escalatio
 
 /**
  * エスカレーションアクションをDiscord API経由で実行する。
- * bufferedMessageIds(検知の元になったバースト全体)は、strikeCountが進んでtimeout/kick/banに
- * 到達した場合でも常に削除する。連投が続く限りstrikeCountはmessageDeleteの段階を過ぎて
- * timeout以降に進むため、削除をmessageDeleteアクション時だけに限定すると、それ以降に
- * 投稿され続けたバーストメッセージが一切削除されなくなる(元の連投が放置される)。
+ * bufferedMessageIds(検知の元になったバースト全体)は、warn以降どの段階に到達した場合でも
+ * 常に削除する(メッセージ削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
  * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時は例外を投げずログのみ行う。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
@@ -108,9 +105,6 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
         return;
       case "unban":
         return;
-      case "messageDelete":
-        await deleteBufferedMessages(message, outcome.bufferedMessageIds);
-        break;
       case "timeout":
         if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);

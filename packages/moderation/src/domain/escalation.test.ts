@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decideEscalationAction } from "./escalation.js";
 
 describe("decideEscalationAction", () => {
-  const steps = { 1: "warn", 3: "messageDelete", 5: "timeout" } as const;
+  const steps = { 1: "warn", 3: "kick", 5: "timeout" } as const;
 
   test("最小キー未満のstrikeCountはnull", () => {
     expect(decideEscalationAction(0, steps)).toBeNull();
@@ -10,13 +10,13 @@ describe("decideEscalationAction", () => {
 
   test("キーちょうどのstrikeCountはそのアクション(境界値)", () => {
     expect(decideEscalationAction(1, steps)).toBe("warn");
-    expect(decideEscalationAction(3, steps)).toBe("messageDelete");
+    expect(decideEscalationAction(3, steps)).toBe("kick");
     expect(decideEscalationAction(5, steps)).toBe("timeout");
   });
 
   test("キー間のstrikeCountは直前のステップを維持する", () => {
     expect(decideEscalationAction(2, steps)).toBe("warn");
-    expect(decideEscalationAction(4, steps)).toBe("messageDelete");
+    expect(decideEscalationAction(4, steps)).toBe("kick");
   });
 
   test("最大キーを超えるstrikeCountは最大キーのアクションを維持する", () => {

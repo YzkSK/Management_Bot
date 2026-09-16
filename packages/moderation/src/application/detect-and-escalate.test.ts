@@ -109,7 +109,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
   test("連投がstrong presetの頻度閾値に達するとstrikeCountが増加しアクションがpublishされる", async () => {
     const userId = `u-${randomUUID()}`;
-    // strong preset: windowSeconds=8, messageThreshold=3, 合計strikeCount=1でESCALATION_STEPS.strong[1]=messageDelete
+    // strong preset: windowSeconds=8, messageThreshold=3, 合計strikeCount=1でESCALATION_STEPS.strong[1]=warn
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
     await setEscalationPreset(db, guildId, "strong");
 
@@ -127,7 +127,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       {
         violationType: "flood",
         strikeCount: 1,
-        actionType: "messageDelete",
+        actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
       },
@@ -139,7 +139,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       targetUserId: userId,
       moderatorId: SYSTEM_MODERATOR_ID,
       action: "create",
-      actionType: "messageDelete",
+      actionType: "warn",
     });
 
     const [row] = await db
@@ -175,7 +175,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       {
         violationType: "flood",
         strikeCount: 1,
-        actionType: "messageDelete",
+        actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
       },
@@ -290,7 +290,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "flood", preset: "strong", enabled: true },
     ]);
-    // strong: 合計strikeCount>=1でmessageDelete、>=2でtimeout(ESCALATION_STEPS.strong)
+    // strong: 合計strikeCount>=1でwarn、>=2でtimeout(ESCALATION_STEPS.strong)
     await setEscalationPreset(db, guildId, "strong");
 
     // duplicate_contentのstrikeCountを1で既存状態としてseedする(このテストではduplicate_content
@@ -320,7 +320,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "flood", preset: "strong", enabled: true },
     ]);
-    // weak: ESCALATION_STEPS.weak = { 1: warn, 3: messageDelete, 5: timeout, 7: kick }
+    // weak: ESCALATION_STEPS.weak = { 1: warn, 5: timeout, 7: kick }
     await setEscalationPreset(db, guildId, "weak");
 
     const userId = `u-${randomUUID()}`;
@@ -334,7 +334,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
     expect(floodOutcome?.strikeCount).toBe(1);
-    expect(floodOutcome?.actionType).toBe("warn"); // ESCALATION_STEPS.weak[1] === "warn"(strongなら"messageDelete"になり結果が変わる)
+    expect(floodOutcome?.actionType).toBe("warn"); // ESCALATION_STEPS.weak[1] === "warn"
   });
 });
 

@@ -41,8 +41,8 @@ export interface EscalationOutcome {
   caseId: string;
   /**
    * この違反の判定に使ったRedisバッファのうち、検知トリガーメッセージと同一チャンネルかつ
-   * 直近windowSeconds秒以内のメッセージID一覧(新しい順)。actionTypeがmessageDeleteの場合、
-   * 呼び出し側はこれらをまとめて削除対象にできる(連投バースト全体を削除する場合)。
+   * 直近windowSeconds秒以内のメッセージID一覧(新しい順)。呼び出し側(executeEscalationAction)は
+   * warn以降どのactionTypeでもこれらをまとめて削除対象にできる(連投バースト全体を削除する場合)。
    * バッファ自体は同一ユーザーのチャンネル横断・時刻フィルタなしの全件を保持しているため、
    * ここで同一チャンネル・時間窓に絞り込んでいる(別チャンネルのメッセージはchannel.bulkDelete
    * が対象にできず、時間窓外の古いメッセージは検知と無関係なため)。
@@ -149,7 +149,7 @@ export async function detectAndEscalate(
     await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
     // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
     // 検知条件(hasFloodHit/isDuplicateHitの閾値)はviolationTypeごとのプリセットのまま、
-    // アクション決定(何回目でwarn/messageDelete/timeout/kick/ban)だけをguild単位で統一する。
+    // アクション決定(何回目でwarn/timeout/kick/ban)だけをguild単位で統一する。
     const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
     const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
     const actionType = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
