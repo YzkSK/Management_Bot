@@ -9,9 +9,17 @@ import {
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { describePreset, ESCALATION_DESCRIPTIONS, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
+import {
+  describePreset,
+  ESCALATION_DESCRIPTIONS,
+  NGWORD_MATCH_TYPE_LABELS,
+  PRESET_LABELS,
+  VIOLATION_TYPE_LABELS,
+  type NgwordMatchType,
+} from "./moderation-labels.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -343,6 +351,139 @@ function WhitelistTableRow({
   );
 }
 
+interface NgwordEntry {
+  id: string;
+  matchType: NgwordMatchType;
+  pattern: string;
+}
+
+function NgwordForm({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const [matchType, setMatchType] = useState<NgwordMatchType>("exact");
+  const [pattern, setPattern] = useState("");
+
+  const mutation = useMutation({
+    ...trpc.moderation.addNgword.mutationOptions(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: trpc.moderation.listNgwords.queryOptions({ guildId }).queryKey });
+      setPattern("");
+    },
+  });
+
+  const isUnsafeRegexError =
+    mutation.error instanceof TRPCClientError && mutation.error.data?.code === "BAD_REQUEST";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <h2 className="text-sm font-semibold">NGワードの追加</h2>
+      <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">種類</label>
+          <Select value={matchType} onValueChange={(value) => setMatchType(value as NgwordMatchType)}>
+            <SelectTrigger className="w-32" aria-label="NGワードの一致方式">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(NGWORD_MATCH_TYPE_LABELS) as NgwordMatchType[]).map((type) => (
+                <SelectItem key={type} value={type}>
+                  {NGWORD_MATCH_TYPE_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">パターン</label>
+          <Input
+            className="w-64"
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            placeholder={matchType === "regex" ? "^ng-word\\d*$" : "NGワード"}
+            aria-label="NGワードのパターン"
+          />
+        </div>
+        <Button
+          type="button"
+          disabled={pattern === "" || mutation.isPending}
+          onClick={() => mutation.mutate({ guildId, matchType, pattern })}
+        >
+          追加
+        </Button>
+      </div>
+      {mutation.isError && (
+        <p className="text-destructive text-xs">
+          {isUnsafeRegexError
+            ? "安全性が確認できない正規表現のため登録できません(ネストした量指定子等)。パターンを見直してください。"
+            : "保存に失敗しました。"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function NgwordTableRow({ guildId, entry }: { guildId: string; entry: NgwordEntry }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    ...trpc.moderation.removeNgword.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.moderation.listNgwords.queryOptions({ guildId }).queryKey }),
+  });
+
+  return (
+    <TableRow>
+      <TableCell>{NGWORD_MATCH_TYPE_LABELS[entry.matchType]}</TableCell>
+      <TableCell className="font-mono text-sm">{entry.pattern}</TableCell>
+      <TableCell>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ guildId, id: entry.id })}
+        >
+          削除
+        </Button>
+        {mutation.isError && <p className="text-destructive text-xs">失敗しました</p>}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function NgwordTab({ guildId }: { guildId: string }) {
+  const query = useQuery(trpc.moderation.listNgwords.queryOptions({ guildId }));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <NgwordForm guildId={guildId} />
+      {query.isPending && <div className="text-sm">読み込み中...</div>}
+      {query.isError && (
+        <Alert variant="destructive">
+          <AlertDescription>NGワード一覧の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+        </Alert>
+      )}
+      {query.data && query.data.length === 0 && (
+        <p className="text-muted-foreground text-sm">登録されたNGワードはありません。</p>
+      )}
+      {query.data && query.data.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>種類</TableHead>
+              <TableHead>パターン</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {query.data.map((entry) => (
+              <NgwordTableRow key={entry.id} guildId={guildId} entry={entry} />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
 interface StrikeEntry {
   userId: string;
   violationType: ModerationViolationType;
@@ -566,7 +707,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
   );
 }
 
-type ModerationTab = "thresholds" | "whitelist" | "strikes";
+type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes";
 
 export function ModerationPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -663,6 +804,7 @@ export function ModerationPage() {
       <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
         <TabsList aria-label="スパム対策の設定">
           <TabsTrigger value="thresholds">検知設定</TabsTrigger>
+          <TabsTrigger value="ngwords">NGワード</TabsTrigger>
           <TabsTrigger value="whitelist">ホワイトリスト</TabsTrigger>
           <TabsTrigger value="strikes">警告回数</TabsTrigger>
         </TabsList>
@@ -684,6 +826,10 @@ export function ModerationPage() {
               ))}
             </TableBody>
           </Table>
+        </TabsContent>
+
+        <TabsContent value="ngwords">
+          <NgwordTab guildId={guildId} />
         </TabsContent>
 
         <TabsContent value="whitelist">

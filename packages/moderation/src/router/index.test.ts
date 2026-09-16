@@ -11,6 +11,7 @@ import {
 } from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type GuildAccessStatus, type GuildMembership, type MemberPage, type RoleOption } from "@management-bot/dashboard-access";
+import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { moderationRouter } from "./index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
@@ -170,6 +171,36 @@ describe("moderationRouter.listWhitelist / addToWhitelist / removeFromWhitelist"
 
     expect(error).toBeDefined();
     expect(await caller.listWhitelist({ guildId })).toEqual([]);
+  });
+});
+
+describe("moderationRouter.listNgwords / addNgword / removeNgword", () => {
+  test("MANAGE_MODERATIONを持たない場合listNgwordsはFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.listNgwords({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("追加したNGワードがlistNgwordsに反映され、削除すると消える", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    const row = await caller.addNgword({ guildId, matchType: "exact", pattern: "banned" });
+    expect(await caller.listNgwords({ guildId })).toEqual([{ id: row.id, matchType: "exact", pattern: "banned" }]);
+
+    await caller.removeNgword({ guildId, id: row.id });
+    expect(await caller.listNgwords({ guildId })).toEqual([]);
+  });
+
+  test("危険な正規表現(ネストした量指定子)の追加はBAD_REQUEST", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(caller.addNgword({ guildId, matchType: "regex", pattern: "(a+)+" }));
+
+    expect(error).toBeInstanceOf(TRPCError);
+    expect((error as TRPCError).code).toBe("BAD_REQUEST");
+    expect(await caller.listNgwords({ guildId })).toEqual([]);
   });
 });
 
