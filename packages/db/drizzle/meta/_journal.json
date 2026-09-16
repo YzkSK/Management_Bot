@@ -127,6 +127,13 @@
       "when": 1789555181568,
       "tag": "0017_ngword_mention_spam_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789569365318,
+      "tag": "0018_invite_link_violation_type",
+      "breakpoints": true
     }
   ]
 }

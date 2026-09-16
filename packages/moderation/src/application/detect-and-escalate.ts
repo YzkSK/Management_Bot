@@ -158,27 +158,32 @@ async function checkViolation(
     return { hit, strikeLockWindowSeconds: NGWORD_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
   }
 
-  // mention_spam
-  const mentionPreset = MENTION_SPAM_PRESETS[preset];
-  const mentionCount = countMentions(message.content);
-  const singleHit = hasSingleMessageMentionSpam(mentionCount, mentionPreset.singleMessageThreshold);
-  const mentionBuffer = await pushMentionCount(
-    deps.redis,
-    message.guildId,
-    message.userId,
-    mentionCount,
-    message.createdAt,
-    mentionPreset.cumulative.windowSeconds,
-  );
-  // TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが混入するため、
-  // hasFloodHitと同様にcreatedAtで時刻フィルタしてから合算する(Codexレビュー指摘)。
-  const mentionCounts = mentionCountsInWindow(mentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds);
-  const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
-  return {
-    hit: singleHit || cumulativeHit,
-    strikeLockWindowSeconds: mentionPreset.cumulative.windowSeconds,
-    bufferedMessageIds: [message.messageId],
-  };
+  if (violationType === "mention_spam") {
+    const mentionPreset = MENTION_SPAM_PRESETS[preset];
+    const mentionCount = countMentions(message.content);
+    const singleHit = hasSingleMessageMentionSpam(mentionCount, mentionPreset.singleMessageThreshold);
+    const mentionBuffer = await pushMentionCount(
+      deps.redis,
+      message.guildId,
+      message.userId,
+      mentionCount,
+      message.createdAt,
+      mentionPreset.cumulative.windowSeconds,
+    );
+    // TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが混入するため、
+    // hasFloodHitと同様にcreatedAtで時刻フィルタしてから合算する(Codexレビュー指摘)。
+    const mentionCounts = mentionCountsInWindow(mentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds);
+    const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
+    return {
+      hit: singleHit || cumulativeHit,
+      strikeLockWindowSeconds: mentionPreset.cumulative.windowSeconds,
+      bufferedMessageIds: [message.messageId],
+    };
+  }
+
+  // invite_link: 検知ロジックは#186(domain層)で実装される。DBスキーマ拡張(#185)時点では
+  // 未実装のためヒットさせない(Codexレビュー指摘: mention_spamへの暗黙フォールスルーを防ぐ)。
+  return { hit: false, strikeLockWindowSeconds: 0, bufferedMessageIds: [] };
 }
 
 export async function detectAndEscalate(

@@ -403,6 +403,19 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     ]);
   });
 
+  test("invite_linkが有効でも検知ロジック未実装(#186)のためメンション投稿は誤ってmention_spamとして検知されない(Codexレビュー指摘の回帰テスト)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const result = await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, content: mentions }));
+
+    expect(result).toEqual([]);
+  });
+
   test("短時間内の累積メンション数がmedium presetの累積閾値(10)以上ならmention_spamとして検知される", async () => {
     const userId = `u-${randomUUID()}`;
     await db

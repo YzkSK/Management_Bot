@@ -15,6 +15,7 @@ const VIOLATION_LABELS = {
   duplicate_content: "同一・類似内容の繰り返し投稿",
   ngword: "NGワードの投稿",
   mention_spam: "大量メンション",
+  invite_link: "招待リンクの投稿",
 } satisfies Record<EscalationOutcome["violationType"], string>;
 
 const ACTION_LABELS = {
