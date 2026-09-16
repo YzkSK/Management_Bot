@@ -13,9 +13,11 @@ import {
   ESCALATION_STEPS,
   countMentions,
   decideEscalationAction,
+  extractInviteCodes,
   findMatchingNgword,
   hasCumulativeMentionSpam,
   hasFloodHit,
+  hasInviteLinkHit,
   hasSingleMessageMentionSpam,
   isDuplicateContent,
 } from "../domain/index.js";
@@ -35,6 +37,9 @@ import { isWhitelisted } from "./whitelist.js";
 /** NGワードはメッセージ単発判定のため、strikeロックのバースト抑制ウィンドウとして固定値を使う。 */
 const NGWORD_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
+/** 招待リンクもNGワードと同様メッセージ単発判定のため、同じ抑制ウィンドウを使う。 */
+const INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS = 10;
+
 /** 自動検知によるアクションであることを表すmoderatorId。人間の実行者は存在しない。 */
 export const SYSTEM_MODERATOR_ID = "system";
 
@@ -53,6 +58,11 @@ export interface DetectAndEscalateDeps {
   db: Db;
   redis: Redis;
   eventBus: { publish: (event: ModerationActionRecordedEvent) => Promise<void> };
+  /**
+   * 招待コードを解決し、遷移先のguildIdを返す(discord.jsのclient.fetchInvite相当)。
+   * 無効なコード・Discord API障害等、解決に失敗した場合はnullを返す想定。
+   */
+  resolveInviteGuildId: (code: string) => Promise<string | null>;
 }
 
 export interface EscalationOutcome {
@@ -181,9 +191,21 @@ async function checkViolation(
     };
   }
 
-  // invite_link: 検知ロジックは#186(domain層)で実装される。DBスキーマ拡張(#185)時点では
-  // 未実装のためヒットさせない(Codexレビュー指摘: mention_spamへの暗黙フォールスルーを防ぐ)。
-  return { hit: false, strikeLockWindowSeconds: 0, bufferedMessageIds: [] };
+  if (violationType === "invite_link") {
+    const codes = extractInviteCodes(message.content);
+    const resolutions = await Promise.all(
+      codes.map(async (code) => {
+        const resolvedGuildId = await deps.resolveInviteGuildId(code);
+        // 解決失敗(null)は安全側に倒し「他ギルドの招待」として扱う(spec: 自ギルド招待の除外)。
+        if (resolvedGuildId === null) return false;
+        return resolvedGuildId === message.guildId;
+      }),
+    );
+    const hit = hasInviteLinkHit(resolutions);
+    return { hit, strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
+  }
+
+  throw new Error(`unhandled violationType: ${violationType satisfies never}`);
 }
 
 export async function detectAndEscalate(

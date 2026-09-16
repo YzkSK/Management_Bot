@@ -82,10 +82,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     return { published, publish: async (event: ModerationActionRecordedEvent) => void published.push(event) };
   }
 
+  /** invite_link以外のテストでは呼ばれない想定のダミー実装(常に自ギルド扱い)。 */
+  const resolveInviteGuildId = async (): Promise<string | null> => guildId;
+
   test("検知種別が何も有効でなければ何も起きない", async () => {
     const eventBus = fakeEventBus();
     const result = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId: `u-${randomUUID()}` }),
     );
     expect(result).toEqual([]);
@@ -99,7 +102,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     for (let i = 0; i < 5; i++) {
-      await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId }));
+      await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId }));
     }
 
     expect(eventBus.published).toEqual([]);
@@ -121,7 +124,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus },
+        { db, redis, eventBus, resolveInviteGuildId },
         message({ guildId, userId, createdAt: new Date(now.getTime() + i * 1000) }),
       );
     }
@@ -166,7 +169,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     for (let i = 0; i < 7; i++) {
       results.push(
         await detectAndEscalate(
-          { db, redis, eventBus },
+          { db, redis, eventBus, resolveInviteGuildId },
           message({ guildId, userId, createdAt: new Date(now.getTime() + i * 500) }),
         ),
       );
@@ -204,12 +207,12 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // bufferedMessageIdsにはchannel-1の2件のみが残るべき(channel-otherの1件目は除外)。
     const otherChannelMessageId = randomUUID();
     await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, channelId: "channel-other", messageId: otherChannelMessageId, createdAt: now }),
     );
     const secondMessageId = randomUUID();
     await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({
         guildId,
         userId,
@@ -220,7 +223,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     );
     const thirdMessageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({
         guildId,
         userId,
@@ -243,7 +246,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     for (let i = 0; i < 5; i++) {
-      await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, roleIds: [roleId] }));
+      await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, roleIds: [roleId] }));
     }
 
     expect(eventBus.published).toEqual([]);
@@ -263,17 +266,17 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const now = new Date();
 
     // 1, 2件目で閾値未達(strong: messageThreshold=3)、3件目と同一のduplicatedを2回送る
-    await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, createdAt: now }));
+    await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, createdAt: now }));
     await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, createdAt: new Date(now.getTime() + 1000) }),
     );
     const first = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
     );
     const retry = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
     );
 
@@ -308,7 +311,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
-        { db, redis, eventBus },
+        { db, redis, eventBus, resolveInviteGuildId },
         { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
       );
     }
@@ -331,7 +334,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
-        { db, redis, eventBus },
+        { db, redis, eventBus, resolveInviteGuildId },
         { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
       );
     }
@@ -349,7 +352,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const eventBus = fakeEventBus();
     const messageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, messageId, content: "banned-word" }),
     );
 
@@ -371,7 +374,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     const result = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, content: "clean message" }),
     );
 
@@ -388,7 +391,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
     const messageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, messageId, content: mentions }),
     );
 
@@ -403,7 +406,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     ]);
   });
 
-  test("invite_linkが有効でも検知ロジック未実装(#186)のためメンション投稿は誤ってmention_spamとして検知されない(Codexレビュー指摘の回帰テスト)", async () => {
+  test("invite_linkが有効でもメンション投稿はmention_spamとして誤検知されない(Codexレビュー指摘の回帰テスト)", async () => {
     const userId = `u-${randomUUID()}`;
     await db
       .insert(moderationThresholds)
@@ -411,9 +414,80 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
-    const result = await detectAndEscalate({ db, redis, eventBus }, message({ guildId, userId, content: mentions }));
+    const result = await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, content: mentions }));
 
     expect(result).toEqual([]);
+  });
+
+  describe("invite_link検知", () => {
+    test("自ギルドへの招待リンクは検知されない", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => guildId },
+        message({ guildId, userId, content: "join us: discord.gg/own-guild-code" }),
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("他ギルドへの招待リンクは検知される", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
+      );
+
+      expect(result).toEqual([
+        {
+          violationType: "invite_link",
+          strikeCount: 1,
+          actionType: "warn",
+          caseId: expect.any(String),
+          bufferedMessageIds: expect.any(Array),
+        },
+      ]);
+    });
+
+    test("招待コード解決失敗時は安全側(検知扱い)に倒れる", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => null },
+        message({ guildId, userId, content: "join us: discord.gg/unresolvable-code" }),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.violationType).toBe("invite_link");
+    });
+
+    test("招待リンクを含まないメッセージは検知されない", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({ guildId, userId, content: "hello world" }),
+      );
+
+      expect(result).toEqual([]);
+    });
   });
 
   test("短時間内の累積メンション数がmedium presetの累積閾値(10)以上ならmention_spamとして検知される", async () => {
@@ -429,7 +503,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus },
+        { db, redis, eventBus, resolveInviteGuildId },
         message({
           guildId,
           userId,
@@ -457,13 +531,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // 直近2通の合計8件はmentionThreshold(10)未満のためヒットしない
     // (フィルタなしで全件合算すると12件になりヒットしてしまう、というバグの回帰確認)。
     await detectAndEscalate(
-      { db, redis, eventBus },
+      { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() - 20_000) }),
     );
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 2; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus },
+        { db, redis, eventBus, resolveInviteGuildId },
         message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
       );
     }
