@@ -135,3 +135,77 @@ export async function markStrikeHitAndCheckNewBurst(
   );
   return result === 1;
 }
+
+function mentionBufferKey(guildId: string, userId: string): string {
+  return `moderation:mention:${guildId}:${userId}`;
+}
+
+export interface BufferedMentionCount {
+  mentionCount: number;
+  createdAt: Date;
+}
+
+interface SerializedMentionCount {
+  mentionCount: number;
+  createdAt: string;
+}
+
+// KEYS[1]=mentionBufferKey, ARGV[1]=serializedEntry, ARGV[2]=maxBufferSize, ARGV[3]=windowSeconds
+// 新規メッセージの{mentionCount, createdAt}をバッファ先頭に積み、TTLをwindowSecondsで更新し、
+// 更新後のバッファ全件(新しい順)を返す。claimAndPushMessageと異なり重複メッセージの排除は
+// 呼び出し側(detectAndEscalate)が既にclaimAndPushMessageで一元的に行っているため不要。
+// TTLはあくまでキー自体の掃除用であり、windowSeconds外のエントリの除外は呼び出し側が
+// createdAtで絞り込む(hasFloodHit/bufferedMessageIdsInWindowと同じ方式、Codexレビュー指摘:
+// TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが合算に混入する)。
+const PUSH_MENTION_COUNT_SCRIPT = `
+redis.call("LPUSH", KEYS[1], ARGV[1])
+redis.call("LTRIM", KEYS[1], 0, ARGV[2] - 1)
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+return redis.call("LRANGE", KEYS[1], 0, -1)
+`;
+
+/**
+ * メンションスパムの累積判定用に、新規メッセージの{mentionCount, createdAt}をguild+userIdの
+ * Redisバッファ(直近MAX_BUFFER_SIZE件)へ積み、更新後のバッファ全件(新しい順)を返す。
+ * 合算対象をwindowSeconds以内に絞り込むのは呼び出し側の責務(mentionCountsInWindow参照)。
+ * 重複配送時の二重カウント防止は、呼び出し側がclaimAndPushMessageのclaim結果を見て
+ * このバッファ更新自体をスキップすることで行う(このバッファ単体には冪等性がない)。
+ */
+export async function pushMentionCount(
+  redis: Redis,
+  guildId: string,
+  userId: string,
+  mentionCount: number,
+  createdAt: Date,
+  windowSeconds: number,
+): Promise<BufferedMentionCount[]> {
+  const serialized: SerializedMentionCount = { mentionCount, createdAt: createdAt.toISOString() };
+  const raw = (await redis.eval(
+    PUSH_MENTION_COUNT_SCRIPT,
+    1,
+    mentionBufferKey(guildId, userId),
+    JSON.stringify(serialized),
+    MAX_BUFFER_SIZE,
+    windowSeconds,
+  )) as string[];
+  return raw.map((item) => {
+    const parsed = JSON.parse(item) as SerializedMentionCount;
+    return { mentionCount: parsed.mentionCount, createdAt: new Date(parsed.createdAt) };
+  });
+}
+
+/**
+ * pushMentionCountが返したバッファのうち、直近windowSeconds秒以内([windowStart, now])の
+ * エントリのmentionCountのみを合算対象として抽出する(bufferedMessageIdsInWindowと同じ
+ * 時刻フィルタ方式)。
+ */
+export function mentionCountsInWindow(
+  buffer: readonly BufferedMentionCount[],
+  now: Date,
+  windowSeconds: number,
+): number[] {
+  const windowStart = now.getTime() - windowSeconds * 1000;
+  return buffer
+    .filter((entry) => entry.createdAt.getTime() >= windowStart && entry.createdAt.getTime() <= now.getTime())
+    .map((entry) => entry.mentionCount);
+}

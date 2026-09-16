@@ -30,5 +30,12 @@ export {
   type StrikePage,
   type StrikeRow,
 } from "./escalation-state.js";
-export { claimAndPushMessage, type BufferedMessage } from "./message-buffer.js";
+export {
+  claimAndPushMessage,
+  pushMentionCount,
+  mentionCountsInWindow,
+  type BufferedMessage,
+  type BufferedMentionCount,
+} from "./message-buffer.js";
 export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";
+export { listNgwords, addNgword, removeNgword, UnsafeNgwordRegexError, type NgwordRow } from "./ngwords.js";
