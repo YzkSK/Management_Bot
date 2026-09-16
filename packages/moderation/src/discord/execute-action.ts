@@ -13,6 +13,8 @@ function reasonFor(outcome: EscalationOutcome): string {
 const VIOLATION_LABELS = {
   flood: "短時間の連続投稿",
   duplicate_content: "同一・類似内容の繰り返し投稿",
+  ngword: "NGワードの投稿",
+  mention_spam: "大量メンション",
 } satisfies Record<EscalationOutcome["violationType"], string>;
 
 const ACTION_LABELS = {

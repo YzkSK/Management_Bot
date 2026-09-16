@@ -6,6 +6,7 @@ import {
   guilds,
   moderationEscalationSettings,
   moderationEscalationState,
+  moderationNgwords,
   moderationThresholds,
   moderationWhitelist,
 } from "./index.ts";
@@ -62,6 +63,15 @@ describe("moderation schema", () => {
     );
   });
 
+  test("moderation_thresholds/moderation_escalation_stateはviolation_type=ngword/mention_spamを受け入れる", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const userId = `test-user-${randomUUID()}`;
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "ngword", strikeCount: 1 });
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "mention_spam", strikeCount: 1 });
+  });
+
   test("moderation_escalation_stateはguild_id+user_id+violation_typeで一意、violation_typeはCHECK制約で検証される", async () => {
     const userId = `test-user-${randomUUID()}`;
     await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
@@ -114,6 +124,25 @@ describe("moderation schema", () => {
       db.insert(moderationEscalationSettings).values({ guildId: `test-guild-${randomUUID()}`, preset: INVALID }),
       "moderation_escalation_settings_preset_check",
     );
+  });
+
+  test("moderation_ngwordsはmatch_typeがCHECK制約で検証され、guild削除時にカスケード削除される", async () => {
+    const id = randomUUID();
+    await db.insert(moderationNgwords).values({ id, guildId, matchType: "exact", pattern: "ng" });
+
+    await expectConstraintViolation(
+      db.insert(moderationNgwords).values({ id: randomUUID(), guildId, matchType: INVALID, pattern: "ng" }),
+      "moderation_ngwords_match_type_check",
+    );
+
+    const cascadeGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: cascadeGuildId, name: "Cascade Test" });
+    await db.insert(moderationNgwords).values({ id: randomUUID(), guildId: cascadeGuildId, matchType: "contains", pattern: "ng" });
+
+    await db.delete(guilds).where(eq(guilds.id, cascadeGuildId));
+
+    const rows = await db.select().from(moderationNgwords).where(eq(moderationNgwords.guildId, cascadeGuildId));
+    expect(rows).toHaveLength(0);
   });
 
   test("moderation_escalation_settingsはguild削除時にカスケード削除される", async () => {

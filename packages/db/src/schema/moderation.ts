@@ -1,4 +1,4 @@
-import { boolean, check, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
 import {
   MODERATION_PRESETS,
@@ -9,6 +9,9 @@ import {
 import { guilds } from "./core.js";
 
 type ModerationWhitelistTargetType = "user" | "role";
+type ModerationNgwordMatchType = "exact" | "contains" | "regex";
+
+const MODERATION_NGWORD_MATCH_TYPES = ["exact", "contains", "regex"] as const;
 
 function enumCheck(column: Column, values: readonly string[]): SQL {
   return sql`${column} IN (${sql.join(
@@ -79,6 +82,23 @@ export const moderationWhitelist = pgTable(
       "moderation_whitelist_no_everyone_check",
       sql`NOT (${table.targetType} = 'role' AND ${table.targetId} = ${table.guildId})`,
     ),
+  ],
+);
+
+export const moderationNgwords = pgTable(
+  "moderation_ngwords",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    matchType: text("match_type").$type<ModerationNgwordMatchType>().notNull(),
+    pattern: text("pattern").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("moderation_ngwords_match_type_check", enumCheck(table.matchType, MODERATION_NGWORD_MATCH_TYPES)),
+    index("moderation_ngwords_guild_id_idx").on(table.guildId),
   ],
 );
 
