@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   release:
-    if: "!contains(github.event.head_commit.message, 'chore: bump version to')"
+    if: >-
+      !(github.event.head_commit.author.email == '41898282+github-actions[bot]@users.noreply.github.com'
+        && startsWith(github.event.head_commit.message, 'chore: bump version to '))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
