@@ -5,6 +5,7 @@ export const VIOLATION_TYPE_LABELS: Record<ModerationViolationType, string> = {
   duplicate_content: "内容重複",
   ngword: "NGワード",
   mention_spam: "メンションスパム",
+  invite_link: "招待リンク",
 };
 
 export const PRESET_LABELS: Record<ModerationPreset, string> = {
@@ -54,6 +55,12 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     weak: "1メッセージ10件以上、または10秒間の合計15件以上のメンションで検知",
     medium: "1メッセージ6件以上、または10秒間の合計10件以上のメンションで検知",
     strong: "1メッセージ4件以上、または8秒間の合計6件以上のメンションで検知",
+  },
+  // packages/moderation/src/domain/presets.ts のINVITE_LINK_PRESETSをUI表示用に説明文化したもの(#186実装後に確定)。
+  invite_link: {
+    weak: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
+    medium: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
+    strong: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
   },
 };
 
