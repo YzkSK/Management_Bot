@@ -29,6 +29,14 @@ describe("extractInviteCodes", () => {
   test("招待リンクを含まないメッセージは空配列", () => {
     expect(extractInviteCodes("hello world")).toEqual([]);
   });
+
+  test("大文字小文字を区別せずマッチする(Codexレビュー指摘の回帰テスト)", () => {
+    expect(extractInviteCodes("HTTPS://DISCORD.GG/ValidCode")).toEqual(["ValidCode"]);
+  });
+
+  test("別ドメインの一部(例: notdiscord.gg)は誤検知しない(Codexレビュー指摘の回帰テスト)", () => {
+    expect(extractInviteCodes("notdiscord.gg/notAnInvite")).toEqual([]);
+  });
 });
 
 describe("hasInviteLinkHit", () => {
