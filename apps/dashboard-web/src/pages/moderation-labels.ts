@@ -3,6 +3,8 @@ import type { ModerationPreset, ModerationViolationType } from "@management-bot/
 export const VIOLATION_TYPE_LABELS: Record<ModerationViolationType, string> = {
   flood: "連投",
   duplicate_content: "内容重複",
+  ngword: "NGワード",
+  mention_spam: "メンションスパム",
 };
 
 export const PRESET_LABELS: Record<ModerationPreset, string> = {
@@ -33,6 +35,17 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     weak: "投稿内容の類似度が95%以上で検知",
     medium: "投稿内容の類似度が90%以上で検知",
     strong: "投稿内容の類似度が85%以上で検知",
+  },
+  // TODO(#182): NGワード/メンションスパムのプリセット閾値が確定次第、具体的な条件文言に更新する。
+  ngword: {
+    weak: "登録済みNGワードに一致した投稿を検知",
+    medium: "登録済みNGワードに一致した投稿を検知",
+    strong: "登録済みNGワードに一致した投稿を検知",
+  },
+  mention_spam: {
+    weak: "大量メンションを含む投稿を検知",
+    medium: "大量メンションを含む投稿を検知",
+    strong: "大量メンションを含む投稿を検知",
   },
 };
 
