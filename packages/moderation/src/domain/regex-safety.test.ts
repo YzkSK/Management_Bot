@@ -33,6 +33,10 @@ describe("checkRegexSafety", () => {
     expect(checkRegexSafety("(a+){1,5}").safe).toBe(false);
   });
 
+  test("内側の量指定子が{n,m}形式のネストパターン^(a{1,5}){1,}$もsafe: falseを返す(Codexレビュー指摘の回帰テスト)", () => {
+    expect(checkRegexSafety("^(a{1,5}){1,}$").safe).toBe(false);
+  });
+
   test("曖昧な選択の繰り返し(a|a)*はsafe: falseを返す", () => {
     expect(checkRegexSafety("(a|a)*").safe).toBe(false);
   });
