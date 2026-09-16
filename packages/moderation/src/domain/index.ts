@@ -14,3 +14,4 @@ export { decideEscalationAction } from "./escalation.js";
 export { matchesNgword, findMatchingNgword, type NgwordMatchType, type NgwordEntry } from "./ngword.js";
 export { checkRegexSafety, type RegexSafetyResult } from "./regex-safety.js";
 export { countMentions, hasSingleMessageMentionSpam, hasCumulativeMentionSpam } from "./mention-spam.js";
+export { extractInviteCodes, hasInviteLinkHit } from "./invite-link.js";
