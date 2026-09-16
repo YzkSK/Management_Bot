@@ -11,7 +11,7 @@ import {
   moderationWhitelist,
 } from "@management-bot/db";
 import { handleModerationEvent } from "@management-bot/logging";
-import { detectAndEscalate, type IncomingMessage, setEscalationPreset } from "@management-bot/moderation";
+import { addNgword, detectAndEscalate, type IncomingMessage, setEscalationPreset } from "@management-bot/moderation";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
@@ -175,6 +175,191 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
         await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId }));
       }
       // イベントが飛んでこないことを確認するため、購読が動作する猶予を与えてから判定する。
+      await new Promise((r) => setTimeout(r, 300));
+
+      expect(received).toEqual([]);
+      expect(
+        await db.select().from(moderationEscalationState).where(eq(moderationEscalationState.userId, userId)),
+      ).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * NGワード/メンションスパム検知(#177)の垂直スライス全体を通しで検証する複合テスト(#183)。
+   * 「NGワード投稿→検知→moderation.action.recorded発行→loggingがmoderationCaseとして記録する」
+   * までを検証する。連投/フラッドと同じエスカレーション・ログ連携基盤を再利用しているため、
+   * 検証観点はflood版のテストと同様だが、判定トリガーがメッセージ本文であることを確認する。
+   */
+  test("NGワード投稿→検知→moderation.action.recorded発行→loggingへのmoderationCase記録まで一気通貫で行われる", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+    await setEscalationPreset(db, guildId, "strong");
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const written = Promise.withResolvers<void>();
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        written.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const outcomes = await detectAndEscalate(
+        { db, redis, eventBus: moderationEventBus },
+        message({ guildId, userId, content: "banned-word" }),
+      );
+
+      expect(outcomes).toEqual([
+        {
+          violationType: "ngword",
+          strikeCount: 1,
+          actionType: "warn",
+          caseId: expect.any(String),
+          bufferedMessageIds: expect.any(Array),
+        },
+      ]);
+
+      await withTimeout(written.promise, 5_000, "logging handler");
+
+      const [row] = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(row).toMatchObject({
+        category: "moderationCase",
+        payload: expect.objectContaining({
+          category: "moderationCase",
+          guildId,
+          targetUserId: userId,
+          actionType: "warn",
+          caseId: outcomes[0]?.caseId,
+        }),
+      });
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * 短時間内の累積メンションスパム検知(#177)からエスカレーション適用までの複合テスト(#183)。
+   * medium preset: cumulative.windowSeconds=10, mentionThreshold=10。1メッセージあたり
+   * 単発閾値(6)未満の4件メンションを3通投稿し、合計12件で累積ヒットすることを確認する。
+   */
+  test("短時間大量メンション投稿→累積検知→エスカレーション適用まで一気通貫で行われる", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const written = Promise.withResolvers<void>();
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        written.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const now = new Date();
+      let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+      for (let i = 0; i < 3; i++) {
+        lastOutcomes = await detectAndEscalate(
+          { db, redis, eventBus: moderationEventBus },
+          message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
+        );
+      }
+
+      expect(lastOutcomes).toEqual([
+        {
+          violationType: "mention_spam",
+          strikeCount: 1,
+          actionType: "warn",
+          caseId: expect.any(String),
+          bufferedMessageIds: expect.any(Array),
+        },
+      ]);
+
+      await withTimeout(written.promise, 5_000, "logging handler");
+
+      const [row] = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(row).toMatchObject({
+        category: "moderationCase",
+        payload: expect.objectContaining({
+          category: "moderationCase",
+          guildId,
+          targetUserId: userId,
+          actionType: "warn",
+          caseId: lastOutcomes[0]?.caseId,
+        }),
+      });
+
+      const [state] = await db
+        .select()
+        .from(moderationEscalationState)
+        .where(eq(moderationEscalationState.userId, userId));
+      expect(state?.strikeCount).toBe(1);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * ホワイトリスト対象ユーザーがNGワード投稿・大量メンションを行っても、strikeCount・ログの
+   * どちらも増加しないことを検証する(flood版のホワイトリストテストと同一方針、#183)。
+   */
+  test("ホワイトリスト対象ユーザーはNGワード投稿・大量メンションを行ってもstrikeCount・ログのどちらも増加しない", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values([
+      { guildId, violationType: "ngword", preset: "medium", enabled: true },
+      { guildId, violationType: "mention_spam", preset: "medium", enabled: true },
+    ]);
+    await addNgword(db, guildId, "exact", "banned-word");
+    await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: userId });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId, content: "banned-word" }));
+      const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+      await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId, content: mentions }));
       await new Promise((r) => setTimeout(r, 300));
 
       expect(received).toEqual([]);
