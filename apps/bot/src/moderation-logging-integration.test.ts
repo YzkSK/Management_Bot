@@ -108,7 +108,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
       for (let i = 0; i < 3; i++) {
         lastOutcomes = await detectAndEscalate(
-          { db, redis, eventBus: moderationEventBus },
+          { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
           message({ guildId, userId, createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
@@ -172,7 +172,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       for (let i = 0; i < 5; i++) {
-        await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId }));
+        await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId }));
       }
       // イベントが飛んでこないことを確認するため、購読が動作する猶予を与えてから判定する。
       await new Promise((r) => setTimeout(r, 300));
@@ -219,7 +219,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const outcomes = await detectAndEscalate(
-        { db, redis, eventBus: moderationEventBus },
+        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
         message({ guildId, userId, content: "banned-word" }),
       );
 
@@ -286,7 +286,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
       for (let i = 0; i < 3; i++) {
         lastOutcomes = await detectAndEscalate(
-          { db, redis, eventBus: moderationEventBus },
+          { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
           message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
@@ -357,9 +357,157 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId, content: "banned-word" }));
+      await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId, content: "banned-word" }));
       const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
-      await detectAndEscalate({ db, redis, eventBus: moderationEventBus }, message({ guildId, userId, content: mentions }));
+      await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId, content: mentions }));
+      await new Promise((r) => setTimeout(r, 300));
+
+      expect(received).toEqual([]);
+      expect(
+        await db.select().from(moderationEscalationState).where(eq(moderationEscalationState.userId, userId)),
+      ).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * 招待リンク検知(#184)の垂直スライス全体を通しで検証する複合テスト(#190)。
+   * 「他ギルド招待リンク投稿→検知→moderation.action.recorded発行→loggingがmoderationCaseとして
+   * 記録する」までを検証する。resolveInviteGuildIdはfetchInvite相当の依存注入のため、
+   * テストでは実際のDiscord APIを呼ばずモック関数で解決結果を制御する。
+   */
+  test("他ギルド招待リンク投稿→検知→moderation.action.recorded発行→loggingへのmoderationCase記録まで一気通貫で行われる", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const written = Promise.withResolvers<void>();
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        written.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const outcomes = await detectAndEscalate(
+        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
+      );
+
+      expect(outcomes).toEqual([
+        {
+          violationType: "invite_link",
+          strikeCount: 1,
+          actionType: "warn",
+          caseId: expect.any(String),
+          bufferedMessageIds: expect.any(Array),
+        },
+      ]);
+
+      await withTimeout(written.promise, 5_000, "logging handler");
+
+      const [row] = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(row).toMatchObject({
+        category: "moderationCase",
+        payload: expect.objectContaining({
+          category: "moderationCase",
+          guildId,
+          targetUserId: userId,
+          actionType: "warn",
+          caseId: outcomes[0]?.caseId,
+        }),
+      });
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * 自ギルドのvanity URL(discord.ggのカスタムコード)は、fetchInvite解決結果のguildIdが
+   * 自ギルドと一致するため検知されないことを確認する(spec: 自ギルド招待の除外節)。
+   */
+  test("自ギルドのvanity URL投稿は検知されない", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const outcomes = await detectAndEscalate(
+        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
+        message({ guildId, userId, content: "join us: discord.gg/own-vanity-url" }),
+      );
+      await new Promise((r) => setTimeout(r, 300));
+
+      expect(outcomes).toEqual([]);
+      expect(received).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      const keys = await redis.keys(`moderation:*:${guildId}:*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  /**
+   * ホワイトリスト対象ユーザーが他ギルド招待リンクを投稿しても、strikeCount・ログの
+   * どちらも増加しないことを検証する(flood/ngword版と同一方針、#190)。
+   */
+  test("ホワイトリスト対象ユーザーは他ギルド招待リンクを投稿してもstrikeCount・ログのどちらも増加しない", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+    await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: userId });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      await detectAndEscalate(
+        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
+      );
       await new Promise((r) => setTimeout(r, 300));
 
       expect(received).toEqual([]);
