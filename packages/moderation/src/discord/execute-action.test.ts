@@ -119,11 +119,15 @@ describe("executeEscalationAction", () => {
     expect(timeout).toHaveBeenCalledWith(expectedMs, expect.any(String));
   });
 
-  test("timeoutMinutesが未設定(本来起こりえない状態)の場合、10分にフォールバックする", async () => {
+  test("timeoutMinutesが未設定(本来起こりえない状態)の場合、実処理とDM文言の両方が10分にフォールバックする(Codexレビュー指摘: 不整合防止)", async () => {
     const timeout = mock(() => Promise.resolve());
     const message = fakeMessage({ timeout });
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout", timeoutMinutes: undefined }));
     expect(timeout).toHaveBeenCalledWith(10 * 60 * 1000, expect.any(String));
+    const payload = (message.author.send as ReturnType<typeof mock>).mock.calls[0][0];
+    const container = (payload.components[0] as ContainerBuilder).toJSON();
+    const text = container.components.map((c) => ("content" in c ? c.content : "")).join("\n");
+    expect(text).toContain("10分間のタイムアウト");
   });
 
   test("kickはmember.kick()を呼ぶとともにbufferedMessageIdsを削除する", async () => {

@@ -23,10 +23,25 @@ const ACTION_LABELS = {
   unban: "BAN解除",
 } satisfies Record<EscalationOutcome["actionType"], string>;
 
+/**
+ * timeoutMinutesが未設定(型上ありえないはずの状態)の場合のフォールバック時間(分)。
+ * executeEscalationActionの実処理と表示文言で同じ値を使い、不整合が起きないようにする
+ * (Codexレビュー指摘: 実処理は10分フォールバックなのにDM文言が汎用「タイムアウト」表示になる不整合)。
+ */
+const FALLBACK_TIMEOUT_MINUTES = 10;
+
+function resolveTimeoutMinutes(outcome: EscalationOutcome): number {
+  if (outcome.timeoutMinutes === undefined) {
+    console.error(`moderation: timeoutMinutes missing for case ${outcome.caseId}, falling back to ${FALLBACK_TIMEOUT_MINUTES} minutes`);
+    return FALLBACK_TIMEOUT_MINUTES;
+  }
+  return outcome.timeoutMinutes;
+}
+
 /** timeoutは5→10→30分と多段階化するため、分数を動的に表示する(#322)。 */
 function actionLabelFor(outcome: EscalationOutcome): string {
-  if (outcome.actionType === "timeout" && outcome.timeoutMinutes !== undefined) {
-    return `${outcome.timeoutMinutes}分間のタイムアウト`;
+  if (outcome.actionType === "timeout") {
+    return `${resolveTimeoutMinutes(outcome)}分間のタイムアウト`;
   }
   return ACTION_LABELS[outcome.actionType];
 }
@@ -113,11 +128,7 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
       case "timeout": {
         if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);
-        if (outcome.timeoutMinutes === undefined) {
-          console.error(`moderation: timeoutMinutes missing for case ${outcome.caseId}, falling back to 10 minutes`);
-        }
-        const timeoutMinutes = outcome.timeoutMinutes ?? 10;
-        await message.member.timeout(timeoutMinutes * 60 * 1000, reasonFor(outcome));
+        await message.member.timeout(resolveTimeoutMinutes(outcome) * 60 * 1000, reasonFor(outcome));
         break;
       }
       case "kick":
