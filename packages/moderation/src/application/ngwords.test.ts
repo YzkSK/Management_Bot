@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { createDb, type Db, guilds } from "@management-bot/db";
-import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
-import { addNgword, listNgwords, removeNgword } from "./ngwords.js";
+import { addNgword, listNgwords, removeNgword, UnsafeNgwordRegexError } from "./ngwords.js";
 
 describe("ngwords application", () => {
   let db: Db;
@@ -31,8 +30,8 @@ describe("ngwords application", () => {
     expect(rows.map((r) => r.pattern).sort()).toEqual(["^ng3\\d+$", "ng1", "ng2"]);
   });
 
-  test("危険な正規表現(ネストした量指定子)の登録はBAD_REQUESTで拒否される", async () => {
-    await expect(addNgword(db, guildId, "regex", "(a+)+")).rejects.toThrow(TRPCError);
+  test("危険な正規表現(ネストした量指定子)の登録はUnsafeNgwordRegexErrorで拒否される", async () => {
+    await expect(addNgword(db, guildId, "regex", "(a+)+")).rejects.toThrow(UnsafeNgwordRegexError);
   });
 
   test("removeNgwordで削除でき、未登録のidでもエラーにならない", async () => {

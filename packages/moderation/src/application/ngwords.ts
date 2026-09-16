@@ -2,11 +2,22 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@management-bot/db";
 import { moderationNgwords } from "@management-bot/db";
-import { TRPCError } from "@trpc/server";
 import { checkRegexSafety, type NgwordEntry, type NgwordMatchType } from "../domain/index.js";
 
 export interface NgwordRow extends NgwordEntry {
   id: string;
+}
+
+/**
+ * 危険な正規表現(ReDoS典型パターン)の登録を拒否するエラー。tRPC(TRPCError)に依存しない
+ * application層固有のエラー型とし、transport層でのマッピングはrouter層の責務とする
+ * (Codexレビュー指摘: application層が@trpc/serverに依存するのはレイヤー違反)。
+ */
+export class UnsafeNgwordRegexError extends Error {
+  constructor(reason: string | undefined) {
+    super(`unsafe regex pattern: ${reason}`);
+    this.name = "UnsafeNgwordRegexError";
+  }
 }
 
 /** guildIdのNGワード全件を返す。 */
@@ -30,7 +41,7 @@ export async function addNgword(
   if (matchType === "regex") {
     const result = checkRegexSafety(pattern);
     if (!result.safe) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: `unsafe regex pattern: ${result.reason}` });
+      throw new UnsafeNgwordRegexError(result.reason);
     }
   }
 

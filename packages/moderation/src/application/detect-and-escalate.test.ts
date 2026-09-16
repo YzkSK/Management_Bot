@@ -429,6 +429,34 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     expect(lastResult).toHaveLength(1);
     expect(lastResult[0]?.violationType).toBe("mention_spam");
   });
+
+  test("windowSecondsより前の古いメンションは累積判定に含まれない(Codexレビュー指摘の回帰テスト)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // medium: cumulative.windowSeconds=10, mentionThreshold=10。
+    // 1通目(4件)はwindowSeconds(10秒)より前に古くなるよう20秒前に送り、
+    // 2通目(4件)・3通目(4件)は直近1秒間隔で送る。時刻フィルタが正しく効いていれば
+    // 直近2通の合計8件はmentionThreshold(10)未満のためヒットしない
+    // (フィルタなしで全件合算すると12件になりヒットしてしまう、というバグの回帰確認)。
+    await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() - 20_000) }),
+    );
+    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    for (let i = 0; i < 2; i++) {
+      lastResult = await detectAndEscalate(
+        { db, redis, eventBus },
+        message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
+      );
+    }
+
+    expect(lastResult).toEqual([]);
+  });
 });
 
 describe("bufferedMessageIdsInWindow", () => {

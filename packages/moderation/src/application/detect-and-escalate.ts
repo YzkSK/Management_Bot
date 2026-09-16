@@ -25,6 +25,7 @@ import {
   type BufferedMessage,
   claimAndPushMessage,
   markStrikeHitAndCheckNewBurst,
+  mentionCountsInWindow,
   pushMentionCount,
 } from "./message-buffer.js";
 import { listNgwords } from "./ngwords.js";
@@ -161,13 +162,17 @@ async function checkViolation(
   const mentionPreset = MENTION_SPAM_PRESETS[preset];
   const mentionCount = countMentions(message.content);
   const singleHit = hasSingleMessageMentionSpam(mentionCount, mentionPreset.singleMessageThreshold);
-  const mentionCounts = await pushMentionCount(
+  const mentionBuffer = await pushMentionCount(
     deps.redis,
     message.guildId,
     message.userId,
     mentionCount,
+    message.createdAt,
     mentionPreset.cumulative.windowSeconds,
   );
+  // TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが混入するため、
+  // hasFloodHitと同様にcreatedAtで時刻フィルタしてから合算する(Codexレビュー指摘)。
+  const mentionCounts = mentionCountsInWindow(mentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds);
   const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
   return {
     hit: singleHit || cumulativeHit,
