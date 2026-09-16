@@ -25,6 +25,14 @@ describe("checkRegexSafety", () => {
     expect(checkRegexSafety("(a{2,})+").safe).toBe(false);
   });
 
+  test("外側の量指定子が{n,}形式のネストパターン^(a+){1,}$もsafe: falseを返す(Codexレビュー指摘)", () => {
+    expect(checkRegexSafety("^(a+){1,}$").safe).toBe(false);
+  });
+
+  test("外側の量指定子が{n,m}形式のネストパターンもsafe: falseを返す", () => {
+    expect(checkRegexSafety("(a+){1,5}").safe).toBe(false);
+  });
+
   test("曖昧な選択の繰り返し(a|a)*はsafe: falseを返す", () => {
     expect(checkRegexSafety("(a|a)*").safe).toBe(false);
   });
