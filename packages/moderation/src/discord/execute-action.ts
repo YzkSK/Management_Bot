@@ -1,5 +1,9 @@
+import { ContainerBuilder, MessageFlags, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import type { Message } from "discord.js";
 import type { EscalationOutcome } from "../application/index.js";
+
+/** logging側(log-entry-presentation.ts)のnegativeアクセントと同一値。モデレーション系カードの警告色を統一する。 */
+const ACCENT_COLOR_NEGATIVE = 0xf23f42;
 
 /** タイムアウトの固定時間。強度プリセットによらず一律とする(初期実装、過剰な設定項目を避ける)。 */
 const TIMEOUT_DURATION_MS = 10 * 60 * 1000;
@@ -23,13 +27,18 @@ const ACTION_LABELS = {
   unban: "BAN解除",
 } satisfies Record<EscalationOutcome["actionType"], string>;
 
-function warnMessageFor(outcome: EscalationOutcome): string {
-  return [
-    "モデレーション通知",
-    `検出内容: ${VIOLATION_LABELS[outcome.violationType]}`,
-    `対応: ${ACTION_LABELS[outcome.actionType]}`,
-    `現在のストライク数: ${outcome.strikeCount}`,
-  ].join("\n");
+/** logging側のContainerカード(log-entry-container.ts)と体裁を揃えたDM警告カード。 */
+function buildWarningContainer(outcome: EscalationOutcome): ContainerBuilder {
+  const bodyLines = [
+    `**検出内容**: ${VIOLATION_LABELS[outcome.violationType]}`,
+    `**対応**: ${ACTION_LABELS[outcome.actionType]}`,
+    `**現在のストライク数**: ${outcome.strikeCount}`,
+  ];
+  return new ContainerBuilder()
+    .setAccentColor(ACCENT_COLOR_NEGATIVE)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent("### 🛑 モデレーション通知"))
+    .addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(bodyLines.join("\n")));
 }
 
 /**
@@ -38,7 +47,10 @@ function warnMessageFor(outcome: EscalationOutcome): string {
  */
 async function sendWarningDm(message: Message, outcome: EscalationOutcome): Promise<void> {
   try {
-    await message.author.send(warnMessageFor(outcome));
+    await message.author.send({
+      components: [buildWarningContainer(outcome)],
+      flags: MessageFlags.IsComponentsV2,
+    });
   } catch (error) {
     console.error(`moderation: failed to send warning DM for case ${outcome.caseId}`, error);
   }

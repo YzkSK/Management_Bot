@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { ContainerBuilder, MessageFlags } from "discord.js";
 import type { Message } from "discord.js";
 import type { EscalationOutcome } from "../application/index.js";
 import { executeEscalationAction } from "./execute-action.js";
@@ -29,6 +30,15 @@ describe("executeEscalationAction", () => {
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
     expect(message.channel.bulkDelete).not.toHaveBeenCalled();
     expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("警告DMはComponents V2のContainerカードとして送る", async () => {
+    const message = fakeMessage();
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
+    const payload = (message.author.send as ReturnType<typeof mock>).mock.calls[0][0];
+    expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(payload.components).toHaveLength(1);
+    expect(payload.components[0]).toBeInstanceOf(ContainerBuilder);
   });
 
   test("messageDelete成功後に対象ユーザーへDMで警告を送る(処罰が先)", async () => {
