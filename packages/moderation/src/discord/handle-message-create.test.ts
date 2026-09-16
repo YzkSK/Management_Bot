@@ -223,4 +223,39 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
     expect(message.bulkDelete).not.toHaveBeenCalled();
   });
+
+  test("他ギルドへの招待リンクは検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/other-guild-code" });
+    await handleMessageCreate(
+      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      message as unknown as Message,
+    );
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  test("自ギルドへの招待リンクは検知されず、メッセージは削除されない", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/own-guild-code" });
+    await handleMessageCreate(
+      { db, redis, eventBus, resolveInviteGuildId: async () => guildId },
+      message as unknown as Message,
+    );
+
+    expect(eventBus.published).toEqual([]);
+    expect(message.deleteFn).not.toHaveBeenCalled();
+  });
 });
