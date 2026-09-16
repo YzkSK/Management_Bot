@@ -13,6 +13,14 @@ export const PRESET_LABELS: Record<ModerationPreset, string> = {
   strong: "強",
 };
 
+export type NgwordMatchType = "exact" | "contains" | "regex";
+
+export const NGWORD_MATCH_TYPE_LABELS: Record<NgwordMatchType, string> = {
+  exact: "完全一致",
+  contains: "部分一致",
+  regex: "正規表現",
+};
+
 /**
  * packages/moderation/src/domain/presets.ts のFLOOD_PRESETSをUI表示用に説明文化したもの。
  * dashboard-webはdiscord.js等を含む@management-bot/moderationパッケージ全体には依存しないため
@@ -36,16 +44,16 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     medium: "投稿内容の類似度が90%以上で検知",
     strong: "投稿内容の類似度が85%以上で検知",
   },
-  // TODO(#182): NGワード/メンションスパムのプリセット閾値が確定次第、具体的な条件文言に更新する。
   ngword: {
-    weak: "登録済みNGワードに一致した投稿を検知",
-    medium: "登録済みNGワードに一致した投稿を検知",
-    strong: "登録済みNGワードに一致した投稿を検知",
+    weak: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
+    medium: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
+    strong: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
   },
+  // packages/moderation/src/domain/presets.ts のMENTION_SPAM_PRESETSをUI表示用に説明文化したもの。
   mention_spam: {
-    weak: "大量メンションを含む投稿を検知",
-    medium: "大量メンションを含む投稿を検知",
-    strong: "大量メンションを含む投稿を検知",
+    weak: "1メッセージ10件以上、または10秒間の合計15件以上のメンションで検知",
+    medium: "1メッセージ6件以上、または10秒間の合計10件以上のメンションで検知",
+    strong: "1メッセージ4件以上、または8秒間の合計6件以上のメンションで検知",
   },
 };
 

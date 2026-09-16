@@ -9,12 +9,15 @@ import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
+  addNgword,
   addToWhitelist,
   getEscalationPreset,
+  listNgwords,
   listStrikes,
   listThresholds,
   listWhitelist,
   removeFromWhitelist,
+  removeNgword,
   resetAllStrikes,
   resetStrike,
   setEscalationPreset,
@@ -28,6 +31,15 @@ const guildIdInput = z.object({ guildId: discordIdSchema });
 const violationTypeSchema = z.enum(MODERATION_VIOLATION_TYPES);
 const presetSchema = z.enum(MODERATION_PRESETS);
 const targetTypeSchema = z.enum(["user", "role"]);
+const ngwordMatchTypeSchema = z.enum(["exact", "contains", "regex"]);
+
+const addNgwordInput = z.object({
+  guildId: discordIdSchema,
+  matchType: ngwordMatchTypeSchema,
+  pattern: z.string().min(1).max(500),
+});
+
+const removeNgwordInput = z.object({ guildId: discordIdSchema, id: z.string().min(1) });
 
 const setThresholdInput = z.object({
   guildId: discordIdSchema,
@@ -170,6 +182,22 @@ export const moderationRouter = router({
     .input(resetAllStrikesInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => resetAllStrikes(ctx.db, input.guildId, input.userId)),
+
+  listNgwords: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(({ ctx, input }) => listNgwords(ctx.db, input.guildId)),
+
+  /** matchType="regex"の場合、addNgword内でcheckRegexSafetyによる危険パターン検証を行いBAD_REQUESTで拒否する。 */
+  addNgword: protectedProcedure
+    .input(addNgwordInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => addNgword(ctx.db, input.guildId, input.matchType, input.pattern)),
+
+  removeNgword: protectedProcedure
+    .input(removeNgwordInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => removeNgword(ctx.db, input.guildId, input.id)),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。
