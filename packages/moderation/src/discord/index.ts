@@ -19,6 +19,8 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     redis.disconnect();
   });
 
+  // messageCreateのみ購読する。メッセージ編集で後から招待リンク/NGワードが追加された場合の
+  // 検知はスコープ外(Issue #188)。対象にする場合はmessageUpdateハンドラの追加検討が必要。
   ctx.client.on("messageCreate", (message) => {
     handleMessageCreate(
       {
