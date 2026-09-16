@@ -12,6 +12,7 @@ function toLogEntry(event: ModerationActionRecordedEvent): LogEntry {
     moderatorId: event.moderatorId,
     action: event.action,
     actionType: event.actionType,
+    timeoutMinutes: event.timeoutMinutes,
   };
 }
 

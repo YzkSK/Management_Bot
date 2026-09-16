@@ -229,6 +229,8 @@ export const moderationCaseLogEntrySchema = z.object({
   moderatorId: nonEmptyString,
   action: z.enum(["create", "update", "resolve"]),
   actionType: z.enum(MODERATION_ACTION_TYPES),
+  /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
+  timeoutMinutes: z.number().int().positive().optional(),
 });
 
 const voiceBase = {

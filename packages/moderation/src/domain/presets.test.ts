@@ -17,16 +17,20 @@ describe("ESCALATION_STEPS", () => {
   });
 
   test("strongはstrikeCount=1でwarnになる(削除は付随処理として実行される)", () => {
-    expect(ESCALATION_STEPS.strong[1]).toBe("warn");
+    expect(ESCALATION_STEPS.strong[1]).toEqual({ actionType: "warn" });
   });
 
-  test("mediumはstrikeCount=1でwarn、3でtimeoutになる", () => {
-    expect(ESCALATION_STEPS.medium[1]).toBe("warn");
-    expect(ESCALATION_STEPS.medium[3]).toBe("timeout");
+  test("mediumはstrikeCount=1でwarn、3〜5でtimeoutが5→10→30分と多段階化する", () => {
+    expect(ESCALATION_STEPS.medium[1]).toEqual({ actionType: "warn" });
+    expect(ESCALATION_STEPS.medium[3]).toEqual({ actionType: "timeout", timeoutMinutes: 5 });
+    expect(ESCALATION_STEPS.medium[4]).toEqual({ actionType: "timeout", timeoutMinutes: 10 });
+    expect(ESCALATION_STEPS.medium[5]).toEqual({ actionType: "timeout", timeoutMinutes: 30 });
   });
 
-  test("weakはstrikeCount=1でwarn、5でtimeoutになる", () => {
-    expect(ESCALATION_STEPS.weak[1]).toBe("warn");
-    expect(ESCALATION_STEPS.weak[5]).toBe("timeout");
+  test("weakはstrikeCount=1でwarn、5〜7でtimeoutが5→10→30分と多段階化する", () => {
+    expect(ESCALATION_STEPS.weak[1]).toEqual({ actionType: "warn" });
+    expect(ESCALATION_STEPS.weak[5]).toEqual({ actionType: "timeout", timeoutMinutes: 5 });
+    expect(ESCALATION_STEPS.weak[6]).toEqual({ actionType: "timeout", timeoutMinutes: 10 });
+    expect(ESCALATION_STEPS.weak[7]).toEqual({ actionType: "timeout", timeoutMinutes: 30 });
   });
 });

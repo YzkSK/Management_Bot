@@ -5,9 +5,6 @@ import type { EscalationOutcome } from "../application/index.js";
 /** logging側(log-entry-presentation.ts)のnegativeアクセントと同一値。モデレーション系カードの警告色を統一する。 */
 const ACCENT_COLOR_NEGATIVE = 0xf23f42;
 
-/** タイムアウトの固定時間。強度プリセットによらず一律とする(初期実装、過剰な設定項目を避ける)。 */
-const TIMEOUT_DURATION_MS = 10 * 60 * 1000;
-
 /** strikeCountは違反種別を跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
 function reasonFor(outcome: EscalationOutcome): string {
   return `moderation: ${outcome.violationType} total strike ${outcome.strikeCount} (case ${outcome.caseId})`;
@@ -20,17 +17,25 @@ const VIOLATION_LABELS = {
 
 const ACTION_LABELS = {
   warn: "警告",
-  timeout: "10分間のタイムアウト",
+  timeout: "タイムアウト",
   kick: "サーバーからの退出",
   ban: "サーバーからのBAN",
   unban: "BAN解除",
 } satisfies Record<EscalationOutcome["actionType"], string>;
 
+/** timeoutは5→10→30分と多段階化するため、分数を動的に表示する(#322)。 */
+function actionLabelFor(outcome: EscalationOutcome): string {
+  if (outcome.actionType === "timeout" && outcome.timeoutMinutes !== undefined) {
+    return `${outcome.timeoutMinutes}分間のタイムアウト`;
+  }
+  return ACTION_LABELS[outcome.actionType];
+}
+
 /** logging側のContainerカード(log-entry-container.ts)と体裁を揃えたDM警告カード。 */
 function buildWarningContainer(outcome: EscalationOutcome): ContainerBuilder {
   const bodyLines = [
     `**検出内容**: ${VIOLATION_LABELS[outcome.violationType]}`,
-    `**対応**: ${ACTION_LABELS[outcome.actionType]}`,
+    `**対応**: ${actionLabelFor(outcome)}`,
     `**現在のストライク数**: ${outcome.strikeCount}`,
   ];
   return new ContainerBuilder()
@@ -105,11 +110,16 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
         return;
       case "unban":
         return;
-      case "timeout":
+      case "timeout": {
         if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);
-        await message.member.timeout(TIMEOUT_DURATION_MS, reasonFor(outcome));
+        if (outcome.timeoutMinutes === undefined) {
+          console.error(`moderation: timeoutMinutes missing for case ${outcome.caseId}, falling back to 10 minutes`);
+        }
+        const timeoutMinutes = outcome.timeoutMinutes ?? 10;
+        await message.member.timeout(timeoutMinutes * 60 * 1000, reasonFor(outcome));
         break;
+      }
       case "kick":
         if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);

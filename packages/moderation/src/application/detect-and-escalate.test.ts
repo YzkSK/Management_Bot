@@ -290,7 +290,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "flood", preset: "strong", enabled: true },
     ]);
-    // strong: 合計strikeCount>=1でwarn、>=2でtimeout(ESCALATION_STEPS.strong)
+    // strong: 合計strikeCount>=1でwarn、>=2でtimeout(5分。ESCALATION_STEPS.strong、#322)
     await setEscalationPreset(db, guildId, "strong");
 
     // duplicate_contentのstrikeCountを1で既存状態としてseedする(このテストではduplicate_content
@@ -301,7 +301,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // strong preset: frequency = { windowSeconds: 8, messageThreshold: 3 } のため、
     // 同一ユーザーが3通連投するとflood側がヒットしstrikeCount(flood)が1になる。
     // この時点で合計は duplicate_content(1) + flood(1) = 2 となり、
-    // ESCALATION_STEPS.strongでは2以上はtimeoutが対応する。
+    // ESCALATION_STEPS.strong[2]はtimeout(5分)が対応する。
     let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
@@ -312,7 +312,8 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
     expect(floodOutcome?.strikeCount).toBe(2); // duplicate_content(1) + flood(1)の合計
-    expect(floodOutcome?.actionType).toBe("timeout"); // ESCALATION_STEPS.strong[2] === "timeout"
+    expect(floodOutcome?.actionType).toBe("timeout"); // ESCALATION_STEPS.strong[2].actionType === "timeout"
+    expect(floodOutcome?.timeoutMinutes).toBe(5); // ESCALATION_STEPS.strong[2].timeoutMinutes === 5
   });
 
   test("エスカレーション強度(preset)を変えると、同じ合計strikeCountでも異なるactionTypeになる", async () => {

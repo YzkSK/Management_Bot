@@ -56,6 +56,16 @@ describe("executeEscalationAction", () => {
     expect(payload.components[0]).toBeInstanceOf(ContainerBuilder);
   });
 
+  test("timeout実行後のDM文言はtimeoutMinutesに応じて動的に変わる(#322)", async () => {
+    const timeout = mock(() => Promise.resolve());
+    const message = fakeMessage({ timeout });
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout", timeoutMinutes: 30 }));
+    const payload = (message.author.send as ReturnType<typeof mock>).mock.calls[0][0];
+    const container = (payload.components[0] as ContainerBuilder).toJSON();
+    const text = container.components.map((c) => ("content" in c ? c.content : "")).join("\n");
+    expect(text).toContain("30分間のタイムアウト");
+  });
+
   test("DM送信が失敗(ブロック等)しても例外を投げない", async () => {
     const message = fakeMessage({}, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
     await expect(
@@ -93,9 +103,27 @@ describe("executeEscalationAction", () => {
   test("timeoutはmember.timeout()を呼ぶとともにbufferedMessageIdsを削除する(連投が続いてもメッセージ削除が漏れないようにするため)", async () => {
     const timeout = mock(() => Promise.resolve());
     const message = fakeMessage({ timeout });
-    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" }));
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout", timeoutMinutes: 5 }));
     expect(timeout).toHaveBeenCalledTimes(1);
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    [5, 5 * 60 * 1000],
+    [10, 10 * 60 * 1000],
+    [30, 30 * 60 * 1000],
+  ])("timeoutMinutes=%d分の場合、member.timeout()に%dミリ秒を渡す(#322、多段階化)", async (minutes, expectedMs) => {
+    const timeout = mock(() => Promise.resolve());
+    const message = fakeMessage({ timeout });
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout", timeoutMinutes: minutes }));
+    expect(timeout).toHaveBeenCalledWith(expectedMs, expect.any(String));
+  });
+
+  test("timeoutMinutesが未設定(本来起こりえない状態)の場合、10分にフォールバックする", async () => {
+    const timeout = mock(() => Promise.resolve());
+    const message = fakeMessage({ timeout });
+    await executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout", timeoutMinutes: undefined }));
+    expect(timeout).toHaveBeenCalledWith(10 * 60 * 1000, expect.any(String));
   });
 
   test("kickはmember.kick()を呼ぶとともにbufferedMessageIdsを削除する", async () => {

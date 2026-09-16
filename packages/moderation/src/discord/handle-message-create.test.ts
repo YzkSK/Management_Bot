@@ -151,16 +151,18 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       { guildId, violationType: "duplicate_content", preset: "strong", enabled: true },
     ]);
     await setEscalationPreset(db, guildId, "strong");
-    // duplicate_contentのstrikeCountを1でseedしておく(統一ストライクカウンター、#311)。
-    // 3件目で新バーストとしてflood/duplicate_contentが同時ヒットする際、
-    // 処理順(スレッショルド登録順: flood→duplicate_content)で合計strikeCountが積み上がる:
-    //   flood加算後の合計 = flood(1) + duplicate_content(1,seed) = 2 → ESCALATION_STEPS.strong[2]=timeout
-    //   duplicate_content加算後の合計 = flood(1) + duplicate_content(2) = 3 → ESCALATION_STEPS.strong[3]=kick
+    // duplicate_contentのstrikeCountを3でseedしておく(統一ストライクカウンター、#311)。
+    // ESCALATION_STEPS.strong = {1: warn, 2: timeout5m, 3: timeout10m, 4: timeout30m, 5: kick, 6: ban}
+    // (タイムアウトの多段階化、#322)。3件目で新バーストとしてflood/duplicate_contentが
+    // 同時ヒットする際、処理順(スレッショルド登録順: flood→duplicate_content)で
+    // 合計strikeCountが積み上がる:
+    //   flood加算後の合計 = flood(1) + duplicate_content(3,seed) = 4 → ESCALATION_STEPS.strong[4]=timeout(30分)
+    //   duplicate_content加算後の合計 = flood(1) + duplicate_content(4) = 5 → ESCALATION_STEPS.strong[5]=kick
     await db.insert(moderationEscalationState).values({
       guildId,
       userId,
       violationType: "duplicate_content",
-      strikeCount: 1,
+      strikeCount: 3,
     });
 
     const eventBus = fakeEventBus();
@@ -170,7 +172,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
     }
 
-    // 3件目: floodがtimeout(合計2)、duplicate_content("B"が2連続)がkick(合計3)に到達。
+    // 3件目: floodがtimeout(合計4)、duplicate_content("B"が2連続)がkick(合計5)に到達。
     // moderation.action.recordedは両方publishされるが、Discord側の処罰実行はより重いkickに
     // 集約される(mostSevere)。バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
     // (連投メッセージが削除されずに残らないようにするため)。

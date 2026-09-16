@@ -41,12 +41,12 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
  * guild単位のエスカレーション強度セレクター(EscalationPresetSelector)の説明表示に使う。
  * ESCALATION_STEPSの値を変更した場合はこちらも合わせて更新すること。
  * メッセージ削除は独立したアクション種別ではなく警告以降の全対応に付随して実行されるため、
- * ここでは表示しない(#321)。
+ * ここでは表示しない(#321)。タイムアウトは5分→10分→30分と多段階化する(#322)。
  */
 export const ESCALATION_DESCRIPTIONS: Record<ModerationPreset, string> = {
-  weak: "1回目:警告 → 5回目:タイムアウト → 7回目:キック",
-  medium: "1回目:警告 → 3回目:タイムアウト → 4回目:キック",
-  strong: "1回目:警告 → 2回目:タイムアウト → 3回目:キック → 4回目:BAN",
+  weak: "1回目:警告 → 5回目:5分タイムアウト → 6回目:10分タイムアウト → 7回目:30分タイムアウト → 8回目:キック",
+  medium: "1回目:警告 → 3回目:5分タイムアウト → 4回目:10分タイムアウト → 5回目:30分タイムアウト → 6回目:キック",
+  strong: "1回目:警告 → 2回目:5分タイムアウト → 3回目:10分タイムアウト → 4回目:30分タイムアウト → 5回目:キック → 6回目:BAN",
 };
 
 export function describePreset(violationType: ModerationViolationType, preset: ModerationPreset): string {

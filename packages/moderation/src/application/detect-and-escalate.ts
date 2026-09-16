@@ -38,6 +38,8 @@ export interface EscalationOutcome {
   /** このエスカレーション判定時点の、violationTypeを跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
   strikeCount: number;
   actionType: ModerationActionType;
+  /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
+  timeoutMinutes?: number;
   caseId: string;
   /**
    * この違反の判定に使ったRedisバッファのうち、検知トリガーメッセージと同一チャンネルかつ
@@ -152,8 +154,8 @@ export async function detectAndEscalate(
     // アクション決定(何回目でwarn/timeout/kick/ban)だけをguild単位で統一する。
     const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
     const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
-    const actionType = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
-    if (actionType === null) continue;
+    const step = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
+    if (step === null) continue;
 
     const caseId = randomUUID();
     await deps.eventBus.publish({
@@ -163,14 +165,16 @@ export async function detectAndEscalate(
       targetUserId: message.userId,
       moderatorId: SYSTEM_MODERATOR_ID,
       action: "create",
-      actionType,
+      actionType: step.actionType,
+      timeoutMinutes: step.timeoutMinutes,
       createdAt: message.createdAt.toISOString(),
     });
 
     outcomes.push({
       violationType: threshold.violationType,
       strikeCount: totalStrikeCount,
-      actionType,
+      actionType: step.actionType,
+      timeoutMinutes: step.timeoutMinutes,
       caseId,
       bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, preset.frequency.windowSeconds),
     });

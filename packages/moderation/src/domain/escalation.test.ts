@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decideEscalationAction } from "./escalation.js";
 
 describe("decideEscalationAction", () => {
-  const steps = { 1: "warn", 3: "kick", 5: "timeout" } as const;
+  const steps = { 1: "warn", 3: "kick", 5: "timeout" };
 
   test("最小キー未満のstrikeCountはnull", () => {
     expect(decideEscalationAction(0, steps)).toBeNull();
