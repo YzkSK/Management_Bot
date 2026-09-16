@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollection, Snowflake } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
+import { buildBulkDeleteSummaryContainers, type GetChannelId, type WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
 import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
@@ -195,7 +195,13 @@ export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId:
     writeLogEntriesBulkSafely(
       deps,
       entries,
-      (entries) => `${entries.length}件のメッセージが<#${channelId}>で一括削除されました`,
+      (entries) => ({
+        components: buildBulkDeleteSummaryContainers({
+          count: entries.length,
+          channelId,
+          createdAt: entries[0]!.createdAt,
+        }),
+      }),
     );
   });
 }

@@ -13,6 +13,7 @@ import { DialogContent, DialogTitle } from "@/components/ui/dialog";
 /** ページ実装済みの機能のみここに登録する(未実装の機能はリンクにしない)。 */
 const FEATURE_PATHS: Record<string, (guildId: string) => string> = {
   logging: (guildId) => `/guilds/${guildId}/logs`,
+  moderation: (guildId) => `/guilds/${guildId}/moderation`,
 };
 
 interface SidebarProps {

@@ -13,6 +13,11 @@ export interface FeatureModuleContext {
    * (通常のクエリはdbを使う。packages/db listenForLogChannelSettingChanges参照)。
    */
   databaseUrl: string;
+  /**
+   * DomainEventBus(eventBus)とは別にRedisへ直接アクセスしたい機能向け(例: moderationの
+   * 連投検知バッファ)。接続を開いた場合はonShutdownでの解放を忘れないこと。
+   */
+  redisUrl: string;
   /** 機能間連携用。他機能への直接importではなくdomain-events経由で疎結合にする(CLAUDE.md参照)。 */
   eventBus: DomainEventBus;
   /**

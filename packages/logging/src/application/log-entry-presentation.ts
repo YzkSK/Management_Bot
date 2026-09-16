@@ -22,7 +22,7 @@ const PRESENTATION: {
   [C in LogEntry["category"]]?: Partial<Record<string, { accent: AccentKind; title: string; icon: string }>>;
 } = {
   message: {
-    create: { accent: "positive", title: "メッセージが投稿されました", icon: "📥" },
+    create: { accent: "positive", title: "メッセージが投稿されました", icon: "💬" },
     update: { accent: "warning", title: "メッセージが編集されました", icon: "✏️" },
     delete: { accent: "negative", title: "メッセージが削除されました", icon: "🗑️" },
     bulkDelete: { accent: "negative", title: "メッセージが一括削除されました", icon: "🧹" },
@@ -31,7 +31,7 @@ const PRESENTATION: {
   },
   reaction: {
     add: { accent: "positive", title: "リアクションが追加されました", icon: "😀" },
-    remove: { accent: "negative", title: "リアクションが削除されました", icon: "😀" },
+    remove: { accent: "negative", title: "リアクションが削除されました", icon: "🚮" },
   },
   member: {
     join: { accent: "positive", title: "ユーザーが参加しました", icon: "📥" },
@@ -39,8 +39,8 @@ const PRESENTATION: {
     ban: { accent: "negative", title: "ユーザーがBANされました", icon: "🔨" },
     unban: { accent: "positive", title: "ユーザーのBANが解除されました", icon: "🔓" },
     kick: { accent: "negative", title: "ユーザーがキックされました", icon: "👢" },
-    timeout: { accent: "warning", title: "ユーザーがタイムアウトされました", icon: "🔇" },
-    timeoutRemove: { accent: "positive", title: "ユーザーのタイムアウトが解除されました", icon: "🔊" },
+    timeout: { accent: "warning", title: "ユーザーがタイムアウトされました", icon: "🔕" },
+    timeoutRemove: { accent: "positive", title: "ユーザーのタイムアウトが解除されました", icon: "🔔" },
     nicknameChange: { accent: "warning", title: "ニックネームが変更されました", icon: "✏️" },
   },
   role: {
@@ -73,13 +73,13 @@ const PRESENTATION: {
   },
   emoji: {
     create: { accent: "positive", title: "絵文字が追加されました", icon: "🙂" },
-    update: { accent: "warning", title: "絵文字が更新されました", icon: "🙂" },
-    delete: { accent: "negative", title: "絵文字が削除されました", icon: "🙂" },
+    update: { accent: "warning", title: "絵文字が更新されました", icon: "✏️" },
+    delete: { accent: "negative", title: "絵文字が削除されました", icon: "🗑️" },
   },
   sticker: {
-    create: { accent: "positive", title: "スタンプが追加されました", icon: "🏷️" },
-    update: { accent: "warning", title: "スタンプが更新されました", icon: "🏷️" },
-    delete: { accent: "negative", title: "スタンプが削除されました", icon: "🏷️" },
+    create: { accent: "positive", title: "スタンプが追加されました", icon: "🖼️" },
+    update: { accent: "warning", title: "スタンプが更新されました", icon: "✏️" },
+    delete: { accent: "negative", title: "スタンプが削除されました", icon: "🗑️" },
   },
   autoMod: {
     ruleCreate: { accent: "positive", title: "AutoModルールが作成されました", icon: "🛡️" },

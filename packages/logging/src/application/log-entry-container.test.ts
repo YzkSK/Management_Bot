@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LogEntry } from "../domain/index.js";
-import { buildLogEntryContainers } from "./log-entry-container.js";
+import { buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
 import { ACCENT_COLORS } from "./log-entry-presentation.js";
 
 interface TextDisplayJSON {
@@ -203,7 +203,35 @@ describe("buildLogEntryContainers", () => {
       changes: { permissions: { before: "0", after: (1n << 5n).toString() } },
     };
     const text = textOf(buildLogEntryContainers(entry));
-    expect(text).toContain("+サーバーの管理");
+    expect(text).toContain("```diff\n+サーバーの管理\n```");
+  });
+
+  test("role/updateのpermissions変更(剥奪+付与混在)は半角ハイフンの削除行を付与行より先に列挙する", () => {
+    const entry: LogEntry = {
+      category: "role",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      roleId: "r1",
+      action: "update",
+      changes: { permissions: { before: (1n << 1n).toString(), after: (1n << 5n).toString() } },
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    const diffBlock = text.match(/```diff\n([\s\S]*?)\n```/)?.[1];
+    expect(diffBlock?.split("\n")).toEqual(["-メンバーをキック", "+サーバーの管理"]);
+  });
+
+  test("voice/updateはdescriptionの文章のみでchangesの生の値行を表示しない", () => {
+    const entry: LogEntry = {
+      category: "voice",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      userId: "u1",
+      channelId: "c1",
+      action: "update",
+      changes: { selfMute: { before: false, after: true } },
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    expect(text).not.toContain("selfMute");
   });
 
   test("role/updateの色変更はbefore→after形式で表示する", () => {
@@ -332,5 +360,24 @@ describe("buildLogEntryContainers", () => {
       actionType: "ChannelDelete",
     };
     expect(mainContainerOf(buildLogEntryContainers(entry)).accent_color).toBe(ACCENT_COLORS.neutral);
+  });
+});
+
+describe("buildBulkDeleteSummaryContainers", () => {
+  test("赤アクセントの一括削除カードに見出し・件数・チャンネル・時刻を入れる", () => {
+    const [container] = buildBulkDeleteSummaryContainers({
+      count: 5,
+      channelId: "c1",
+      createdAt: "2026-09-16T00:50:00.000Z",
+    });
+
+    expect(container!.toJSON()).toMatchObject({
+      accent_color: 0xf23f42,
+      components: expect.arrayContaining([
+        expect.objectContaining({ content: expect.stringContaining("🧹 メッセージが一括削除されました") }),
+        expect.objectContaining({ content: expect.stringContaining("5件のメッセージが<#c1>で一括削除されました") }),
+        expect.objectContaining({ content: expect.stringContaining("<t:1789519800:f>") }),
+      ]),
+    });
   });
 });

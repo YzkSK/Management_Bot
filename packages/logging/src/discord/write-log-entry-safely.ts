@@ -1,5 +1,10 @@
 import type { LogEntry } from "../domain/index.js";
-import { writeLogEntriesBulk, writeLogEntry, type WriteLogEntryDeps } from "../application/index.js";
+import {
+  writeLogEntriesBulk,
+  writeLogEntry,
+  type ChannelMessagePayload,
+  type WriteLogEntryDeps,
+} from "../application/index.js";
 
 /**
  * discord.jsのイベントリスナーは同期コールバックで再配送の仕組みもないため、
@@ -16,7 +21,7 @@ export function writeLogEntrySafely(deps: WriteLogEntryDeps, entry: LogEntry, id
 export function writeLogEntriesBulkSafely(
   deps: WriteLogEntryDeps,
   entries: readonly LogEntry[],
-  summary: (entries: readonly LogEntry[]) => string,
+  summary: (entries: readonly LogEntry[]) => ChannelMessagePayload,
 ): void {
   void writeLogEntriesBulk(deps, entries, summary).catch((error: unknown) => {
     console.error(`Failed to write log entries in bulk (count=${entries.length})`, error);

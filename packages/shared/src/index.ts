@@ -26,6 +26,11 @@ export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
 export { MODERATION_ACTION_TYPES, type ModerationActionType } from "./moderation-action-type.js";
 export {
+  MODERATION_VIOLATION_TYPES,
+  type ModerationViolationType,
+} from "./moderation-violation-type.js";
+export { MODERATION_PRESETS, type ModerationPreset } from "./moderation-preset.js";
+export {
   LOG_ENTRY_SCHEMAS,
   messageLogEntrySchema,
   reactionLogEntrySchema,
