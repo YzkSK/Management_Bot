@@ -1,10 +1,18 @@
 import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { createDb, type Db, guilds, moderationEscalationState, moderationThresholds } from "@management-bot/db";
+import {
+  createDb,
+  type Db,
+  guilds,
+  moderationEscalationState,
+  moderationNgwords,
+  moderationThresholds,
+} from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
+import { addNgword } from "../application/ngwords.js";
 import { setEscalationPreset } from "../application/escalation-settings.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
@@ -76,6 +84,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   afterEach(async () => {
     await db.delete(moderationThresholds).where(eq(moderationThresholds.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
+    await db.delete(moderationNgwords).where(eq(moderationNgwords.guildId, guildId));
     const keys = await redis.keys(`moderation:*:${guildId}:*`);
     if (keys.length > 0) await redis.del(...keys);
   });
@@ -180,5 +189,35 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(last?.kick).toHaveBeenCalledTimes(1);
     expect(last?.timeout).not.toHaveBeenCalled();
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test("NGワードに一致するメッセージは検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate({ db, redis, eventBus }, message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  test("1メッセージ内の大量メンションはmention_spamとして検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const message = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate({ db, redis, eventBus }, message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
   });
 });
