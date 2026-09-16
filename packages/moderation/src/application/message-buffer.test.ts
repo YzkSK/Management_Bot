@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
-import { claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
+import { claimAndPushMessage, markStrikeHitAndCheckNewBurst, pushMentionCount } from "./message-buffer.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,6 +89,30 @@ describe.skipIf(!(await isRedisAvailable()))("claimAndPushMessage", () => {
     expect(first).not.toBeNull();
     expect(second).toBeNull();
     expect(first).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!(await isRedisAvailable()))("pushMentionCount", () => {
+  const redis = new Redis(REDIS_URL);
+  const guildId = `g-${randomUUID()}`;
+  const userId = `u-${randomUUID()}`;
+
+  afterEach(async () => {
+    const keys = await redis.keys(`moderation:*:${guildId}:*`);
+    if (keys.length > 0) await redis.del(...keys);
+  });
+
+  test("新しい順(先頭が最新)でメンション数バッファを返す", async () => {
+    await pushMentionCount(redis, guildId, userId, 3, 60);
+    const buffer = await pushMentionCount(redis, guildId, userId, 5, 60);
+    expect(buffer).toEqual([5, 3]);
+  });
+
+  test("TTLをwindowSecondsで設定する", async () => {
+    await pushMentionCount(redis, guildId, userId, 1, 60);
+    const ttl = await redis.ttl(`moderation:mention:${guildId}:${userId}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60);
   });
 });
 

@@ -4,14 +4,35 @@ import type { Db } from "@management-bot/db";
 import type {
   ModerationActionRecordedEvent,
   ModerationActionType,
+  ModerationPreset,
   ModerationViolationType,
 } from "@management-bot/shared";
-import { FLOOD_PRESETS, ESCALATION_STEPS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
+import {
+  FLOOD_PRESETS,
+  MENTION_SPAM_PRESETS,
+  ESCALATION_STEPS,
+  countMentions,
+  decideEscalationAction,
+  findMatchingNgword,
+  hasCumulativeMentionSpam,
+  hasFloodHit,
+  hasSingleMessageMentionSpam,
+  isDuplicateContent,
+} from "../domain/index.js";
 import { getEscalationPreset } from "./escalation-settings.js";
 import { getTotalStrikeCount, incrementStrike } from "./escalation-state.js";
-import { type BufferedMessage, claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
+import {
+  type BufferedMessage,
+  claimAndPushMessage,
+  markStrikeHitAndCheckNewBurst,
+  pushMentionCount,
+} from "./message-buffer.js";
+import { listNgwords } from "./ngwords.js";
 import { getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
+
+/** NGワードはメッセージ単発判定のため、strikeロックのバースト抑制ウィンドウとして固定値を使う。 */
+const NGWORD_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
 /** 自動検知によるアクションであることを表すmoderatorId。人間の実行者は存在しない。 */
 export const SYSTEM_MODERATOR_ID = "system";
@@ -95,6 +116,66 @@ export function bufferedMessageIdsInWindow(
  * 同じmessageIdでの再配送・ハンドラ再試行は(claimAndPushMessageにより)判定・strike加算をスキップし、
  * 空配列を返す。
  */
+/**
+ * 1つのviolationTypeの判定結果。hitならstrikeロックに使うwindowSecondsと、
+ * 削除対象メッセージIDを返す(flood/duplicate_contentはバースト全体、ngword/mention_spamは
+ * 検知トリガーメッセージ自身、設計spec「削除対象」節の通り)。
+ */
+interface ViolationCheck {
+  hit: boolean;
+  strikeLockWindowSeconds: number;
+  bufferedMessageIds: readonly string[];
+}
+
+async function checkViolation(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+  buffer: readonly BufferedMessage[],
+  violationType: ModerationViolationType,
+  preset: ModerationPreset,
+): Promise<ViolationCheck> {
+  if (violationType === "flood" || violationType === "duplicate_content") {
+    const floodPreset = FLOOD_PRESETS[preset];
+    const hit =
+      violationType === "flood"
+        ? hasFloodHit(
+            buffer.map((m) => m.createdAt),
+            message.createdAt,
+            floodPreset.frequency,
+          )
+        : isDuplicateHit(buffer, message, floodPreset.duplicateSimilarityThreshold);
+    return {
+      hit,
+      strikeLockWindowSeconds: floodPreset.frequency.windowSeconds,
+      bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, floodPreset.frequency.windowSeconds),
+    };
+  }
+
+  if (violationType === "ngword") {
+    const ngwords = await listNgwords(deps.db, message.guildId);
+    const hit = findMatchingNgword(message.content, ngwords) !== null;
+    return { hit, strikeLockWindowSeconds: NGWORD_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
+  }
+
+  // mention_spam
+  const mentionPreset = MENTION_SPAM_PRESETS[preset];
+  const mentionCount = countMentions(message.content);
+  const singleHit = hasSingleMessageMentionSpam(mentionCount, mentionPreset.singleMessageThreshold);
+  const mentionCounts = await pushMentionCount(
+    deps.redis,
+    message.guildId,
+    message.userId,
+    mentionCount,
+    mentionPreset.cumulative.windowSeconds,
+  );
+  const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
+  return {
+    hit: singleHit || cumulativeHit,
+    strikeLockWindowSeconds: mentionPreset.cumulative.windowSeconds,
+    bufferedMessageIds: [message.messageId],
+  };
+}
+
 export async function detectAndEscalate(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
@@ -106,7 +187,12 @@ export async function detectAndEscalate(
   const thresholds = await getEnabledThresholds(deps.db, message.guildId);
   if (thresholds.length === 0) return [];
 
-  const windowSeconds = Math.max(...thresholds.map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds));
+  const floodWindowSeconds = thresholds
+    .filter((t) => t.violationType === "flood" || t.violationType === "duplicate_content")
+    .map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds);
+  // flood/duplicate_content以外しか有効でないguildでも、直近メッセージの重複判定用に
+  // 最低限のバッファウィンドウ(NGWORD_STRIKE_LOCK_WINDOW_SECONDS)は確保する。
+  const windowSeconds = Math.max(NGWORD_STRIKE_LOCK_WINDOW_SECONDS, ...floodWindowSeconds);
   const buffer = await claimAndPushMessage(
     deps.redis,
     message.guildId,
@@ -124,23 +210,15 @@ export async function detectAndEscalate(
 
   const outcomes: EscalationOutcome[] = [];
   for (const threshold of thresholds) {
-    const preset = FLOOD_PRESETS[threshold.preset];
-    const hit =
-      threshold.violationType === "flood"
-        ? hasFloodHit(
-            buffer.map((m) => m.createdAt),
-            message.createdAt,
-            preset.frequency,
-          )
-        : isDuplicateHit(buffer, message, preset.duplicateSimilarityThreshold);
-    if (!hit) continue;
+    const check = await checkViolation(deps, message, buffer, threshold.violationType, threshold.preset);
+    if (!check.hit) continue;
 
     const canStrike = await markStrikeHitAndCheckNewBurst(
       deps.redis,
       message.guildId,
       message.userId,
       threshold.violationType,
-      preset.frequency.windowSeconds,
+      check.strikeLockWindowSeconds,
     );
     if (!canStrike) continue;
 
@@ -150,8 +228,9 @@ export async function detectAndEscalate(
     // 経過後に自動的に次のstrikeを許可するため、最悪でも検知がその分遅れるだけで済む。
     await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
     // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
-    // 検知条件(hasFloodHit/isDuplicateHitの閾値)はviolationTypeごとのプリセットのまま、
-    // アクション決定(何回目でwarn/timeout/kick/ban)だけをguild単位で統一する。
+    // 検知条件(hasFloodHit/isDuplicateHit/findMatchingNgword/hasSingleMessageMentionSpam等)は
+    // violationTypeごとのプリセットのまま、アクション決定(何回目でwarn/timeout/kick/ban)だけを
+    // guild単位で統一する。
     const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
     const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
     const step = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
@@ -176,7 +255,7 @@ export async function detectAndEscalate(
       actionType: step.actionType,
       timeoutMinutes: step.timeoutMinutes,
       caseId,
-      bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, preset.frequency.windowSeconds),
+      bufferedMessageIds: check.bufferedMessageIds,
     });
   }
 

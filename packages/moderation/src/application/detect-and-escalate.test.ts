@@ -5,6 +5,7 @@ import {
   type Db,
   guilds,
   moderationEscalationState,
+  moderationNgwords,
   moderationThresholds,
   moderationWhitelist,
 } from "@management-bot/db";
@@ -20,6 +21,7 @@ import {
 import { incrementStrike } from "./escalation-state.js";
 import { setEscalationPreset } from "./escalation-settings.js";
 import type { BufferedMessage } from "./message-buffer.js";
+import { addNgword } from "./ngwords.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 
@@ -70,6 +72,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await db.delete(moderationThresholds).where(eq(moderationThresholds.guildId, guildId));
     await db.delete(moderationWhitelist).where(eq(moderationWhitelist.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
+    await db.delete(moderationNgwords).where(eq(moderationNgwords.guildId, guildId));
     const keys = await redis.keys(`moderation:*:${guildId}:*`);
     if (keys.length > 0) await redis.del(...keys);
   });
@@ -336,6 +339,95 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
     expect(floodOutcome?.strikeCount).toBe(1);
     expect(floodOutcome?.actionType).toBe("warn"); // ESCALATION_STEPS.weak[1] === "warn"
+  });
+
+  test("登録済みNGワードに一致するメッセージはngwordとして検知され、削除対象はそのメッセージ自身のみ", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const messageId = randomUUID();
+    const result = await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, messageId, content: "banned-word" }),
+    );
+
+    expect(result).toEqual([
+      {
+        violationType: "ngword",
+        strikeCount: 1,
+        actionType: "warn",
+        caseId: expect.any(String),
+        bufferedMessageIds: [messageId],
+      },
+    ]);
+  });
+
+  test("NGワードに一致しないメッセージはngwordとして検知されない", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const result = await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, content: "clean message" }),
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  test("1メッセージ内のメンション数がmedium presetの単発閾値(6)以上ならmention_spamとして検知される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const messageId = randomUUID();
+    const result = await detectAndEscalate(
+      { db, redis, eventBus },
+      message({ guildId, userId, messageId, content: mentions }),
+    );
+
+    expect(result).toEqual([
+      {
+        violationType: "mention_spam",
+        strikeCount: 1,
+        actionType: "warn",
+        caseId: expect.any(String),
+        bufferedMessageIds: [messageId],
+      },
+    ]);
+  });
+
+  test("短時間内の累積メンション数がmedium presetの累積閾値(10)以上ならmention_spamとして検知される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // medium: cumulative.windowSeconds=10, mentionThreshold=10。各メッセージ4件ずつメンションし、
+    // 3通目で合計12件に達して累積ヒットする(単発閾値6は超えない)。
+    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    for (let i = 0; i < 3; i++) {
+      lastResult = await detectAndEscalate(
+        { db, redis, eventBus },
+        message({
+          guildId,
+          userId,
+          content: "<@1> <@2> <@3> <@4>",
+          createdAt: new Date(now.getTime() + i * 1000),
+        }),
+      );
+    }
+
+    expect(lastResult).toHaveLength(1);
+    expect(lastResult[0]?.violationType).toBe("mention_spam");
   });
 });
 

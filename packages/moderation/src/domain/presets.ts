@@ -24,6 +24,28 @@ export const FLOOD_PRESETS: Readonly<Record<ModerationPreset, FloodPresetConfig>
   },
 };
 
+export interface MentionSpamPresetConfig {
+  /** 1メッセージ内のメンション数がこの値以上で単発ヒット。 */
+  singleMessageThreshold: number;
+  /** 直近windowSeconds秒間の合計メンション数がこの値以上で累積ヒット。 */
+  cumulative: { windowSeconds: number; mentionThreshold: number };
+}
+
+export const MENTION_SPAM_PRESETS: Readonly<Record<ModerationPreset, MentionSpamPresetConfig>> = {
+  weak: {
+    singleMessageThreshold: 10,
+    cumulative: { windowSeconds: 10, mentionThreshold: 15 },
+  },
+  medium: {
+    singleMessageThreshold: 6,
+    cumulative: { windowSeconds: 10, mentionThreshold: 10 },
+  },
+  strong: {
+    singleMessageThreshold: 4,
+    cumulative: { windowSeconds: 8, mentionThreshold: 6 },
+  },
+};
+
 /**
  * エスカレーション段階1件分。actionType="timeout"の場合のみtimeoutMinutesを持つ
  * (#322、タイムアウトの多段階化)。それ以外のactionTypeではtimeoutMinutesを持たない。

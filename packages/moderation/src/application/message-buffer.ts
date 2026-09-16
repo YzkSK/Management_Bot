@@ -135,3 +135,42 @@ export async function markStrikeHitAndCheckNewBurst(
   );
   return result === 1;
 }
+
+function mentionBufferKey(guildId: string, userId: string): string {
+  return `moderation:mention:${guildId}:${userId}`;
+}
+
+// KEYS[1]=mentionBufferKey, ARGV[1]=mentionCount, ARGV[2]=maxBufferSize, ARGV[3]=windowSeconds
+// 新規メッセージのメンション数をバッファ先頭に積み、TTLをwindowSecondsで更新し、更新後の
+// バッファ全件(新しい順)を返す。claimAndPushMessageと異なり重複メッセージの排除は
+// 呼び出し側(detectAndEscalate)が既にclaimAndPushMessageで一元的に行っているため不要。
+const PUSH_MENTION_COUNT_SCRIPT = `
+redis.call("LPUSH", KEYS[1], ARGV[1])
+redis.call("LTRIM", KEYS[1], 0, ARGV[2] - 1)
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+return redis.call("LRANGE", KEYS[1], 0, -1)
+`;
+
+/**
+ * メンションスパムの累積判定用に、新規メッセージのメンション数をguild+userIdのRedisバッファ
+ * (固定ウィンドウ、直近MAX_BUFFER_SIZE件)へ積み、更新後のバッファ全件(新しい順)を返す。
+ * 重複配送時の二重カウント防止は、呼び出し側がclaimAndPushMessageのclaim結果を見て
+ * このバッファ更新自体をスキップすることで行う(このバッファ単体には冪等性がない)。
+ */
+export async function pushMentionCount(
+  redis: Redis,
+  guildId: string,
+  userId: string,
+  mentionCount: number,
+  windowSeconds: number,
+): Promise<number[]> {
+  const raw = (await redis.eval(
+    PUSH_MENTION_COUNT_SCRIPT,
+    1,
+    mentionBufferKey(guildId, userId),
+    mentionCount,
+    MAX_BUFFER_SIZE,
+    windowSeconds,
+  )) as string[];
+  return raw.map(Number);
+}

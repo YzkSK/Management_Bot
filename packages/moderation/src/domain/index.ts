@@ -1,9 +1,11 @@
 export {
   MODERATION_PRESETS,
   FLOOD_PRESETS,
+  MENTION_SPAM_PRESETS,
   ESCALATION_STEPS,
   type ModerationPreset,
   type FloodPresetConfig,
+  type MentionSpamPresetConfig,
   type EscalationStep,
 } from "./presets.js";
 export { hasFloodHit } from "./frequency.js";
