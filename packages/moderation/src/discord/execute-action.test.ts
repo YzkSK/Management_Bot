@@ -25,10 +25,25 @@ function fakeMessage(member: Record<string, unknown> | null = {}, author: Record
 }
 
 describe("executeEscalationAction", () => {
-  test("warnは対象ユーザーにDMで警告を送るのみで、他のDiscord APIは呼び出さない", async () => {
+  test("warnはbufferedMessageIdsを削除したうえで対象ユーザーにDMで警告を送る(削除が先)", async () => {
+    const calls: string[] = [];
+    const message = {
+      author: { send: mock(async () => void calls.push("dm")) },
+      channel: { bulkDelete: mock(async () => void calls.push("delete")) },
+      member: {},
+    };
+    await executeEscalationAction(
+      message as unknown as Message,
+      outcome({ actionType: "warn", bufferedMessageIds: ["m3", "m2", "m1"] }),
+    );
+    expect(message.channel.bulkDelete).toHaveBeenCalledWith(["m3", "m2", "m1"]);
+    expect(calls).toEqual(["delete", "dm"]);
+  });
+
+  test("warn実行時にメッセージ削除が失敗しても、警告DM送信は実行される(削除失敗が警告をブロックしない)", async () => {
     const message = fakeMessage();
+    message.channel.bulkDelete = mock(() => Promise.reject(new Error("missing permissions")));
     await executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" }));
-    expect(message.channel.bulkDelete).not.toHaveBeenCalled();
     expect(message.author.send).toHaveBeenCalledTimes(1);
   });
 

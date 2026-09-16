@@ -76,9 +76,9 @@ async function deleteBufferedMessages(message: Message, bufferedMessageIds: read
 }
 
 /**
- * timeout/kick/ban実行時の付随処理として削除を行う版。削除はあくまで連投バーストの後始末で
- * あり本体アクションではないため、Manage Messages権限が無い等で削除だけが失敗しても、
- * 後続の処罰(member.timeout()/kick()/ban())の実行を止めないよう例外を握りつぶす
+ * warn/timeout/kick/ban実行時の付随処理として削除を行う版。削除はあくまで連投バーストの
+ * 後始末であり本体アクションではないため、Manage Messages権限が無い等で削除だけが失敗しても、
+ * 後続の処罰(member.timeout()/kick()/ban())や警告DM送信の実行を止めないよう例外を握りつぶす
  * (Codexレビュー指摘: 削除失敗が処罰実行をブロックする退行を防ぐ)。
  */
 async function deleteBufferedMessagesSafely(message: Message, outcome: EscalationOutcome): Promise<void> {
@@ -103,6 +103,7 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
   try {
     switch (outcome.actionType) {
       case "warn":
+        await deleteBufferedMessagesSafely(message, outcome);
         await sendWarningDm(message, outcome);
         return;
       case "unban":
