@@ -193,16 +193,18 @@ async function checkViolation(
 
   if (violationType === "invite_link") {
     const codes = extractInviteCodes(message.content);
-    const resolutions = await Promise.all(
-      codes.map(async (code) => {
-        const resolvedGuildId = await deps.resolveInviteGuildId(code);
-        // 解決失敗(null)は安全側に倒し「他ギルドの招待」として扱う(spec: 自ギルド招待の除外)。
-        if (resolvedGuildId === null) return false;
-        return resolvedGuildId === message.guildId;
-      }),
-    );
-    const hit = hasInviteLinkHit(resolutions);
-    return { hit, strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
+    // 悪意あるメッセージに大量の招待リンクを詰め込まれるとfetchInvite呼び出しが
+    // 際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
+    // 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
+    for (const code of codes) {
+      const resolvedGuildId = await deps.resolveInviteGuildId(code);
+      // 解決失敗(null)は安全側に倒し「他ギルドの招待」として扱う(spec: 自ギルド招待の除外)。
+      const isOwnGuild = resolvedGuildId !== null && resolvedGuildId === message.guildId;
+      if (hasInviteLinkHit([isOwnGuild])) {
+        return { hit: true, strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
+      }
+    }
+    return { hit: false, strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
   }
 
   throw new Error(`unhandled violationType: ${violationType satisfies never}`);

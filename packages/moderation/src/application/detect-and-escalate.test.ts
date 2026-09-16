@@ -488,6 +488,60 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       expect(result).toEqual([]);
     });
+
+    test("他ギルドの招待が見つかった時点で以降のresolveInviteGuildId呼び出しを打ち切る(Codexレビュー指摘の回帰テスト: レート制限消費対策)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const resolvedCodes: string[] = [];
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        {
+          db,
+          redis,
+          eventBus,
+          resolveInviteGuildId: async (code) => {
+            resolvedCodes.push(code);
+            return "other-guild-id";
+          },
+        },
+        message({
+          guildId,
+          userId,
+          content: "discord.gg/first-code discord.gg/second-code discord.gg/third-code",
+        }),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(resolvedCodes).toEqual(["first-code"]);
+    });
+
+    test("全て自ギルドの招待なら全件resolveInviteGuildIdを呼び出したうえで検知されない", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const resolvedCodes: string[] = [];
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalate(
+        {
+          db,
+          redis,
+          eventBus,
+          resolveInviteGuildId: async (code) => {
+            resolvedCodes.push(code);
+            return guildId;
+          },
+        },
+        message({ guildId, userId, content: "discord.gg/first-code discord.gg/second-code" }),
+      );
+
+      expect(result).toEqual([]);
+      expect(resolvedCodes).toEqual(["first-code", "second-code"]);
+    });
   });
 
   test("短時間内の累積メンション数がmedium presetの累積閾値(10)以上ならmention_spamとして検知される", async () => {
