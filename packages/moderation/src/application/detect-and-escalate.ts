@@ -31,7 +31,7 @@ import {
   pushMentionCount,
 } from "./message-buffer.js";
 import { listNgwords } from "./ngwords.js";
-import { getEnabledThresholds } from "./thresholds.js";
+import { type EnabledThreshold, getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
 
 /** NGワードはメッセージ単発判定のため、strikeロックのバースト抑制ウィンドウとして固定値を使う。 */
@@ -42,6 +42,25 @@ const INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
 /** 自動検知によるアクションであることを表すmoderatorId。人間の実行者は存在しない。 */
 export const SYSTEM_MODERATOR_ID = "system";
+
+/**
+ * MessageCreate起点で判定する違反種別。raidはGuildMemberAdd起点、new_account_guardは
+ * 入室時単体判定のため、どちらもこのMessageCreateフローでは扱わない(設計spec参照)。
+ */
+const MESSAGE_CREATE_VIOLATION_TYPES = [
+  "flood",
+  "duplicate_content",
+  "ngword",
+  "mention_spam",
+  "invite_link",
+] as const satisfies readonly ModerationViolationType[];
+type MessageCreateViolationType = (typeof MESSAGE_CREATE_VIOLATION_TYPES)[number];
+
+function isMessageCreateViolationType(
+  violationType: ModerationViolationType,
+): violationType is MessageCreateViolationType {
+  return (MESSAGE_CREATE_VIOLATION_TYPES as readonly string[]).includes(violationType);
+}
 
 export interface IncomingMessage {
   guildId: string;
@@ -66,7 +85,7 @@ export interface DetectAndEscalateDeps {
 }
 
 export interface EscalationOutcome {
-  violationType: ModerationViolationType;
+  violationType: MessageCreateViolationType;
   /** このエスカレーション判定時点の、violationTypeを跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
   strikeCount: number;
   actionType: ModerationActionType;
@@ -142,7 +161,7 @@ async function checkViolation(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
   buffer: readonly BufferedMessage[],
-  violationType: ModerationViolationType,
+  violationType: MessageCreateViolationType,
   preset: ModerationPreset,
 ): Promise<ViolationCheck> {
   if (violationType === "flood" || violationType === "duplicate_content") {
@@ -231,7 +250,11 @@ export async function detectAndEscalate(
     return { outcomes: [], lockedMessageIds: [] };
   }
 
-  const thresholds = await getEnabledThresholds(deps.db, message.guildId);
+  const allThresholds = await getEnabledThresholds(deps.db, message.guildId);
+  const thresholds = allThresholds.filter(
+    (t): t is EnabledThreshold & { violationType: MessageCreateViolationType } =>
+      isMessageCreateViolationType(t.violationType),
+  );
   if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
 
   const floodWindowSeconds = thresholds

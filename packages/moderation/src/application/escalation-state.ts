@@ -1,7 +1,7 @@
 import { and, eq, gt, sql, type TablesRelationalConfig } from "drizzle-orm";
 import type { Db } from "@management-bot/db";
 import { moderationEscalationState } from "@management-bot/db";
-import type { ModerationViolationType } from "@management-bot/shared";
+import type { ModerationEscalationViolationType } from "@management-bot/shared";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 
@@ -13,7 +13,7 @@ export async function incrementStrike(
   db: Db,
   guildId: string,
   userId: string,
-  violationType: ModerationViolationType,
+  violationType: ModerationEscalationViolationType,
 ): Promise<number> {
   const [row] = await db
     .insert(moderationEscalationState)
@@ -37,7 +37,7 @@ export async function incrementStrike(
 
 export interface StrikeRow {
   userId: string;
-  violationType: ModerationViolationType;
+  violationType: ModerationEscalationViolationType;
   strikeCount: number;
   lastViolationAt: Date;
 }
@@ -83,7 +83,7 @@ export async function resetStrike(
   db: Db,
   guildId: string,
   userId: string,
-  violationType: ModerationViolationType,
+  violationType: ModerationEscalationViolationType,
 ): Promise<void> {
   await db
     .delete(moderationEscalationState)

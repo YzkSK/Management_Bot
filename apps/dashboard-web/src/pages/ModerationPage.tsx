@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import {
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,
+  type ModerationEscalationViolationType,
   type ModerationPreset,
   type ModerationViolationType,
 } from "@management-bot/shared";
@@ -39,10 +40,19 @@ interface WhitelistEntry {
   targetId: string;
 }
 
+/**
+ * Dashboard UIに設定行を表示するviolationType。raid/new_account_guardはdomain/application/discord層
+ * (#193〜#195)が未実装のため、有効化しても何も検知されない状態を避けるためここには含めない
+ * (#196で実装後にMODERATION_VIOLATION_TYPES全体へ戻す)。
+ */
+const DASHBOARD_VIOLATION_TYPES = MODERATION_VIOLATION_TYPES.filter(
+  (v) => v !== "raid" && v !== "new_account_guard",
+);
+
 /** DBに未設定のviolationTypeはenabled=false/preset=mediumとして表示する(デフォルト行の補完)。 */
 function withDefaults(settings: readonly ThresholdSetting[]): ThresholdSetting[] {
   const byType = new Map(settings.map((s) => [s.violationType, s]));
-  return MODERATION_VIOLATION_TYPES.map(
+  return DASHBOARD_VIOLATION_TYPES.map(
     (violationType) => byType.get(violationType) ?? { violationType, preset: "medium", enabled: false },
   );
 }
@@ -486,7 +496,7 @@ function NgwordTab({ guildId }: { guildId: string }) {
 
 interface StrikeEntry {
   userId: string;
-  violationType: ModerationViolationType;
+  violationType: ModerationEscalationViolationType;
   strikeCount: number;
   lastViolationAt: string | Date;
 }

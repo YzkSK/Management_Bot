@@ -3,6 +3,7 @@ import {
   buildInviteUrl,
   CAPABILITIES,
   discordIdSchema,
+  MODERATION_ESCALATION_VIOLATION_TYPES,
   MODERATION_VIOLATION_TYPES,
 } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
@@ -30,6 +31,8 @@ import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
 const violationTypeSchema = z.enum(MODERATION_VIOLATION_TYPES);
+/** moderation_escalation_state(ストライク)はraidを扱わない(raidはmoderation_raid_stateで別管理)。 */
+const escalationViolationTypeSchema = z.enum(MODERATION_ESCALATION_VIOLATION_TYPES);
 const presetSchema = z.enum(MODERATION_PRESETS);
 const targetTypeSchema = z.enum(["user", "role"]);
 const ngwordMatchTypeSchema = z.enum(["exact", "contains", "regex"]);
@@ -58,7 +61,7 @@ const whitelistTargetInput = z.object({
 const strikeTargetInput = z.object({
   guildId: discordIdSchema,
   userId: discordIdSchema,
-  violationType: violationTypeSchema,
+  violationType: escalationViolationTypeSchema,
 });
 
 const setEscalationPresetInput = z.object({ guildId: discordIdSchema, preset: presetSchema });
