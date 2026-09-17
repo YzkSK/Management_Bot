@@ -91,7 +91,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId: `u-${randomUUID()}` }),
     );
-    expect(result).toEqual([]);
+    expect(result).toEqual({ outcomes: [], lockedMessageIds: [] });
     expect(eventBus.published).toEqual([]);
   });
 
@@ -121,7 +121,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     const now = new Date();
-    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
         { db, redis, eventBus, resolveInviteGuildId },
@@ -129,7 +129,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    expect(lastResult).toEqual([
+    expect(lastResult.outcomes).toEqual([
       {
         violationType: "flood",
         strikeCount: 1,
@@ -175,9 +175,9 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    const hits = results.filter((r) => r.length > 0);
+    const hits = results.filter((r) => r.outcomes.length > 0);
     expect(hits).toHaveLength(1);
-    expect(hits[0]).toEqual([
+    expect(hits[0]?.outcomes).toEqual([
       {
         violationType: "flood",
         strikeCount: 1,
@@ -233,9 +233,9 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       }),
     );
 
-    expect(result).toHaveLength(1);
-    expect(result[0]?.bufferedMessageIds).not.toContain(otherChannelMessageId);
-    expect(new Set(result[0]?.bufferedMessageIds)).toEqual(new Set([secondMessageId, thirdMessageId]));
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0]?.bufferedMessageIds).not.toContain(otherChannelMessageId);
+    expect(new Set(result.outcomes[0]?.bufferedMessageIds)).toEqual(new Set([secondMessageId, thirdMessageId]));
   });
 
   test("ホワイトリスト対象ロールを持つユーザーは連投してもstrikeCountが増加しない", async () => {
@@ -280,8 +280,8 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
     );
 
-    expect(first).toHaveLength(1);
-    expect(retry).toEqual([]);
+    expect(first.outcomes).toHaveLength(1);
+    expect(retry).toEqual({ outcomes: [], lockedMessageIds: [] });
     expect(eventBus.published).toHaveLength(1);
 
     const [row] = await db
@@ -308,7 +308,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // 同一ユーザーが3通連投するとflood側がヒットしstrikeCount(flood)が1になる。
     // この時点で合計は duplicate_content(1) + flood(1) = 2 となり、
     // ESCALATION_STEPS.strong[2]はtimeout(5分)が対応する。
-    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
         { db, redis, eventBus, resolveInviteGuildId },
@@ -316,7 +316,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
+    const floodOutcome = lastOutcomes.outcomes.find((o) => o.violationType === "flood");
     expect(floodOutcome?.strikeCount).toBe(2); // duplicate_content(1) + flood(1)の合計
     expect(floodOutcome?.actionType).toBe("timeout"); // ESCALATION_STEPS.strong[2].actionType === "timeout"
     expect(floodOutcome?.timeoutMinutes).toBe(5); // ESCALATION_STEPS.strong[2].timeoutMinutes === 5
@@ -331,7 +331,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     await setEscalationPreset(db, guildId, "weak");
 
     const userId = `u-${randomUUID()}`;
-    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
         { db, redis, eventBus, resolveInviteGuildId },
@@ -339,7 +339,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    const floodOutcome = lastOutcomes.find((o) => o.violationType === "flood");
+    const floodOutcome = lastOutcomes.outcomes.find((o) => o.violationType === "flood");
     expect(floodOutcome?.strikeCount).toBe(1);
     expect(floodOutcome?.actionType).toBe("warn"); // ESCALATION_STEPS.weak[1] === "warn"
   });
@@ -356,7 +356,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       message({ guildId, userId, messageId, content: "banned-word" }),
     );
 
-    expect(result).toEqual([
+    expect(result.outcomes).toEqual([
       {
         violationType: "ngword",
         strikeCount: 1,
@@ -365,6 +365,43 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         bufferedMessageIds: [messageId],
       },
     ]);
+  });
+
+  test("strikeロック中(10秒以内)の連続NGワード投稿は、2件目以降もstrikeは進まないがlockedMessageIdsに削除対象として含まれる(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const firstMessageId = randomUUID();
+    const secondMessageId = randomUUID();
+    const first = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, messageId: firstMessageId, content: "banned-word", createdAt: now }),
+    );
+    const second = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({
+        guildId,
+        userId,
+        messageId: secondMessageId,
+        content: "banned-word",
+        createdAt: new Date(now.getTime() + 1000),
+      }),
+    );
+
+    expect(first.outcomes).toHaveLength(1);
+    expect(first.lockedMessageIds).toEqual([]);
+    expect(second.outcomes).toEqual([]);
+    expect(second.lockedMessageIds).toEqual([secondMessageId]);
+    expect(eventBus.published).toHaveLength(1);
+
+    const [row] = await db
+      .select()
+      .from(moderationEscalationState)
+      .where(eq(moderationEscalationState.userId, userId));
+    expect(row?.strikeCount).toBe(1);
   });
 
   test("NGワードに一致しないメッセージはngwordとして検知されない", async () => {
@@ -378,7 +415,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       message({ guildId, userId, content: "clean message" }),
     );
 
-    expect(result).toEqual([]);
+    expect(result.outcomes).toEqual([]);
   });
 
   test("1メッセージ内のメンション数がmedium presetの単発閾値(6)以上ならmention_spamとして検知される", async () => {
@@ -395,7 +432,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       message({ guildId, userId, messageId, content: mentions }),
     );
 
-    expect(result).toEqual([
+    expect(result.outcomes).toEqual([
       {
         violationType: "mention_spam",
         strikeCount: 1,
@@ -404,6 +441,45 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         bufferedMessageIds: [messageId],
       },
     ]);
+  });
+
+  test("strikeロック中(cumulative.windowSeconds以内)の連続メンションスパム投稿は、2件目以降もstrikeは進まないがlockedMessageIdsに削除対象として含まれる(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const now = new Date();
+    const firstMessageId = randomUUID();
+    const secondMessageId = randomUUID();
+    const first = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, messageId: firstMessageId, content: mentions, createdAt: now }),
+    );
+    const second = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({
+        guildId,
+        userId,
+        messageId: secondMessageId,
+        content: mentions,
+        createdAt: new Date(now.getTime() + 1000),
+      }),
+    );
+
+    expect(first.outcomes).toHaveLength(1);
+    expect(first.lockedMessageIds).toEqual([]);
+    expect(second.outcomes).toEqual([]);
+    expect(second.lockedMessageIds).toEqual([secondMessageId]);
+    expect(eventBus.published).toHaveLength(1);
+
+    const [row] = await db
+      .select()
+      .from(moderationEscalationState)
+      .where(eq(moderationEscalationState.userId, userId));
+    expect(row?.strikeCount).toBe(1);
   });
 
   test("invite_linkが有効でもメンション投稿はmention_spamとして誤検知されない(Codexレビュー指摘の回帰テスト)", async () => {
@@ -416,7 +492,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
     const result = await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, content: mentions }));
 
-    expect(result).toEqual([]);
+    expect(result.outcomes).toEqual([]);
   });
 
   describe("invite_link検知", () => {
@@ -432,7 +508,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         message({ guildId, userId, content: "join us: discord.gg/own-guild-code" }),
       );
 
-      expect(result).toEqual([]);
+      expect(result.outcomes).toEqual([]);
     });
 
     test("他ギルドへの招待リンクは検知される", async () => {
@@ -447,7 +523,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
       );
 
-      expect(result).toEqual([
+      expect(result.outcomes).toEqual([
         {
           violationType: "invite_link",
           strikeCount: 1,
@@ -456,6 +532,50 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
           bufferedMessageIds: expect.any(Array),
         },
       ]);
+    });
+
+    test("strikeロック中(10秒以内)の連続招待リンク投稿は、2件目以降もstrikeは進まないがlockedMessageIdsに削除対象として含まれる(#338)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const now = new Date();
+      const firstMessageId = randomUUID();
+      const secondMessageId = randomUUID();
+      const first = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({
+          guildId,
+          userId,
+          messageId: firstMessageId,
+          content: "join us: discord.gg/other-guild-code",
+          createdAt: now,
+        }),
+      );
+      const second = await detectAndEscalate(
+        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        message({
+          guildId,
+          userId,
+          messageId: secondMessageId,
+          content: "join us: discord.gg/other-guild-code",
+          createdAt: new Date(now.getTime() + 1000),
+        }),
+      );
+
+      expect(first.outcomes).toHaveLength(1);
+      expect(first.lockedMessageIds).toEqual([]);
+      expect(second.outcomes).toEqual([]);
+      expect(second.lockedMessageIds).toEqual([secondMessageId]);
+      expect(eventBus.published).toHaveLength(1);
+
+      const [row] = await db
+        .select()
+        .from(moderationEscalationState)
+        .where(eq(moderationEscalationState.userId, userId));
+      expect(row?.strikeCount).toBe(1);
     });
 
     test("招待コード解決失敗時は安全側(検知扱い)に倒れる", async () => {
@@ -470,8 +590,8 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         message({ guildId, userId, content: "join us: discord.gg/unresolvable-code" }),
       );
 
-      expect(result).toHaveLength(1);
-      expect(result[0]?.violationType).toBe("invite_link");
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("invite_link");
     });
 
     test("招待リンクを含まないメッセージは検知されない", async () => {
@@ -486,7 +606,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         message({ guildId, userId, content: "hello world" }),
       );
 
-      expect(result).toEqual([]);
+      expect(result.outcomes).toEqual([]);
     });
 
     test("他ギルドの招待が見つかった時点で以降のresolveInviteGuildId呼び出しを打ち切る(Codexレビュー指摘の回帰テスト: レート制限消費対策)", async () => {
@@ -514,7 +634,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         }),
       );
 
-      expect(result).toHaveLength(1);
+      expect(result.outcomes).toHaveLength(1);
       expect(resolvedCodes).toEqual(["first-code"]);
     });
 
@@ -539,7 +659,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         message({ guildId, userId, content: "discord.gg/first-code discord.gg/second-code" }),
       );
 
-      expect(result).toEqual([]);
+      expect(result.outcomes).toEqual([]);
       expect(resolvedCodes).toEqual(["first-code", "second-code"]);
     });
   });
@@ -554,7 +674,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const now = new Date();
     // medium: cumulative.windowSeconds=10, mentionThreshold=10。各メッセージ4件ずつメンションし、
     // 3通目で合計12件に達して累積ヒットする(単発閾値6は超えない)。
-    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
         { db, redis, eventBus, resolveInviteGuildId },
@@ -567,8 +687,8 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    expect(lastResult).toHaveLength(1);
-    expect(lastResult[0]?.violationType).toBe("mention_spam");
+    expect(lastResult.outcomes).toHaveLength(1);
+    expect(lastResult.outcomes[0]?.violationType).toBe("mention_spam");
   });
 
   test("windowSecondsより前の古いメンションは累積判定に含まれない(Codexレビュー指摘の回帰テスト)", async () => {
@@ -588,7 +708,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       { db, redis, eventBus, resolveInviteGuildId },
       message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() - 20_000) }),
     );
-    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+    let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 2; i++) {
       lastResult = await detectAndEscalate(
         { db, redis, eventBus, resolveInviteGuildId },
@@ -596,7 +716,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       );
     }
 
-    expect(lastResult).toEqual([]);
+    expect(lastResult.outcomes).toEqual([]);
   });
 });
 

@@ -210,16 +210,29 @@ async function checkViolation(
   throw new Error(`unhandled violationType: ${violationType satisfies never}`);
 }
 
+export interface DetectAndEscalateResult {
+  outcomes: EscalationOutcome[];
+  /**
+   * strikeロック中(同一ユーザーが直近strikeLockWindowSeconds秒以内に既にstrikeを加算済み)のため
+   * outcomesには含まれないが、違反として検知され削除が必要なメッセージID一覧(#338)。
+   * ngword/mention_spam/invite_linkはbufferedMessageIdsが検知トリガーメッセージ自身のみのため、
+   * ロックによりoutcomesから漏れるとそのメッセージが二度と削除対象に含まれなくなる
+   * (flood/duplicate_contentはバースト全体を返すため次のhit時にまとめて削除されるが、
+   * 単発判定の3種別はロック中の個別メッセージがここでしか伝わらない)。
+   */
+  lockedMessageIds: readonly string[];
+}
+
 export async function detectAndEscalate(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
-): Promise<EscalationOutcome[]> {
+): Promise<DetectAndEscalateResult> {
   if (await isWhitelisted(deps.db, message.guildId, message.userId, message.roleIds)) {
-    return [];
+    return { outcomes: [], lockedMessageIds: [] };
   }
 
   const thresholds = await getEnabledThresholds(deps.db, message.guildId);
-  if (thresholds.length === 0) return [];
+  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
 
   const floodWindowSeconds = thresholds
     .filter((t) => t.violationType === "flood" || t.violationType === "duplicate_content")
@@ -240,9 +253,10 @@ export async function detectAndEscalate(
     PROCESSED_MARKER_TTL_SECONDS,
     windowSeconds,
   );
-  if (buffer === null) return [];
+  if (buffer === null) return { outcomes: [], lockedMessageIds: [] };
 
   const outcomes: EscalationOutcome[] = [];
+  const lockedMessageIds = new Set<string>();
   for (const threshold of thresholds) {
     const check = await checkViolation(deps, message, buffer, threshold.violationType, threshold.preset);
     if (!check.hit) continue;
@@ -254,7 +268,16 @@ export async function detectAndEscalate(
       threshold.violationType,
       check.strikeLockWindowSeconds,
     );
-    if (!canStrike) continue;
+    if (!canStrike) {
+      // flood/duplicate_contentはcheck.bufferedMessageIdsがバースト全体(同一チャンネル・
+      // window内の全メッセージ)を指すため、ロック中でも次にhitした際にまとめて削除される。
+      // ここで加えると、strike済みバーストの古いメッセージまで無関係に再削除対象へ混入するため、
+      // 単発判定(ngword/mention_spam/invite_link、bufferedMessageIdsは検知トリガー自身のみ)に限定する。
+      if (threshold.violationType === "ngword" || threshold.violationType === "mention_spam" || threshold.violationType === "invite_link") {
+        lockedMessageIds.add(message.messageId);
+      }
+      continue;
+    }
 
     // incrementStrike失敗時、意図的にロックを解放しない。接続断絶やタイムアウト等の
     // エラーはSQL自体がcommit済みかどうか判別できないため、ここで解放して再試行を
@@ -293,5 +316,5 @@ export async function detectAndEscalate(
     });
   }
 
-  return outcomes;
+  return { outcomes, lockedMessageIds: [...lockedMessageIds] };
 }

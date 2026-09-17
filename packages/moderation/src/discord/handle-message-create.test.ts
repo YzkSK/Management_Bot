@@ -44,8 +44,9 @@ function fakeMessage(overrides: {
   const timeout = mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
+  const send = mock(() => Promise.resolve());
   return {
-    author: { id: overrides.userId, bot: overrides.bot ?? false },
+    author: { id: overrides.userId, bot: overrides.bot ?? false, send },
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
     id: randomUUID(),
@@ -59,6 +60,7 @@ function fakeMessage(overrides: {
     timeout,
     kick,
     ban,
+    send,
   };
 }
 
@@ -257,6 +259,68 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
     expect(eventBus.published).toEqual([]);
     expect(message.deleteFn).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続NGワード投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const first = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, first as unknown as Message);
+    const second = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(first.send).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続メンションスパム投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const first = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, first as unknown as Message);
+    const second = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続招待リンク投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const content = "join us: discord.gg/other-guild-code";
+    const first = fakeMessage({ guildId, userId, content });
+    await handleMessageCreate(
+      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      first as unknown as Message,
+    );
+    const second = fakeMessage({ guildId, userId, content });
+    await handleMessageCreate(
+      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      second as unknown as Message,
+    );
+
+    expect(eventBus.published).toHaveLength(1);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
   });
 
   test("招待コード解決失敗時は安全側(検知扱い)に倒れ、メッセージが削除される", async () => {
