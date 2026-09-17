@@ -598,12 +598,20 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       const caseId = lastResult?.raidHit?.caseId;
       expect(received).toHaveLength(6);
       expect(new Set(received.map((e) => e.caseId))).toEqual(new Set([caseId]));
+      // 全対象者(6人)それぞれに個別のmoderation.action.recordedが発行されることを検証する
+      // (Codexレビュー指摘: caseId・件数だけでは全員が同じユーザーを指していても通ってしまうため)。
+      expect(new Set(received.map((e) => e.targetUserId))).toEqual(new Set(userIds));
       for (const event of received) {
         expect(event.actionType).toBe("timeout");
       }
 
       const rows = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
       expect(rows).toHaveLength(6);
+      const loggedTargetUserIds = rows.map((row) => {
+        const payload = row.payload as { targetUserId?: unknown };
+        return payload.targetUserId;
+      });
+      expect(new Set(loggedTargetUserIds)).toEqual(new Set(userIds));
       for (const row of rows) {
         expect(row).toMatchObject({
           category: "moderationCase",
@@ -621,8 +629,12 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
   });
 
   /**
-   * ホワイトリスト対象ユーザーの入室が、レイド判定の人数カウント・一括timeout対象の
-   * どちらからも除外されることを検証する(設計spec「ホワイトリスト」節、#197)。
+   * ホワイトリスト対象ユーザーの入室が、レイド判定の人数カウント(閾値到達自体を阻害しうる)から
+   * 除外されることを検証する(設計spec「ホワイトリスト」節、#197)。
+   * strong presetの閾値(6人)ちょうどの通常ユーザーではホワイトリスト対象を混ぜても
+   * 「そもそもレイドが発生しない」ため一括アクション対象からの除外を検証できない
+   * (Codexレビュー指摘)。通常ユーザーを閾値と同数(6人)入室させて実際にレイドを発生させたうえで、
+   * ホワイトリスト対象の入室(6人の前後)がtargetUserIds・ログのどちらにも含まれないことを検証する。
    */
   test("ホワイトリスト対象ユーザーの入室はレイド判定の人数カウント・一括アクション対象から除外される", async () => {
     const guildId = `test-guild-${randomUUID()}`;
@@ -636,23 +648,25 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
     const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
     const sendToChannel = mock(() => Promise.resolve());
     const received: ModerationActionRecordedEvent[] = [];
+    const allWritten = Promise.withResolvers<void>();
 
     try {
       await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
         if (event.guildId !== guildId) return;
         received.push(event);
         await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        if (received.length >= 6) allWritten.resolve();
       });
       await new Promise((r) => setTimeout(r, 100));
 
       const now = new Date();
-      // strong presetの閾値は6人。ホワイトリスト対象1人+通常5人=6人分入室させるが、
-      // ホワイトリスト対象はバッファに積まれないため実際のカウントは5人でヒットしない。
+      // ホワイトリスト対象を先に入室させる(バッファに積まれないため、後続の人数カウントに影響しない)。
       await handleGuildMemberAdd(
         { db, redis, eventBus: moderationEventBus },
         guildMember({ guildId, userId: whitelistedUserId, joinedAt: now }),
       );
-      const userIds = Array.from({ length: 5 }, () => `u-${randomUUID()}`);
+      // strong presetの閾値は6人。通常ユーザーを6人ちょうど入室させ、実際にレイドを発生させる。
+      const userIds = Array.from({ length: 6 }, () => `u-${randomUUID()}`);
       let lastResult: Awaited<ReturnType<typeof handleGuildMemberAdd>> | undefined;
       for (const userId of userIds) {
         lastResult = await handleGuildMemberAdd(
@@ -660,11 +674,28 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           guildMember({ guildId, userId, joinedAt: now }),
         );
       }
-      await new Promise((r) => setTimeout(r, 300));
+      // レイド発生後にもホワイトリスト対象を入室させ、事後の入室もバッファ・対象に含まれないことを確認する。
+      await handleGuildMemberAdd(
+        { db, redis, eventBus: moderationEventBus },
+        guildMember({ guildId, userId: whitelistedUserId, joinedAt: now }),
+      );
 
-      expect(lastResult?.raidHit).toBeNull();
-      expect(received).toEqual([]);
-      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+      expect(lastResult?.raidHit).not.toBeNull();
+      expect(lastResult?.raidHit?.targetUserIds).not.toContain(whitelistedUserId);
+      expect(new Set(lastResult?.raidHit?.targetUserIds)).toEqual(new Set(userIds));
+
+      await withTimeout(allWritten.promise, 5_000, "logging handler");
+
+      expect(received).toHaveLength(6);
+      expect(received.map((e) => e.targetUserId)).not.toContain(whitelistedUserId);
+
+      const rows = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(rows).toHaveLength(6);
+      const loggedTargetUserIds = rows.map((row) => {
+        const payload = row.payload as { targetUserId?: unknown };
+        return payload.targetUserId;
+      });
+      expect(loggedTargetUserIds).not.toContain(whitelistedUserId);
     } finally {
       await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
       await db.delete(guilds).where(eq(guilds.id, guildId));
