@@ -1,7 +1,7 @@
 import type { Message } from "discord.js";
 import type { ModerationActionType } from "@management-bot/shared";
 import { detectAndEscalate, type DetectAndEscalateDeps, type EscalationOutcome } from "../application/index.js";
-import { executeEscalationAction } from "./execute-action.js";
+import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
 
 const ACTION_SEVERITY: Record<ModerationActionType, number> = {
   warn: 0,
@@ -43,7 +43,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   if (message.author.bot) return;
   if (!message.guild || !message.member) return;
 
-  const outcomes = await detectAndEscalate(deps, {
+  const { outcomes, lockedMessageIds } = await detectAndEscalate(deps, {
     guildId: message.guild.id,
     userId: message.author.id,
     channelId: message.channelId,
@@ -53,7 +53,18 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
     createdAt: message.createdAt,
   });
 
-  if (outcomes.length === 0) return;
+  if (outcomes.length === 0) {
+    // strikeロック中でも検知されたメッセージ(ngword/mention_spam/invite_link)は
+    // strike加算・エスカレーション通知なしで削除のみ行う(#338)。
+    if (lockedMessageIds.length > 0) {
+      try {
+        await deleteBufferedMessages(message, lockedMessageIds);
+      } catch (error) {
+        console.error("moderation: failed to delete locked messages", error);
+      }
+    }
+    return;
+  }
 
   const target = mostSevere(outcomes);
   await executeEscalationAction(message, { ...target, bufferedMessageIds: mergeBufferedMessageIds(outcomes) });

@@ -105,15 +105,15 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const now = new Date();
-      let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+      let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
       for (let i = 0; i < 3; i++) {
-        lastOutcomes = await detectAndEscalate(
+        lastResult = await detectAndEscalate(
           { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
           message({ guildId, userId, createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
 
-      expect(lastOutcomes).toEqual([
+      expect(lastResult.outcomes).toEqual([
         {
           violationType: "flood",
           strikeCount: 1,
@@ -133,7 +133,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           guildId,
           targetUserId: userId,
           actionType: "warn",
-          caseId: lastOutcomes[0]?.caseId,
+          caseId: lastResult.outcomes[0]?.caseId,
         }),
       });
 
@@ -218,12 +218,12 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      const outcomes = await detectAndEscalate(
+      const result = await detectAndEscalate(
         { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
         message({ guildId, userId, content: "banned-word" }),
       );
 
-      expect(outcomes).toEqual([
+      expect(result.outcomes).toEqual([
         {
           violationType: "ngword",
           strikeCount: 1,
@@ -243,7 +243,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           guildId,
           targetUserId: userId,
           actionType: "warn",
-          caseId: outcomes[0]?.caseId,
+          caseId: result.outcomes[0]?.caseId,
         }),
       });
     } finally {
@@ -283,15 +283,15 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const now = new Date();
-      let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = [];
+      let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
       for (let i = 0; i < 3; i++) {
-        lastOutcomes = await detectAndEscalate(
+        lastResult = await detectAndEscalate(
           { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
           message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
 
-      expect(lastOutcomes).toEqual([
+      expect(lastResult.outcomes).toEqual([
         {
           violationType: "mention_spam",
           strikeCount: 1,
@@ -311,7 +311,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           guildId,
           targetUserId: userId,
           actionType: "warn",
-          caseId: lastOutcomes[0]?.caseId,
+          caseId: lastResult.outcomes[0]?.caseId,
         }),
       });
 
@@ -402,12 +402,12 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      const outcomes = await detectAndEscalate(
+      const result = await detectAndEscalate(
         { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" },
         message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
       );
 
-      expect(outcomes).toEqual([
+      expect(result.outcomes).toEqual([
         {
           violationType: "invite_link",
           strikeCount: 1,
@@ -427,7 +427,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           guildId,
           targetUserId: userId,
           actionType: "warn",
-          caseId: outcomes[0]?.caseId,
+          caseId: result.outcomes[0]?.caseId,
         }),
       });
     } finally {
@@ -462,13 +462,13 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      const outcomes = await detectAndEscalate(
+      const result = await detectAndEscalate(
         { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
         message({ guildId, userId, content: "join us: discord.gg/own-vanity-url" }),
       );
       await new Promise((r) => setTimeout(r, 300));
 
-      expect(outcomes).toEqual([]);
+      expect(result.outcomes).toEqual([]);
       expect(received).toEqual([]);
       expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
     } finally {

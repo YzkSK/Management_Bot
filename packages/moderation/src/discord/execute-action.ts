@@ -88,7 +88,7 @@ async function sendWarningDm(message: Message, outcome: EscalationOutcome): Prom
  * windowSeconds(最大でも数十秒)以内のメッセージのみのため実質問題にならない。
  * 失敗時は例外を投げる(呼び出し側の責務でハンドリングする)。
  */
-async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
+export async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
   const channel = message.channel;
   if ("bulkDelete" in channel && bufferedMessageIds.length >= 2) {
     await channel.bulkDelete(bufferedMessageIds);
