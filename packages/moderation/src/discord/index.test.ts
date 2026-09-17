@@ -4,7 +4,7 @@ import type { Db } from "@management-bot/db";
 import { registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
-  test("messageCreateハンドラを登録する", () => {
+  test("messageCreate/guildMemberAddの両ハンドラを登録する", () => {
     const on = mock(() => undefined);
     const onShutdown = mock(() => undefined);
     const ctx = {
@@ -18,8 +18,8 @@ describe("registerDiscordHandlers", () => {
 
     registerDiscordHandlers(ctx);
 
-    expect(on).toHaveBeenCalledTimes(1);
-    expect(on.mock.calls[0]?.[0]).toBe("messageCreate");
+    expect(on).toHaveBeenCalledTimes(2);
+    expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "guildMemberAdd"]);
     expect(onShutdown).toHaveBeenCalledTimes(1);
   });
 });
