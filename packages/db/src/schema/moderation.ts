@@ -1,6 +1,7 @@
 import { boolean, check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
 import {
+  MODERATION_ESCALATION_VIOLATION_TYPES,
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,
   type ModerationPreset,
@@ -55,7 +56,7 @@ export const moderationEscalationState = pgTable(
     primaryKey({ columns: [table.guildId, table.userId, table.violationType] }),
     check(
       "moderation_escalation_state_violation_type_check",
-      enumCheck(table.violationType, MODERATION_VIOLATION_TYPES),
+      enumCheck(table.violationType, MODERATION_ESCALATION_VIOLATION_TYPES),
     ),
     check("moderation_escalation_state_strike_count_check", sql`${table.strikeCount} >= 0`),
   ],
@@ -100,6 +101,18 @@ export const moderationNgwords = pgTable(
     check("moderation_ngwords_match_type_check", enumCheck(table.matchType, MODERATION_NGWORD_MATCH_TYPES)),
     index("moderation_ngwords_guild_id_idx").on(table.guildId),
   ],
+);
+
+export const moderationRaidState = pgTable(
+  "moderation_raid_state",
+  {
+    guildId: text("guild_id")
+      .primaryKey()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    incidentCount: integer("incident_count").notNull().default(0),
+    lastRaidAt: timestamp("last_raid_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("moderation_raid_state_incident_count_check", sql`${table.incidentCount} >= 0`)],
 );
 
 export const moderationEscalationSettings = pgTable(

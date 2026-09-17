@@ -7,6 +7,7 @@ import {
   moderationEscalationSettings,
   moderationEscalationState,
   moderationNgwords,
+  moderationRaidState,
   moderationThresholds,
   moderationWhitelist,
 } from "./index.ts";
@@ -70,6 +71,25 @@ describe("moderation schema", () => {
     const userId = `test-user-${randomUUID()}`;
     await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "ngword", strikeCount: 1 });
     await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "mention_spam", strikeCount: 1 });
+  });
+
+  test("moderation_thresholdsはviolation_type=raid/new_account_guardを受け入れる", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "medium", enabled: true });
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "new_account_guard", preset: "medium", enabled: true });
+  });
+
+  test("moderation_escalation_stateはviolation_type=new_account_guardを受け入れるが、raidはCHECK制約で拒否する(ギルド単位はmoderation_raid_stateで別管理)", async () => {
+    const userId = `test-user-${randomUUID()}`;
+    await db
+      .insert(moderationEscalationState)
+      .values({ guildId, userId, violationType: "new_account_guard", strikeCount: 1 });
+
+    await expectConstraintViolation(
+      db.insert(moderationEscalationState).values({ guildId, userId, violationType: "raid", strikeCount: 1 }),
+      "moderation_escalation_state_violation_type_check",
+    );
   });
 
   test("moderation_escalation_stateはguild_id+user_id+violation_typeで一意、violation_typeはCHECK制約で検証される", async () => {
@@ -142,6 +162,34 @@ describe("moderation schema", () => {
     await db.delete(guilds).where(eq(guilds.id, cascadeGuildId));
 
     const rows = await db.select().from(moderationNgwords).where(eq(moderationNgwords.guildId, cascadeGuildId));
+    expect(rows).toHaveLength(0);
+  });
+
+  test("moderation_raid_stateはguild_idを主キーに持ち、incident_countはCHECK制約で検証される", async () => {
+    await db.insert(moderationRaidState).values({ guildId, incidentCount: 1 });
+
+    await expectConstraintViolation(
+      db.insert(moderationRaidState).values({ guildId, incidentCount: 2 }),
+      "moderation_raid_state_pkey",
+    );
+
+    const negativeGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: negativeGuildId, name: "Negative Test" });
+    await expectConstraintViolation(
+      db.insert(moderationRaidState).values({ guildId: negativeGuildId, incidentCount: -1 }),
+      "moderation_raid_state_incident_count_check",
+    );
+    await db.delete(guilds).where(eq(guilds.id, negativeGuildId));
+  });
+
+  test("moderation_raid_stateはguild削除時にカスケード削除される", async () => {
+    const cascadeGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: cascadeGuildId, name: "Cascade Test" });
+    await db.insert(moderationRaidState).values({ guildId: cascadeGuildId, incidentCount: 1 });
+
+    await db.delete(guilds).where(eq(guilds.id, cascadeGuildId));
+
+    const rows = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, cascadeGuildId));
     expect(rows).toHaveLength(0);
   });
 

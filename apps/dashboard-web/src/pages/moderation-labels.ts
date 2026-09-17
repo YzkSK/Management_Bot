@@ -6,6 +6,8 @@ export const VIOLATION_TYPE_LABELS: Record<ModerationViolationType, string> = {
   ngword: "NGワード",
   mention_spam: "メンションスパム",
   invite_link: "招待リンク",
+  raid: "レイド(大量入室)",
+  new_account_guard: "新規アカウントガード",
 };
 
 export const PRESET_LABELS: Record<ModerationPreset, string> = {
@@ -61,6 +63,17 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     weak: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
     medium: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
     strong: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
+  },
+  // TODO(#196): domain層(#193)確定後、具体的な閾値(N秒/M人/N日)を反映する。
+  raid: {
+    weak: "短時間の大量入室を検知",
+    medium: "短時間の大量入室を検知",
+    strong: "短時間の大量入室を検知",
+  },
+  new_account_guard: {
+    weak: "作成間もないアカウントの入室を検知",
+    medium: "作成間もないアカウントの入室を検知",
+    strong: "作成間もないアカウントの入室を検知",
   },
 };
 
