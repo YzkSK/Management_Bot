@@ -64,16 +64,19 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     medium: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
     strong: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
   },
-  // TODO(#196): domain層(#193)確定後、具体的な閾値(N秒/M人/N日)を反映する。
+  // packages/moderation/src/domain/presets.ts のRAID_PRESETSをUI表示用に説明文化したもの。
+  // 新規アカウント比率が閾値以上、または同一ギルドでの検知が2回目以降の場合は
+  // より長いtimeout(危険度highのtimeoutMinutes)が適用される(設計spec「重み付け」節)。
   raid: {
-    weak: "短時間の大量入室を検知",
-    medium: "短時間の大量入室を検知",
-    strong: "短時間の大量入室を検知",
+    weak: "30秒間に15人以上の入室で検知(作成3日以内の比率80%以上でより長いタイムアウト)",
+    medium: "30秒間に10人以上の入室で検知(作成7日以内の比率60%以上でより長いタイムアウト)",
+    strong: "30秒間に6人以上の入室で検知(作成14日以内の比率40%以上でより長いタイムアウト)",
   },
+  // packages/moderation/src/domain/presets.ts のNEW_ACCOUNT_GUARD_PRESETSをUI表示用に説明文化したもの。
   new_account_guard: {
-    weak: "作成間もないアカウントの入室を検知",
-    medium: "作成間もないアカウントの入室を検知",
-    strong: "作成間もないアカウントの入室を検知",
+    weak: "作成から1日以内のアカウントの入室を検知",
+    medium: "作成から3日以内のアカウントの入室を検知",
+    strong: "作成から7日以内のアカウントの入室を検知",
   },
 };
 
