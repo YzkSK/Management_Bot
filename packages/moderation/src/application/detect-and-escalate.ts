@@ -1,18 +1,10 @@
-import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
 import type { Db } from "@management-bot/db";
-import type {
-  ModerationActionRecordedEvent,
-  ModerationActionType,
-  ModerationPreset,
-  ModerationViolationType,
-} from "@management-bot/shared";
+import type { ModerationActionRecordedEvent, ModerationActionType, ModerationPreset, ModerationViolationType } from "@management-bot/shared";
 import {
   FLOOD_PRESETS,
   MENTION_SPAM_PRESETS,
-  ESCALATION_STEPS,
   countMentions,
-  decideEscalationAction,
   extractInviteCodes,
   findMatchingNgword,
   hasCumulativeMentionSpam,
@@ -21,8 +13,7 @@ import {
   hasSingleMessageMentionSpam,
   isDuplicateContent,
 } from "../domain/index.js";
-import { getEscalationPreset } from "./escalation-settings.js";
-import { getTotalStrikeCount, incrementStrike } from "./escalation-state.js";
+import { escalateAndRecordStrike } from "./escalate-and-record.js";
 import {
   type BufferedMessage,
   claimAndPushMessage,
@@ -34,14 +25,13 @@ import { listNgwords } from "./ngwords.js";
 import { type EnabledThreshold, getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
 
+export { SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
+
 /** NGワードはメッセージ単発判定のため、strikeロックのバースト抑制ウィンドウとして固定値を使う。 */
 const NGWORD_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
 /** 招待リンクもNGワードと同様メッセージ単発判定のため、同じ抑制ウィンドウを使う。 */
 const INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS = 10;
-
-/** 自動検知によるアクションであることを表すmoderatorId。人間の実行者は存在しない。 */
-export const SYSTEM_MODERATOR_ID = "system";
 
 /**
  * MessageCreate起点で判定する違反種別。raidはGuildMemberAdd起点、new_account_guardは
@@ -302,39 +292,25 @@ export async function detectAndEscalate(
       continue;
     }
 
-    // incrementStrike失敗時、意図的にロックを解放しない。接続断絶やタイムアウト等の
-    // エラーはSQL自体がcommit済みかどうか判別できないため、ここで解放して再試行を
-    // 許すと(実はcommit済みだった場合に)二重にstrikeが進みうる。ロックはwindowSeconds
-    // 経過後に自動的に次のstrikeを許可するため、最悪でも検知がその分遅れるだけで済む。
-    await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
     // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
     // 検知条件(hasFloodHit/isDuplicateHit/findMatchingNgword/hasSingleMessageMentionSpam等)は
     // violationTypeごとのプリセットのまま、アクション決定(何回目でwarn/timeout/kick/ban)だけを
-    // guild単位で統一する。
-    const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
-    const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
-    const step = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
-    if (step === null) continue;
-
-    const caseId = randomUUID();
-    await deps.eventBus.publish({
-      type: "moderation.action.recorded",
-      guildId: message.guildId,
-      caseId,
-      targetUserId: message.userId,
-      moderatorId: SYSTEM_MODERATOR_ID,
-      action: "create",
-      actionType: step.actionType,
-      timeoutMinutes: step.timeoutMinutes,
-      createdAt: message.createdAt.toISOString(),
-    });
+    // guild単位で統一する(escalateAndRecordStrikeへ抽出、#194でnew_account_guardとも共用)。
+    const escalation = await escalateAndRecordStrike(
+      deps,
+      message.guildId,
+      message.userId,
+      threshold.violationType,
+      message.createdAt,
+    );
+    if (escalation === null) continue;
 
     outcomes.push({
       violationType: threshold.violationType,
-      strikeCount: totalStrikeCount,
-      actionType: step.actionType,
-      timeoutMinutes: step.timeoutMinutes,
-      caseId,
+      strikeCount: escalation.strikeCount,
+      actionType: escalation.actionType,
+      timeoutMinutes: escalation.timeoutMinutes,
+      caseId: escalation.caseId,
       bufferedMessageIds: check.bufferedMessageIds,
     });
   }
