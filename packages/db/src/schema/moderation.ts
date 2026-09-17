@@ -4,6 +4,7 @@ import {
   MODERATION_ESCALATION_VIOLATION_TYPES,
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,
+  type ModerationEscalationViolationType,
   type ModerationPreset,
   type ModerationViolationType,
 } from "@management-bot/shared";
@@ -48,7 +49,7 @@ export const moderationEscalationState = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    violationType: text("violation_type").$type<ModerationViolationType>().notNull(),
+    violationType: text("violation_type").$type<ModerationEscalationViolationType>().notNull(),
     strikeCount: integer("strike_count").notNull().default(0),
     lastViolationAt: timestamp("last_violation_at", { withTimezone: true }).notNull().defaultNow(),
   },

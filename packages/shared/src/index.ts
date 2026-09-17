@@ -29,6 +29,7 @@ export {
   MODERATION_VIOLATION_TYPES,
   MODERATION_ESCALATION_VIOLATION_TYPES,
   type ModerationViolationType,
+  type ModerationEscalationViolationType,
 } from "./moderation-violation-type.js";
 export { MODERATION_PRESETS, type ModerationPreset } from "./moderation-preset.js";
 export {
