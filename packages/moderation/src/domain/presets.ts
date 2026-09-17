@@ -53,6 +53,12 @@ export interface RaidPresetConfig {
   newAccountMaxAgeDays: number;
   /** ウィンドウ内入室者に占める新規アカウント比率(0〜1)がこの値以上なら重い危険度とする。 */
   newAccountRatioThreshold: number;
+  /**
+   * レイドヒット時、対象ユーザー全員へ一括実行するtimeoutの時間(分)。
+   * 危険度(RaidSeverity)がhighならnewAccountRatioThreshold以上の比率が新規アカウントで
+   * 占められている=より悪質とみなし、normalより長いtimeoutを適用する(設計spec「重み付け」節)。
+   */
+  timeoutMinutes: { normal: number; high: number };
 }
 
 /**
@@ -64,16 +70,19 @@ export const RAID_PRESETS: Readonly<Record<ModerationPreset, RaidPresetConfig>> 
     window: { windowSeconds: 30, memberThreshold: 15 },
     newAccountMaxAgeDays: 3,
     newAccountRatioThreshold: 0.8,
+    timeoutMinutes: { normal: 10, high: 30 },
   },
   medium: {
     window: { windowSeconds: 30, memberThreshold: 10 },
     newAccountMaxAgeDays: 7,
     newAccountRatioThreshold: 0.6,
+    timeoutMinutes: { normal: 30, high: 60 },
   },
   strong: {
     window: { windowSeconds: 30, memberThreshold: 6 },
     newAccountMaxAgeDays: 14,
     newAccountRatioThreshold: 0.4,
+    timeoutMinutes: { normal: 60, high: 1440 },
   },
 };
 

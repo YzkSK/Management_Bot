@@ -41,6 +41,14 @@ describe("RAID_PRESETS", () => {
     expect(RAID_PRESETS.strong.newAccountRatioThreshold).toBeLessThan(RAID_PRESETS.medium.newAccountRatioThreshold);
     expect(RAID_PRESETS.medium.newAccountRatioThreshold).toBeLessThan(RAID_PRESETS.weak.newAccountRatioThreshold);
   });
+
+  test("各プリセットでseverity=highのtimeoutMinutesはnormal以上", () => {
+    for (const preset of MODERATION_PRESETS) {
+      expect(RAID_PRESETS[preset].timeoutMinutes.high).toBeGreaterThanOrEqual(
+        RAID_PRESETS[preset].timeoutMinutes.normal,
+      );
+    }
+  });
 });
 
 describe("NEW_ACCOUNT_GUARD_PRESETS", () => {
