@@ -1,5 +1,6 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { Redis } from "ioredis";
+import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
 /** 無効なコード・Discord API障害等、解決に失敗した場合はnullを返す(呼び出し側で安全側=検知扱いに倒す)。 */
@@ -32,6 +33,14 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
       message,
     ).catch((error: unknown) => {
       console.error("moderation: failed to handle messageCreate", error);
+    });
+  });
+
+  // guildMemberAddはmessageCreateとは別のギルド単位集団現象(レイド)・入室時単体判定
+  // (new_account_guard)を扱うため、専用ハンドラとして分離登録する(設計spec参照)。
+  ctx.client.on("guildMemberAdd", (member) => {
+    handleGuildMemberAddEvent({ db: ctx.db, redis, eventBus: ctx.eventBus }, member).catch((error: unknown) => {
+      console.error("moderation: failed to handle guildMemberAdd", error);
     });
   });
 }
