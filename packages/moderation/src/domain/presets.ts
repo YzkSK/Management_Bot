@@ -46,6 +46,58 @@ export const MENTION_SPAM_PRESETS: Readonly<Record<ModerationPreset, MentionSpam
   },
 };
 
+export interface RaidPresetConfig {
+  /** 直近windowSeconds秒間にmemberThreshold人以上入室でヒット。 */
+  window: { windowSeconds: number; memberThreshold: number };
+  /** 入室から起算してこの日数以内のアカウントを「新規アカウント」とみなす。 */
+  newAccountMaxAgeDays: number;
+  /** ウィンドウ内入室者に占める新規アカウント比率(0〜1)がこの値以上なら重い危険度とする。 */
+  newAccountRatioThreshold: number;
+  /**
+   * レイドヒット時、対象ユーザー全員へ一括実行するtimeoutの時間(分)。
+   * 危険度(RaidSeverity)がhighならnewAccountRatioThreshold以上の比率が新規アカウントで
+   * 占められている=より悪質とみなし、normalより長いtimeoutを適用する(設計spec「重み付け」節)。
+   */
+  timeoutMinutes: { normal: number; high: number };
+}
+
+/**
+ * レイド(大量入室)検知のプリセット。weak/medium/strongの強度ごとに
+ * ウィンドウ・人数閾値・新規アカウント判定日数・比率閾値を定義する(設計spec「重み付け」節)。
+ */
+export const RAID_PRESETS: Readonly<Record<ModerationPreset, RaidPresetConfig>> = {
+  weak: {
+    window: { windowSeconds: 30, memberThreshold: 15 },
+    newAccountMaxAgeDays: 3,
+    newAccountRatioThreshold: 0.8,
+    timeoutMinutes: { normal: 10, high: 30 },
+  },
+  medium: {
+    window: { windowSeconds: 30, memberThreshold: 10 },
+    newAccountMaxAgeDays: 7,
+    newAccountRatioThreshold: 0.6,
+    timeoutMinutes: { normal: 30, high: 60 },
+  },
+  strong: {
+    window: { windowSeconds: 30, memberThreshold: 6 },
+    newAccountMaxAgeDays: 14,
+    newAccountRatioThreshold: 0.4,
+    timeoutMinutes: { normal: 60, high: 1440 },
+  },
+};
+
+export interface NewAccountGuardPresetConfig {
+  /** 入室から起算してこの日数以内のアカウントをガード対象とみなす。 */
+  maxAgeDays: number;
+}
+
+/** 新規アカウント単体ガード(new_account_guard)のプリセット。レイド判定とは独立した閾値。 */
+export const NEW_ACCOUNT_GUARD_PRESETS: Readonly<Record<ModerationPreset, NewAccountGuardPresetConfig>> = {
+  weak: { maxAgeDays: 1 },
+  medium: { maxAgeDays: 3 },
+  strong: { maxAgeDays: 7 },
+};
+
 /**
  * エスカレーション段階1件分。actionType="timeout"の場合のみtimeoutMinutesを持つ
  * (#322、タイムアウトの多段階化)。それ以外のactionTypeではtimeoutMinutesを持たない。
