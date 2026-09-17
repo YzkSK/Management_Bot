@@ -62,7 +62,10 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     await db.delete(moderationWhitelist).where(eq(moderationWhitelist.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
     await db.delete(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
-    const keys = await redis.keys(`moderation:raid:${guildId}`);
+    const keys = [
+      ...(await redis.keys(`moderation:raid:${guildId}`)),
+      ...(await redis.keys(`moderation:raid-lock:${guildId}`)),
+    ];
     if (keys.length > 0) await redis.del(...keys);
   });
 
@@ -126,6 +129,65 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
 
     const [raidState] = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
     expect(raidState?.incidentCount).toBe(1);
+  });
+
+  test("raid: 閾値到達後も入室が続く間は、windowSeconds以内なら新規インシデントとして再検知しない(同一バースト中の重複timeout防止)", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const oldAccountCreatedAt = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    // strong presetの閾値は6人。6人目でヒットし、7〜8人目でも同一バースト(windowSeconds以内)の
+    // ままなら新規インシデントとして扱わずnullを返す。
+    for (let i = 0; i < 6; i++) {
+      await handleGuildMemberAdd(
+        { db, redis, eventBus },
+        member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+      );
+    }
+    expect(eventBus.published).toHaveLength(6);
+
+    const seventh = await handleGuildMemberAdd(
+      { db, redis, eventBus },
+      member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+    );
+    const eighth = await handleGuildMemberAdd(
+      { db, redis, eventBus },
+      member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+    );
+
+    expect(seventh.raidHit).toBeNull();
+    expect(eighth.raidHit).toBeNull();
+    expect(eventBus.published).toHaveLength(6);
+
+    const [raidState] = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
+    expect(raidState?.incidentCount).toBe(1);
+  });
+
+  test("raid: 過去にこのguildでレイドを検知済み(incidentCount>=1)なら、新規アカウント比率に関わらずseverity=highになる", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    // incidentCountを1で事前seedし、「過去に1回検知済み」の状態を再現する。
+    await db.insert(moderationRaidState).values({ guildId, incidentCount: 1, lastRaidAt: new Date() });
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // 新規アカウント比率0%(全員十分古いアカウント)でもrepeat incidentによりhighになることを確認する。
+    const oldAccountCreatedAt = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const userIds = Array.from({ length: 6 }, () => `u-${randomUUID()}`);
+
+    let lastResult;
+    for (const userId of userIds) {
+      lastResult = await handleGuildMemberAdd(
+        { db, redis, eventBus },
+        member({ guildId, userId, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+      );
+    }
+
+    expect(lastResult?.raidHit?.severity).toBe("high");
+    expect(lastResult?.raidHit?.timeoutMinutes).toBe(1440);
+
+    const [raidState] = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
+    expect(raidState?.incidentCount).toBe(2);
   });
 
   test("raid: 新規アカウント比率が閾値以上ならseverity=highでtimeoutMinutesが長くなる", async () => {

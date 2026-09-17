@@ -3,8 +3,8 @@ import type { Db } from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { detectRaid, hasNewAccountGuardHit, NEW_ACCOUNT_GUARD_PRESETS, RAID_PRESETS, type RaidSeverity } from "../domain/index.js";
 import { escalateAndRecordStrike, SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
-import { pushRaidEntry } from "./raid-buffer.js";
-import { incrementRaidIncident } from "./raid-state.js";
+import { markRaidHitAndCheckNewIncident, pushRaidEntry } from "./raid-buffer.js";
+import { getRaidState, incrementRaidIncident } from "./raid-state.js";
 import { getEnabledThresholds } from "./thresholds.js";
 import { isWhitelisted } from "./whitelist.js";
 
@@ -66,6 +66,18 @@ export async function handleGuildMemberAdd(
   return { raidHit, newAccountGuardOutcome };
 }
 
+/**
+ * 過去にこのguildで検知したレイド件数(moderation_raid_state.incidentCount、UPSERT前の値)。
+ * 1件以上(=今回が2件目以降)なら、新規アカウント比率に関わらずseverityをhighへ引き上げる
+ * (繰り返しレイドを受けているギルドはより悪質とみなす、設計spec「incidentCountを
+ * 強度プリセットのエスカレーション判断に使用」節、Codexレビュー指摘対応)。
+ */
+const REPEAT_INCIDENT_SEVERITY_THRESHOLD = 1;
+
+function escalateSeverityByIncidentCount(severity: RaidSeverity, priorIncidentCount: number): RaidSeverity {
+  return priorIncidentCount >= REPEAT_INCIDENT_SEVERITY_THRESHOLD ? "high" : severity;
+}
+
 async function detectRaidHit(
   deps: GuildMemberAddDeps,
   member: IncomingGuildMember,
@@ -85,9 +97,16 @@ async function detectRaidHit(
   const result = detectRaid(buffer, member.joinedAt, config);
   if (!result.hit) return null;
 
+  // 閾値到達後も入室が続く限り毎回ヒットし続けるため、windowSecondsに1回だけ新規インシデントとして
+  // 扱う(このロックを通過した呼び出しのみが実際にインシデントを作る、Codexレビュー指摘対応)。
+  const isNewIncident = await markRaidHitAndCheckNewIncident(deps.redis, member.guildId, config.window.windowSeconds);
+  if (!isNewIncident) return null;
+
+  const priorState = await getRaidState(deps.db, member.guildId);
+  const severity = escalateSeverityByIncidentCount(result.severity, priorState?.incidentCount ?? 0);
   const incidentCount = await incrementRaidIncident(deps.db, member.guildId, member.joinedAt);
   const caseId = crypto.randomUUID();
-  const timeoutMinutes = config.timeoutMinutes[result.severity];
+  const timeoutMinutes = config.timeoutMinutes[severity];
 
   // レイド一括timeoutは対象ユーザーごとに同一caseIdでイベントをpublishし、logging側で
   // 同一インシデントとして相関できるようにする(設計spec「ログ連携」節)。
@@ -105,7 +124,7 @@ async function detectRaidHit(
     });
   }
 
-  return { targetUserIds: result.targetUserIds, severity: result.severity, timeoutMinutes, caseId, incidentCount };
+  return { targetUserIds: result.targetUserIds, severity, timeoutMinutes, caseId, incidentCount };
 }
 
 async function detectNewAccountGuardHit(
