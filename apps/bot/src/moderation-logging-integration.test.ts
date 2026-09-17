@@ -7,11 +7,19 @@ import {
   guilds,
   logEntries,
   moderationEscalationState,
+  moderationRaidState,
   moderationThresholds,
   moderationWhitelist,
 } from "@management-bot/db";
 import { handleModerationEvent } from "@management-bot/logging";
-import { addNgword, detectAndEscalate, type IncomingMessage, setEscalationPreset } from "@management-bot/moderation";
+import {
+  addNgword,
+  detectAndEscalate,
+  handleGuildMemberAdd,
+  type IncomingGuildMember,
+  type IncomingMessage,
+  setEscalationPreset,
+} from "@management-bot/moderation";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
@@ -520,6 +528,265 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await db.delete(guilds).where(eq(guilds.id, guildId));
       const keys = await redis.keys(`moderation:*:${guildId}:*`);
       if (keys.length > 0) await redis.del(...keys);
+    }
+  });
+
+  function guildMember(
+    overrides: Partial<IncomingGuildMember> & Pick<IncomingGuildMember, "guildId" | "userId">,
+  ): IncomingGuildMember {
+    const now = new Date();
+    return { roleIds: [], accountCreatedAt: now, joinedAt: now, ...overrides };
+  }
+
+  async function cleanupRaidKeys(guildId: string): Promise<void> {
+    const keys = [
+      ...(await redis.keys(`moderation:raid:${guildId}`)),
+      ...(await redis.keys(`moderation:raid-lock:${guildId}`)),
+    ];
+    if (keys.length > 0) await redis.del(...keys);
+  }
+
+  /**
+   * レイド対策(大量入室検知、#191)の垂直スライス全体を通しで検証する複合テスト(#197)。
+   * 「短時間大量入室(新規アカウント多数)→レイド検知→対象者一括timeout相当のイベント発行→
+   * moderation.action.recorded複数発行→loggingに同一caseIdで相関記録される」までを検証する。
+   * strong preset: window.memberThreshold=6, newAccountRatioThreshold=0.4。
+   * 実際のDiscord API呼び出し(discord層のtimeout実行)はスコープ外で、
+   * application層(handleGuildMemberAdd)がmoderation.action.recordedをpublishするところまでを検証する。
+   */
+  test("短時間大量入室(新規アカウント多数)→レイド検知→対象者全員へのmoderation.action.recorded発行→loggingに同一caseIdで相関記録される", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+    const allWritten = Promise.withResolvers<void>();
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        if (received.length >= 6) allWritten.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const now = new Date();
+      // strong preset: newAccountMaxAgeDays=14。全員作成1日以内(比率100%)なので
+      // newAccountRatioThreshold(0.4)を超えseverity=highになる。
+      const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const userIds = Array.from({ length: 6 }, () => `u-${randomUUID()}`);
+
+      let lastResult: Awaited<ReturnType<typeof handleGuildMemberAdd>> | undefined;
+      for (const userId of userIds) {
+        lastResult = await handleGuildMemberAdd(
+          { db, redis, eventBus: moderationEventBus },
+          guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
+        );
+      }
+
+      expect(lastResult?.raidHit).not.toBeNull();
+      expect(lastResult?.raidHit?.severity).toBe("high");
+      expect(lastResult?.raidHit?.targetUserIds).toHaveLength(6);
+
+      await withTimeout(allWritten.promise, 5_000, "logging handler");
+
+      const caseId = lastResult?.raidHit?.caseId;
+      expect(received).toHaveLength(6);
+      expect(new Set(received.map((e) => e.caseId))).toEqual(new Set([caseId]));
+      for (const event of received) {
+        expect(event.actionType).toBe("timeout");
+      }
+
+      const rows = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(rows).toHaveLength(6);
+      for (const row of rows) {
+        expect(row).toMatchObject({
+          category: "moderationCase",
+          payload: expect.objectContaining({ category: "moderationCase", guildId, caseId, actionType: "timeout" }),
+        });
+      }
+
+      const [raidState] = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
+      expect(raidState?.incidentCount).toBe(1);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      await cleanupRaidKeys(guildId);
+    }
+  });
+
+  /**
+   * ホワイトリスト対象ユーザーの入室が、レイド判定の人数カウント・一括timeout対象の
+   * どちらからも除外されることを検証する(設計spec「ホワイトリスト」節、#197)。
+   */
+  test("ホワイトリスト対象ユーザーの入室はレイド判定の人数カウント・一括アクション対象から除外される", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    const whitelistedUserId = `u-${randomUUID()}`;
+    await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: whitelistedUserId });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const now = new Date();
+      // strong presetの閾値は6人。ホワイトリスト対象1人+通常5人=6人分入室させるが、
+      // ホワイトリスト対象はバッファに積まれないため実際のカウントは5人でヒットしない。
+      await handleGuildMemberAdd(
+        { db, redis, eventBus: moderationEventBus },
+        guildMember({ guildId, userId: whitelistedUserId, joinedAt: now }),
+      );
+      const userIds = Array.from({ length: 5 }, () => `u-${randomUUID()}`);
+      let lastResult: Awaited<ReturnType<typeof handleGuildMemberAdd>> | undefined;
+      for (const userId of userIds) {
+        lastResult = await handleGuildMemberAdd(
+          { db, redis, eventBus: moderationEventBus },
+          guildMember({ guildId, userId, joinedAt: now }),
+        );
+      }
+      await new Promise((r) => setTimeout(r, 300));
+
+      expect(lastResult?.raidHit).toBeNull();
+      expect(received).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      await cleanupRaidKeys(guildId);
+    }
+  });
+
+  /**
+   * 新規アカウントガード(new_account_guard、#191)単体検知の垂直スライスを通しで検証する
+   * 複合テスト(#197)。既存の共通エスカレーション処理(#173)にそのまま接続していることを、
+   * 「作成間もないアカウントの入室→strike加算→moderation.action.recorded発行→
+   * loggingへのmoderationCase記録」まで検証する。
+   */
+  test("作成間もないアカウントの入室→new_account_guard検知→エスカレーション適用→loggingへのmoderationCase記録まで一気通貫で行われる", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const written = Promise.withResolvers<void>();
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+        written.resolve();
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const now = new Date();
+      const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const result = await handleGuildMemberAdd(
+        { db, redis, eventBus: moderationEventBus },
+        guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
+      );
+
+      expect(result.newAccountGuardOutcome).toMatchObject({
+        violationType: "new_account_guard",
+        strikeCount: 1,
+        actionType: "warn",
+        caseId: expect.any(String),
+      });
+
+      await withTimeout(written.promise, 5_000, "logging handler");
+
+      const [row] = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
+      expect(row).toMatchObject({
+        category: "moderationCase",
+        payload: expect.objectContaining({
+          category: "moderationCase",
+          guildId,
+          targetUserId: userId,
+          actionType: "warn",
+          caseId: result.newAccountGuardOutcome?.caseId,
+        }),
+      });
+
+      const [state] = await db
+        .select()
+        .from(moderationEscalationState)
+        .where(eq(moderationEscalationState.userId, userId));
+      expect(state?.strikeCount).toBe(1);
+      expect(state?.violationType).toBe("new_account_guard");
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      await cleanupRaidKeys(guildId);
+    }
+  });
+
+  /**
+   * ホワイトリスト対象ユーザーは作成間もないアカウントで入室してもnew_account_guardの
+   * strikeCount・ログのどちらも増加しないことを検証する(flood/ngword版と同一方針、#197)。
+   */
+  test("ホワイトリスト対象ユーザーは作成間もないアカウントで入室してもnew_account_guardのstrikeCount・ログのどちらも増加しない", async () => {
+    const guildId = `test-guild-${randomUUID()}`;
+    const userId = `u-${randomUUID()}`;
+    await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
+    await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: userId });
+
+    const runId = randomUUID();
+    const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
+    const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
+    const sendToChannel = mock(() => Promise.resolve());
+    const received: ModerationActionRecordedEvent[] = [];
+
+    try {
+      await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== guildId) return;
+        received.push(event);
+        await handleModerationEvent({ db, sendToChannel })(event, entryId);
+      });
+      await new Promise((r) => setTimeout(r, 100));
+
+      const now = new Date();
+      const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const result = await handleGuildMemberAdd(
+        { db, redis, eventBus: moderationEventBus },
+        guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
+      );
+      await new Promise((r) => setTimeout(r, 300));
+
+      expect(result.newAccountGuardOutcome).toBeNull();
+      expect(received).toEqual([]);
+      expect(
+        await db.select().from(moderationEscalationState).where(eq(moderationEscalationState.userId, userId)),
+      ).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
+    } finally {
+      await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
+      await db.delete(guilds).where(eq(guilds.id, guildId));
+      await cleanupRaidKeys(guildId);
     }
   });
 });
