@@ -39,3 +39,13 @@ export {
 } from "./message-buffer.js";
 export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";
 export { listNgwords, addNgword, removeNgword, UnsafeNgwordRegexError, type NgwordRow } from "./ngwords.js";
+export { escalateAndRecordStrike, type EscalateAndRecordDeps, type EscalationResult } from "./escalate-and-record.js";
+export { pushRaidEntry } from "./raid-buffer.js";
+export { incrementRaidIncident, getRaidState } from "./raid-state.js";
+export {
+  handleGuildMemberAdd,
+  type GuildMemberAddDeps,
+  type GuildMemberAddResult,
+  type IncomingGuildMember,
+  type RaidHitResult,
+} from "./guild-member-add.js";
