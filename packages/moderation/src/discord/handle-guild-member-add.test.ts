@@ -36,15 +36,21 @@ function fakeMember(overrides: {
   accountCreatedAt: Date;
   joinedAt: Date;
   bot?: boolean;
-  fetchImpl?: (userId: string) => Promise<{ timeout: ReturnType<typeof mock> }>;
 }) {
   const timeout = mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
-  const fetchedMembers = new Map<string, { timeout: ReturnType<typeof mock> }>();
+  const fetchedMembers = new Map<
+    string,
+    { id: string; guild: { id: string }; timeout: ReturnType<typeof mock> }
+  >();
   const fetch = mock(async (userId: string) => {
     if (!fetchedMembers.has(userId)) {
-      fetchedMembers.set(userId, { timeout: mock(() => Promise.resolve()) });
+      fetchedMembers.set(userId, {
+        id: userId,
+        guild: { id: overrides.guildId },
+        timeout: mock(() => Promise.resolve()),
+      });
     }
     return fetchedMembers.get(userId);
   });

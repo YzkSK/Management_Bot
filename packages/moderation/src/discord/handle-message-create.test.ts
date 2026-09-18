@@ -185,14 +185,15 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
     // timeout実行時もdeleteBufferedMessagesSafely経由でバッファの削除は必ず行われる。
     // create×2(warn, timeout)→実際にDiscord APIへ実行されるのはmostSevere(timeout)の1回のみ。
-    // timeout側はresult="success"でresolveされ、集約されなかったwarn側もresult="skipped"で
-    // resolveされる(未解決のまま残さないため、#350)。
+    // 2件目のwarnと3件目のtimeoutは別のmessageCreateイベントで実行されるため、
+    // どちらもresult="success"でresolveされる。result="skipped"になるのは同一イベントで
+    // 複数outcomeが同時にヒットした場合のみ。
     expect(eventBus.published).toHaveLength(4);
     expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
     const resolves = eventBus.published.filter((e) => e.action === "resolve");
     expect(resolves).toHaveLength(2);
-    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(1);
-    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(1);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(0);
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
   });
