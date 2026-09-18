@@ -4,6 +4,12 @@ function normalize(content: string): string {
   return content.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function similarityOfNormalized(normA: string, normB: string): number {
+  const maxLength = Math.max(normA.length, normB.length);
+  if (maxLength === 0) return 1;
+  return 1 - distance(normA, normB) / maxLength;
+}
+
 /**
  * 正規化後のLevenshtein距離ベースの類似度(0〜1)を返す純粋関数。
  * ponytail: 文字数はUTF-16コードユニット単位(string.length)で計算するため、
@@ -11,11 +17,7 @@ function normalize(content: string): string {
  * 書記素単位での比較が必要になったらIntl.Segmenterへの置き換えを検討する。
  */
 export function similarity(a: string, b: string): number {
-  const normA = normalize(a);
-  const normB = normalize(b);
-  const maxLength = Math.max(normA.length, normB.length);
-  if (maxLength === 0) return 1;
-  return 1 - distance(normA, normB) / maxLength;
+  return similarityOfNormalized(normalize(a), normalize(b));
 }
 
 /**
@@ -27,6 +29,8 @@ export function isDuplicateContent(a: string, b: string, similarityThreshold: nu
   if (!Number.isFinite(similarityThreshold) || similarityThreshold < 0 || similarityThreshold > 1) {
     throw new RangeError(`similarityThreshold must be between 0 and 1, got ${similarityThreshold}`);
   }
-  if (normalize(a) === "" && normalize(b) === "") return false;
-  return similarity(a, b) >= similarityThreshold;
+  const normA = normalize(a);
+  const normB = normalize(b);
+  if (normA === "" && normB === "") return false;
+  return similarityOfNormalized(normA, normB) >= similarityThreshold;
 }

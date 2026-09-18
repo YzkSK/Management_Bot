@@ -236,6 +236,36 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     ]);
   });
 
+  test("duplicate_content: windowSecondsより古い過去投稿とは一致しない(strong preset windowSeconds=8)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({
+      guildId,
+      violationType: "duplicate_content",
+      preset: "strong",
+      enabled: true,
+    });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // A@0s → B@7s(TTLをwindowSeconds分延長) → A@14s。BはAから7秒後でwindowSeconds(8秒)以内だが、
+    // 3件目(A@14s)は1件目(A@0s)から14秒後でwindowSeconds外のため、一致してはならない。
+    await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime()) }),
+    );
+    await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-B", createdAt: new Date(now.getTime() + 7000) }),
+    );
+    const third = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime() + 14000) }),
+    );
+
+    expect(third.outcomes).toEqual([]);
+  });
+
   test("bufferedMessageIdsは検知トリガーと同一チャンネルかつwindowSeconds以内のメッセージのみに絞られる", async () => {
     const userId = `u-${randomUUID()}`;
     // strong preset: windowSeconds=8, messageThreshold=3
