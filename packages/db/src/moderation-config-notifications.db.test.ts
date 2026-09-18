@@ -91,4 +91,34 @@ describe("listenForModerationConfigChanges", () => {
     const result = await notification;
     expect(result).toEqual({ guildId });
   });
+
+  test("moderation_ngwordsのUPDATEでguild_id自体が変わる場合、新旧両方のguildIdを通知する", async () => {
+    const otherGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: otherGuildId, name: "other guild" });
+    const id = randomUUID();
+    await db.insert(moderationNgwords).values({ id, guildId, matchType: "exact", pattern: "foo" });
+
+    const notifications: ModerationConfigChangedNotification[] = [];
+    let onChange: (n: ModerationConfigChangedNotification) => void = () => {};
+    const received = new Promise<void>((resolve) => {
+      onChange = (n) => {
+        notifications.push(n);
+        if (notifications.length >= 2) resolve();
+      };
+    });
+    listener = listenForModerationConfigChanges(databaseUrl, (n) => onChange(n));
+    await listener.ready;
+
+    await db.update(moderationNgwords).set({ guildId: otherGuildId }).where(eq(moderationNgwords.id, id));
+
+    await Promise.race([
+      received,
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("timed out")), 5000)),
+    ]);
+
+    expect(notifications).toContainEqual({ guildId });
+    expect(notifications).toContainEqual({ guildId: otherGuildId });
+
+    await db.delete(guilds).where(eq(guilds.id, otherGuildId));
+  });
 });

@@ -3,14 +3,23 @@
 -- ためのpg_notify。dashboard-apiでの設定変更が、bot(別プロセス)のキャッシュへTTL満了を待たず
 -- 反映されるようにする(#353)。3テーブルとも同じチャンネル(moderation_config_changed)に
 -- guildIdのみを通知する(configCacheはguild単位のスナップショットのため、どのテーブルが
--- 変わったかを区別する必要がない)。guild_idは主キーの一部だが、外部キー参照先(guilds.id)自体が
--- 不変であるべき値のためUPDATEでの変更は想定しない(0013と異なりOLD/NEW両方の通知は行わない)。
+-- 変わったかを区別する必要がない)。moderation_thresholds/moderation_whitelistはguild_idが
+-- 複合主キーの一部だが、moderation_ngwordsはidが単独主キーでguild_idはPK外のカラムのため、
+-- UPDATEでguild_id自体が変わり得る。0013(log_channel_settings)の前例と同様、UPDATE時に
+-- OLDとNEWのguild_idが異なる場合は両方通知する(片方だけ通知すると旧guild側のキャッシュが
+-- TTL満了まで残る、codexレビュー指摘)。
 CREATE FUNCTION notify_moderation_config_changed() RETURNS trigger AS $$
 BEGIN
   PERFORM pg_notify(
     'moderation_config_changed',
     json_build_object('guildId', COALESCE(NEW.guild_id, OLD.guild_id))::text
   );
+  IF TG_OP = 'UPDATE' AND NEW.guild_id IS DISTINCT FROM OLD.guild_id THEN
+    PERFORM pg_notify(
+      'moderation_config_changed',
+      json_build_object('guildId', OLD.guild_id)::text
+    );
+  END IF;
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
