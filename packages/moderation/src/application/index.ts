@@ -49,3 +49,8 @@ export {
   type IncomingGuildMember,
   type RaidHitResult,
 } from "./guild-member-add.js";
+export {
+  createModerationConfigCache,
+  type ModerationConfigCache,
+  type ModerationConfigSnapshot,
+} from "./moderation-config-cache.js";

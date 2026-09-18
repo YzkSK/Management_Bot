@@ -1,12 +1,11 @@
 import type { Redis } from "ioredis";
 import type { Db } from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
-import { detectRaid, hasNewAccountGuardHit, NEW_ACCOUNT_GUARD_PRESETS, RAID_PRESETS, type RaidSeverity } from "../domain/index.js";
+import { detectRaid, hasNewAccountGuardHit, isWhitelistMatch, NEW_ACCOUNT_GUARD_PRESETS, RAID_PRESETS, type RaidSeverity } from "../domain/index.js";
 import { escalateAndRecordStrike, SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
+import type { ModerationConfigCache } from "./moderation-config-cache.js";
 import { markRaidHitAndCheckNewIncident, pushRaidEntry } from "./raid-buffer.js";
 import { getRaidState, incrementRaidIncident } from "./raid-state.js";
-import { getEnabledThresholds } from "./thresholds.js";
-import { isWhitelisted } from "./whitelist.js";
 
 export interface IncomingGuildMember {
   guildId: string;
@@ -21,6 +20,8 @@ export interface GuildMemberAddDeps {
   db: Db;
   redis: Redis;
   eventBus: { publish: (event: ModerationActionRecordedEvent) => Promise<void> };
+  /** whitelist/thresholdsをguild単位でまとめてTTLキャッシュする(#352)。detect-and-escalate.tsと同じ仕組み。 */
+  configCache: ModerationConfigCache;
 }
 
 export interface RaidHitResult {
@@ -49,13 +50,14 @@ export async function handleGuildMemberAdd(
   deps: GuildMemberAddDeps,
   member: IncomingGuildMember,
 ): Promise<GuildMemberAddResult> {
-  if (await isWhitelisted(deps.db, member.guildId, member.userId, member.roleIds)) {
+  const snapshot = await deps.configCache.get(deps.db, member.guildId);
+
+  if (isWhitelistMatch(snapshot.whitelist, member.guildId, member.userId, member.roleIds)) {
     return { raidHit: null, newAccountGuardOutcome: null };
   }
 
-  const enabledThresholds = await getEnabledThresholds(deps.db, member.guildId);
-  const raidThreshold = enabledThresholds.find((t) => t.violationType === "raid");
-  const guardThreshold = enabledThresholds.find((t) => t.violationType === "new_account_guard");
+  const raidThreshold = snapshot.enabledThresholds.find((t) => t.violationType === "raid");
+  const guardThreshold = snapshot.enabledThresholds.find((t) => t.violationType === "new_account_guard");
 
   const raidHit = raidThreshold ? await detectRaidHit(deps, member, raidThreshold.preset) : null;
 

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -13,6 +13,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import { handleGuildMemberAdd, type IncomingGuildMember } from "./guild-member-add.js";
+import { createModerationConfigCache } from "./moderation-config-cache.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 
@@ -74,10 +75,19 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     return { published, publish: async (event: ModerationActionRecordedEvent) => void published.push(event) };
   }
 
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
+   */
+  function deps(eventBus: ReturnType<typeof fakeEventBus>) {
+    return { db, redis, eventBus, configCache: createModerationConfigCache() };
+  }
+
   test("raid/new_account_guardのどちらも無効なら何も起きない", async () => {
     const eventBus = fakeEventBus();
     const result = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId: `u-${randomUUID()}` }),
     );
     expect(result).toEqual({ raidHit: null, newAccountGuardOutcome: null });
@@ -95,7 +105,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     const eventBus = fakeEventBus();
     const now = new Date();
     const result = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId, accountCreatedAt: now, joinedAt: now }),
     );
 
@@ -112,7 +122,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     let lastResult;
     for (const userId of userIds) {
       lastResult = await handleGuildMemberAdd(
-        { db, redis, eventBus },
+        deps(eventBus),
         member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000), joinedAt: now }),
       );
     }
@@ -141,18 +151,18 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     // ままなら新規インシデントとして扱わずnullを返す。
     for (let i = 0; i < 6; i++) {
       await handleGuildMemberAdd(
-        { db, redis, eventBus },
+        deps(eventBus),
         member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
       );
     }
     expect(eventBus.published).toHaveLength(6);
 
     const seventh = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
     );
     const eighth = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
     );
 
@@ -178,7 +188,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     let lastResult;
     for (const userId of userIds) {
       lastResult = await handleGuildMemberAdd(
-        { db, redis, eventBus },
+        deps(eventBus),
         member({ guildId, userId, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
       );
     }
@@ -200,7 +210,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     let lastResult;
     for (const userId of userIds) {
       lastResult = await handleGuildMemberAdd(
-        { db, redis, eventBus },
+        deps(eventBus),
         member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), joinedAt: now }),
       );
     }
@@ -217,13 +227,13 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     const eventBus = fakeEventBus();
     const now = new Date();
 
-    await handleGuildMemberAdd({ db, redis, eventBus }, member({ guildId, userId: whitelistedUserId, joinedAt: now }));
+    await handleGuildMemberAdd(deps(eventBus), member({ guildId, userId: whitelistedUserId, joinedAt: now }));
 
     const userIds = Array.from({ length: 5 }, () => `u-${randomUUID()}`);
     let lastResult;
     for (const userId of userIds) {
       lastResult = await handleGuildMemberAdd(
-        { db, redis, eventBus },
+        deps(eventBus),
         member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000), joinedAt: now }),
       );
     }
@@ -242,7 +252,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     const userId = `u-${randomUUID()}`;
 
     const result = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), joinedAt: now }),
     );
 
@@ -267,7 +277,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     const userId = `u-${randomUUID()}`;
 
     const result = await handleGuildMemberAdd(
-      { db, redis, eventBus },
+      deps(eventBus),
       member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000), joinedAt: now }),
     );
 

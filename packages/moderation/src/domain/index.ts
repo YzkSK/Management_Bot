@@ -30,3 +30,4 @@ export {
   type RaidDetectionResult,
 } from "./raid.js";
 export { isNewAccount, hasNewAccountGuardHit } from "./new-account-guard.js";
+export { isWhitelistMatch, type WhitelistMatchEntry } from "./whitelist-match.js";

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -21,6 +21,7 @@ import {
 import { incrementStrike } from "./escalation-state.js";
 import { setEscalationPreset } from "./escalation-settings.js";
 import type { BufferedMessage } from "./message-buffer.js";
+import { createModerationConfigCache } from "./moderation-config-cache.js";
 import { addNgword } from "./ngwords.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -85,10 +86,22 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
   /** invite_link以外のテストでは呼ばれない想定のダミー実装(常に自ギルド扱い)。 */
   const resolveInviteGuildId = async (): Promise<string | null> => guildId;
 
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
+   */
+  function deps(
+    eventBus: ReturnType<typeof fakeEventBus>,
+    overrides: Partial<Parameters<typeof detectAndEscalate>[0]> = {},
+  ) {
+    return { db, redis, eventBus, resolveInviteGuildId, configCache: createModerationConfigCache(), ...overrides };
+  }
+
   test("検知種別が何も有効でなければ何も起きない", async () => {
     const eventBus = fakeEventBus();
     const result = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId: `u-${randomUUID()}` }),
     );
     expect(result).toEqual({ outcomes: [], lockedMessageIds: [] });
@@ -102,7 +115,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     for (let i = 0; i < 5; i++) {
-      await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId }));
+      await detectAndEscalate(deps(eventBus), message({ guildId, userId }));
     }
 
     expect(eventBus.published).toEqual([]);
@@ -124,7 +137,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId },
+        deps(eventBus),
         message({ guildId, userId, createdAt: new Date(now.getTime() + i * 1000) }),
       );
     }
@@ -169,7 +182,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     for (let i = 0; i < 7; i++) {
       results.push(
         await detectAndEscalate(
-          { db, redis, eventBus, resolveInviteGuildId },
+          deps(eventBus),
           message({ guildId, userId, createdAt: new Date(now.getTime() + i * 500) }),
         ),
       );
@@ -211,15 +224,15 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // A → B → A の順で投稿。直前1件(B)との比較だけではAとAの重複を検出できないが、
     // バッファ全体比較であれば3件目(A)が1件目(A)とヒットするはず。
     const first = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime()) }),
     );
     const second = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "completely unrelated message", createdAt: new Date(now.getTime() + 1000) }),
     );
     const third = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime() + 2000) }),
     );
 
@@ -251,15 +264,15 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // A@0s → B@7s(TTLをwindowSeconds分延長) → A@14s。BはAから7秒後でwindowSeconds(8秒)以内だが、
     // 3件目(A@14s)は1件目(A@0s)から14秒後でwindowSeconds外のため、一致してはならない。
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime()) }),
     );
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "content-B", createdAt: new Date(now.getTime() + 7000) }),
     );
     const third = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime() + 14000) }),
     );
 
@@ -278,12 +291,12 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // bufferedMessageIdsにはchannel-1の2件のみが残るべき(channel-otherの1件目は除外)。
     const otherChannelMessageId = randomUUID();
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, channelId: "channel-other", messageId: otherChannelMessageId, createdAt: now }),
     );
     const secondMessageId = randomUUID();
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({
         guildId,
         userId,
@@ -294,7 +307,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     );
     const thirdMessageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({
         guildId,
         userId,
@@ -317,7 +330,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     for (let i = 0; i < 5; i++) {
-      await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, roleIds: [roleId] }));
+      await detectAndEscalate(deps(eventBus), message({ guildId, userId, roleIds: [roleId] }));
     }
 
     expect(eventBus.published).toEqual([]);
@@ -337,17 +350,17 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const now = new Date();
 
     // 1, 2件目で閾値未達(strong: messageThreshold=3)、3件目と同一のduplicatedを2回送る
-    await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, createdAt: now }));
+    await detectAndEscalate(deps(eventBus), message({ guildId, userId, createdAt: now }));
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, createdAt: new Date(now.getTime() + 1000) }),
     );
     const first = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
     );
     const retry = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       { ...duplicated, createdAt: new Date(now.getTime() + 2000) },
     );
 
@@ -382,7 +395,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId },
+        deps(eventBus),
         { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
       );
     }
@@ -405,7 +418,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastOutcomes: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastOutcomes = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId },
+        deps(eventBus),
         { guildId, userId, channelId: "c1", roleIds: [], messageId: randomUUID(), content: `msg-${i}`, createdAt: new Date() },
       );
     }
@@ -423,7 +436,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const eventBus = fakeEventBus();
     const messageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, messageId, content: "banned-word" }),
     );
 
@@ -448,11 +461,11 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const firstMessageId = randomUUID();
     const secondMessageId = randomUUID();
     const first = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, messageId: firstMessageId, content: "banned-word", createdAt: now }),
     );
     const second = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({
         guildId,
         userId,
@@ -482,7 +495,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     const result = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "clean message" }),
     );
 
@@ -499,7 +512,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
     const messageId = randomUUID();
     const result = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, messageId, content: mentions }),
     );
 
@@ -526,11 +539,11 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     const firstMessageId = randomUUID();
     const secondMessageId = randomUUID();
     const first = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, messageId: firstMessageId, content: mentions, createdAt: now }),
     );
     const second = await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({
         guildId,
         userId,
@@ -561,7 +574,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
     const eventBus = fakeEventBus();
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
-    const result = await detectAndEscalate({ db, redis, eventBus, resolveInviteGuildId }, message({ guildId, userId, content: mentions }));
+    const result = await detectAndEscalate(deps(eventBus), message({ guildId, userId, content: mentions }));
 
     expect(result.outcomes).toEqual([]);
   });
@@ -575,7 +588,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => guildId },
+        deps(eventBus, { resolveInviteGuildId: async () => guildId }),
         message({ guildId, userId, content: "join us: discord.gg/own-guild-code" }),
       );
 
@@ -590,7 +603,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
         message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
       );
 
@@ -616,7 +629,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       const firstMessageId = randomUUID();
       const secondMessageId = randomUUID();
       const first = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
         message({
           guildId,
           userId,
@@ -626,7 +639,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         }),
       );
       const second = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
         message({
           guildId,
           userId,
@@ -657,7 +670,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => null },
+        deps(eventBus, { resolveInviteGuildId: async () => null }),
         message({ guildId, userId, content: "join us: discord.gg/unresolvable-code" }),
       );
 
@@ -673,7 +686,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
         message({ guildId, userId, content: "hello world" }),
       );
 
@@ -689,15 +702,12 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       const resolvedCodes: string[] = [];
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        {
-          db,
-          redis,
-          eventBus,
+        deps(eventBus, {
           resolveInviteGuildId: async (code) => {
             resolvedCodes.push(code);
             return "other-guild-id";
           },
-        },
+        }),
         message({
           guildId,
           userId,
@@ -718,15 +728,12 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       const resolvedCodes: string[] = [];
       const eventBus = fakeEventBus();
       const result = await detectAndEscalate(
-        {
-          db,
-          redis,
-          eventBus,
+        deps(eventBus, {
           resolveInviteGuildId: async (code) => {
             resolvedCodes.push(code);
             return guildId;
           },
-        },
+        }),
         message({ guildId, userId, content: "discord.gg/first-code discord.gg/second-code" }),
       );
 
@@ -748,7 +755,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 3; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId },
+        deps(eventBus),
         message({
           guildId,
           userId,
@@ -776,13 +783,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     // 直近2通の合計8件はmentionThreshold(10)未満のためヒットしない
     // (フィルタなしで全件合算すると12件になりヒットしてしまう、というバグの回帰確認)。
     await detectAndEscalate(
-      { db, redis, eventBus, resolveInviteGuildId },
+      deps(eventBus),
       message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() - 20_000) }),
     );
     let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
     for (let i = 0; i < 2; i++) {
       lastResult = await detectAndEscalate(
-        { db, redis, eventBus, resolveInviteGuildId },
+        deps(eventBus),
         message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
       );
     }

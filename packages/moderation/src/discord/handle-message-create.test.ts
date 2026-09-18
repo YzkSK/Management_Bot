@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -12,6 +12,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
+import { createModerationConfigCache } from "../application/index.js";
 import { addNgword } from "../application/ngwords.js";
 import { setEscalationPreset } from "../application/escalation-settings.js";
 import { handleMessageCreate } from "./handle-message-create.js";
@@ -103,17 +104,29 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   /** invite_link以外のテストでは呼ばれない想定のダミー実装(常に自ギルド扱い)。 */
   const resolveInviteGuildId = async (): Promise<string | null> => guildId;
 
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
+   */
+  function deps(
+    eventBus: ReturnType<typeof fakeEventBus>,
+    overrides: Partial<Parameters<typeof handleMessageCreate>[0]> = {},
+  ) {
+    return { db, redis, eventBus, resolveInviteGuildId, configCache: createModerationConfigCache(), ...overrides };
+  }
+
   test("botのメッセージは無視する", async () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", bot: true });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
   });
 
   test("guild/memberがないメッセージ(DM等)は無視する", async () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", hasGuild: false });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
   });
 
@@ -126,7 +139,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (let i = 0; i < 3; i++) {
       last = fakeMessage({ guildId, userId, content: `msg-${i}` });
-      await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
@@ -148,7 +161,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (let i = 0; i < 3; i++) {
       last = fakeMessage({ guildId, userId, content: `msg-${i}`, timeoutRejects: true });
-      await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     expect(eventBus.published).toHaveLength(2);
@@ -175,7 +188,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (let i = 0; i < 3; i++) {
       last = fakeMessage({ guildId, userId, content });
-      await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     // 2件目: duplicate_content(合計strikeCount=1)がヒットしESCALATION_STEPS.strong[1]=warn。
@@ -224,7 +237,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (const content of ["A", "B", "B"]) {
       last = fakeMessage({ guildId, userId, content });
-      await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     // 3件目: floodがtimeout(合計4)、duplicate_content("B"が2連続)がkick(合計5)に到達。
@@ -251,7 +264,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId, content: "banned-word" });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
 
     expect(eventBus.published).toHaveLength(2);
     expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
@@ -268,7 +281,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
     const message = fakeMessage({ guildId, userId, content: mentions });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
 
     expect(eventBus.published).toHaveLength(2);
     expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
@@ -285,7 +298,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/other-guild-code" });
     await handleMessageCreate(
-      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
       message as unknown as Message,
     );
 
@@ -304,7 +317,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/own-guild-code" });
     await handleMessageCreate(
-      { db, redis, eventBus, resolveInviteGuildId: async () => guildId },
+      deps(eventBus, { resolveInviteGuildId: async () => guildId }),
       message as unknown as Message,
     );
 
@@ -319,9 +332,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
     const eventBus = fakeEventBus();
     const first = fakeMessage({ guildId, userId, content: "banned-word" });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, first as unknown as Message);
+    await handleMessageCreate(deps(eventBus), first as unknown as Message);
     const second = fakeMessage({ guildId, userId, content: "banned-word" });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
+    await handleMessageCreate(deps(eventBus), second as unknown as Message);
 
     expect(eventBus.published).toHaveLength(2);
     expect(first.deleteFn).toHaveBeenCalledTimes(1);
@@ -339,9 +352,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
     const first = fakeMessage({ guildId, userId, content: mentions });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, first as unknown as Message);
+    await handleMessageCreate(deps(eventBus), first as unknown as Message);
     const second = fakeMessage({ guildId, userId, content: mentions });
-    await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
+    await handleMessageCreate(deps(eventBus), second as unknown as Message);
 
     expect(eventBus.published).toHaveLength(2);
     expect(first.deleteFn).toHaveBeenCalledTimes(1);
@@ -359,12 +372,12 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const content = "join us: discord.gg/other-guild-code";
     const first = fakeMessage({ guildId, userId, content });
     await handleMessageCreate(
-      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
       first as unknown as Message,
     );
     const second = fakeMessage({ guildId, userId, content });
     await handleMessageCreate(
-      { db, redis, eventBus, resolveInviteGuildId: async () => "other-guild-id" },
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
       second as unknown as Message,
     );
 
@@ -383,7 +396,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/unresolvable-code" });
     await handleMessageCreate(
-      { db, redis, eventBus, resolveInviteGuildId: async () => null },
+      deps(eventBus, { resolveInviteGuildId: async () => null }),
       message as unknown as Message,
     );
 

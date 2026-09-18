@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -13,6 +13,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { GuildMember } from "discord.js";
+import { createModerationConfigCache } from "../application/index.js";
 import { setEscalationPreset } from "../application/escalation-settings.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 
@@ -104,11 +105,20 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     return { published, publish: async (event: ModerationActionRecordedEvent) => void published.push(event) };
   }
 
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
+   */
+  function deps(eventBus: ReturnType<typeof fakeEventBus>) {
+    return { db, redis, eventBus, configCache: createModerationConfigCache() };
+  }
+
   test("botの入室は無視する", async () => {
     const eventBus = fakeEventBus();
     const now = new Date();
     const member = fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: now, joinedAt: now, bot: true });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, member as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
     expect(eventBus.published).toEqual([]);
   });
 
@@ -123,7 +133,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     );
 
     for (const member of members) {
-      await handleGuildMemberAddEvent({ db, redis, eventBus }, member as unknown as GuildMember);
+      await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
     }
 
     // 6人目(トリガーとなった入室者自身)は直接member.timeout()が呼ばれ、
@@ -154,7 +164,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const now = new Date();
 
     const whitelistedMember = fakeMember({ guildId, userId: whitelistedUserId, accountCreatedAt: now, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, whitelistedMember as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), whitelistedMember as unknown as GuildMember);
     expect(whitelistedMember.timeout).not.toHaveBeenCalled();
     expect(eventBus.published).toEqual([]);
   });
@@ -172,11 +182,11 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const first = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, first as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), first as unknown as GuildMember);
     expect(first.timeout).not.toHaveBeenCalled();
 
     const second = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, second as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), second as unknown as GuildMember);
     expect(second.timeout).toHaveBeenCalledTimes(1);
 
     // 1件目: warn(create+resolve)、2件目: timeout(create+resolve)の計4件(#350)。
@@ -204,19 +214,19 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     // raidの閾値(6人)にも同時到達させる。
     const userId = `u-${randomUUID()}`;
     const warmup = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, warmup as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), warmup as unknown as GuildMember);
 
     const otherMembers = Array.from({ length: 4 }, () =>
       fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
     );
     for (const member of otherMembers) {
-      await handleGuildMemberAddEvent({ db, redis, eventBus }, member as unknown as GuildMember);
+      await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
     }
 
     // 6人目として同一ユーザー(userId)が再入室したことにする(new_account_guardのstrikeCount=2で
     // timeoutに到達、同時にraidの6人目としてもヒットする状況を再現)。
     const trigger = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, trigger as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), trigger as unknown as GuildMember);
 
     // raid(1440分 or 60分)のtimeoutが1回だけ呼ばれ、new_account_guardの5分timeoutでは上書きされない。
     expect(trigger.timeout).toHaveBeenCalledTimes(1);
@@ -241,7 +251,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const userId = `u-${randomUUID()}`;
 
     const member = fakeMember({ guildId, userId, accountCreatedAt: oldAccountCreatedAt, joinedAt: now });
-    await handleGuildMemberAddEvent({ db, redis, eventBus }, member as unknown as GuildMember);
+    await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
 
     expect(member.timeout).not.toHaveBeenCalled();
     expect(eventBus.published).toEqual([]);

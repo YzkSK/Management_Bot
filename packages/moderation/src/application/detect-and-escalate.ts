@@ -12,6 +12,7 @@ import {
   hasInviteLinkHit,
   hasSingleMessageMentionSpam,
   isDuplicateContent,
+  isWhitelistMatch,
 } from "../domain/index.js";
 import { escalateAndRecordStrike } from "./escalate-and-record.js";
 import {
@@ -21,9 +22,9 @@ import {
   mentionCountsInWindow,
   pushMentionCount,
 } from "./message-buffer.js";
-import { listNgwords } from "./ngwords.js";
-import { type EnabledThreshold, getEnabledThresholds } from "./thresholds.js";
-import { isWhitelisted } from "./whitelist.js";
+import type { ModerationConfigCache, ModerationConfigSnapshot } from "./moderation-config-cache.js";
+import type { NgwordRow } from "./ngwords.js";
+import type { EnabledThreshold } from "./thresholds.js";
 
 export { SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
 
@@ -72,6 +73,12 @@ export interface DetectAndEscalateDeps {
    * 無効なコード・Discord API障害等、解決に失敗した場合はnullを返す想定。
    */
   resolveInviteGuildId: (code: string) => Promise<string | null>;
+  /**
+   * whitelist/thresholds/ngwordsをguild単位でまとめてTTLキャッシュする(#352)。
+   * メッセージ受信ごとの個別DB問い合わせを避けるため、プロセス起動時に1回生成し共有する
+   * (discord/index.tsのcreateModerationConfigCache呼び出し箇所を参照)。
+   */
+  configCache: ModerationConfigCache;
 }
 
 export interface EscalationOutcome {
@@ -174,6 +181,7 @@ async function checkViolation(
   buffer: readonly BufferedMessage[],
   violationType: MessageCreateViolationType,
   preset: ModerationPreset,
+  ngwords: readonly NgwordRow[],
 ): Promise<ViolationCheck> {
   if (violationType === "flood" || violationType === "duplicate_content") {
     const floodPreset = FLOOD_PRESETS[preset];
@@ -193,7 +201,6 @@ async function checkViolation(
   }
 
   if (violationType === "ngword") {
-    const ngwords = await listNgwords(deps.db, message.guildId);
     const hit = findMatchingNgword(message.content, ngwords) !== null;
     return { hit, strikeLockWindowSeconds: NGWORD_STRIKE_LOCK_WINDOW_SECONDS, bufferedMessageIds: [message.messageId] };
   }
@@ -257,12 +264,13 @@ export async function detectAndEscalate(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
 ): Promise<DetectAndEscalateResult> {
-  if (await isWhitelisted(deps.db, message.guildId, message.userId, message.roleIds)) {
+  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
+
+  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
     return { outcomes: [], lockedMessageIds: [] };
   }
 
-  const allThresholds = await getEnabledThresholds(deps.db, message.guildId);
-  const thresholds = allThresholds.filter(
+  const thresholds = snapshot.enabledThresholds.filter(
     (t): t is EnabledThreshold & { violationType: MessageCreateViolationType } =>
       isMessageCreateViolationType(t.violationType),
   );
@@ -292,7 +300,7 @@ export async function detectAndEscalate(
   const outcomes: EscalationOutcome[] = [];
   const lockedMessageIds = new Set<string>();
   for (const threshold of thresholds) {
-    const check = await checkViolation(deps, message, buffer, threshold.violationType, threshold.preset);
+    const check = await checkViolation(deps, message, buffer, threshold.violationType, threshold.preset, snapshot.ngwords);
     if (!check.hit) continue;
 
     const canStrike = await markStrikeHitAndCheckNewBurst(
