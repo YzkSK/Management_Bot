@@ -11,7 +11,7 @@ import {
   isDuplicateContent,
 } from "../domain/index.js";
 import type { IncomingMessage } from "./detect-and-escalate.js";
-import type { BufferedMentionCount, BufferedMessage } from "./message-buffer.js";
+import type { BufferedMessage } from "./message-buffer.js";
 import type { NgwordRow } from "./ngwords.js";
 
 /**
@@ -127,21 +127,19 @@ export function checkNgword(message: IncomingMessage, ngwords: readonly NgwordRo
 }
 
 /**
- * mention_spam判定。mentionBuffer(pushMentionCountの戻り値)は呼び出し側が事前にRedisへ
- * 書き込んで用意したものを受け取るだけで、この関数自体はRedisに触れない(副作用なし)。
+ * mention_spam判定。mentionCounts(pushMentionCount+mentionCountsInWindowで時刻フィルタ済みの値)は
+ * 呼び出し側が事前にRedisへ書き込んで用意したものを受け取るだけで、この関数自体はRedisに触れない
+ * (副作用なし)。
  */
 export function checkMentionSpam(
   message: IncomingMessage,
   preset: ModerationPreset,
-  mentionBuffer: readonly BufferedMentionCount[],
+  mentionCounts: readonly number[],
 ): ViolationCheck {
   const mentionPreset = MENTION_SPAM_PRESETS[preset];
   const mentionCount = countMentions(message.content);
   const singleHit = hasSingleMessageMentionSpam(mentionCount, mentionPreset.singleMessageThreshold);
-  const cumulativeHit = hasCumulativeMentionSpam(
-    mentionBuffer.map((m) => m.mentionCount),
-    mentionPreset.cumulative.mentionThreshold,
-  );
+  const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
   return {
     hit: singleHit || cumulativeHit,
     strikeLockWindowSeconds: mentionPreset.cumulative.windowSeconds,

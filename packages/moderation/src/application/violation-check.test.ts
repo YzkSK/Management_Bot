@@ -95,18 +95,12 @@ describe("checkMentionSpam", () => {
   });
 
   test("累積メンション数が閾値(medium=10)以上ならhit=true", () => {
-    const mentionBuffer = [
-      { mentionCount: 5, createdAt: new Date("2026-01-01T00:00:08.000Z") },
-      { mentionCount: 5, createdAt: new Date("2026-01-01T00:00:09.000Z") },
-    ];
-    const result = checkMentionSpam(message({ content: "<@1>" }), "medium", mentionBuffer);
+    const result = checkMentionSpam(message({ content: "<@1>" }), "medium", [5, 5]);
     expect(result.hit).toBe(true);
   });
 
   test("単発・累積いずれも閾値未満ならhit=false", () => {
-    const result = checkMentionSpam(message({ content: "<@1>" }), "medium", [
-      { mentionCount: 1, createdAt: new Date("2026-01-01T00:00:09.000Z") },
-    ]);
+    const result = checkMentionSpam(message({ content: "<@1>" }), "medium", [1]);
     expect(result.hit).toBe(false);
   });
 });

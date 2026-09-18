@@ -139,10 +139,8 @@ async function prepareAndCheckViolation(
     );
     // TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが混入するため、
     // hasFloodHitと同様にcreatedAtで時刻フィルタしてから合算する(Codexレビュー指摘)。
-    const mentionBuffer = mentionCountsInWindow(rawMentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds).map(
-      (mentionCount) => ({ mentionCount, createdAt: message.createdAt }),
-    );
-    return checkMentionSpam(message, preset, mentionBuffer);
+    const mentionCounts = mentionCountsInWindow(rawMentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds);
+    return checkMentionSpam(message, preset, mentionCounts);
   }
 
   if (violationType === "invite_link") {
@@ -154,7 +152,9 @@ async function prepareAndCheckViolation(
     for (const code of codes) {
       const resolvedGuildId = await deps.resolveInviteGuildId(code);
       resolvedGuildIds.push(resolvedGuildId);
-      if (resolvedGuildId !== null && resolvedGuildId !== message.guildId) break;
+      // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
+      // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
+      if (resolvedGuildId !== message.guildId) break;
     }
     return checkInviteLink(message, resolvedGuildIds);
   }
