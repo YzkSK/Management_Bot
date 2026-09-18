@@ -216,7 +216,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     );
     const second = await detectAndEscalate(
       { db, redis, eventBus, resolveInviteGuildId },
-      message({ guildId, userId, content: "content-B", createdAt: new Date(now.getTime() + 1000) }),
+      message({ guildId, userId, content: "completely unrelated message", createdAt: new Date(now.getTime() + 1000) }),
     );
     const third = await detectAndEscalate(
       { db, redis, eventBus, resolveInviteGuildId },
