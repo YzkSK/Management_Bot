@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DomainEventBus } from "@management-bot/core";
 import {
   createDb,
@@ -14,6 +14,7 @@ import {
 import { handleModerationEvent } from "@management-bot/logging";
 import {
   addNgword,
+  createModerationConfigCache,
   detectAndEscalate,
   handleGuildMemberAdd,
   type IncomingGuildMember,
@@ -81,6 +82,15 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   const { db, close }: { db: Db; close: () => Promise<void> } = createDb(databaseUrl);
   const redis = new Redis(REDIS_URL);
+  let configCache = createModerationConfigCache();
+
+  beforeEach(() => {
+    configCache = createModerationConfigCache();
+  });
+
+  function withConfigCache<T extends object>(deps: T) {
+    return { ...deps, configCache };
+  }
 
   afterAll(async () => {
     await close();
@@ -116,7 +126,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
       for (let i = 0; i < 3; i++) {
         lastResult = await detectAndEscalate(
-          { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
+          withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }),
           message({ guildId, userId, createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
@@ -180,7 +190,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       for (let i = 0; i < 5; i++) {
-        await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId }));
+        await detectAndEscalate(withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }), message({ guildId, userId }));
       }
       // イベントが飛んでこないことを確認するため、購読が動作する猶予を与えてから判定する。
       await new Promise((r) => setTimeout(r, 300));
@@ -227,7 +237,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const result = await detectAndEscalate(
-        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
+        withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }),
         message({ guildId, userId, content: "banned-word" }),
       );
 
@@ -294,7 +304,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastResult: Awaited<ReturnType<typeof detectAndEscalate>> = { outcomes: [], lockedMessageIds: [] };
       for (let i = 0; i < 3; i++) {
         lastResult = await detectAndEscalate(
-          { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
+          withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }),
           message({ guildId, userId, content: "<@1> <@2> <@3> <@4>", createdAt: new Date(now.getTime() + i * 1000) }),
         );
       }
@@ -365,9 +375,9 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId, content: "banned-word" }));
+      await detectAndEscalate(withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }), message({ guildId, userId, content: "banned-word" }));
       const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
-      await detectAndEscalate({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }, message({ guildId, userId, content: mentions }));
+      await detectAndEscalate(withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }), message({ guildId, userId, content: mentions }));
       await new Promise((r) => setTimeout(r, 300));
 
       expect(received).toEqual([]);
@@ -411,7 +421,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const result = await detectAndEscalate(
-        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" }),
         message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
       );
 
@@ -471,7 +481,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       const result = await detectAndEscalate(
-        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId },
+        withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => guildId }),
         message({ guildId, userId, content: "join us: discord.gg/own-vanity-url" }),
       );
       await new Promise((r) => setTimeout(r, 300));
@@ -513,7 +523,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       await new Promise((r) => setTimeout(r, 100));
 
       await detectAndEscalate(
-        { db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" },
+        withConfigCache({ db, redis, eventBus: moderationEventBus, resolveInviteGuildId: async () => "other-guild-id" }),
         message({ guildId, userId, content: "join us: discord.gg/other-guild-code" }),
       );
       await new Promise((r) => setTimeout(r, 300));
@@ -584,7 +594,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastResult: Awaited<ReturnType<typeof handleGuildMemberAdd>> | undefined;
       for (const userId of userIds) {
         lastResult = await handleGuildMemberAdd(
-          { db, redis, eventBus: moderationEventBus },
+          withConfigCache({ db, redis, eventBus: moderationEventBus }),
           guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
         );
       }
@@ -662,7 +672,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       const now = new Date();
       // ホワイトリスト対象を先に入室させる(バッファに積まれないため、後続の人数カウントに影響しない)。
       await handleGuildMemberAdd(
-        { db, redis, eventBus: moderationEventBus },
+        withConfigCache({ db, redis, eventBus: moderationEventBus }),
         guildMember({ guildId, userId: whitelistedUserId, joinedAt: now }),
       );
       // strong presetの閾値は6人。通常ユーザーを6人ちょうど入室させ、実際にレイドを発生させる。
@@ -670,13 +680,13 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       let lastResult: Awaited<ReturnType<typeof handleGuildMemberAdd>> | undefined;
       for (const userId of userIds) {
         lastResult = await handleGuildMemberAdd(
-          { db, redis, eventBus: moderationEventBus },
+          withConfigCache({ db, redis, eventBus: moderationEventBus }),
           guildMember({ guildId, userId, joinedAt: now }),
         );
       }
       // レイド発生後にもホワイトリスト対象を入室させ、事後の入室もバッファ・対象に含まれないことを確認する。
       await handleGuildMemberAdd(
-        { db, redis, eventBus: moderationEventBus },
+        withConfigCache({ db, redis, eventBus: moderationEventBus }),
         guildMember({ guildId, userId: whitelistedUserId, joinedAt: now }),
       );
 
@@ -735,7 +745,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       const now = new Date();
       const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const result = await handleGuildMemberAdd(
-        { db, redis, eventBus: moderationEventBus },
+        withConfigCache({ db, redis, eventBus: moderationEventBus }),
         guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
       );
 
@@ -803,7 +813,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       const now = new Date();
       const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const result = await handleGuildMemberAdd(
-        { db, redis, eventBus: moderationEventBus },
+        withConfigCache({ db, redis, eventBus: moderationEventBus }),
         guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
       );
       await new Promise((r) => setTimeout(r, 300));
