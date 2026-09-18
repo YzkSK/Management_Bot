@@ -89,4 +89,22 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
     failureCode: execResult.failureCode,
     createdAt: new Date().toISOString(),
   });
+
+  // targetに集約されず実行されなかった側のcreateイベント(既にpublish済み)にも、
+  // 未解決のまま残さないようresult="skipped"のresolveをpublishする(#350、codexレビュー指摘)。
+  for (const outcome of outcomes) {
+    if (outcome.caseId === target.caseId) continue;
+    await deps.eventBus.publish({
+      type: "moderation.action.recorded",
+      guildId: message.guild.id,
+      caseId: outcome.caseId,
+      targetUserId: message.author.id,
+      moderatorId: SYSTEM_MODERATOR_ID,
+      action: "resolve",
+      actionType: outcome.actionType,
+      timeoutMinutes: outcome.timeoutMinutes,
+      result: "skipped",
+      createdAt: new Date().toISOString(),
+    });
+  }
 }

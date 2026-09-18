@@ -184,11 +184,15 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     // ESCALATION_STEPS.strong[2]=timeoutに到達する。duplicate_contentも閾値には達し続けるが、
     // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
     // timeout実行時もdeleteBufferedMessagesSafely経由でバッファの削除は必ず行われる。
-    // create×2(warn, timeout)→実際にDiscord APIへ実行されるのはmostSevere(timeout)の1回のみで、
-    // それに対するresolveが1件publishされる(#350)。
-    expect(eventBus.published).toHaveLength(3);
+    // create×2(warn, timeout)→実際にDiscord APIへ実行されるのはmostSevere(timeout)の1回のみ。
+    // timeout側はresult="success"でresolveされ、集約されなかったwarn側もresult="skipped"で
+    // resolveされる(未解決のまま残さないため、#350)。
+    expect(eventBus.published).toHaveLength(4);
     expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
-    expect(eventBus.published.filter((e) => e.action === "resolve")).toHaveLength(1);
+    const resolves = eventBus.published.filter((e) => e.action === "resolve");
+    expect(resolves).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(1);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(1);
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
   });
@@ -224,12 +228,16 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
 
     // 3件目: floodがtimeout(合計4)、duplicate_content("B"が2連続)がkick(合計5)に到達。
     // moderation.action.recordedのcreateは両方publishされるが、Discord側の処罰実行はより重いkickに
-    // 集約される(mostSevere)ため、resolveはkick分の1件のみpublishされる(#350)。
+    // 集約される(mostSevere)。kick側はresult="success"でresolveされ、集約されなかったtimeout側も
+    // result="skipped"でresolveされる(未解決のまま残さないため、#350)。
     // バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
     // (連投メッセージが削除されずに残らないようにするため)。
-    expect(eventBus.published).toHaveLength(3);
+    expect(eventBus.published).toHaveLength(4);
     expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
-    expect(eventBus.published.filter((e) => e.action === "resolve")).toHaveLength(1);
+    const resolves = eventBus.published.filter((e) => e.action === "resolve");
+    expect(resolves).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(1);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(1);
     expect(last?.kick).toHaveBeenCalledTimes(1);
     expect(last?.timeout).not.toHaveBeenCalled();
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);

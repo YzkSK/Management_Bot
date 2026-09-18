@@ -16,6 +16,8 @@ function fakeDb(
   inserts: RecordedInsert[],
   updates: RecordedUpdate[],
   channelSetting: { channelId: string } | undefined,
+  /** UPDATEが対象行に一致したかどうか(false=更新0件、insertへフォールバックする経路を再現)。 */
+  updateMatchesExistingRow = true,
 ): Db {
   return {
     insert: () => ({
@@ -27,7 +29,7 @@ function fakeDb(
     update: () => ({
       set: (set: unknown) => {
         updates.push({ set });
-        return { where: () => Promise.resolve() };
+        return { where: () => ({ returning: () => Promise.resolve(updateMatchesExistingRow ? [{ id: "case-1:u1" }] : []) }) };
       },
     }),
     select: () => ({
@@ -78,7 +80,7 @@ describe("handleModerationEvent", () => {
     await handler(createEvent, "1234-0");
 
     expect(inserts[0]?.values).toMatchObject({
-      id: "case-1",
+      id: "case-1:u1",
       guildId: "g1",
       category: "moderationCase",
       payload: {
@@ -106,6 +108,26 @@ describe("handleModerationEvent", () => {
     expect(updates[0]?.set).toMatchObject({
       payload: { action: "resolve", caseId: "case-1", result: "success" },
     });
+  });
+
+  test("resolveがcreateより先に(または単独で)処理された場合、更新0件ならresolveの内容でinsertする(#350)", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb(inserts, updates, { channelId: "c1" }, false);
+    const sendToChannel = mock(() => Promise.resolve());
+    const handler = handleModerationEvent({ db, sendToChannel });
+
+    await handler(resolveSuccessEvent, "1234-1");
+
+    expect(updates).toHaveLength(1);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]?.values).toMatchObject({
+      id: "case-1:u1",
+      payload: { action: "resolve", caseId: "case-1", result: "success" },
+    });
+    // insertフォールバック経路ではwriteLogEntry(保存の都度チャンネル送信)は使わないため、
+    // result=successでは送信されない(通常のresult=failed判定のみに従う)。
+    expect(sendToChannel).not.toHaveBeenCalled();
   });
 
   test("resolveでresult=successの場合はDiscordへ送信しない(createで既に1通送信済みのため)", async () => {
