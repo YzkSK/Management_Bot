@@ -41,4 +41,14 @@ describe("isDuplicateContent", () => {
     expect(() => isDuplicateContent("a", "b", -0.01)).toThrow(RangeError);
     expect(() => isDuplicateContent("a", "b", 1.01)).toThrow(RangeError);
   });
+
+  test("正規化後に両方とも空文字列(空文字・空白のみ)ならヒットしない(画像・スタンプのみの投稿の誤検知防止)", () => {
+    expect(isDuplicateContent("", "", 1)).toBe(false);
+    expect(isDuplicateContent("   ", "", 1)).toBe(false);
+    expect(isDuplicateContent("", "", 0)).toBe(false);
+  });
+
+  test("片方のみ空文字列なら通常通り判定する(類似度0でヒットしない)", () => {
+    expect(isDuplicateContent("hello", "", 0.5)).toBe(false);
+  });
 });

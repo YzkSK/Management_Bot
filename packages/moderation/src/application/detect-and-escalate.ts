@@ -96,10 +96,16 @@ export interface EscalationOutcome {
 /** 処理済みメッセージのSETNXマーカーをどれだけ保持するか。実際のwindowSecondsより十分長く取る。 */
 const PROCESSED_MARKER_TTL_SECONDS = 3600;
 
+/**
+ * バッファ内の直前1件だけでなく、直近バッファ全体(自分自身を除く)のいずれかと類似していれば
+ * 重複投稿とみなす。直前1件のみの比較では`A → B → A`のような繰り返し投稿を検出できないため
+ * (改善案5.2節)。バッファ自体がMAX_BUFFER_SIZE件・windowSecondsで区切られているため、
+ * 全件比較しても「直近の投稿」の範囲を超えることはない。
+ */
 function isDuplicateHit(buffer: readonly BufferedMessage[], message: IncomingMessage, threshold: number): boolean {
-  const previous = buffer.find((m) => m.messageId !== message.messageId);
-  if (!previous) return false;
-  return isDuplicateContent(message.content, previous.content, threshold);
+  return buffer
+    .filter((m) => m.messageId !== message.messageId)
+    .some((m) => isDuplicateContent(message.content, m.content, threshold));
 }
 
 /**

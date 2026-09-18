@@ -18,10 +18,15 @@ export function similarity(a: string, b: string): number {
   return 1 - distance(normA, normB) / maxLength;
 }
 
-/** 2つのメッセージ本文が閾値以上の類似度を持つ(重複投稿とみなせる)かを判定する純粋関数。 */
+/**
+ * 2つのメッセージ本文が閾値以上の類似度を持つ(重複投稿とみなせる)かを判定する純粋関数。
+ * 正規化後に両方とも空文字列になる場合は重複とみなさない(画像・スタンプのみの投稿等、
+ * 本文が空の投稿同士が無条件で類似度1になり誤検知することを防ぐため)。
+ */
 export function isDuplicateContent(a: string, b: string, similarityThreshold: number): boolean {
   if (!Number.isFinite(similarityThreshold) || similarityThreshold < 0 || similarityThreshold > 1) {
     throw new RangeError(`similarityThreshold must be between 0 and 1, got ${similarityThreshold}`);
   }
+  if (normalize(a) === "" && normalize(b) === "") return false;
   return similarity(a, b) >= similarityThreshold;
 }

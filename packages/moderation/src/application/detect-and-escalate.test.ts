@@ -195,6 +195,47 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     expect(row?.strikeCount).toBe(1);
   });
 
+  test("duplicate_content: A→B→Aのように直前1件とは異なる過去投稿の繰り返しも検出する", async () => {
+    const userId = `u-${randomUUID()}`;
+    // strong preset: duplicateSimilarityThreshold=0.85
+    await db.insert(moderationThresholds).values({
+      guildId,
+      violationType: "duplicate_content",
+      preset: "strong",
+      enabled: true,
+    });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    // A → B → A の順で投稿。直前1件(B)との比較だけではAとAの重複を検出できないが、
+    // バッファ全体比較であれば3件目(A)が1件目(A)とヒットするはず。
+    const first = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime()) }),
+    );
+    const second = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-B", createdAt: new Date(now.getTime() + 1000) }),
+    );
+    const third = await detectAndEscalate(
+      { db, redis, eventBus, resolveInviteGuildId },
+      message({ guildId, userId, content: "content-A", createdAt: new Date(now.getTime() + 2000) }),
+    );
+
+    expect(first.outcomes).toEqual([]);
+    expect(second.outcomes).toEqual([]);
+    expect(third.outcomes).toEqual([
+      {
+        violationType: "duplicate_content",
+        strikeCount: 1,
+        actionType: "warn",
+        caseId: expect.any(String),
+        bufferedMessageIds: expect.any(Array),
+      },
+    ]);
+  });
+
   test("bufferedMessageIdsは検知トリガーと同一チャンネルかつwindowSeconds以内のメッセージのみに絞られる", async () => {
     const userId = `u-${randomUUID()}`;
     // strong preset: windowSeconds=8, messageThreshold=3
