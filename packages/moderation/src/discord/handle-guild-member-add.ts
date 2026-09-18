@@ -1,5 +1,5 @@
 import type { GuildMember } from "discord.js";
-import type { ModerationActionType } from "@management-bot/shared";
+import { ACTION_SEVERITY, type ModerationActionType } from "@management-bot/shared";
 import {
   SYSTEM_MODERATOR_ID,
   type EscalationResult,
@@ -26,20 +26,6 @@ function raidTimeoutReason(caseId: string, incidentCount: number): string {
 function newAccountGuardReason(outcome: EscalationResult): string {
   return `moderation: new_account_guard total strike ${outcome.strikeCount} (case ${outcome.caseId})`;
 }
-
-/**
- * actionTypeの重さ(execute-action.tsのACTION_SEVERITYと同じ考え方)。raid一括timeoutと
- * new_account_guardの処罰が同一入室者に重複適用される場合、より重い方だけを実行するために使う
- * (Codexレビュー指摘: 順に実行すると後勝ちでtimeoutが上書きされ、reasonがnew_account_guard側
- * だけになったりraidの長時間timeoutがnew_account_guardの短時間timeoutで上書きされたりする)。
- */
-const ACTION_SEVERITY: Record<ModerationActionType, number> = {
-  warn: 0,
-  timeout: 1,
-  kick: 2,
-  ban: 3,
-  unban: -1,
-};
 
 /**
  * レイドヒット時、対象ユーザー全員に一括timeoutを実行する。Discord APIレート制限に
