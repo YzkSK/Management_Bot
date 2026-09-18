@@ -25,6 +25,8 @@ export {
   newAccountRatio,
   decideRaidSeverity,
   detectRaid,
+  escalateSeverityByIncidentCount,
+  REPEAT_INCIDENT_SEVERITY_THRESHOLD,
   type RaidBufferEntry,
   type RaidSeverity,
   type RaidDetectionResult,
