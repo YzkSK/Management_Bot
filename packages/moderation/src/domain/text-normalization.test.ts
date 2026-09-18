@@ -18,4 +18,12 @@ describe("toCompact", () => {
   test("通常の英数字はそのまま保持される", () => {
     expect(toCompact("hello123")).toBe("hello123");
   });
+
+  test("タブ・改行は除去される", () => {
+    expect(toCompact("b\ta\rd\nword")).toBe("badword");
+  });
+
+  test("bidi制御文字などの書式文字(Cf)は除去される", () => {
+    expect(toCompact("b⁠a‎d‮word")).toBe("badword");
+  });
 });
