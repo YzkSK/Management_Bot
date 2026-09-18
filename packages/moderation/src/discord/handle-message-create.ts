@@ -1,6 +1,11 @@
 import type { Message } from "discord.js";
 import type { ModerationActionType } from "@management-bot/shared";
-import { detectAndEscalate, type DetectAndEscalateDeps, type EscalationOutcome } from "../application/index.js";
+import {
+  detectAndEscalate,
+  SYSTEM_MODERATOR_ID,
+  type DetectAndEscalateDeps,
+  type EscalationOutcome,
+} from "../application/index.js";
 import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
 
 const ACTION_SEVERITY: Record<ModerationActionType, number> = {
@@ -67,5 +72,21 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   }
 
   const target = mostSevere(outcomes);
-  await executeEscalationAction(message, { ...target, bufferedMessageIds: mergeBufferedMessageIds(outcomes) });
+  const execResult = await executeEscalationAction(message, {
+    ...target,
+    bufferedMessageIds: mergeBufferedMessageIds(outcomes),
+  });
+  await deps.eventBus.publish({
+    type: "moderation.action.recorded",
+    guildId: message.guild.id,
+    caseId: target.caseId,
+    targetUserId: message.author.id,
+    moderatorId: SYSTEM_MODERATOR_ID,
+    action: "resolve",
+    actionType: target.actionType,
+    timeoutMinutes: target.timeoutMinutes,
+    result: execResult.result,
+    failureCode: execResult.failureCode,
+    createdAt: new Date().toISOString(),
+  });
 }

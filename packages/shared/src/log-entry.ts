@@ -221,17 +221,30 @@ export const auditLogCorrelationEntrySchema = z.object({
   actionType: nonEmptyString,
 });
 
-export const moderationCaseLogEntrySchema = z.object({
+const moderationCaseBase = {
   ...base,
   category: z.literal("moderationCase"),
   caseId: nonEmptyString,
   targetUserId: nonEmptyString,
   moderatorId: nonEmptyString,
-  action: z.enum(["create", "update", "resolve"]),
   actionType: z.enum(MODERATION_ACTION_TYPES),
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes: z.number().int().positive().optional(),
-});
+};
+
+/**
+ * action="create"は処罰予定の記録、action="resolve"はDiscord API実行後の結果確定(#350)。
+ * resolveのみDiscord APIの実行結果(result/failureCode)を持つ。
+ */
+export const moderationCaseLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({ ...moderationCaseBase, action: z.literal("create") }),
+  z.object({
+    ...moderationCaseBase,
+    action: z.literal("resolve"),
+    result: z.enum(["success", "failed", "skipped"]),
+    failureCode: z.string().optional(),
+  }),
+]);
 
 const voiceBase = {
   ...base,

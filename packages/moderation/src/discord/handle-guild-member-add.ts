@@ -1,11 +1,22 @@
 import type { GuildMember } from "discord.js";
 import type { ModerationActionType } from "@management-bot/shared";
 import {
+  SYSTEM_MODERATOR_ID,
   type EscalationResult,
   type GuildMemberAddDeps,
   handleGuildMemberAdd,
   type RaidHitResult,
 } from "../application/index.js";
+
+interface ActionExecutionResult {
+  result: "success" | "failed" | "skipped";
+  failureCode?: string;
+}
+
+const SUCCESS: ActionExecutionResult = { result: "success" };
+
+/** raid/new_account_guardが同一入室者に同時ヒットし、重さ比較でより軽い側が実行されなかったことを表す(#350)。 */
+const SKIPPED: ActionExecutionResult = { result: "skipped" };
 
 /** 自動検知によるアクションであることを表すreason(execute-action.tsのSYSTEM_MODERATOR_IDと対になる文言)。 */
 function raidTimeoutReason(caseId: string, incidentCount: number): string {
@@ -34,14 +45,16 @@ const ACTION_SEVERITY: Record<ModerationActionType, number> = {
  * レイドヒット時、対象ユーザー全員に一括timeoutを実行する。Discord APIレート制限に
  * 触れやすいため、初期実装は逐次実行から始める(設計spec「リスク・注意点」節、
  * 問題化したらキュー化・バックオフを検討)。個々のtimeout失敗(対象が既に退出した等)は
- * 他の対象への実行を止めないようログのみ行う。
+ * 他の対象への実行を止めないようログのみ行い、結果を返す(#350)。
  */
-async function executeRaidTimeout(target: GuildMember, raidHit: RaidHitResult): Promise<void> {
+async function executeRaidTimeout(target: GuildMember, raidHit: RaidHitResult): Promise<ActionExecutionResult> {
   const reason = raidTimeoutReason(raidHit.caseId, raidHit.incidentCount);
   try {
     await target.timeout(raidHit.timeoutMinutes * 60 * 1000, reason);
+    return SUCCESS;
   } catch (error) {
     console.error(`moderation: failed to timeout raid target ${target.id} for case ${raidHit.caseId}`, error);
+    return { result: "failed", failureCode: "discord_api_error" };
   }
 }
 
@@ -51,29 +64,100 @@ async function executeRaidTimeout(target: GuildMember, raidHit: RaidHitResult): 
  * 進んだ場合も同じ仕組みで実行する(#173の共通エスカレーション処理に接続しているため、
  * strikeが積み重なれば通常のエスカレーションと同様に段階が進みうる)。
  */
-async function executeNewAccountGuardAction(member: GuildMember, outcome: EscalationResult): Promise<void> {
+async function executeNewAccountGuardAction(
+  member: GuildMember,
+  outcome: EscalationResult,
+): Promise<ActionExecutionResult> {
   const reason = newAccountGuardReason(outcome);
   try {
     switch (outcome.actionType) {
       case "warn":
-        return;
+        return SUCCESS;
       case "timeout": {
         const timeoutMinutes = outcome.timeoutMinutes ?? 10;
         await member.timeout(timeoutMinutes * 60 * 1000, reason);
-        return;
+        return SUCCESS;
       }
       case "kick":
         await member.kick(reason);
-        return;
+        return SUCCESS;
       case "ban":
         await member.ban({ reason });
-        return;
+        return SUCCESS;
       case "unban":
-        return;
+        return SUCCESS;
     }
   } catch (error) {
     console.error(`moderation: failed to execute new_account_guard action "${outcome.actionType}" for case ${outcome.caseId}`, error);
+    return { result: "failed", failureCode: "discord_api_error" };
   }
+}
+
+/** moderation.action.recordedのresolveイベントをpublishする共通ヘルパー(#350)。 */
+async function publishResolve(
+  deps: GuildMemberAddDeps,
+  params: {
+    guildId: string;
+    caseId: string;
+    targetUserId: string;
+    actionType: ModerationActionType;
+    timeoutMinutes?: number;
+  },
+  execResult: ActionExecutionResult,
+): Promise<void> {
+  await deps.eventBus.publish({
+    type: "moderation.action.recorded",
+    guildId: params.guildId,
+    caseId: params.caseId,
+    targetUserId: params.targetUserId,
+    moderatorId: SYSTEM_MODERATOR_ID,
+    action: "resolve",
+    actionType: params.actionType,
+    timeoutMinutes: params.timeoutMinutes,
+    result: execResult.result,
+    failureCode: execResult.failureCode,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/** new_account_guardの処罰実行結果をmoderation.action.recordedのresolveイベントとしてpublishする(#350)。 */
+async function executeAndRecordNewAccountGuardAction(
+  deps: GuildMemberAddDeps,
+  member: GuildMember,
+  outcome: EscalationResult,
+): Promise<void> {
+  const execResult = await executeNewAccountGuardAction(member, outcome);
+  await publishResolve(
+    deps,
+    {
+      guildId: member.guild.id,
+      caseId: outcome.caseId,
+      targetUserId: member.id,
+      actionType: outcome.actionType,
+      timeoutMinutes: outcome.timeoutMinutes,
+    },
+    execResult,
+  );
+}
+
+/** raid一括timeoutの実行結果をmoderation.action.recordedのresolveイベントとしてpublishする(#350)。 */
+async function executeAndRecordRaidTimeout(
+  deps: GuildMemberAddDeps,
+  target: GuildMember,
+  raidHit: RaidHitResult,
+): Promise<void> {
+  const execResult = await executeRaidTimeout(target, raidHit);
+  await publishResolve(
+    deps,
+    {
+      guildId: target.guild.id,
+      caseId: raidHit.caseId,
+      targetUserId: target.id,
+      actionType: "timeout",
+      timeoutMinutes: raidHit.timeoutMinutes,
+    },
+    execResult,
+  );
 }
 
 /**
@@ -101,15 +185,33 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
 
   if (selfIsRaidTarget && guardOutcome) {
     // 入室者自身が両方にヒットした場合のみ重さを比較する。raidは常にtimeout。
+    // 実行されなかった側のcreateイベント(既にpublish済み)には、未解決のまま残さないよう
+    // result="skipped"のresolveをpublishする(#350)。
     if (ACTION_SEVERITY.timeout >= ACTION_SEVERITY[guardOutcome.actionType]) {
-      await executeRaidTimeout(member, raidHit);
+      await executeAndRecordRaidTimeout(deps, member, raidHit);
+      await publishResolve(
+        deps,
+        {
+          guildId: member.guild.id,
+          caseId: guardOutcome.caseId,
+          targetUserId: member.id,
+          actionType: guardOutcome.actionType,
+          timeoutMinutes: guardOutcome.timeoutMinutes,
+        },
+        SKIPPED,
+      );
     } else {
-      await executeNewAccountGuardAction(member, guardOutcome);
+      await executeAndRecordNewAccountGuardAction(deps, member, guardOutcome);
+      await publishResolve(
+        deps,
+        { guildId: member.guild.id, caseId: raidHit.caseId, targetUserId: member.id, actionType: "timeout", timeoutMinutes: raidHit.timeoutMinutes },
+        SKIPPED,
+      );
     }
   } else if (guardOutcome) {
-    await executeNewAccountGuardAction(member, guardOutcome);
+    await executeAndRecordNewAccountGuardAction(deps, member, guardOutcome);
   } else if (selfIsRaidTarget) {
-    await executeRaidTimeout(member, raidHit);
+    await executeAndRecordRaidTimeout(deps, member, raidHit);
   }
 
   if (raidHit) {
@@ -119,9 +221,14 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
     for (const targetUserId of otherTargetIds) {
       try {
         const target = await member.guild.members.fetch(targetUserId);
-        await executeRaidTimeout(target, raidHit);
+        await executeAndRecordRaidTimeout(deps, target, raidHit);
       } catch (error) {
         console.error(`moderation: failed to fetch raid target ${targetUserId} for case ${raidHit.caseId}`, error);
+        await publishResolve(
+          deps,
+          { guildId: member.guild.id, caseId: raidHit.caseId, targetUserId, actionType: "timeout", timeoutMinutes: raidHit.timeoutMinutes },
+          { result: "failed", failureCode: "member_not_found" },
+        );
       }
     }
   }

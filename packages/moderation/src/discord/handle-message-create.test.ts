@@ -38,10 +38,14 @@ function fakeMessage(overrides: {
   bot?: boolean;
   hasGuild?: boolean;
   hasMember?: boolean;
+  /** timeout()がDiscord APIエラーで失敗するケースを再現する(#350の処罰失敗パス検証用)。 */
+  timeoutRejects?: boolean;
 }) {
   const deleteFn = mock(() => Promise.resolve());
   const bulkDelete = mock(() => Promise.resolve());
-  const timeout = mock(() => Promise.resolve());
+  const timeout = overrides.timeoutRejects
+    ? mock(() => Promise.reject(new Error("Missing Permissions")))
+    : mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
   const send = mock(() => Promise.resolve());
@@ -126,7 +130,35 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     }
 
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
-    expect(eventBus.published).toHaveLength(1);
+    // create(処罰予定)→resolve(実行結果)の2段階でpublishされる(#350)。
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create" });
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+  });
+
+  test("Discord API(timeout)がエラーで失敗した場合、resolveイベントはresult=failedでpublishされる(#350)", async () => {
+    const userId = `u-${randomUUID()}`;
+    // strong preset: ESCALATION_STEPS.strong[2]=timeout(5分)。strikeCountを1でseedし、
+    // 1件目のflood検知で合計2に到達させてtimeoutを引き当てる。
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
+
+    const eventBus = fakeEventBus();
+    let last: ReturnType<typeof fakeMessage> | undefined;
+    for (let i = 0; i < 3; i++) {
+      last = fakeMessage({ guildId, userId, content: `msg-${i}`, timeoutRejects: true });
+      await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, last as unknown as Message);
+    }
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create", actionType: "timeout" });
+    expect(eventBus.published[1]).toMatchObject({
+      action: "resolve",
+      actionType: "timeout",
+      result: "failed",
+      failureCode: "discord_api_error",
+    });
   });
 
   test("flood/duplicate_contentが同時にヒットしても、それぞれ同一バースト中は1回しかstrikeが進まない", async () => {
@@ -152,7 +184,11 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     // ESCALATION_STEPS.strong[2]=timeoutに到達する。duplicate_contentも閾値には達し続けるが、
     // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
     // timeout実行時もdeleteBufferedMessagesSafely経由でバッファの削除は必ず行われる。
-    expect(eventBus.published).toHaveLength(2);
+    // create×2(warn, timeout)→実際にDiscord APIへ実行されるのはmostSevere(timeout)の1回のみで、
+    // それに対するresolveが1件publishされる(#350)。
+    expect(eventBus.published).toHaveLength(3);
+    expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
+    expect(eventBus.published.filter((e) => e.action === "resolve")).toHaveLength(1);
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
   });
@@ -187,10 +223,13 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     }
 
     // 3件目: floodがtimeout(合計4)、duplicate_content("B"が2連続)がkick(合計5)に到達。
-    // moderation.action.recordedは両方publishされるが、Discord側の処罰実行はより重いkickに
-    // 集約される(mostSevere)。バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
+    // moderation.action.recordedのcreateは両方publishされるが、Discord側の処罰実行はより重いkickに
+    // 集約される(mostSevere)ため、resolveはkick分の1件のみpublishされる(#350)。
+    // バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
     // (連投メッセージが削除されずに残らないようにするため)。
-    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published).toHaveLength(3);
+    expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
+    expect(eventBus.published.filter((e) => e.action === "resolve")).toHaveLength(1);
     expect(last?.kick).toHaveBeenCalledTimes(1);
     expect(last?.timeout).not.toHaveBeenCalled();
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
@@ -205,7 +244,8 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const message = fakeMessage({ guildId, userId, content: "banned-word" });
     await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
     expect(message.bulkDelete).not.toHaveBeenCalled();
   });
@@ -221,7 +261,8 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const message = fakeMessage({ guildId, userId, content: mentions });
     await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, message as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
     expect(message.bulkDelete).not.toHaveBeenCalled();
   });
@@ -239,7 +280,8 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       message as unknown as Message,
     );
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
     expect(message.bulkDelete).not.toHaveBeenCalled();
   });
@@ -272,7 +314,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const second = fakeMessage({ guildId, userId, content: "banned-word" });
     await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
     expect(first.deleteFn).toHaveBeenCalledTimes(1);
     expect(first.send).toHaveBeenCalledTimes(1);
     expect(second.deleteFn).toHaveBeenCalledTimes(1);
@@ -292,7 +334,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const second = fakeMessage({ guildId, userId, content: mentions });
     await handleMessageCreate({ db, redis, eventBus, resolveInviteGuildId }, second as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
     expect(first.deleteFn).toHaveBeenCalledTimes(1);
     expect(second.deleteFn).toHaveBeenCalledTimes(1);
     expect(second.send).not.toHaveBeenCalled();
@@ -317,7 +359,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       second as unknown as Message,
     );
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
     expect(first.deleteFn).toHaveBeenCalledTimes(1);
     expect(second.deleteFn).toHaveBeenCalledTimes(1);
     expect(second.send).not.toHaveBeenCalled();
@@ -336,7 +378,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       message as unknown as Message,
     );
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
   });
 });

@@ -112,7 +112,6 @@ const PRESENTATION: {
   auditLogCorrelation: {},
   moderationCase: {
     create: { accent: "negative", title: "モデレーション対応が記録されました", icon: "🛑" },
-    update: { accent: "warning", title: "モデレーション対応が更新されました", icon: "🛑" },
     resolve: { accent: "positive", title: "モデレーション対応が解決しました", icon: "✅" },
   },
   voice: {

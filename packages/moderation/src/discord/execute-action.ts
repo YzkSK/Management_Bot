@@ -111,44 +111,53 @@ async function deleteBufferedMessagesSafely(message: Message, outcome: Escalatio
   }
 }
 
+export interface ExecuteActionResult {
+  result: "success" | "failed";
+  /** result="failed"の場合のみ設定する、失敗理由を表す短いコード(#350)。 */
+  failureCode?: string;
+}
+
+const SUCCESS: ExecuteActionResult = { result: "success" };
+
 /**
- * エスカレーションアクションをDiscord API経由で実行する。
+ * エスカレーションアクションをDiscord API経由で実行し、実行結果を返す(#350)。
  * bufferedMessageIds(検知の元になったバースト全体)は、warn以降どの段階に到達した場合でも
  * 常に削除する(メッセージ削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
- * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時は例外を投げずログのみ行う。
+ * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時も例外は投げず結果を返すのみとする。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
  */
-export async function executeEscalationAction(message: Message, outcome: EscalationOutcome): Promise<void> {
+export async function executeEscalationAction(message: Message, outcome: EscalationOutcome): Promise<ExecuteActionResult> {
   try {
     switch (outcome.actionType) {
       case "warn":
         await deleteBufferedMessagesSafely(message, outcome);
         await sendWarningDm(message, outcome);
-        return;
+        return SUCCESS;
       case "unban":
-        return;
+        return SUCCESS;
       case "timeout": {
-        if (!message.member) return;
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
         await message.member.timeout(resolveTimeoutMinutes(outcome) * 60 * 1000, reasonFor(outcome));
         break;
       }
       case "kick":
-        if (!message.member) return;
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
-        if (!message.member) return;
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }
   } catch (error) {
     console.error(`moderation: failed to execute action "${outcome.actionType}" for case ${outcome.caseId}`, error);
-    return;
+    return { result: "failed", failureCode: "discord_api_error" };
   }
 
   await sendWarningDm(message, outcome);
+  return SUCCESS;
 }
