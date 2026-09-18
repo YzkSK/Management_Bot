@@ -1,4 +1,4 @@
-﻿import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -74,12 +74,22 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   let close: () => Promise<void>;
   const redis = new Redis(REDIS_URL);
   const guildId = `test-guild-${randomUUID()}`;
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * beforeEachでテストごとに新規生成し、1テスト内の複数呼び出し(deps())では共有する。
+   */
+  let configCache: ReturnType<typeof createModerationConfigCache>;
 
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
     ({ db, close } = createDb(databaseUrl));
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+  });
+
+  beforeEach(() => {
+    configCache = createModerationConfigCache();
   });
 
   afterAll(async () => {
@@ -104,16 +114,11 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   /** invite_link以外のテストでは呼ばれない想定のダミー実装(常に自ギルド扱い)。 */
   const resolveInviteGuildId = async (): Promise<string | null> => guildId;
 
-  /**
-   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
-   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
-   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
-   */
   function deps(
     eventBus: ReturnType<typeof fakeEventBus>,
     overrides: Partial<Parameters<typeof handleMessageCreate>[0]> = {},
   ) {
-    return { db, redis, eventBus, resolveInviteGuildId, configCache: createModerationConfigCache(), ...overrides };
+    return { db, redis, eventBus, resolveInviteGuildId, configCache, ...overrides };
   }
 
   test("botのメッセージは無視する", async () => {

@@ -1,4 +1,4 @@
-﻿import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -44,12 +44,22 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
   let close: () => Promise<void>;
   const redis = new Redis(REDIS_URL);
   const guildId = `test-guild-${randomUUID()}`;
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * beforeEachでテストごとに新規生成し、1テスト内の複数呼び出し(deps())では共有する。
+   */
+  let configCache: ReturnType<typeof createModerationConfigCache>;
 
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
     ({ db, close } = createDb(databaseUrl));
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+  });
+
+  beforeEach(() => {
+    configCache = createModerationConfigCache();
   });
 
   afterAll(async () => {
@@ -75,13 +85,8 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     return { published, publish: async (event: ModerationActionRecordedEvent) => void published.push(event) };
   }
 
-  /**
-   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
-   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
-   * テストごとに新規生成し、テスト内の複数呼び出しでのみ共有する。
-   */
   function deps(eventBus: ReturnType<typeof fakeEventBus>) {
-    return { db, redis, eventBus, configCache: createModerationConfigCache() };
+    return { db, redis, eventBus, configCache };
   }
 
   test("raid/new_account_guardのどちらも無効なら何も起きない", async () => {
