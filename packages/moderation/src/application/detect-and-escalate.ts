@@ -96,10 +96,31 @@ export interface EscalationOutcome {
 /** 処理済みメッセージのSETNXマーカーをどれだけ保持するか。実際のwindowSecondsより十分長く取る。 */
 const PROCESSED_MARKER_TTL_SECONDS = 3600;
 
-function isDuplicateHit(buffer: readonly BufferedMessage[], message: IncomingMessage, threshold: number): boolean {
-  const previous = buffer.find((m) => m.messageId !== message.messageId);
-  if (!previous) return false;
-  return isDuplicateContent(message.content, previous.content, threshold);
+/**
+ * バッファ内の直前1件だけでなく、windowSeconds以内の直近バッファ全体(自分自身を除く)のいずれかと
+ * 類似していれば重複投稿とみなす。直前1件のみの比較では`A → B → A`のような繰り返し投稿を
+ * 検出できないため(改善案5.2節)。バッファ自体はRedisのTTLがpush毎に延長されwindowSecondsより
+ * 古いメッセージも残り得るため、bufferedMessageIdsInWindowと同じ時間窓([message.createdAt -
+ * windowSeconds, message.createdAt])で明示的に絞り込む(絞り込まないと、間に別メッセージを挟んで
+ * TTLが延長され続けた古い投稿とも一致してしまう)。flood検知と同様、チャンネル横断で判定する設計は
+ * 維持する(削除対象のみbufferedMessageIdsInWindowでチャンネル別に絞り込まれる)。
+ */
+function isDuplicateHit(
+  buffer: readonly BufferedMessage[],
+  message: IncomingMessage,
+  threshold: number,
+  windowSeconds: number,
+): boolean {
+  const windowStart = message.createdAt.getTime() - windowSeconds * 1000;
+  const windowEnd = message.createdAt.getTime();
+  return buffer
+    .filter(
+      (m) =>
+        m.messageId !== message.messageId &&
+        m.createdAt.getTime() >= windowStart &&
+        m.createdAt.getTime() <= windowEnd,
+    )
+    .some((m) => isDuplicateContent(message.content, m.content, threshold));
 }
 
 /**
@@ -163,7 +184,7 @@ async function checkViolation(
             message.createdAt,
             floodPreset.frequency,
           )
-        : isDuplicateHit(buffer, message, floodPreset.duplicateSimilarityThreshold);
+        : isDuplicateHit(buffer, message, floodPreset.duplicateSimilarityThreshold, floodPreset.frequency.windowSeconds);
     return {
       hit,
       strikeLockWindowSeconds: floodPreset.frequency.windowSeconds,
