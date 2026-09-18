@@ -141,6 +141,13 @@
       "when": 1789644749079,
       "tag": "0019_lovely_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789768465762,
+      "tag": "0020_moderation-config-notify-trigger",
+      "breakpoints": true
     }
   ]
 }

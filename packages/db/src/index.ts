@@ -7,4 +7,8 @@ export {
   type LogEntryInsertNotification,
   type LogChannelSettingChangedNotification,
 } from "./log-entry-notifications.js";
+export {
+  listenForModerationConfigChanges,
+  type ModerationConfigChangedNotification,
+} from "./moderation-config-notifications.js";
 export * from "./schema/index.js";
