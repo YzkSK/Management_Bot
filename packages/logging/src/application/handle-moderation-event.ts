@@ -1,31 +1,36 @@
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import type { LogEntry } from "../domain/index.js";
-import { writeLogEntry, type WriteLogEntryDeps } from "./write-log-entry.js";
+import { writeModerationCaseLogEntry } from "./write-moderation-case-log-entry.js";
+import type { WriteLogEntryDeps } from "./write-log-entry.js";
 
-function toLogEntry(event: ModerationActionRecordedEvent): LogEntry {
-  return {
-    category: "moderationCase",
+type ModerationCaseLogEntry = Extract<LogEntry, { category: "moderationCase" }>;
+
+function toLogEntry(event: ModerationActionRecordedEvent): ModerationCaseLogEntry {
+  const base = {
+    category: "moderationCase" as const,
     guildId: event.guildId,
     createdAt: event.createdAt,
     caseId: event.caseId,
     targetUserId: event.targetUserId,
     moderatorId: event.moderatorId,
-    action: event.action,
     actionType: event.actionType,
     timeoutMinutes: event.timeoutMinutes,
   };
+  return event.action === "create"
+    ? { ...base, action: "create" }
+    : { ...base, action: "resolve", result: event.result, failureCode: event.failureCode };
 }
 
 /**
  * moderation側が発行するmoderation.action.recordedを購読し、moderationCaseカテゴリの
  * ログとして書き込むハンドラ。DomainEventBus.subscribeに渡すことを想定する。
- * entryId(Redis Streamsのエントリid)はstream単位でのみ一意なため、
- * event.typeを前置してlog_entries.id(全体PK)としての一意性を確保する。
- * at-least-once配送による再実行(ハンドラ再試行・XAUTOCLAIMでの再配送)でも
- * ログが重複保存されないようにする。
+ * action="create"/"resolve"は同一caseIdで2回発行され(#350)、log_entries.idにcaseIdを
+ * 使うことで同一行への新規insert/UPDATEとして扱う(writeModerationCaseLogEntry参照)。
+ * entryId(Redis Streamsのエントリid)は他カテゴリの冪等キー(`${type}:${entryId}`)としては
+ * 使われるが、moderationCaseはcaseId自体が冪等キーを兼ねるため使わない。
  */
 export function handleModerationEvent(
   deps: WriteLogEntryDeps,
 ): (event: ModerationActionRecordedEvent, entryId: string) => Promise<void> {
-  return (event, entryId) => writeLogEntry(deps, toLogEntry(event), `${event.type}:${entryId}`);
+  return (event) => writeModerationCaseLogEntry(deps, toLogEntry(event));
 }

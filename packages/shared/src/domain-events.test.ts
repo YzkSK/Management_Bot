@@ -73,4 +73,54 @@ describe("moderationActionRecordedSchema", () => {
       }),
     ).toThrow();
   });
+
+  test("action=resolveはresultを含めてparseできる", () => {
+    const result = moderationActionRecordedSchema.parse({
+      type: "moderation.action.recorded",
+      guildId: "1",
+      caseId: "case-1",
+      targetUserId: "2",
+      moderatorId: "3",
+      action: "resolve",
+      actionType: "ban",
+      result: "failed",
+      failureCode: "member_not_found",
+      createdAt: "2026-08-29T00:00:00.000Z",
+    });
+    expect(result.action).toBe("resolve");
+    if (result.action === "resolve") {
+      expect(result.result).toBe("failed");
+      expect(result.failureCode).toBe("member_not_found");
+    }
+  });
+
+  test("action=resolveでresultが欠けている場合は拒否する", () => {
+    expect(() =>
+      moderationActionRecordedSchema.parse({
+        type: "moderation.action.recorded",
+        guildId: "1",
+        caseId: "case-1",
+        targetUserId: "2",
+        moderatorId: "3",
+        action: "resolve",
+        actionType: "ban",
+        createdAt: "2026-08-29T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  test("action=updateは拒否する(未使用のため選択肢から除外)", () => {
+    expect(() =>
+      moderationActionRecordedSchema.parse({
+        type: "moderation.action.recorded",
+        guildId: "1",
+        caseId: "case-1",
+        targetUserId: "2",
+        moderatorId: "3",
+        action: "update",
+        actionType: "ban",
+        createdAt: "2026-08-29T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
 });

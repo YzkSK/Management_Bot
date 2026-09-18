@@ -36,15 +36,21 @@ function fakeMember(overrides: {
   accountCreatedAt: Date;
   joinedAt: Date;
   bot?: boolean;
-  fetchImpl?: (userId: string) => Promise<{ timeout: ReturnType<typeof mock> }>;
 }) {
   const timeout = mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
-  const fetchedMembers = new Map<string, { timeout: ReturnType<typeof mock> }>();
+  const fetchedMembers = new Map<
+    string,
+    { id: string; guild: { id: string }; timeout: ReturnType<typeof mock> }
+  >();
   const fetch = mock(async (userId: string) => {
     if (!fetchedMembers.has(userId)) {
-      fetchedMembers.set(userId, { timeout: mock(() => Promise.resolve()) });
+      fetchedMembers.set(userId, {
+        id: userId,
+        guild: { id: overrides.guildId },
+        timeout: mock(() => Promise.resolve()),
+      });
     }
     return fetchedMembers.get(userId);
   });
@@ -130,7 +136,13 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     for (const fetched of lastMember?.fetchedMembers.values() ?? []) {
       expect(fetched.timeout).toHaveBeenCalledTimes(1);
     }
-    expect(eventBus.published.filter((e) => e.actionType === "timeout")).toHaveLength(6);
+    // create×6(対象ユーザー全員分)→resolve×6(実行結果、#350)。
+    const timeoutEvents = eventBus.published.filter((e) => e.actionType === "timeout");
+    expect(timeoutEvents).toHaveLength(12);
+    expect(timeoutEvents.filter((e) => e.action === "create")).toHaveLength(6);
+    const resolveEvents = timeoutEvents.filter((e) => e.action === "resolve");
+    expect(resolveEvents).toHaveLength(6);
+    expect(resolveEvents.every((e) => e.action === "resolve" && e.result === "success")).toBe(true);
   });
 
   test("raid: ホワイトリスト対象の入室はカウントされず一括timeoutの対象にもならない", async () => {
@@ -167,9 +179,12 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     await handleGuildMemberAddEvent({ db, redis, eventBus }, second as unknown as GuildMember);
     expect(second.timeout).toHaveBeenCalledTimes(1);
 
-    expect(eventBus.published).toHaveLength(2);
-    expect(eventBus.published[0]?.actionType).toBe("warn");
-    expect(eventBus.published[1]?.actionType).toBe("timeout");
+    // 1件目: warn(create+resolve)、2件目: timeout(create+resolve)の計4件(#350)。
+    expect(eventBus.published).toHaveLength(4);
+    expect(eventBus.published[0]).toMatchObject({ action: "create", actionType: "warn" });
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", actionType: "warn", result: "success" });
+    expect(eventBus.published[2]).toMatchObject({ action: "create", actionType: "timeout" });
+    expect(eventBus.published[3]).toMatchObject({ action: "resolve", actionType: "timeout", result: "success" });
   });
 
   test("raid+new_account_guardが同一入室者に同時ヒットした場合、より重いraidのtimeoutのみが実行される(new_account_guardのtimeoutで上書きされない)", async () => {
@@ -208,6 +223,12 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const timeoutCallArgs = trigger.timeout.mock.calls[0] as unknown[] | undefined;
     const timeoutMs = timeoutCallArgs?.[0] as number | undefined;
     expect(timeoutMs).toBeGreaterThan(5 * 60 * 1000);
+
+    // 実行されなかったnew_account_guard側(trigger分)のcreateには、未解決のまま残さないよう
+    // result="skipped"のresolveがpublishされる(#350)。
+    const skippedResolves = eventBus.published.filter((e) => e.action === "resolve" && e.result === "skipped");
+    expect(skippedResolves).toHaveLength(1);
+    expect(skippedResolves[0]).toMatchObject({ targetUserId: userId, actionType: "timeout" });
   });
 
   test("new_account_guard: 作成から十分経過したアカウントの入室では何も実行されない", async () => {

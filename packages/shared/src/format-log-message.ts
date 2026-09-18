@@ -380,10 +380,15 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       switch (entry.action) {
         case "create":
           return `${moderatorName} が ${targetName} にモデレーション処分を行いました`;
-        case "update":
-          return `${moderatorName} が ${targetName} への処分を更新しました`;
         case "resolve":
-          return `${moderatorName} が ${targetName} への処分を解決しました`;
+          switch (entry.result) {
+            case "success":
+              return `${moderatorName} が ${targetName} への処分を実行しました`;
+            case "failed":
+              return `${moderatorName} が ${targetName} への処分の実行に失敗しました`;
+            case "skipped":
+              return `${moderatorName} が ${targetName} への処分はより重い処分に集約されたためスキップされました`;
+          }
       }
       break;
     }

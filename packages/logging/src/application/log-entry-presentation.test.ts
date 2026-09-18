@@ -22,7 +22,11 @@ describe("getPresentation", () => {
     for (const category of Object.keys(LOG_ENTRY_SCHEMAS) as (keyof typeof LOG_ENTRY_SCHEMAS)[]) {
       if (category === "auditLogCorrelation") continue;
       for (const action of actionsOf(category)) {
-        const presentation = getPresentation({ category, action } as never);
+        const entry =
+          category === "moderationCase" && action === "resolve"
+            ? { category, action, result: "success" }
+            : { category, action };
+        const presentation = getPresentation(entry as never);
         expect(presentation.title, `${category}/${action}`).not.toBe("ログイベント");
         expect(presentation.icon, `${category}/${action}`).not.toBe("ℹ️");
       }

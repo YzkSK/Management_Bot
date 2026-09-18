@@ -70,7 +70,7 @@ describe("executeEscalationAction", () => {
     const message = fakeMessage({}, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" })),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ result: "success" });
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
@@ -159,7 +159,7 @@ describe("executeEscalationAction", () => {
     const message = fakeMessage(null);
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" })),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ result: "failed", failureCode: "member_not_found" });
     expect(message.author.send).not.toHaveBeenCalled();
     expect(message.channel.bulkDelete).not.toHaveBeenCalled();
   });
@@ -169,7 +169,7 @@ describe("executeEscalationAction", () => {
     const message = fakeMessage({ kick });
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "kick" })),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ result: "failed", failureCode: "discord_api_error" });
     expect(message.author.send).not.toHaveBeenCalled();
   });
 

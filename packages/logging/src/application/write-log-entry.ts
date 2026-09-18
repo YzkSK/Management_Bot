@@ -59,7 +59,8 @@ const TRUNCATION_SUFFIX = "…";
  */
 const CORRELATION_SEND_DELAY_MS = 3_000;
 
-async function selectChannelId(db: Db, guildId: string, category: LogEntry["category"]): Promise<string | null> {
+/** guild×categoryの出力先チャンネルIDをDBから直接引く。write-moderation-case-log-entry.tsからも共用する。 */
+export async function selectChannelId(db: Db, guildId: string, category: LogEntry["category"]): Promise<string | null> {
   const [channelSetting] = await db
     .select({ channelId: logChannelSettings.channelId })
     .from(logChannelSettings)
