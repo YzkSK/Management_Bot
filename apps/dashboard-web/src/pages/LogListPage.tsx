@@ -9,6 +9,7 @@ import {
   diffPermissions,
   formatChangeValue,
   formatLogMessage,
+  isBulkDeleteLogEntry,
   summarizeLogEntry,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
@@ -247,6 +248,48 @@ export function LogListPage() {
 
                     {isExpanded && (
                       <div id={detailId} className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                        {isBulkDeleteLogEntry(entry) && (
+                          <section aria-label="削除されたメッセージ" className="flex flex-col gap-2 rounded-md border bg-card p-3">
+                            <h2 className="text-sm font-semibold">削除されたメッセージ（{entry.deletedMessages.length}件）</h2>
+                            {entry.deletedMessages.map((deletedMessage, index) => (
+                              <article
+                                key={deletedMessage.messageId ?? `${deletedMessage.authorId}-${index}`}
+                                className="flex flex-col gap-2 rounded-md border p-3"
+                              >
+                                <p className="text-sm font-medium">{deletedMessage.authorName ?? deletedMessage.authorId}</p>
+                                <p className="text-sm whitespace-pre-wrap">{deletedMessage.content || "本文なし"}</p>
+                                <p className="text-muted-foreground font-mono text-xs">
+                                  メッセージ ID: {deletedMessage.messageId ?? "取得不可"}
+                                </p>
+                                {deletedMessage.attachments && deletedMessage.attachments.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {deletedMessage.attachments.map((attachment) =>
+                                      attachment.contentType?.startsWith("image/") ? (
+                                        <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
+                                          <img
+                                            src={attachment.url}
+                                            alt={attachment.filename}
+                                            className="h-24 w-24 rounded-md border object-cover"
+                                          />
+                                        </a>
+                                      ) : (
+                                        <a
+                                          key={attachment.url}
+                                          href={attachment.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-sm text-primary underline"
+                                        >
+                                          {attachment.filename}
+                                        </a>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
+                              </article>
+                            ))}
+                          </section>
+                        )}
                         {(summary.content !== null || summary.previousContent !== null) && (
                           <div className="rounded-md border bg-card p-3">
                             {summary.previousContent !== null && (

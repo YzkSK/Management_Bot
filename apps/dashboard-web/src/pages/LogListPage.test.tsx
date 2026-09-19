@@ -447,4 +447,59 @@ describe("LogListPage", () => {
     expect(html).toContain("新しい名前");
     mock.restore();
   });
+  test("集約bulkDeleteを展開すると投稿者・本文・添付ファイル・メッセージIDを表示する", () => {
+    const expandedIds = new Set(["log-bulk"]);
+    let expandedStateInitialized = false;
+    mock.module("react", () => ({
+      ...React,
+      useState: <T,>(initialValue: T) => {
+        if (!expandedStateInitialized && initialValue instanceof Set && initialValue.size === 0) {
+          expandedStateInitialized = true;
+          return [expandedIds, mock<React.Dispatch<React.SetStateAction<Set<string>>>>()] as [T, React.Dispatch<React.SetStateAction<T>>];
+        }
+        return reactUseState(initialValue);
+      },
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-bulk",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-20T00:00:00.000Z",
+              channelId: "c1",
+              action: "bulkDelete",
+              deletedMessages: [
+                {
+                  messageId: "m1",
+                  authorId: "u1",
+                  authorName: "投稿者A",
+                  content: "削除本文A",
+                  attachments: [{ url: "https://cdn.discordapp.com/a.png", filename: "a.png", contentType: "image/png" }],
+                },
+                { messageId: "m2", authorId: "u2" },
+              ],
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("2件のメッセージが一括削除されました");
+    expect(html).toContain("削除されたメッセージ");
+    expect(html).toContain("投稿者A");
+    expect(html).toContain("削除本文A");
+    expect(html).toContain("u2");
+    expect(html).toContain("本文なし");
+    expect(html).toContain("メッセージ ID: m1");
+    expect(html).toContain("a.png");
+    mock.restore();
+  });
 });
