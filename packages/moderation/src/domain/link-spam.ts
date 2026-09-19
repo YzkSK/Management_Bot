@@ -1,6 +1,20 @@
 import { countMentions } from "./mention-spam.js";
 
 /**
+ * Discord招待リンクのURL部分(https?://含む)を検出して除去するための正規表現。
+ * invite-link.tsのINVITE_LINK_PATTERNとホスト部分は同じだが、こちらはプロトコル・
+ * 招待コード自体も含めて丸ごとマッチさせ、メンション併用判定のURL検出対象から
+ * 除外するために使う(招待リンクの検知はinvite_link専用とする、Codexレビュー指摘)。
+ */
+const DISCORD_INVITE_URL_PATTERN =
+  /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-zA-Z0-9-]+/gi;
+
+/** メンション併用等の判定の前に、Discord招待リンク部分を本文から取り除く。 */
+function stripDiscordInviteUrls(content: string): string {
+  return content.replace(DISCORD_INVITE_URL_PATTERN, "");
+}
+
+/**
  * URLに一般的に使われる短縮ドメインの固定リスト。展開はSSRFリスクがあるため行わず、
  * ドメイン名の一致のみで判定する(改善案5.6節: 短縮URL展開は初期実装では見送り)。
  */
@@ -43,8 +57,9 @@ const PROMOTIONAL_PHRASES = [
 
 /**
  * メンション併用判定用のURL検出。プロトコルあり("https://...")に加え、
- * プロトコルなしのドメイン形式(例: "discord.gg/abc", "example.com/path")も拾う
- * (Codexレビュー指摘: プロトコル必須だとdiscord.gg等の招待リンクを見落とす)。
+ * プロトコルなしのドメイン形式(例: "example.com/path")も拾う。
+ * 呼び出し側(scoreLinkSpam)でDiscord招待リンク部分を除去した本文を渡すため、
+ * ここでは招待ドメインを個別に除外する必要はない。
  */
 const URL_PATTERN = /https?:\/\/\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\/\S*/i;
 
@@ -75,7 +90,10 @@ export function scoreLinkSpam(input: LinkSpamScoreInput): number {
     score += 20;
   }
   if (PROMOTIONAL_PHRASES.some((phrase) => input.content.includes(phrase))) score += 15;
-  if (countMentions(input.content) > 0 && URL_PATTERN.test(input.content)) score += 20;
+  // メンション併用のURL判定はDiscord招待リンク部分を除いた本文で行う(招待リンクの検知は
+  // invite_link専用とし、link_spam側で間接的にヒットさせて二重にstrikeが加算されるのを防ぐ)。
+  const contentWithoutInviteUrls = stripDiscordInviteUrls(input.content);
+  if (countMentions(contentWithoutInviteUrls) > 0 && URL_PATTERN.test(contentWithoutInviteUrls)) score += 20;
   if (SHORTENED_URL_PATTERN.test(input.content)) score += 10;
 
   return score;

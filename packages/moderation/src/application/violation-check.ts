@@ -4,7 +4,6 @@ import {
   LINK_SPAM_PRESETS,
   MENTION_SPAM_PRESETS,
   countMentions,
-  extractInviteCodes,
   findMatchingNgword,
   hasCumulativeMentionSpam,
   hasFloodHit,
@@ -175,17 +174,18 @@ export function checkInviteLink(message: IncomingMessage, resolvedGuildIds: read
 
 /**
  * link_spam判定(外部リンク・宣伝のスコア方式検知、改善案5.6節)。副作用なし。
- * Discord招待コードを含むメッセージはinvite_link専用とし、link_spamの採点対象から
- * 完全に除外する(両方有効化時の二重strike加算を避けるため、Codexレビュー指摘)。
- * 単に「外部招待」項目をスコアから外すだけでは、招待リンクがメンション併用等の
- * 他の採点項目(プロトコルなしURLとして拾われる)経由で間接的にヒットしてしまうため、
- * メッセージ単位でスキップする必要がある。DBアクセス・Discord API呼び出しを伴わない。
+ * 「外部Discord招待」自体は採点項目に含めない(invite_linkとの役割重複、Codexレビュー指摘)。
+ * ただし招待コードの有無でメッセージ単位に判定をスキップすることはしない
+ * (extractInviteCodesは候補抽出であり安全側=過剰検知寄りの設計のため、除外条件として使うと
+ * 実際には招待でない文字列を紛れ込ませるだけでlink_spamの検知を回避できてしまう、
+ * Codexレビュー再指摘)。invite_linkと同一メッセージで両方ヒットした場合の二重strike対策は
+ * 呼び出し側(handleMessageCreate/handleMessageUpdate)でのアクション集約に委ねる。
+ * DBアクセス・Discord API呼び出しを伴わない。
  */
 export function checkLinkSpam(message: IncomingMessage, preset: ModerationPreset): ViolationCheck {
-  const hasInviteCode = extractInviteCodes(message.content).length > 0;
   const msSinceJoined =
     message.joinedAt !== undefined ? message.createdAt.getTime() - message.joinedAt.getTime() : undefined;
-  const score = hasInviteCode ? 0 : scoreLinkSpam({ content: message.content, msSinceJoined });
+  const score = scoreLinkSpam({ content: message.content, msSinceJoined });
   return {
     hit: hasLinkSpamHit(score, LINK_SPAM_PRESETS[preset].deleteThreshold),
     strikeLockWindowSeconds: LINK_SPAM_STRIKE_LOCK_WINDOW_SECONDS,

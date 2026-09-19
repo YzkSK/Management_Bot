@@ -891,8 +891,10 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const now = new Date();
-      // メンション併用(20) + 参加24時間以内(20) = 40点 >= strong閾値35のため、
-      // extractInviteCodesでの除外がなければlink_spamも誤ってヒットしてしまう。
+      // Discord招待リンク部分はメンション併用判定の対象から除外されるため
+      // (link-spam.tsのstripDiscordInviteUrls参照)、参加24時間以内(20点)のみで
+      // strong閾値35点未満となりlink_spamはヒットしない。招待リンクを検知した際、
+      // メンション併用のような他の採点項目経由で間接的にlink_spamへ二重加算されないことを確認する。
       const result = await detectAndEscalate(
         deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
         message({

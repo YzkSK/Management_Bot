@@ -32,8 +32,13 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://example.com/join" }))).toBe(20);
   });
 
-  test("メンションとURL(プロトコルなし)の併用でも20点(Codexレビュー指摘: discord.gg等の招待リンクも拾う)", () => {
-    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg/abc123" }))).toBe(20);
+  test("メンションとURL(プロトコルなし・一般ドメイン)の併用でも20点", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> example.com/join" }))).toBe(20);
+  });
+
+  test("メンションとDiscord招待リンクの併用は加点されない(招待の検知はinvite_link専用、Codexレビュー指摘の回帰テスト)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg/abc123" }))).toBe(0);
+    expect(scoreLinkSpam(baseInput({ content: "<@123> https://discord.com/invite/abc123" }))).toBe(0);
   });
 
   test("メンションのみ(URLなし)は加点されない", () => {
