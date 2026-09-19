@@ -73,14 +73,16 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              logsQuery.data.entries.flatMap(({ entry }) =>
+              logsQuery.data.entries.flatMap(({ entry, collapsedEntries }) =>
+                [entry, ...(collapsedEntries?.map(({ entry: collapsedEntry }) => collapsedEntry) ?? [])].flatMap((visibleEntry) =>
                 USER_ID_FIELDS.flatMap((key) => {
                   // スナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
                   const snapshotField = SNAPSHOT_FIELD_BY_ID_FIELD[key];
-                  if (snapshotField && snapshotField in entry && entry[snapshotField as keyof typeof entry]) return [];
-                  const value = entry[key as keyof typeof entry];
+                  if (snapshotField && snapshotField in visibleEntry && visibleEntry[snapshotField as keyof typeof visibleEntry]) return [];
+                  const value = visibleEntry[key as keyof typeof visibleEntry];
                   return typeof value === "string" ? [value] : [];
                 }),
+                ),
               ),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
@@ -93,13 +95,14 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              logsQuery.data.entries.flatMap(({ entry }) => {
-                const direct = Object.entries(entry).flatMap(([key, value]) =>
+              logsQuery.data.entries.flatMap(({ entry, collapsedEntries }) =>
+                [entry, ...(collapsedEntries?.map(({ entry: collapsedEntry }) => collapsedEntry) ?? [])].flatMap((visibleEntry) => {
+                const direct = Object.entries(visibleEntry).flatMap(([key, value]) =>
                   (key === "channelId" || key === "previousChannelId" || key === "threadId") && typeof value === "string"
                     ? [value]
                     : [],
                 );
-                const changes = "changes" in entry && entry.changes ? entry.changes : {};
+                const changes = "changes" in visibleEntry && visibleEntry.changes ? visibleEntry.changes : {};
                 const fromChanges = Object.entries(changes).flatMap(([field, change]) =>
                   CHANNEL_REFERENCE_CHANGE_FIELDS.has(field)
                     ? [change.before, change.after].filter((v): v is string => typeof v === "string")
@@ -107,6 +110,7 @@ export function LogListPage() {
                 );
                 return [...direct, ...fromChanges];
               }),
+              ),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
@@ -219,12 +223,14 @@ export function LogListPage() {
             <p className="text-muted-foreground text-sm">該当するログはありません。</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {logsQuery.data.entries.map(({ id, entry }) => {
+              {logsQuery.data.entries.map(({ id, entry, collapsedEntries }) => {
                 const summary = summarizeLogEntry(entry);
                 const names = { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
                 const message = formatLogMessage(entry, summary, names);
                 const isExpanded = expandedIds.has(id);
                 const detailId = `log-detail-${id}`;
+                const collapsedDetailId = `collapsed-log-detail-${id}`;
+                const isCollapsedExpanded = expandedIds.has(`collapsed-${id}`);
 
                 return (
                   <div key={id} className="rounded-lg border">
@@ -411,6 +417,66 @@ export function LogListPage() {
                           </details>
                         )}
                       </div>
+                    )}
+
+                    {collapsedEntries && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(`collapsed-${id}`)}
+                          aria-expanded={isCollapsedExpanded}
+                          aria-controls={collapsedDetailId}
+                          className="flex w-full items-center gap-3 border-t px-3 py-2 text-left hover:bg-accent/50"
+                        >
+                          <span
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: CATEGORY_ACCENT.message }}
+                            aria-hidden="true"
+                          />
+                          <span className="flex-1 text-sm">削除された投稿ログ（{collapsedEntries.length}件）</span>
+                        </button>
+                        {isCollapsedExpanded && (
+                          <div id={collapsedDetailId} className="flex flex-col gap-2 border-t bg-muted/40 p-3">
+                            {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry }) => {
+                              const collapsedSummary = summarizeLogEntry(collapsedEntry);
+                              const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, names);
+                              return (
+                                <article key={collapsedId} className="flex flex-col gap-2 rounded-md border bg-card p-3">
+                                  <p className="text-sm">{collapsedMessage}</p>
+                                  {collapsedSummary.content !== null && (
+                                    <p className="text-sm whitespace-pre-wrap">{collapsedSummary.content || "本文なし"}</p>
+                                  )}
+                                  {collapsedSummary.attachments !== null && collapsedSummary.attachments.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {collapsedSummary.attachments.map((attachment) =>
+                                        attachment.contentType?.startsWith("image/") ? (
+                                          <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
+                                            <img
+                                              src={attachment.url}
+                                              alt={attachment.filename}
+                                              className="h-24 w-24 rounded-md border object-cover"
+                                            />
+                                          </a>
+                                        ) : (
+                                          <a
+                                            key={attachment.url}
+                                            href={attachment.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-sm text-primary underline"
+                                          >
+                                            {attachment.filename}
+                                          </a>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+                                </article>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 );
