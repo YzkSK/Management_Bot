@@ -881,6 +881,32 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       expect(result.outcomes).toHaveLength(1);
       expect(result.outcomes[0]?.violationType).toBe("invite_link");
     });
+
+    test("参加24時間以内のユーザーがメンション付き外部招待を投稿しても、二重加算されない(Codexレビュー指摘: プロトコルなしURL検出緩和後の再発ケース)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values([
+        { guildId, violationType: "invite_link", preset: "medium", enabled: true },
+        { guildId, violationType: "link_spam", preset: "strong", enabled: true },
+      ]);
+
+      const eventBus = fakeEventBus();
+      const now = new Date();
+      // メンション併用(20) + 参加24時間以内(20) = 40点 >= strong閾値35のため、
+      // extractInviteCodesでの除外がなければlink_spamも誤ってヒットしてしまう。
+      const result = await detectAndEscalate(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({
+          guildId,
+          userId,
+          content: "<@123> discord.gg/external",
+          createdAt: now,
+          joinedAt: new Date(now.getTime() - 60 * 60 * 1000),
+        }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("invite_link");
+    });
   });
 
   describe("detectAndEscalateOnEdit(#362-7.1)", () => {

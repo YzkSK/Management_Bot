@@ -18,11 +18,13 @@ const SHORTENED_URL_DOMAINS = [
 /**
  * メッセージ本文はプロトコルなしで書かれることも多いため、"https?://"を必須にしない。
  * パスなし(例: "https://bit.ly")でも検知できるよう、ドメイン直後の"/"も必須にしない
- * (Codexレビュー指摘)。ただし末尾に"(?![\w.-])"を付け、"bit.ly-lookalike.com"のような
- * 別ドメインへの部分一致(誤検知)は除外する。
+ * (Codexレビュー指摘)。ドメイン名の前後に"(?<![\w.-])"/"(?![\w.-])"を付け、
+ * "foo-bit.ly"や"foo.bit.ly"、"bit.ly-lookalike.com"のような別ドメインへの
+ * 部分一致(誤検知)を除外する(invite-link.tsのINVITE_LINK_PATTERNと同じ方式、
+ * Codexレビュー指摘: \bだけでは"."/"-"の前後でも成立してしまい先頭側の誤検知を防げない)。
  */
 const SHORTENED_URL_PATTERN = new RegExp(
-  `\\b(?:https?:\\/\\/)?(?:www\\.)?(?:${SHORTENED_URL_DOMAINS.map((d) => d.replace(".", "\\.")).join("|")})(?![\\w.-])(?:\\/\\S*)?`,
+  `(?<![\\w.-])(?:https?:\\/\\/)?(?:www\\.)?(?:${SHORTENED_URL_DOMAINS.map((d) => d.replace(".", "\\.")).join("|")})(?![\\w.-])(?:\\/\\S*)?`,
   "i",
 );
 

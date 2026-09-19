@@ -56,8 +56,13 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "https://bit.ly" }))).toBe(10);
   });
 
-  test("短縮URLでないドメインは加点されない", () => {
+  test("短縮URLでないドメインは加点されない(末尾側の部分一致)", () => {
     expect(scoreLinkSpam(baseInput({ content: "https://example.com/bit.ly-lookalike" }))).toBe(0);
+  });
+
+  test("短縮URLドメインの先頭側部分一致は加点されない(Codexレビュー指摘の回帰テスト)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "https://foo-bit.ly/x" }))).toBe(0);
+    expect(scoreLinkSpam(baseInput({ content: "https://foo.bit.ly/x" }))).toBe(0);
   });
 
   test("複数項目該当時は合算される", () => {
