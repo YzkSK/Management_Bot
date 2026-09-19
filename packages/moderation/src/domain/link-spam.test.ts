@@ -2,16 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { hasLinkSpamHit, scoreLinkSpam } from "./link-spam.js";
 
 function baseInput(overrides: Partial<Parameters<typeof scoreLinkSpam>[0]> = {}) {
-  return { content: "hello", hasExternalInvite: false, msSinceJoined: undefined, ...overrides };
+  return { content: "hello", msSinceJoined: undefined, ...overrides };
 }
 
 describe("scoreLinkSpam", () => {
   test("何も該当しなければ0点", () => {
     expect(scoreLinkSpam(baseInput())).toBe(0);
-  });
-
-  test("外部Discord招待で50点", () => {
-    expect(scoreLinkSpam(baseInput({ hasExternalInvite: true }))).toBe(50);
   });
 
   test("参加24時間以内(ちょうど境界)で20点", () => {
@@ -32,8 +28,12 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "サーバー宣伝させてください" }))).toBe(15);
   });
 
-  test("メンションとURLの併用で20点", () => {
+  test("メンションとURL(プロトコルあり)の併用で20点", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://example.com/join" }))).toBe(20);
+  });
+
+  test("メンションとURL(プロトコルなし)の併用でも20点(Codexレビュー指摘: discord.gg等の招待リンクも拾う)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg/abc123" }))).toBe(20);
   });
 
   test("メンションのみ(URLなし)は加点されない", () => {
@@ -44,8 +44,16 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "https://example.com" }))).toBe(0);
   });
 
-  test("短縮URLドメインで10点", () => {
+  test("短縮URLドメイン(プロトコル+パスあり)で10点", () => {
     expect(scoreLinkSpam(baseInput({ content: "check this out https://bit.ly/abc123" }))).toBe(10);
+  });
+
+  test("短縮URLドメイン(プロトコルなし)でも10点", () => {
+    expect(scoreLinkSpam(baseInput({ content: "check this out bit.ly/abc123" }))).toBe(10);
+  });
+
+  test("短縮URLドメイン(パスなし)でも10点(Codexレビュー指摘)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "https://bit.ly" }))).toBe(10);
   });
 
   test("短縮URLでないドメインは加点されない", () => {
@@ -56,11 +64,10 @@ describe("scoreLinkSpam", () => {
     const oneHourMs = 60 * 60 * 1000;
     const score = scoreLinkSpam({
       content: "<@123> サーバー宣伝 https://bit.ly/abc",
-      hasExternalInvite: true,
       msSinceJoined: oneHourMs,
     });
-    // 外部招待50 + 参加24時間以内20 + 宣伝語句15 + メンション併用20 + 短縮URL10 = 115
-    expect(score).toBe(115);
+    // 参加24時間以内20 + 宣伝語句15 + メンション併用20 + 短縮URL10 = 65
+    expect(score).toBe(65);
   });
 });
 

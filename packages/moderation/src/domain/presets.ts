@@ -51,11 +51,17 @@ export interface LinkSpamPresetConfig {
   deleteThreshold: number;
 }
 
-/** 外部リンク・宣伝のスコア方式検知(改善案5.6節)のプリセット。strikeによる段階的処罰は既存のESCALATION_STEPSに委ねる。 */
+/**
+ * 外部リンク・宣伝のスコア方式検知(改善案5.6節)のプリセット。strikeによる段階的処罰は
+ * 既存のESCALATION_STEPSに委ねる。採点項目から外部Discord招待(+50点、invite_linkとの
+ * 役割重複のため対象外、scoreLinkSpamのコメント参照)を除いたため、理論上の最大スコアは
+ * 65点(参加24時間以内20+宣伝語句15+メンション併用20+短縮URL10)。各閾値はこの範囲に収まる
+ * よう設定する(Codexレビュー指摘: 旧weak閾値80点は最大スコアを超えヒットし得なかった)。
+ */
 export const LINK_SPAM_PRESETS: Readonly<Record<ModerationPreset, LinkSpamPresetConfig>> = {
-  weak: { deleteThreshold: 80 },
-  medium: { deleteThreshold: 65 },
-  strong: { deleteThreshold: 50 },
+  weak: { deleteThreshold: 55 },
+  medium: { deleteThreshold: 45 },
+  strong: { deleteThreshold: 35 },
 };
 
 export interface RaidPresetConfig {

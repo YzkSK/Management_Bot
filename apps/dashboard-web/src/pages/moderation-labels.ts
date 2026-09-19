@@ -67,9 +67,9 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
   },
   // packages/moderation/src/domain/presets.ts のLINK_SPAM_PRESETSをUI表示用に説明文化したもの。
   link_spam: {
-    weak: "外部招待・宣伝語句・メンション併用・短縮URL等のスコア合計が80点以上で検知",
-    medium: "外部招待・宣伝語句・メンション併用・短縮URL等のスコア合計が65点以上で検知",
-    strong: "外部招待・宣伝語句・メンション併用・短縮URL等のスコア合計が50点以上で検知",
+    weak: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が55点以上で検知",
+    medium: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が45点以上で検知",
+    strong: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が35点以上で検知",
   },
   // packages/moderation/src/domain/presets.ts のRAID_PRESETSをUI表示用に説明文化したもの。
   // 新規アカウント比率が閾値以上、または同一ギルドでの検知が2回目以降の場合は

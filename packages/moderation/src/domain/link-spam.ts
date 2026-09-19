@@ -15,8 +15,14 @@ const SHORTENED_URL_DOMAINS = [
   "rebrand.ly",
 ] as const;
 
+/**
+ * メッセージ本文はプロトコルなしで書かれることも多いため、"https?://"を必須にしない。
+ * パスなし(例: "https://bit.ly")でも検知できるよう、ドメイン直後の"/"も必須にしない
+ * (Codexレビュー指摘)。ただし末尾に"(?![\w.-])"を付け、"bit.ly-lookalike.com"のような
+ * 別ドメインへの部分一致(誤検知)は除外する。
+ */
 const SHORTENED_URL_PATTERN = new RegExp(
-  `\\bhttps?:\\/\\/(?:www\\.)?(?:${SHORTENED_URL_DOMAINS.map((d) => d.replace(".", "\\.")).join("|")})\\/`,
+  `\\b(?:https?:\\/\\/)?(?:www\\.)?(?:${SHORTENED_URL_DOMAINS.map((d) => d.replace(".", "\\.")).join("|")})(?![\\w.-])(?:\\/\\S*)?`,
   "i",
 );
 
@@ -33,12 +39,15 @@ const PROMOTIONAL_PHRASES = [
   "参加してね",
 ] as const;
 
-const URL_PATTERN = /https?:\/\/\S+/i;
+/**
+ * メンション併用判定用のURL検出。プロトコルあり("https://...")に加え、
+ * プロトコルなしのドメイン形式(例: "discord.gg/abc", "example.com/path")も拾う
+ * (Codexレビュー指摘: プロトコル必須だとdiscord.gg等の招待リンクを見落とす)。
+ */
+const URL_PATTERN = /https?:\/\/\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\/\S*/i;
 
 export interface LinkSpamScoreInput {
   content: string;
-  /** メッセージに他ギルドへの招待リンクが含まれるか(checkInviteLinkと同じ判定基準)。 */
-  hasExternalInvite: boolean;
   /**
    * 投稿者がこのguildに参加してから経過した時間(ミリ秒)。undefinedの場合は
    * 参加時刻不明として「参加24時間以内」の加点対象にしない(安全側ではなく、
@@ -52,13 +61,14 @@ const RECENTLY_JOINED_MS = 24 * 60 * 60 * 1000;
 
 /**
  * 外部リンク・宣伝行為をスコア方式で採点する純粋関数(改善案5.6節)。
- * 採点項目は初期実装スコープの5項目のみ(許可チャンネル・複数チャンネル同文投稿は対象外、#369)。
- * URLを含まないメッセージ(招待リンクのみのケース含む)でも宣伝語句・メンション等は独立に加点する。
+ * 改善案の採点表にある「外部Discord招待(+50点)」は、既存のinvite_link違反種別と
+ * 役割が重複し、両方を有効化した場合に同一メッセージへ二重にstrikeが加算されてしまう
+ * ため対象外とする(Codexレビュー指摘、外部招待の検知はinvite_link専用とする)。
+ * 採点項目は初期実装スコープの4項目のみ(許可チャンネル・複数チャンネル同文投稿も対象外、#369)。
  */
 export function scoreLinkSpam(input: LinkSpamScoreInput): number {
   let score = 0;
 
-  if (input.hasExternalInvite) score += 50;
   if (input.msSinceJoined !== undefined && input.msSinceJoined >= 0 && input.msSinceJoined <= RECENTLY_JOINED_MS) {
     score += 20;
   }

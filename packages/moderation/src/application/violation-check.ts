@@ -174,19 +174,13 @@ export function checkInviteLink(message: IncomingMessage, resolvedGuildIds: read
 
 /**
  * link_spam判定(外部リンク・宣伝のスコア方式検知、改善案5.6節)。副作用なし。
- * resolvedGuildIds(invite_linkと同じ解決結果)から外部招待の有無を導出してスコアに加点する。
+ * 外部招待の検知はinvite_link専用とする(両方有効化時の二重strike加算を避けるため、
+ * Codexレビュー指摘)。DBアクセス・Discord API呼び出しを伴わない。
  */
-export function checkLinkSpam(
-  message: IncomingMessage,
-  preset: ModerationPreset,
-  resolvedGuildIds: readonly (string | null)[],
-): ViolationCheck {
-  const hasExternalInvite = resolvedGuildIds.some(
-    (resolvedGuildId) => resolvedGuildId === null || resolvedGuildId !== message.guildId,
-  );
+export function checkLinkSpam(message: IncomingMessage, preset: ModerationPreset): ViolationCheck {
   const msSinceJoined =
     message.joinedAt !== undefined ? message.createdAt.getTime() - message.joinedAt.getTime() : undefined;
-  const score = scoreLinkSpam({ content: message.content, hasExternalInvite, msSinceJoined });
+  const score = scoreLinkSpam({ content: message.content, msSinceJoined });
   return {
     hit: hasLinkSpamHit(score, LINK_SPAM_PRESETS[preset].deleteThreshold),
     strikeLockWindowSeconds: LINK_SPAM_STRIKE_LOCK_WINDOW_SECONDS,

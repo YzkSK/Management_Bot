@@ -175,8 +175,7 @@ async function prepareAndCheckViolation(
   }
 
   if (violationType === "link_spam") {
-    const resolvedGuildIds = await resolveInviteCodes(deps, message);
-    return checkLinkSpam(message, preset, resolvedGuildIds);
+    return checkLinkSpam(message, preset);
   }
 
   throw new Error(`unhandled violationType: ${violationType satisfies never}`);
@@ -297,8 +296,10 @@ export async function detectAndEscalate(
 }
 
 /**
- * messageUpdateを起点に、編集後の内容でngword/invite_linkのみ再検知するユースケース(改善案7.1節)。
- * 投稿後に編集でNGワード・招待リンクを後から仕込む回避を防ぐ。
+ * messageUpdateを起点に、編集後の内容でngword/invite_link/link_spamのみ再検知する
+ * ユースケース(改善案7.1節)。投稿後に編集でNGワード・招待リンク・宣伝文等を
+ * 後から仕込む回避を防ぐ。link_spamはメッセージ単体で判定でき、バッファ・累積状態を
+ * 伴わないため編集検知の対象に含められる(Codexレビュー指摘、#369)。
  * flood/duplicate_content(バッファ内の他メッセージとの比較が前提)とmention_spam(Redisバッファへの
  * 累積プッシュを伴い、編集のたびに再実行すると二重カウントになる)は対象外とする。
  * claimAndPushMessageによる同一messageIdの再処理防止は使わない(バッファに触れないため不要であり、
@@ -316,9 +317,10 @@ export async function detectAndEscalateOnEdit(
     return { outcomes: [], lockedMessageIds: [] };
   }
 
+  const EDIT_VIOLATION_TYPES = ["ngword", "invite_link", "link_spam"] as const;
   const thresholds = snapshot.enabledThresholds.filter(
-    (t): t is EnabledThreshold & { violationType: "ngword" | "invite_link" } =>
-      t.violationType === "ngword" || t.violationType === "invite_link",
+    (t): t is EnabledThreshold & { violationType: (typeof EDIT_VIOLATION_TYPES)[number] } =>
+      (EDIT_VIOLATION_TYPES as readonly string[]).includes(t.violationType),
   );
   if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
 

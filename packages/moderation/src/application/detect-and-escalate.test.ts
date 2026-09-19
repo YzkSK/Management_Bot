@@ -806,17 +806,17 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
   });
 
   describe("link_spam検知(#369)", () => {
-    test("外部招待+メンション併用のスコア合計がstrong presetの閾値(50)以上ならlink_spamとして検知される", async () => {
+    test("宣伝語句+メンション併用+短縮URLのスコア合計がstrong presetの閾値(35)以上ならlink_spamとして検知される", async () => {
       const userId = `u-${randomUUID()}`;
       await db
         .insert(moderationThresholds)
         .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
 
       const eventBus = fakeEventBus();
-      // 外部招待50 + メンション併用20 = 70点 >= strong閾値50
+      // 宣伝語句15 + メンション併用20 + 短縮URL10 = 45点 >= strong閾値35
       const result = await detectAndEscalate(
-        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
-        message({ guildId, userId, content: "<@123> discord.gg/other-guild-code" }),
+        deps(eventBus),
+        message({ guildId, userId, content: "<@123> サーバー宣伝 bit.ly/abc" }),
       );
 
       expect(result.outcomes).toHaveLength(1);
@@ -830,7 +830,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
 
       const eventBus = fakeEventBus();
-      // 宣伝語句15点のみ < strong閾値50
+      // 宣伝語句15点のみ < strong閾値35
       const result = await detectAndEscalate(
         deps(eventBus),
         message({ guildId, userId, content: "サーバー宣伝します" }),
@@ -847,13 +847,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       const eventBus = fakeEventBus();
       const now = new Date();
-      // 外部招待50 + 参加24時間以内20 = 70点 >= strong閾値50
+      // 参加24時間以内20 + 宣伝語句15 = 35点 >= strong閾値35(境界)
       const result = await detectAndEscalate(
-        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        deps(eventBus),
         message({
           guildId,
           userId,
-          content: "discord.gg/other-guild-code",
+          content: "サーバー宣伝します",
           createdAt: now,
           joinedAt: new Date(now.getTime() - 60 * 60 * 1000),
         }),
@@ -861,6 +861,25 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       expect(result.outcomes).toHaveLength(1);
       expect(result.outcomes[0]?.violationType).toBe("link_spam");
+    });
+
+    test("invite_linkとlink_spamを両方有効化しても、外部招待の投稿はinvite_linkのみで検知されlink_spam側は二重加算しない(Codexレビュー指摘の回帰テスト)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values([
+        { guildId, violationType: "invite_link", preset: "medium", enabled: true },
+        { guildId, violationType: "link_spam", preset: "strong", enabled: true },
+      ]);
+
+      const eventBus = fakeEventBus();
+      // 招待リンクのみでlink_spam側の採点対象(宣伝語句・メンション併用・短縮URL・参加時間)には
+      // 一切該当しないメッセージ。invite_linkのみがヒットし、link_spamは検知されないはず。
+      const result = await detectAndEscalate(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({ guildId, userId, content: "discord.gg/other-guild-code" }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("invite_link");
     });
   });
 
@@ -902,6 +921,23 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
 
       expect(result.outcomes).toHaveLength(1);
       expect(result.outcomes[0]?.violationType).toBe("invite_link");
+    });
+
+    test("編集後の内容が宣伝スコア閾値以上ならlink_spamとして検知される(#369)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
+
+      const eventBus = fakeEventBus();
+      // 宣伝語句15 + メンション併用20 + 短縮URL10 = 45点 >= strong閾値35
+      const result = await detectAndEscalateOnEdit(
+        deps(eventBus),
+        message({ guildId, userId, content: "<@123> サーバー宣伝 bit.ly/abc" }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("link_spam");
     });
 
     test("flood/duplicate_content/mention_spamはthresholdが有効でも対象外", async () => {
