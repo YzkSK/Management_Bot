@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { Redis } from "ioredis";
 import { handleModerationEvent } from "./handle-moderation-event.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
-const STREAM = "domain-events:moderation.action.recorded";
 
 async function isRedisAvailable(): Promise<boolean> {
   const probe = new Redis(REDIS_URL, { retryStrategy: () => null, lazyConnect: true });
@@ -37,12 +36,6 @@ function fakeDb(inserts: { values: unknown }[]): Db {
 }
 
 describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合テスト", () => {
-  afterEach(async () => {
-    const raw = new Redis(REDIS_URL);
-    await raw.del(STREAM);
-    await raw.quit();
-  });
-
   test("moderation側がpublishしたイベントをloggingが購読しログ書き込みまで完了する", async () => {
     const group = randomUUID();
     const publisherBus = new DomainEventBus(REDIS_URL, group);
@@ -54,6 +47,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合�
 
     try {
       await subscriberBus.subscribe("moderation.action.recorded", async (event, entryId) => {
+        if (event.guildId !== "g1") return;
         await handleModerationEvent({ db, sendToChannel })(event, entryId);
         written.resolve();
       });
@@ -67,6 +61,13 @@ describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合�
         moderatorId: "mod1",
         action: "create",
         actionType: "kick",
+        incident: {
+          violationType: "ngword",
+          score: null,
+          matchedMessageCount: 1,
+          deletedMessageCount: 1,
+          strikeCount: 1,
+        },
         createdAt: "2026-08-31T00:00:00.000Z",
       });
 
@@ -82,7 +83,11 @@ describe.skipIf(!(await isRedisAvailable()))("moderation.action.recorded 結合�
       expect(inserts[0]?.values).toMatchObject({
         guildId: "g1",
         category: "moderationCase",
-        payload: { actionType: "kick", caseId: "case-1" },
+        payload: {
+          actionType: "kick",
+          caseId: "case-1",
+          incident: { violationType: "ngword", strikeCount: 1 },
+        },
       });
     } finally {
       await Promise.all([publisherBus.close(), subscriberBus.close()]);

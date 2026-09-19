@@ -157,6 +157,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
       },
     ]);
     expect(eventBus.published).toHaveLength(1);
@@ -212,6 +213,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
       },
     ]);
     expect(eventBus.published).toHaveLength(1);
@@ -260,6 +262,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        incident: expect.objectContaining({ violationType: "duplicate_content", strikeCount: 1, score: null }),
       },
     ]);
   });
@@ -462,6 +465,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: [messageId],
+        incident: expect.objectContaining({ violationType: "ngword", strikeCount: 1, score: null }),
       },
     ]);
   });
@@ -538,6 +542,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: [messageId],
+        incident: expect.objectContaining({ violationType: "mention_spam", strikeCount: 1, score: null }),
       },
     ]);
   });
@@ -629,6 +634,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          incident: expect.objectContaining({ violationType: "invite_link", strikeCount: 1, score: null }),
         },
       ]);
     });
@@ -965,6 +971,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: [messageId],
+          incident: expect.objectContaining({ violationType: "ngword", strikeCount: 1, score: null }),
         },
       ]);
     });

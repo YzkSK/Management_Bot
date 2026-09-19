@@ -4,7 +4,6 @@ import type {
   ModerationActionRecordedEvent,
   ModerationActionType,
   ModerationEscalationViolationType,
-  ModerationIncident,
 } from "@management-bot/shared";
 import { decideEscalationAction, ESCALATION_STEPS } from "../domain/index.js";
 import { getEscalationPreset } from "./escalation-settings.js";

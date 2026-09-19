@@ -138,6 +138,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
         },
       ]);
 
@@ -248,6 +249,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          incident: expect.objectContaining({ violationType: "ngword", strikeCount: 1, score: null }),
         },
       ]);
 
@@ -262,6 +264,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           targetUserId: userId,
           actionType: "warn",
           caseId: result.outcomes[0]?.caseId,
+          incident: expect.objectContaining({ violationType: "ngword", strikeCount: 1 }),
         }),
       });
     } finally {
@@ -316,6 +319,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          incident: expect.objectContaining({ violationType: "mention_spam", strikeCount: 1, score: null }),
         },
       ]);
 
@@ -432,6 +436,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          incident: expect.objectContaining({ violationType: "invite_link", strikeCount: 1, score: null }),
         },
       ]);
 

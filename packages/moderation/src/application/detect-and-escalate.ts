@@ -272,7 +272,7 @@ async function runViolationChecks(
       violationType: threshold.violationType,
       strikeCount: escalation.strikeCount,
       actionType: escalation.actionType,
-      timeoutMinutes: escalation.timeoutMinutes,
+      ...(escalation.timeoutMinutes === undefined ? {} : { timeoutMinutes: escalation.timeoutMinutes }),
       caseId: escalation.caseId,
       bufferedMessageIds: check.bufferedMessageIds,
       incident: escalation.incident,
