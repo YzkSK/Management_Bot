@@ -23,7 +23,6 @@ async function sendRaidKickDm(member: GuildMember): Promise<void> {
     .catch((error) => console.error(`moderation: failed to send raid kick DM to ${member.id}`, error));
 }
 
-/** raid/new_account_guardが同一入室者に同時ヒットし、重さ比較でより軽い側が実行されなかったことを表す(#350)。 */
 /** 自動検知によるアクションであることを表すreason(execute-action.tsのSYSTEM_MODERATOR_IDと対になる文言)。 */
 function raidKickReason(caseId: string, incidentCount: number): string {
   return `moderation: raid detected (incident #${incidentCount}, case ${caseId})`;
@@ -47,12 +46,6 @@ async function executeRaidKick(target: GuildMember, raidHit: RaidHitResult): Pro
   }
 }
 
-/**
- * new_account_guardヒット時、escalateAndRecordStrikeが決定したactionType(warn/timeout、
- * 設計spec「検知時アクション」節)を実行する。既存エスカレーション段階がkick/ban/unbanまで
- * 進んだ場合も同じ仕組みで実行する(#173の共通エスカレーション処理に接続しているため、
- * strikeが積み重なれば通常のエスカレーションと同様に段階が進みうる)。
- */
 /** moderation.action.recordedのresolveイベントをpublishする共通ヘルパー(#350)。 */
 async function publishResolve(
   deps: GuildMemberAddDeps,
@@ -102,14 +95,7 @@ async function executeAndRecordRaidKick(
   );
 }
 
-/**
- * guildMemberAddイベントを受けてhandleGuildMemberAddを呼び出し、判定結果に応じてDiscord API側の
- * アクション(レイド一括timeout・new_account_guardのwarn/timeout等)を実行する。
- * raid/new_account_guardは互いに独立した判定だが、入室者自身がraidの一括timeout対象と
- * new_account_guardのヒットを同時に満たす場合、両方を順に実行すると後勝ちで上書きされてしまう
- * (例: raidのtimeoutMinutes=1440がnew_account_guardのtimeoutMinutes=5で上書きされる)。
- * そのためactionTypeの重さを比較し、より重い方だけを入室者自身に実行する(Codexレビュー指摘対応)。
- */
+/** guildMemberAddイベントを受け、ロックダウンまたはレイドへのDiscord側アクションを実行する。 */
 export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member: GuildMember): Promise<void> {
   if (member.user.bot) return;
 

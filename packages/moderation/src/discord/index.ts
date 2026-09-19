@@ -102,8 +102,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     });
   });
 
-  // guildMemberAddはmessageCreateとは別のギルド単位集団現象(レイド)・入室時単体判定
-  // (new_account_guard)を扱うため、専用ハンドラとして分離登録する(設計spec参照)。
+  // guildMemberAddはmessageCreateとは別のギルド単位集団現象であるレイドを扱う。
   ctx.client.on("guildMemberAdd", (member) => {
     handleGuildMemberAddEvent({ db: ctx.db, redis, eventBus: ctx.eventBus, configCache }, member).catch((error: unknown) => {
       console.error("moderation: failed to handle guildMemberAdd", error);

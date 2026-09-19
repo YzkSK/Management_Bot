@@ -8,7 +8,6 @@ export const VIOLATION_TYPE_LABELS: Record<ModerationViolationType, string> = {
   invite_link: "招待リンク",
   link_spam: "外部リンク・宣伝",
   raid: "レイド(大量入室)",
-  new_account_guard: "新規アカウントガード",
 };
 
 export const PRESET_LABELS: Record<ModerationPreset, string> = {
@@ -83,12 +82,6 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     weak: "30秒間に15人以上の入室で検知(作成3日以内の比率80%以上でより長いタイムアウト)",
     medium: "30秒間に10人以上の入室で検知(作成7日以内の比率60%以上でより長いタイムアウト)",
     strong: "30秒間に6人以上の入室で検知(作成14日以内の比率40%以上でより長いタイムアウト)",
-  },
-  // packages/moderation/src/domain/presets.ts のNEW_ACCOUNT_GUARD_PRESETSをUI表示用に説明文化したもの。
-  new_account_guard: {
-    weak: "作成から1日以内のアカウントの入室を検知",
-    medium: "作成から3日以内のアカウントの入室を検知",
-    strong: "作成から7日以内のアカウントの入室を検知",
   },
 };
 

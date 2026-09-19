@@ -169,6 +169,13 @@
       "when": 1789855211108,
       "tag": "0023_freezing_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789857884178,
+      "tag": "0024_sudden_wolfsbane",
+      "breakpoints": true
     }
   ]
 }

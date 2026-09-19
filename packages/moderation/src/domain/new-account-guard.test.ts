@@ -1,43 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { hasNewAccountGuardHit, isNewAccount } from "./new-account-guard.js";
+import { isNewAccount } from "./new-account-guard.js";
 
 describe("isNewAccount", () => {
   const maxAgeDays = 7;
 
-  test("作成からmaxAgeDaysより新しければtrue", () => {
+  test("returns true through the inclusive maximum age", () => {
     const createdAt = new Date("2026-01-01T00:00:00.000Z");
-    const joinedAt = new Date("2026-01-05T00:00:00.000Z");
-    expect(isNewAccount(createdAt, joinedAt, maxAgeDays)).toBe(true);
+    expect(isNewAccount(createdAt, new Date("2026-01-08T00:00:00.000Z"), maxAgeDays)).toBe(true);
   });
 
-  test("作成からちょうどmaxAgeDaysならtrue(境界値)", () => {
+  test("rejects accounts older than the maximum age and future creation times", () => {
     const createdAt = new Date("2026-01-01T00:00:00.000Z");
-    const joinedAt = new Date("2026-01-08T00:00:00.000Z");
-    expect(isNewAccount(createdAt, joinedAt, maxAgeDays)).toBe(true);
+    expect(isNewAccount(createdAt, new Date("2026-01-08T00:00:00.001Z"), maxAgeDays)).toBe(false);
+    expect(isNewAccount(new Date("2026-01-05T00:00:00.000Z"), createdAt, maxAgeDays)).toBe(false);
   });
 
-  test("作成からmaxAgeDaysより古ければfalse", () => {
-    const createdAt = new Date("2026-01-01T00:00:00.000Z");
-    const joinedAt = new Date("2026-01-08T00:00:00.001Z");
-    expect(isNewAccount(createdAt, joinedAt, maxAgeDays)).toBe(false);
-  });
-
-  test("joinedAtがcreatedAtより前(クロックスキュー等)はfalse", () => {
-    const createdAt = new Date("2026-01-05T00:00:00.000Z");
-    const joinedAt = new Date("2026-01-01T00:00:00.000Z");
-    expect(isNewAccount(createdAt, joinedAt, maxAgeDays)).toBe(false);
-  });
-
-  test("maxAgeDaysが負数はRangeError", () => {
+  test("rejects negative maximum ages", () => {
     expect(() => isNewAccount(new Date(), new Date(), -1)).toThrow(RangeError);
-  });
-});
-
-describe("hasNewAccountGuardHit", () => {
-  test("isNewAccountと同じ結果を返す", () => {
-    const createdAt = new Date("2026-01-01T00:00:00.000Z");
-    const joinedAt = new Date("2026-01-02T00:00:00.000Z");
-    expect(hasNewAccountGuardHit(createdAt, joinedAt, 3)).toBe(true);
-    expect(hasNewAccountGuardHit(createdAt, joinedAt, 0)).toBe(false);
   });
 });

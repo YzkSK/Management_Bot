@@ -73,19 +73,12 @@ describe("moderation schema", () => {
     await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "mention_spam", strikeCount: 1 });
   });
 
-  test("moderation_thresholdsはviolation_type=raid/new_account_guardを受け入れる", async () => {
+  test("moderation_thresholdsはviolation_type=raidを受け入れる", async () => {
     await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "medium", enabled: true });
-    await db
-      .insert(moderationThresholds)
-      .values({ guildId, violationType: "new_account_guard", preset: "medium", enabled: true });
   });
 
-  test("moderation_escalation_stateはviolation_type=new_account_guardを受け入れるが、raidはCHECK制約で拒否する(ギルド単位はmoderation_raid_stateで別管理)", async () => {
+  test("moderation_escalation_stateはraidをCHECK制約で拒否する(ギルド単位はmoderation_raid_stateで別管理)", async () => {
     const userId = `test-user-${randomUUID()}`;
-    await db
-      .insert(moderationEscalationState)
-      .values({ guildId, userId, violationType: "new_account_guard", strikeCount: 1 });
-
     await expectConstraintViolation(
       db.insert(moderationEscalationState).values({ guildId, userId, violationType: "raid", strikeCount: 1 }),
       "moderation_escalation_state_violation_type_check",

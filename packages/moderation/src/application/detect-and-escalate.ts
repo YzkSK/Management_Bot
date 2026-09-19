@@ -32,8 +32,7 @@ export { SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
 export { bufferedMessageIdsInWindow } from "./violation-check.js";
 
 /**
- * MessageCreate起点で判定する違反種別。raidはGuildMemberAdd起点、new_account_guardは
- * 入室時単体判定のため、どちらもこのMessageCreateフローでは扱わない(設計spec参照)。
+ * MessageCreate起点で判定する違反種別。raidはGuildMemberAdd起点のため、このフローでは扱わない。
  */
 const MESSAGE_CREATE_VIOLATION_TYPES = [
   "flood",
@@ -253,7 +252,7 @@ async function runViolationChecks(
     // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
     // 検知条件(hasFloodHit/isDuplicateHit/findMatchingNgword/hasSingleMessageMentionSpam等)は
     // violationTypeごとのプリセットのまま、アクション決定(何回目でwarn/timeout/kick/ban)だけを
-    // guild単位で統一する(escalateAndRecordStrikeへ抽出、#194でnew_account_guardとも共用)。
+    // guild単位で統一する。
     const escalation = await escalateAndRecordStrike(
       deps,
       message.guildId,

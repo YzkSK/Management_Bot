@@ -4,9 +4,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import {
   detectRaid,
   escalateSeverityByIncidentCount,
-  hasNewAccountGuardHit,
   isWhitelistMatch,
-  NEW_ACCOUNT_GUARD_PRESETS,
   RAID_PRESETS,
   type RaidSeverity,
 } from "../domain/index.js";
@@ -53,15 +51,10 @@ export interface RaidHitResult {
 export interface GuildMemberAddResult {
   /** レイド(集団)ヒット時のみ設定。対象ユーザー全員への一括kick実行は呼び出し側(discord層)の責務。 */
   raidHit: RaidHitResult | null;
-  /** new_account_guardは監視専用のため、処罰結果を返さない。 */
-  newAccountGuardOutcome: null;
 }
 
 /**
- * GuildMemberAdd受信時のユースケース。ホワイトリスト対象は判定(レイドの人数カウント・
- * new_account_guard判定)自体から除外する(設計spec「ホワイトリスト」節)。
- * raid(集団)判定とnew_account_guard(単体)判定は互いに独立しており、両方ヒットしうる
- * (例: 新規アカウントの大量入室で両方ヒット)。
+ * GuildMemberAdd受信時のユースケース。ホワイトリスト対象はレイドの人数カウントから除外する。
  */
 export async function handleGuildMemberAdd(
   deps: GuildMemberAddDeps,
@@ -70,26 +63,13 @@ export async function handleGuildMemberAdd(
   const snapshot = await deps.configCache.get(deps.db, member.guildId);
 
   if (isWhitelistMatch(snapshot.whitelist, member.guildId, member.userId, member.roleIds)) {
-    return { raidHit: null, newAccountGuardOutcome: null };
+    return { raidHit: null };
   }
 
   const raidThreshold = snapshot.enabledThresholds.find((t) => t.violationType === "raid");
-  const guardThreshold = snapshot.enabledThresholds.find((t) => t.violationType === "new_account_guard");
-
   const raidHit = raidThreshold ? await detectRaidHit(deps, member, raidThreshold.preset) : null;
 
-  // 新規アカウントガードは監視用途に限定する。アカウント年齢だけを理由に
-  // strike・timeout等を与えないため、ここでは検知しても処罰結果を返さない。
-  if (guardThreshold) {
-    void hasNewAccountGuardHit(
-      member.accountCreatedAt,
-      member.joinedAt,
-      NEW_ACCOUNT_GUARD_PRESETS[guardThreshold.preset].maxAgeDays,
-    );
-  }
-  const newAccountGuardOutcome = null;
-
-  return { raidHit, newAccountGuardOutcome };
+  return { raidHit };
 }
 
 async function detectRaidHit(

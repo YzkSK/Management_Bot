@@ -104,18 +104,6 @@ export const RAID_PRESETS: Readonly<Record<ModerationPreset, RaidPresetConfig>> 
   },
 };
 
-export interface NewAccountGuardPresetConfig {
-  /** 入室から起算してこの日数以内のアカウントをガード対象とみなす。 */
-  maxAgeDays: number;
-}
-
-/** 新規アカウント単体ガード(new_account_guard)のプリセット。レイド判定とは独立した閾値。 */
-export const NEW_ACCOUNT_GUARD_PRESETS: Readonly<Record<ModerationPreset, NewAccountGuardPresetConfig>> = {
-  weak: { maxAgeDays: 1 },
-  medium: { maxAgeDays: 3 },
-  strong: { maxAgeDays: 7 },
-};
-
 /**
  * エスカレーション段階1件分。actionType="timeout"の場合のみtimeoutMinutesを持つ
  * (#322、タイムアウトの多段階化)。それ以外のactionTypeではtimeoutMinutesを持たない。

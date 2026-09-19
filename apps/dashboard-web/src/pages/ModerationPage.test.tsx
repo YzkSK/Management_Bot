@@ -103,7 +103,7 @@ describe("ModerationPage", () => {
     expect(renderPage(guildId, queryClient)).toContain("検知履歴");
   });
 
-  test("raid/new_account_guardの設定行を表示する(#196: DASHBOARD_VIOLATION_TYPES制限撤廃の確認)", () => {
+  test("raidの設定行を表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";
     seedBaseQueries(queryClient, guildId);
@@ -112,22 +112,7 @@ describe("ModerationPage", () => {
     const html = renderPage(guildId, queryClient);
 
     expect(html).toContain("レイド(大量入室)");
-    expect(html).toContain("新規アカウントガード");
-  });
-
-  test("raid/new_account_guardが既に有効化されている場合、その設定値を反映して表示する", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    const guildId = "g1";
-    seedBaseQueries(queryClient, guildId);
-    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, [
-      { violationType: "raid", preset: "strong", enabled: true },
-      { violationType: "new_account_guard", preset: "weak", enabled: false },
-    ]);
-
-    const html = renderPage(guildId, queryClient);
-
-    expect(html).toContain("レイド(大量入室)");
-    expect(html).toContain("新規アカウントガード");
+    expect(html).not.toContain("新規アカウントガード");
   });
 });
 

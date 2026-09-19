@@ -4,14 +4,12 @@ export {
   MENTION_SPAM_PRESETS,
   LINK_SPAM_PRESETS,
   RAID_PRESETS,
-  NEW_ACCOUNT_GUARD_PRESETS,
   ESCALATION_STEPS,
   type ModerationPreset,
   type FloodPresetConfig,
   type MentionSpamPresetConfig,
   type LinkSpamPresetConfig,
   type RaidPresetConfig,
-  type NewAccountGuardPresetConfig,
   type EscalationStep,
 } from "./presets.js";
 export { hasFloodHit } from "./frequency.js";
@@ -34,5 +32,5 @@ export {
   type RaidSeverity,
   type RaidDetectionResult,
 } from "./raid.js";
-export { isNewAccount, hasNewAccountGuardHit } from "./new-account-guard.js";
+export { isNewAccount } from "./new-account-guard.js";
 export { isWhitelistMatch, type WhitelistMatchEntry } from "./whitelist-match.js";

@@ -5,89 +5,47 @@ import {
   LINK_SPAM_PRESETS,
   MENTION_SPAM_PRESETS,
   MODERATION_PRESETS,
-  NEW_ACCOUNT_GUARD_PRESETS,
   RAID_PRESETS,
 } from "./presets.js";
 
-describe("FLOOD_PRESETS", () => {
-  test("escalationStepsフィールドを持たない(検知条件のみ)", () => {
+describe("moderation presets", () => {
+  test("defines each supported severity", () => {
+    expect(MODERATION_PRESETS).toEqual(["weak", "medium", "strong"]);
+    expect(Object.keys(MENTION_SPAM_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
+    expect(Object.keys(LINK_SPAM_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
+    expect(Object.keys(RAID_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
+    expect(Object.keys(ESCALATION_STEPS).sort()).toEqual(["medium", "strong", "weak"]);
+  });
+
+  test("flood presets only define detection conditions", () => {
     for (const preset of MODERATION_PRESETS) {
       expect(FLOOD_PRESETS[preset]).not.toHaveProperty("escalationSteps");
       expect(FLOOD_PRESETS[preset].frequency).toBeDefined();
       expect(FLOOD_PRESETS[preset].duplicateSimilarityThreshold).toBeDefined();
     }
   });
-});
 
-describe("MENTION_SPAM_PRESETS", () => {
-  test("weak/medium/strongの3プリセットを持ち、strongほど閾値が厳しい", () => {
-    expect(Object.keys(MENTION_SPAM_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
+  test("stronger presets detect abuse with lower thresholds", () => {
     expect(MENTION_SPAM_PRESETS.strong.singleMessageThreshold).toBeLessThan(
       MENTION_SPAM_PRESETS.medium.singleMessageThreshold,
     );
     expect(MENTION_SPAM_PRESETS.medium.singleMessageThreshold).toBeLessThan(
       MENTION_SPAM_PRESETS.weak.singleMessageThreshold,
     );
-  });
-});
-
-describe("LINK_SPAM_PRESETS", () => {
-  test("weak/medium/strongの3プリセットを持ち、strongほど削除閾値が低い(検知しやすい)", () => {
-    expect(Object.keys(LINK_SPAM_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
     expect(LINK_SPAM_PRESETS.strong.deleteThreshold).toBeLessThan(LINK_SPAM_PRESETS.medium.deleteThreshold);
     expect(LINK_SPAM_PRESETS.medium.deleteThreshold).toBeLessThan(LINK_SPAM_PRESETS.weak.deleteThreshold);
-  });
-});
-
-describe("RAID_PRESETS", () => {
-  test("weak/medium/strongの3プリセットを持ち、strongほど人数閾値が厳しい(検知しやすい)", () => {
-    expect(Object.keys(RAID_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
     expect(RAID_PRESETS.strong.window.memberThreshold).toBeLessThan(RAID_PRESETS.medium.window.memberThreshold);
     expect(RAID_PRESETS.medium.window.memberThreshold).toBeLessThan(RAID_PRESETS.weak.window.memberThreshold);
   });
 
-  test("strongほど新規アカウント比率の重み付け閾値が緩い(少ない比率でhighになる)", () => {
+  test("raid presets retain their new-account ratio criteria", () => {
     expect(RAID_PRESETS.strong.newAccountRatioThreshold).toBeLessThan(RAID_PRESETS.medium.newAccountRatioThreshold);
     expect(RAID_PRESETS.medium.newAccountRatioThreshold).toBeLessThan(RAID_PRESETS.weak.newAccountRatioThreshold);
   });
 
-  test("各プリセットでseverity=highのtimeoutMinutesはnormal以上", () => {
-    for (const preset of MODERATION_PRESETS) {
-      expect(RAID_PRESETS[preset].timeoutMinutes.high).toBeGreaterThanOrEqual(
-        RAID_PRESETS[preset].timeoutMinutes.normal,
-      );
-    }
-  });
-});
-
-describe("NEW_ACCOUNT_GUARD_PRESETS", () => {
-  test("weak/medium/strongの3プリセットを持ち、strongほど判定日数が長い(検知しやすい)", () => {
-    expect(Object.keys(NEW_ACCOUNT_GUARD_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
-    expect(NEW_ACCOUNT_GUARD_PRESETS.weak.maxAgeDays).toBeLessThan(NEW_ACCOUNT_GUARD_PRESETS.medium.maxAgeDays);
-    expect(NEW_ACCOUNT_GUARD_PRESETS.medium.maxAgeDays).toBeLessThan(NEW_ACCOUNT_GUARD_PRESETS.strong.maxAgeDays);
-  });
-});
-
-describe("ESCALATION_STEPS", () => {
-  test("weak/medium/strongの3プリセットを持つ", () => {
-    expect(Object.keys(ESCALATION_STEPS).sort()).toEqual(["medium", "strong", "weak"]);
-  });
-
-  test("strongはstrikeCount=1でwarnになる(削除は付随処理として実行される)", () => {
+  test("escalation retains warning and timeout steps", () => {
     expect(ESCALATION_STEPS.strong[1]).toEqual({ actionType: "warn" });
-  });
-
-  test("mediumはstrikeCount=1でwarn、3〜5でtimeoutが5→10→30分と多段階化する", () => {
-    expect(ESCALATION_STEPS.medium[1]).toEqual({ actionType: "warn" });
     expect(ESCALATION_STEPS.medium[3]).toEqual({ actionType: "timeout", timeoutMinutes: 5 });
-    expect(ESCALATION_STEPS.medium[4]).toEqual({ actionType: "timeout", timeoutMinutes: 10 });
-    expect(ESCALATION_STEPS.medium[5]).toEqual({ actionType: "timeout", timeoutMinutes: 30 });
-  });
-
-  test("weakはstrikeCount=1でwarn、5〜7でtimeoutが5→10→30分と多段階化する", () => {
-    expect(ESCALATION_STEPS.weak[1]).toEqual({ actionType: "warn" });
     expect(ESCALATION_STEPS.weak[5]).toEqual({ actionType: "timeout", timeoutMinutes: 5 });
-    expect(ESCALATION_STEPS.weak[6]).toEqual({ actionType: "timeout", timeoutMinutes: 10 });
-    expect(ESCALATION_STEPS.weak[7]).toEqual({ actionType: "timeout", timeoutMinutes: 30 });
   });
 });

@@ -89,22 +89,19 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     return { db, redis, eventBus, configCache };
   }
 
-  test("raid/new_account_guardのどちらも無効なら何も起きない", async () => {
+  test("raidが無効なら何も起きない", async () => {
     const eventBus = fakeEventBus();
     const result = await handleGuildMemberAdd(
       deps(eventBus),
       member({ guildId, userId: `u-${randomUUID()}` }),
     );
-    expect(result).toEqual({ raidHit: null, newAccountGuardOutcome: null });
+    expect(result).toEqual({ raidHit: null });
     expect(eventBus.published).toEqual([]);
   });
 
-  test("ホワイトリスト対象ユーザーはraid/new_account_guard両方の判定対象から除外される", async () => {
+  test("ホワイトリスト対象ユーザーはraid判定対象から除外される", async () => {
     const userId = `u-${randomUUID()}`;
     await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
-    await db
-      .insert(moderationThresholds)
-      .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
     await db.insert(moderationWhitelist).values({ guildId, targetType: "user", targetId: userId });
 
     const eventBus = fakeEventBus();
@@ -114,7 +111,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
       member({ guildId, userId, accountCreatedAt: now, joinedAt: now }),
     );
 
-    expect(result).toEqual({ raidHit: null, newAccountGuardOutcome: null });
+    expect(result).toEqual({ raidHit: null });
     expect(eventBus.published).toEqual([]);
   });
 
@@ -248,43 +245,4 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     expect(lastResult?.raidHit).toBeNull();
   });
 
-  test("new_account_guard: 作成間もないアカウントの入室でもstrikeや処罰イベントを作らない", async () => {
-    await db
-      .insert(moderationThresholds)
-      .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
-    const eventBus = fakeEventBus();
-    const now = new Date();
-    const userId = `u-${randomUUID()}`;
-
-    const result = await handleGuildMemberAdd(
-      deps(eventBus),
-      member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), joinedAt: now }),
-    );
-
-    expect(result.newAccountGuardOutcome).toBeNull();
-    expect(eventBus.published).toEqual([]);
-
-    const rows = await db
-      .select()
-      .from(moderationEscalationState)
-      .where(eq(moderationEscalationState.userId, userId));
-    expect(rows).toHaveLength(0);
-  });
-
-  test("new_account_guard: 作成から十分経過したアカウントの入室ではヒットしない", async () => {
-    await db
-      .insert(moderationThresholds)
-      .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
-    const eventBus = fakeEventBus();
-    const now = new Date();
-    const userId = `u-${randomUUID()}`;
-
-    const result = await handleGuildMemberAdd(
-      deps(eventBus),
-      member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000), joinedAt: now }),
-    );
-
-    expect(result.newAccountGuardOutcome).toBeNull();
-    expect(eventBus.published).toEqual([]);
-  });
 });

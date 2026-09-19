@@ -46,7 +46,7 @@ export interface MessageIncidentInput {
  * (guildId, userId, violationType)のstrikeを加算し、違反種別を跨いだ合計strikeCount
  * (統一ストライクカウンター、#311)に対してguild単位のエスカレーション段階を決定、
  * moderation.action.recordedイベントをpublishする。MessageCreate起点(detectAndEscalate)・
- * GuildMemberAdd起点のnew_account_guard(#194)の両方から呼ばれる共通処理。
+ * MessageCreate起点の処理から呼ばれる共通処理。
  * decideEscalationActionがnull(該当段階なし)を返した場合はnullを返す(アクション不要)。
  */
 export async function escalateAndRecordStrike(

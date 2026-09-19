@@ -9,7 +9,6 @@ export const MODERATION_ESCALATION_VIOLATION_TYPES = [
   "mention_spam",
   "invite_link",
   "link_spam",
-  "new_account_guard",
 ] as const;
 
 export const MODERATION_VIOLATION_TYPES = [...MODERATION_ESCALATION_VIOLATION_TYPES, "raid"] as const;

@@ -41,8 +41,8 @@ const moderationActionBaseFields = {
  * action="resolve"はDiscord API実行後の結果確定を表す(#350)。同一caseIdで2段階発行される。
  * resolveのみresult/failureCodeを必須にし、Bot権限不足・対象ユーザー退出等による
  * 処罰実行失敗をログ側で判別できるようにする。result="skipped"は、raid一括timeoutと
- * new_account_guardが同一ユーザーに同時ヒットし、より重い処罰に集約された結果
- * 実行されなかった側を表す(未解決のcreateのまま残さないため)。
+ * 同一ユーザーの複数検知でより重い処罰に集約され、実行されなかった側を表す
+ * (未解決のcreateのまま残さないため)。
  */
 export const moderationActionRecordedSchema = z.discriminatedUnion("action", [
   z.object({ ...moderationActionBaseFields, action: z.literal("create") }),
