@@ -150,18 +150,3 @@ async function detectRaidHit(
   return { targetUserIds: result.targetUserIds, severity, timeoutMinutes, caseId, incidentCount, incident };
 }
 
-async function detectNewAccountGuardHit(
-  deps: GuildMemberAddDeps,
-  member: IncomingGuildMember,
-  preset: keyof typeof NEW_ACCOUNT_GUARD_PRESETS,
-): ReturnType<typeof escalateAndRecordStrike> {
-  const config = NEW_ACCOUNT_GUARD_PRESETS[preset];
-  const hit = hasNewAccountGuardHit(member.accountCreatedAt, member.joinedAt, config.maxAgeDays);
-  if (!hit) return null;
-
-  return escalateAndRecordStrike(deps, member.guildId, member.userId, "new_account_guard", member.joinedAt, {
-    score: null,
-    matchedMessageCount: 1,
-    deletedMessageCount: 0,
-  });
-}

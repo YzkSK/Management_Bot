@@ -14,7 +14,6 @@ import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { GuildMember } from "discord.js";
 import { createModerationConfigCache } from "../application/index.js";
-import { setEscalationPreset } from "../application/escalation-settings.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
