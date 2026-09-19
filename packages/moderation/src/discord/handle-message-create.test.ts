@@ -16,6 +16,7 @@ import type { Message } from "discord.js";
 import { createModerationConfigCache } from "../application/index.js";
 import { addNgword } from "../application/ngwords.js";
 import { setEscalationPreset } from "../application/escalation-settings.js";
+import { BurstSettlementCoordinator, type SettlementScheduler } from "./burst-settlement.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -76,6 +77,51 @@ function fakeMessage(overrides: {
   };
 }
 
+function fakeSettlementScheduler(): {
+  scheduler: SettlementScheduler;
+  waitForTimer: () => Promise<void>;
+  runOnlyTimer: () => void;
+} {
+  let nextId = 0;
+  const callbacks = new Map<number, () => void>();
+  return {
+    scheduler: {
+      setTimeout(callback): ReturnType<typeof setTimeout> {
+        const id = nextId++;
+        callbacks.set(id, callback);
+        return id as ReturnType<typeof setTimeout>;
+      },
+      clearTimeout(timer): void {
+        callbacks.delete(timer as number);
+      },
+    },
+    async waitForTimer(): Promise<void> {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (callbacks.size === 1) return;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      throw new Error("settlement timer was not registered");
+    },
+    runOnlyTimer(): void {
+      expect([...callbacks]).toHaveLength(1);
+      const callback = [...callbacks.values()][0];
+      if (!callback) throw new Error("timer callback is missing");
+      callbacks.clear();
+      callback();
+    },
+  };
+}
+
+function immediateBurstSettlementCoordinator(): BurstSettlementCoordinator {
+  return new BurstSettlementCoordinator({
+    setTimeout(callback): ReturnType<typeof setTimeout> {
+      queueMicrotask(callback);
+      return 0 as ReturnType<typeof setTimeout>;
+    },
+    clearTimeout(): void {},
+  });
+}
+
 describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   let db: Db;
   let close: () => Promise<void>;
@@ -125,7 +171,15 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     eventBus: ReturnType<typeof fakeEventBus>,
     overrides: Partial<Parameters<typeof handleMessageCreate>[0]> = {},
   ) {
-    return { db, redis, eventBus, resolveInviteGuildId, configCache, ...overrides };
+    return {
+      db,
+      redis,
+      eventBus,
+      resolveInviteGuildId,
+      configCache,
+      burstSettlementCoordinator: immediateBurstSettlementCoordinator(),
+      ...overrides,
+    };
   }
 
   test("自Bot自身のメッセージは無視する(改善案7.2節)", async () => {
@@ -214,6 +268,89 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(eventBus.published).toHaveLength(2);
     expect(eventBus.published[0]).toMatchObject({ action: "create" });
     expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+  });
+
+  test("連投検知後の投稿が1秒間止まるまで、同じバーストとして削除を待機する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const first = fakeMessage({ guildId, userId, content: "first" });
+    const second = fakeMessage({ guildId, userId, content: "second" });
+    const trigger = fakeMessage({ guildId, userId, content: "trigger" });
+    const trailing = fakeMessage({ guildId, userId, content: "trailing" });
+    const otherUser = fakeMessage({ guildId, userId: `other-${randomUUID()}`, content: "other user" });
+    const otherChannel = fakeMessage({ guildId, userId, channelId: "channel-2", content: "other channel" });
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), first as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), second as unknown as Message);
+    const triggerTask = handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trigger as unknown as Message);
+    await clock.waitForTimer();
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trailing as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), otherUser as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), otherChannel as unknown as Message);
+
+    expect(trigger.bulkDelete).not.toHaveBeenCalled();
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(0);
+
+    clock.runOnlyTimer();
+    await triggerTask;
+
+    expect(trigger.bulkDelete).toHaveBeenCalledWith(expect.arrayContaining([first.id, second.id, trigger.id, trailing.id]));
+    expect(trigger.bulkDelete).not.toHaveBeenCalledWith(expect.arrayContaining([otherUser.id, otherChannel.id]));
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(1);
+
+    const links = await db
+      .select({ messageId: moderationMessageDeletionLinks.messageId, caseId: moderationMessageDeletionLinks.caseId })
+      .from(moderationMessageDeletionLinks)
+      .where(
+        and(
+          eq(moderationMessageDeletionLinks.guildId, guildId),
+          inArray(moderationMessageDeletionLinks.messageId, [first.id, second.id, trigger.id, trailing.id]),
+        ),
+      );
+    expect(new Set(links.map((link) => link.messageId))).toEqual(new Set([first.id, second.id, trigger.id, trailing.id]));
+    expect(new Set(links.map((link) => link.caseId))).toEqual(new Set([eventBus.published[0]?.caseId]));
+  });
+
+  test("収束前の追加投稿が既存の件数閾値に達すると、タイマーを待たずに削除する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const initialMessages = [
+      fakeMessage({ guildId, userId, content: "first" }),
+      fakeMessage({ guildId, userId, content: "second" }),
+      fakeMessage({ guildId, userId, content: "trigger" }),
+    ];
+    const trailingMessages = [
+      fakeMessage({ guildId, userId, content: "trailing-1" }),
+      fakeMessage({ guildId, userId, content: "trailing-2" }),
+      fakeMessage({ guildId, userId, content: "trailing-3" }),
+    ];
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[0] as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[1] as unknown as Message);
+    const triggerTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      initialMessages[2] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    for (const trailingMessage of trailingMessages) {
+      await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trailingMessage as unknown as Message);
+    }
+    await triggerTask;
+
+    expect(initialMessages[2].bulkDelete).toHaveBeenCalledWith(
+      expect.arrayContaining([...initialMessages, ...trailingMessages].map((message) => message.id)),
+    );
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(1);
   });
 
   test("一括削除の直前に削除メッセージ群とモデレーションケースを関連付ける", async () => {

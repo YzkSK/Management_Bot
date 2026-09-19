@@ -70,4 +70,17 @@ describe("BurstSettlementCoordinator", () => {
 
     expect(coordinator.append("guild:channel:other-user", "other-message")).toBeFalse();
   });
+
+  test("収束後は同じキーで次のバーストを開始できる", async () => {
+    const clock = fakeScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const first = coordinator.start({ key: "guild:channel:user", initialMessageIds: ["first"], maxAdditionalMessages: 1 });
+
+    coordinator.append("guild:channel:user", "later");
+    await expect(first).resolves.toEqual({ messageIds: ["first", "later"], reason: "limit" });
+
+    const second = coordinator.start({ key: "guild:channel:user", initialMessageIds: ["next"], maxAdditionalMessages: 1 });
+    coordinator.append("guild:channel:user", "next-later");
+    await expect(second).resolves.toEqual({ messageIds: ["next", "next-later"], reason: "limit" });
+  });
 });

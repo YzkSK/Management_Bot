@@ -7,7 +7,12 @@ import {
   type DetectAndEscalateDeps,
   type EscalationOutcome,
 } from "../application/index.js";
+import { BurstSettlementCoordinator } from "./burst-settlement.js";
 import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
+
+export interface HandleMessageCreateDeps extends DetectAndEscalateDeps {
+  burstSettlementCoordinator: BurstSettlementCoordinator;
+}
 
 function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
   return outcomes.reduce((most, outcome) =>
@@ -29,6 +34,17 @@ function mergeBufferedMessageIds(outcomes: readonly EscalationOutcome[]): readon
   return [...ids];
 }
 
+function burstKey(message: Message): string {
+  return `${message.guild!.id}:${message.channelId}:${message.author.id}`;
+}
+
+function settlementMessageThreshold(outcomes: readonly EscalationOutcome[]): number | undefined {
+  const thresholds = outcomes.flatMap((outcome) =>
+    outcome.settlementMessageThreshold === undefined ? [] : [outcome.settlementMessageThreshold],
+  );
+  return thresholds.length === 0 ? undefined : Math.min(...thresholds);
+}
+
 /**
  * messageCreateイベントを受けてdetectAndEscalateを呼び出し、判定結果に応じてDiscord API側の
  * アクションを実行する。flood/duplicate_contentが同一メッセージで同時にヒットした場合、
@@ -44,7 +60,7 @@ function mergeBufferedMessageIds(outcomes: readonly EscalationOutcome[]): readon
  * null)ため、ロール判定は空配列で行い、timeout/kick/banはexecuteEscalationActionの
  * 既存のmember_not_foundフォールバックにより自動的に失敗扱いになる(削除は実行される)。
  */
-export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
+export async function handleMessageCreate(deps: HandleMessageCreateDeps, message: Message): Promise<void> {
   // client.userが未確定(ログイン処理中等)の場合、自Bot判定が常にfalseになり自Bot自身の
   // 投稿まで検知対象に含まれてしまう(fail-open)。安全側に倒し、確定するまで何もしない
   // (Codexレビュー指摘)。
@@ -52,6 +68,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   if (!selfBotId || message.author.id === selfBotId) return;
   if (!message.guild) return;
 
+  const key = burstKey(message);
   const { outcomes, lockedMessageIds } = await detectAndEscalate(deps, {
     guildId: message.guild.id,
     userId: message.author.id,
@@ -62,6 +79,10 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
     createdAt: message.createdAt,
     joinedAt: message.member?.joinedAt ?? undefined,
   });
+
+  if (outcomes.length === 0 && lockedMessageIds.length === 0) {
+    deps.burstSettlementCoordinator.append(key, message.id);
+  }
 
   if (outcomes.length === 0) {
     // strikeロック中でも検知されたメッセージ(ngword/mention_spam/invite_link)は
@@ -77,7 +98,17 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   }
 
   const target = mostSevere(outcomes);
-  const bufferedMessageIds = mergeBufferedMessageIds(outcomes);
+  const threshold = settlementMessageThreshold(outcomes);
+  const bufferedMessageIds =
+    threshold === undefined
+      ? mergeBufferedMessageIds(outcomes)
+      : (
+          await deps.burstSettlementCoordinator.start({
+            key,
+            initialMessageIds: mergeBufferedMessageIds(outcomes),
+            maxAdditionalMessages: threshold,
+          })
+        ).messageIds;
   // DiscordのmessageDeleteBulkイベントはbulkDelete()の実行中にも届きうるため、先に永続化する。
   // 関連付けが書き込めなければアクションを実行せず、因果関係が欠けたログを作らない。
   if (bufferedMessageIds.length >= 2 && "bulkDelete" in message.channel) {

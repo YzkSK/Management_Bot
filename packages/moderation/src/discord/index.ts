@@ -3,6 +3,7 @@ import { listenForModerationConfigChanges } from "@management-bot/db";
 import { createTtlCache } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import { createModerationConfigCache, listLockdownsNeedingSynchronization } from "../application/index.js";
+import { BurstSettlementCoordinator } from "./burst-settlement.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 import { synchronizeLockdown } from "./lockdown.js";
 import { handleMessageCreate } from "./handle-message-create.js";
@@ -43,6 +44,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // whitelist/thresholds/ngwordsをguild単位でまとめてTTLキャッシュする(#352)。
   // プロセス起動時に1回生成し、messageCreate/guildMemberAdd両ハンドラで共有する。
   const configCache = createModerationConfigCache();
+  const burstSettlementCoordinator = new BurstSettlementCoordinator();
   const resolveInviteGuildId = createInviteGuildIdResolver(ctx.client);
   // dashboard-api(別プロセス)での設定変更をTTL満了前に反映するため、
   // DBトリガー(migrations/0020)のpg_notifyをLISTENしてキャッシュを即時invalidateする(#353)。
@@ -85,6 +87,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     eventBus: ctx.eventBus,
     resolveInviteGuildId,
     configCache,
+    burstSettlementCoordinator,
   };
 
   ctx.client.on("messageCreate", (message) => {
