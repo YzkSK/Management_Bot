@@ -175,47 +175,21 @@ export interface DetectAndEscalateResult {
   lockedMessageIds: readonly string[];
 }
 
-export async function detectAndEscalate(
+/**
+ * thresholdごとにcheck→strikeロック確認→エスカレーション記録までを行う共通ループ。
+ * messageCreate(detectAndEscalate)・messageUpdate(detectAndEscalateOnEdit)の両方から使う。
+ */
+async function runViolationChecks(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
+  buffer: readonly BufferedMessage[],
+  thresholds: readonly (EnabledThreshold & { violationType: MessageCreateViolationType })[],
+  ngwords: readonly NgwordRow[],
 ): Promise<DetectAndEscalateResult> {
-  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
-
-  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
-    return { outcomes: [], lockedMessageIds: [] };
-  }
-
-  const thresholds = snapshot.enabledThresholds.filter(
-    (t): t is EnabledThreshold & { violationType: MessageCreateViolationType } =>
-      isMessageCreateViolationType(t.violationType),
-  );
-  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
-
-  const floodWindowSeconds = thresholds
-    .filter((t) => t.violationType === "flood" || t.violationType === "duplicate_content")
-    .map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds);
-  // flood/duplicate_content以外しか有効でないguildでも、直近メッセージの重複判定用に
-  // 最低限のバッファウィンドウ(NGWORD_STRIKE_LOCK_WINDOW_SECONDS)は確保する。
-  const windowSeconds = Math.max(NGWORD_STRIKE_LOCK_WINDOW_SECONDS, ...floodWindowSeconds);
-  const buffer = await claimAndPushMessage(
-    deps.redis,
-    message.guildId,
-    message.userId,
-    {
-      messageId: message.messageId,
-      channelId: message.channelId,
-      content: message.content,
-      createdAt: message.createdAt,
-    },
-    PROCESSED_MARKER_TTL_SECONDS,
-    windowSeconds,
-  );
-  if (buffer === null) return { outcomes: [], lockedMessageIds: [] };
-
   const outcomes: EscalationOutcome[] = [];
   const lockedMessageIds = new Set<string>();
   for (const threshold of thresholds) {
-    const check = await prepareAndCheckViolation(deps, message, buffer, threshold.violationType, threshold.preset, snapshot.ngwords);
+    const check = await prepareAndCheckViolation(deps, message, buffer, threshold.violationType, threshold.preset, ngwords);
     if (!check.hit) continue;
 
     const canStrike = await markStrikeHitAndCheckNewBurst(
@@ -260,4 +234,73 @@ export async function detectAndEscalate(
   }
 
   return { outcomes, lockedMessageIds: [...lockedMessageIds] };
+}
+
+export async function detectAndEscalate(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+): Promise<DetectAndEscalateResult> {
+  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
+
+  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
+    return { outcomes: [], lockedMessageIds: [] };
+  }
+
+  const thresholds = snapshot.enabledThresholds.filter(
+    (t): t is EnabledThreshold & { violationType: MessageCreateViolationType } =>
+      isMessageCreateViolationType(t.violationType),
+  );
+  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
+
+  const floodWindowSeconds = thresholds
+    .filter((t) => t.violationType === "flood" || t.violationType === "duplicate_content")
+    .map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds);
+  // flood/duplicate_content以外しか有効でないguildでも、直近メッセージの重複判定用に
+  // 最低限のバッファウィンドウ(NGWORD_STRIKE_LOCK_WINDOW_SECONDS)は確保する。
+  const windowSeconds = Math.max(NGWORD_STRIKE_LOCK_WINDOW_SECONDS, ...floodWindowSeconds);
+  const buffer = await claimAndPushMessage(
+    deps.redis,
+    message.guildId,
+    message.userId,
+    {
+      messageId: message.messageId,
+      channelId: message.channelId,
+      content: message.content,
+      createdAt: message.createdAt,
+    },
+    PROCESSED_MARKER_TTL_SECONDS,
+    windowSeconds,
+  );
+  if (buffer === null) return { outcomes: [], lockedMessageIds: [] };
+
+  return runViolationChecks(deps, message, buffer, thresholds, snapshot.ngwords);
+}
+
+/**
+ * messageUpdateを起点に、編集後の内容でngword/invite_linkのみ再検知するユースケース(改善案7.1節)。
+ * 投稿後に編集でNGワード・招待リンクを後から仕込む回避を防ぐ。
+ * flood/duplicate_content(バッファ内の他メッセージとの比較が前提)とmention_spam(Redisバッファへの
+ * 累積プッシュを伴い、編集のたびに再実行すると二重カウントになる)は対象外とする。
+ * claimAndPushMessageによる同一messageIdの再処理防止は使わない(バッファに触れないため不要であり、
+ * 使うと同じmessageIdの初回create処理でスキップ済みとなり編集時の判定が常にブロックされてしまう)。
+ * そのため同一メッセージへの複数回の編集はその都度評価されるが、strikeロック(markStrikeHitAndCheckNewBurst)
+ * により短時間の連続ヒットは抑制される。
+ */
+export async function detectAndEscalateOnEdit(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+): Promise<DetectAndEscalateResult> {
+  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
+
+  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
+    return { outcomes: [], lockedMessageIds: [] };
+  }
+
+  const thresholds = snapshot.enabledThresholds.filter(
+    (t): t is EnabledThreshold & { violationType: "ngword" | "invite_link" } =>
+      t.violationType === "ngword" || t.violationType === "invite_link",
+  );
+  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
+
+  return runViolationChecks(deps, message, [], thresholds, snapshot.ngwords);
 }

@@ -1,5 +1,6 @@
 export {
   detectAndEscalate,
+  detectAndEscalateOnEdit,
   SYSTEM_MODERATOR_ID,
   type DetectAndEscalateDeps,
   type EscalationOutcome,

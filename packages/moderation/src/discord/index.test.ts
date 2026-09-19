@@ -4,7 +4,7 @@ import type { Db } from "@management-bot/db";
 import { createInviteGuildIdResolver, registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
-  test("messageCreate/guildMemberAddの両ハンドラを登録する", () => {
+  test("messageCreate/messageUpdate/guildMemberAddの3つのハンドラを登録する(#362-7.1)", () => {
     const on = mock(() => undefined);
     const onShutdown = mock(() => undefined);
     const ctx = {
@@ -18,8 +18,8 @@ describe("registerDiscordHandlers", () => {
 
     registerDiscordHandlers(ctx);
 
-    expect(on).toHaveBeenCalledTimes(2);
-    expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "guildMemberAdd"]);
+    expect(on).toHaveBeenCalledTimes(3);
+    expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "messageUpdate", "guildMemberAdd"]);
     // redis(メッセージ処理用)とmoderation_config_changedのLISTEN接続(#353)の2つを解放する。
     expect(onShutdown).toHaveBeenCalledTimes(2);
   });
