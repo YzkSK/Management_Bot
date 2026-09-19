@@ -89,6 +89,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
     action: "resolve",
     actionType: target.actionType,
     timeoutMinutes: target.timeoutMinutes,
+    incident: target.incident,
     result: execResult.result,
     failureCode: execResult.failureCode,
     createdAt: new Date().toISOString(),
@@ -107,6 +108,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
       action: "resolve",
       actionType: outcome.actionType,
       timeoutMinutes: outcome.timeoutMinutes,
+      incident: outcome.incident,
       result: "skipped",
       createdAt: new Date().toISOString(),
     });

@@ -88,6 +88,7 @@ async function publishResolve(
     targetUserId: string;
     actionType: ModerationActionType;
     timeoutMinutes?: number;
+    incident: EscalationResult["incident"] | RaidHitResult["incident"];
   },
   execResult: ActionExecutionResult,
 ): Promise<void> {
@@ -100,6 +101,7 @@ async function publishResolve(
     action: "resolve",
     actionType: params.actionType,
     timeoutMinutes: params.timeoutMinutes,
+    incident: params.incident,
     result: execResult.result,
     failureCode: execResult.failureCode,
     createdAt: new Date().toISOString(),
@@ -121,6 +123,7 @@ async function executeAndRecordNewAccountGuardAction(
       targetUserId: member.id,
       actionType: outcome.actionType,
       timeoutMinutes: outcome.timeoutMinutes,
+      incident: outcome.incident,
     },
     execResult,
   );
@@ -141,6 +144,7 @@ async function executeAndRecordRaidTimeout(
       targetUserId: target.id,
       actionType: "timeout",
       timeoutMinutes: raidHit.timeoutMinutes,
+      incident: raidHit.incident,
     },
     execResult,
   );
@@ -183,6 +187,7 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
           targetUserId: member.id,
           actionType: guardOutcome.actionType,
           timeoutMinutes: guardOutcome.timeoutMinutes,
+          incident: guardOutcome.incident,
         },
         SKIPPED,
       );
@@ -190,7 +195,14 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
       await executeAndRecordNewAccountGuardAction(deps, member, guardOutcome);
       await publishResolve(
         deps,
-        { guildId: member.guild.id, caseId: raidHit.caseId, targetUserId: member.id, actionType: "timeout", timeoutMinutes: raidHit.timeoutMinutes },
+        {
+          guildId: member.guild.id,
+          caseId: raidHit.caseId,
+          targetUserId: member.id,
+          actionType: "timeout",
+          timeoutMinutes: raidHit.timeoutMinutes,
+          incident: raidHit.incident,
+        },
         SKIPPED,
       );
     }
@@ -212,7 +224,14 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
         console.error(`moderation: failed to fetch raid target ${targetUserId} for case ${raidHit.caseId}`, error);
         await publishResolve(
           deps,
-          { guildId: member.guild.id, caseId: raidHit.caseId, targetUserId, actionType: "timeout", timeoutMinutes: raidHit.timeoutMinutes },
+          {
+            guildId: member.guild.id,
+            caseId: raidHit.caseId,
+            targetUserId,
+            actionType: "timeout",
+            timeoutMinutes: raidHit.timeoutMinutes,
+            incident: raidHit.incident,
+          },
           { result: "failed", failureCode: "member_not_found" },
         );
       }

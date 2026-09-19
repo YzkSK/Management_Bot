@@ -774,7 +774,53 @@ function StrikeTab({ guildId }: { guildId: string }) {
   );
 }
 
-type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes";
+function ModerationHistoryTab({ guildId }: { guildId: string }) {
+  const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }));
+
+  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isError || !query.data) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>検知履歴の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+      </Alert>
+    );
+  }
+  if (query.data.entries.length === 0) return <div className="text-sm">検知履歴はありません。</div>;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ケース ID</TableHead>
+          <TableHead>違反</TableHead>
+          <TableHead>対象</TableHead>
+          <TableHead>スコア</TableHead>
+          <TableHead>ストライク</TableHead>
+          <TableHead>処分結果</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {query.data.entries.map(({ id, entry }) => {
+          if (entry.category !== "moderationCase") return null;
+          const { incident } = entry;
+          const result = entry.action === "resolve" ? entry.result : "実行中";
+          return (
+            <TableRow key={id}>
+              <TableCell>{entry.caseId}</TableCell>
+              <TableCell>{incident.violationType === "raid" ? "レイド" : VIOLATION_TYPE_LABELS[incident.violationType]}</TableCell>
+              <TableCell>{entry.targetUserId}</TableCell>
+              <TableCell>{incident.score ?? "—"}</TableCell>
+              <TableCell>{incident.strikeCount ?? "—"}</TableCell>
+              <TableCell>{result}{entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes" | "history";
 
 export function ModerationPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -874,6 +920,7 @@ export function ModerationPage() {
           <TabsTrigger value="ngwords">NGワード</TabsTrigger>
           <TabsTrigger value="whitelist">ホワイトリスト</TabsTrigger>
           <TabsTrigger value="strikes">警告回数</TabsTrigger>
+          <TabsTrigger value="history">検知履歴</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds">
@@ -936,6 +983,10 @@ export function ModerationPage() {
 
         <TabsContent value="strikes">
           <StrikeTab guildId={guildId} />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <ModerationHistoryTab guildId={guildId} />
         </TabsContent>
       </Tabs>
     </div>

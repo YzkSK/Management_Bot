@@ -39,6 +39,15 @@ export interface RaidHitResult {
   timeoutMinutes: number;
   caseId: string;
   incidentCount: number;
+  incident: {
+    violationType: "raid";
+    score: null;
+    matchedMessageCount: number;
+    deletedMessageCount: number;
+    strikeCount: null;
+    raidSeverity: RaidSeverity;
+    raidTargetCount: number;
+  };
 }
 
 export interface GuildMemberAddResult {
@@ -105,6 +114,15 @@ async function detectRaidHit(
   const incidentCount = await incrementRaidIncident(deps.db, member.guildId, member.joinedAt);
   const caseId = crypto.randomUUID();
   const timeoutMinutes = config.timeoutMinutes[severity];
+  const incident = {
+    violationType: "raid" as const,
+    score: null,
+    matchedMessageCount: result.targetUserIds.length,
+    deletedMessageCount: 0,
+    strikeCount: null,
+    raidSeverity: severity,
+    raidTargetCount: result.targetUserIds.length,
+  };
 
   // レイド一括timeoutは対象ユーザーごとに同一caseIdでイベントをpublishし、logging側で
   // 同一インシデントとして相関できるようにする(設計spec「ログ連携」節)。
@@ -118,11 +136,12 @@ async function detectRaidHit(
       action: "create",
       actionType: "timeout",
       timeoutMinutes,
+      incident,
       createdAt: member.joinedAt.toISOString(),
     });
   }
 
-  return { targetUserIds: result.targetUserIds, severity, timeoutMinutes, caseId, incidentCount };
+  return { targetUserIds: result.targetUserIds, severity, timeoutMinutes, caseId, incidentCount, incident };
 }
 
 async function detectNewAccountGuardHit(
@@ -134,5 +153,9 @@ async function detectNewAccountGuardHit(
   const hit = hasNewAccountGuardHit(member.accountCreatedAt, member.joinedAt, config.maxAgeDays);
   if (!hit) return null;
 
-  return escalateAndRecordStrike(deps, member.guildId, member.userId, "new_account_guard", member.joinedAt);
+  return escalateAndRecordStrike(deps, member.guildId, member.userId, "new_account_guard", member.joinedAt, {
+    score: null,
+    matchedMessageCount: 1,
+    deletedMessageCount: 0,
+  });
 }

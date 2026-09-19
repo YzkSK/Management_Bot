@@ -33,6 +33,7 @@ export type StrikeLockMode = "burst" | "single-shot";
  */
 export interface ViolationCheck {
   hit: boolean;
+  score: number | null;
   strikeLockWindowSeconds: number;
   strikeLockMode: StrikeLockMode;
   bufferedMessageIds: readonly string[];
@@ -115,6 +116,7 @@ export function checkFloodOrDuplicate(
       : isDuplicateHit(buffer, message, floodPreset.duplicateSimilarityThreshold, floodPreset.frequency.windowSeconds);
   return {
     hit,
+    score: null,
     strikeLockWindowSeconds: floodPreset.frequency.windowSeconds,
     strikeLockMode: "burst",
     bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, floodPreset.frequency.windowSeconds),
@@ -126,6 +128,7 @@ export function checkNgword(message: IncomingMessage, ngwords: readonly NgwordRo
   const hit = findMatchingNgword(message.content, ngwords) !== null;
   return {
     hit,
+    score: null,
     strikeLockWindowSeconds: NGWORD_STRIKE_LOCK_WINDOW_SECONDS,
     strikeLockMode: "single-shot",
     bufferedMessageIds: [message.messageId],
@@ -148,6 +151,7 @@ export function checkMentionSpam(
   const cumulativeHit = hasCumulativeMentionSpam(mentionCounts, mentionPreset.cumulative.mentionThreshold);
   return {
     hit: singleHit || cumulativeHit,
+    score: null,
     strikeLockWindowSeconds: mentionPreset.cumulative.windowSeconds,
     strikeLockMode: "single-shot",
     bufferedMessageIds: [message.messageId],
@@ -166,6 +170,7 @@ export function checkInviteLink(message: IncomingMessage, resolvedGuildIds: read
   });
   return {
     hit,
+    score: null,
     strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS,
     strikeLockMode: "single-shot",
     bufferedMessageIds: [message.messageId],
@@ -188,6 +193,7 @@ export function checkLinkSpam(message: IncomingMessage, preset: ModerationPreset
   const score = scoreLinkSpam({ content: message.content, msSinceJoined });
   return {
     hit: hasLinkSpamHit(score, LINK_SPAM_PRESETS[preset].deleteThreshold),
+    score,
     strikeLockWindowSeconds: LINK_SPAM_STRIKE_LOCK_WINDOW_SECONDS,
     strikeLockMode: "single-shot",
     bufferedMessageIds: [message.messageId],

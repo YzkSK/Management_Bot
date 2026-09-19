@@ -4,6 +4,7 @@ import {
   bufferedMessageIdsInWindow,
   checkFloodOrDuplicate,
   checkInviteLink,
+  checkLinkSpam,
   checkMentionSpam,
   checkNgword,
 } from "./violation-check.js";
@@ -125,6 +126,23 @@ describe("checkInviteLink", () => {
   test("招待コードなし(空配列)ならhit=false", () => {
     const result = checkInviteLink(message(), []);
     expect(result.hit).toBe(false);
+  });
+});
+
+describe("checkLinkSpam", () => {
+  test("検知に用いたリンクスパムスコアを返す", () => {
+    const createdAt = new Date("2026-01-01T00:00:10.000Z");
+    const result = checkLinkSpam(
+      message({
+        content: "サーバー宣伝 <@123> https://bit.ly/example",
+        createdAt,
+        joinedAt: new Date(createdAt.getTime() - 60_000),
+      }),
+      "strong",
+    );
+
+    expect(result.hit).toBe(true);
+    expect(result.score).toBe(65);
   });
 });
 

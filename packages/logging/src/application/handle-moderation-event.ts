@@ -15,6 +15,7 @@ function toLogEntry(event: ModerationActionRecordedEvent): ModerationCaseLogEntr
     moderatorId: event.moderatorId,
     actionType: event.actionType,
     timeoutMinutes: event.timeoutMinutes,
+    incident: event.incident,
   };
   return event.action === "create"
     ? { ...base, action: "create" }

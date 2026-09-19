@@ -1,8 +1,13 @@
 import type { Redis } from "ioredis";
 import type { Db } from "@management-bot/db";
-import type { ModerationActionRecordedEvent, ModerationActionType, ModerationPreset, ModerationViolationType } from "@management-bot/shared";
+import type {
+  ModerationActionRecordedEvent,
+  ModerationActionType,
+  ModerationPreset,
+  ModerationViolationType,
+} from "@management-bot/shared";
 import { MENTION_SPAM_PRESETS, FLOOD_PRESETS, countMentions, extractInviteCodes, isWhitelistMatch } from "../domain/index.js";
-import { escalateAndRecordStrike } from "./escalate-and-record.js";
+import { escalateAndRecordStrike, type MessageModerationIncident } from "./escalate-and-record.js";
 import {
   type BufferedMessage,
   claimAndPushMessage,
@@ -96,6 +101,7 @@ export interface EscalationOutcome {
    * が対象にできず、時間窓外の古いメッセージは検知と無関係なため)。
    */
   bufferedMessageIds: readonly string[];
+  incident: MessageModerationIncident;
 }
 
 /** 処理済みメッセージのSETNXマーカーをどれだけ保持するか。実際のwindowSecondsより十分長く取る。 */
@@ -254,6 +260,11 @@ async function runViolationChecks(
       message.userId,
       threshold.violationType,
       message.createdAt,
+      {
+        score: check.score,
+        matchedMessageCount: check.bufferedMessageIds.length,
+        deletedMessageCount: check.bufferedMessageIds.length,
+      },
     );
     if (escalation === null) continue;
 
@@ -264,6 +275,7 @@ async function runViolationChecks(
       timeoutMinutes: escalation.timeoutMinutes,
       caseId: escalation.caseId,
       bufferedMessageIds: check.bufferedMessageIds,
+      incident: escalation.incident,
     });
   }
 

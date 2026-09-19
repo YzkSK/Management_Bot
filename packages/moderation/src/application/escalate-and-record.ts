@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@management-bot/db";
-import type { ModerationActionRecordedEvent, ModerationActionType, ModerationEscalationViolationType } from "@management-bot/shared";
+import type {
+  ModerationActionRecordedEvent,
+  ModerationActionType,
+  ModerationEscalationViolationType,
+  ModerationIncident,
+} from "@management-bot/shared";
 import { decideEscalationAction, ESCALATION_STEPS } from "../domain/index.js";
 import { getEscalationPreset } from "./escalation-settings.js";
 import { getTotalStrikeCount, incrementStrike } from "./escalation-state.js";
@@ -21,6 +26,21 @@ export interface EscalationResult {
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes?: number;
   caseId: string;
+  incident: MessageModerationIncident;
+}
+
+export interface MessageModerationIncident {
+  violationType: ModerationEscalationViolationType;
+  score: number | null;
+  matchedMessageCount: number;
+  deletedMessageCount: number;
+  strikeCount: number;
+}
+
+export interface MessageIncidentInput {
+  score: number | null;
+  matchedMessageCount: number;
+  deletedMessageCount: number;
 }
 
 /**
@@ -36,6 +56,7 @@ export async function escalateAndRecordStrike(
   userId: string,
   violationType: ModerationEscalationViolationType,
   createdAt: Date,
+  incidentInput: MessageIncidentInput,
 ): Promise<EscalationResult | null> {
   // incrementStrike失敗時、呼び出し元のstrikeロック解放は行わない(既存detectAndEscalateと同じ理由:
   // 接続断絶等はcommit済みかどうか判別できず、誤って解放すると二重にstrikeが進みうるため)。
@@ -46,6 +67,7 @@ export async function escalateAndRecordStrike(
   if (step === null) return null;
 
   const caseId = randomUUID();
+  const incident: MessageModerationIncident = { violationType, ...incidentInput, strikeCount: totalStrikeCount };
   await deps.eventBus.publish({
     type: "moderation.action.recorded",
     guildId,
@@ -55,6 +77,7 @@ export async function escalateAndRecordStrike(
     action: "create",
     actionType: step.actionType,
     timeoutMinutes: step.timeoutMinutes,
+    incident,
     createdAt: createdAt.toISOString(),
   });
 
@@ -64,5 +87,6 @@ export async function escalateAndRecordStrike(
     actionType: step.actionType,
     timeoutMinutes: step.timeoutMinutes,
     caseId,
+    incident,
   };
 }

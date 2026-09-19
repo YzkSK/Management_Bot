@@ -167,6 +167,13 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       moderatorId: SYSTEM_MODERATOR_ID,
       action: "create",
       actionType: "warn",
+      incident: {
+        violationType: "flood",
+        score: null,
+        matchedMessageCount: 3,
+        deletedMessageCount: 3,
+        strikeCount: 1,
+      },
     });
 
     const [row] = await db

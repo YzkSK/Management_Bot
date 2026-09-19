@@ -25,6 +25,15 @@ function seedBaseQueries(queryClient: QueryClient, guildId: string): void {
 }
 
 describe("ModerationPage", () => {
+  test("検知履歴タブを表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedBaseQueries(queryClient, guildId);
+    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, []);
+
+    expect(renderPage(guildId, queryClient)).toContain("検知履歴");
+  });
+
   test("raid/new_account_guardの設定行を表示する(#196: DASHBOARD_VIOLATION_TYPES制限撤廃の確認)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";
