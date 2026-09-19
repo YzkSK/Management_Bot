@@ -37,6 +37,11 @@ describe("extractInviteCodes", () => {
   test("別ドメインの一部(例: notdiscord.gg)は誤検知しない(Codexレビュー指摘の回帰テスト)", () => {
     expect(extractInviteCodes("notdiscord.gg/notAnInvite")).toEqual([]);
   });
+
+  test("www.付きのドメインからも招待コードを抽出する(#370: link-spam.tsとの扱い統一)", () => {
+    expect(extractInviteCodes("https://www.discord.gg/abc123")).toEqual(["abc123"]);
+    expect(extractInviteCodes("www.discord.com/invite/abc123")).toEqual(["abc123"]);
+  });
 });
 
 describe("hasInviteLinkHit", () => {
