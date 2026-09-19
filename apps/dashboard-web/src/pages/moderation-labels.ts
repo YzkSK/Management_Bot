@@ -17,6 +17,11 @@ export const PRESET_LABELS: Record<ModerationPreset, string> = {
   strong: "強",
 };
 
+/** NGワード・招待リンクは種別固有の検知条件が強度で変わらない。 */
+export function isPresetIndependentViolationType(violationType: ModerationViolationType): boolean {
+  return violationType === "ngword" || violationType === "invite_link";
+}
+
 export type NgwordMatchType = "exact" | "contains" | "regex";
 
 export const NGWORD_MATCH_TYPE_LABELS: Record<NgwordMatchType, string> = {

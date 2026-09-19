@@ -13,6 +13,7 @@ import { trpc } from "../trpc.js";
 import {
   describePreset,
   ESCALATION_DESCRIPTIONS,
+  isPresetIndependentViolationType,
   NGWORD_MATCH_TYPE_LABELS,
   PRESET_LABELS,
   VIOLATION_TYPE_LABELS,
@@ -84,6 +85,14 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
+          {isPresetIndependentViolationType(row.violationType) ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-muted-foreground text-sm underline decoration-dotted">強度共通</span>
+              </TooltipTrigger>
+              <TooltipContent>{describePreset(row.violationType, "medium")}</TooltipContent>
+            </Tooltip>
+          ) : (
           <Select
             value={row.preset}
             disabled={mutation.isPending}
@@ -107,6 +116,7 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
               ))}
             </SelectContent>
           </Select>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
