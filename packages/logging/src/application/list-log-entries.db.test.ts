@@ -49,6 +49,30 @@ async function insert(entry: LogEntry, createdAt: string, authorIsBot = false): 
   });
 }
 
+function messageCreateEntry(messageId: string, content: string): LogEntry {
+  return {
+    category: "message",
+    guildId,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    channelId: "c1",
+    authorId: "u1",
+    messageId,
+    action: "create",
+    content,
+  };
+}
+
+function bulkDeleteEntry(messageIds: readonly string[]): LogEntry {
+  return {
+    category: "message",
+    guildId,
+    createdAt: "2026-09-20T00:01:00.000Z",
+    channelId: "c1",
+    action: "bulkDelete",
+    deletedMessages: messageIds.map((messageId) => ({ messageId, authorId: "u1" })),
+  };
+}
+
 describe("listLogEntries", () => {
   test("guildIdで絞り込み、他ギルドのエントリを含まない", async () => {
     await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
@@ -71,6 +95,52 @@ describe("listLogEntries", () => {
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]?.entry.category).toBe("member");
+  });
+
+  test("一括削除に含まれる15件の投稿ログを子ログへ集約し、次ページで重複表示しない", async () => {
+    const messageIds = Array.from({ length: 15 }, (_, index) => `message-${index + 1}`);
+    for (const [index, messageId] of messageIds.entries()) {
+      await insert(messageCreateEntry(messageId, `content-${index + 1}`), `2026-09-20T00:00:${String(index).padStart(2, "0")}.000Z`);
+    }
+    await insert(memberEntry({ userId: "unrelated" }), "2026-09-20T00:00:30.000Z");
+    await insert(bulkDeleteEntry(messageIds), "2026-09-20T00:01:00.000Z");
+
+    const firstPage = await listLogEntries(db, { guildId, limit: 1 });
+
+    expect(firstPage.entries).toHaveLength(1);
+    expect(firstPage.entries[0]).toMatchObject({
+      entry: { action: "bulkDelete" },
+      collapsedEntries: messageIds.map((messageId, index) => ({
+        entry: { action: "create", messageId, content: `content-${index + 1}` },
+      })),
+    });
+    expect(firstPage.nextCursor).not.toBeNull();
+
+    const secondPage = await listLogEntries(db, { guildId, limit: 50, cursor: firstPage.nextCursor! });
+
+    expect(secondPage.entries.map(({ entry }) => entry)).toEqual([expect.objectContaining({ userId: "unrelated" })]);
+  });
+
+  test("messageIdを持たない既存の投稿ログは一括削除の子ログにせず通常表示する", async () => {
+    await insert(
+      {
+        category: "message",
+        guildId,
+        createdAt: "2026-09-20T00:00:00.000Z",
+        channelId: "c1",
+        authorId: "u1",
+        action: "create",
+        content: "legacy",
+      },
+      "2026-09-20T00:00:00.000Z",
+    );
+    await insert(bulkDeleteEntry(["message-1"]), "2026-09-20T00:01:00.000Z");
+
+    const result = await listLogEntries(db, { guildId, limit: 50 });
+
+    expect(result.entries.map(({ entry }) => entry)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ action: "create", content: "legacy" })]),
+    );
   });
 
   test("excludeCategoriesで指定したカテゴリは結果に含まれない", async () => {

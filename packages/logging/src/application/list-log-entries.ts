@@ -1,7 +1,7 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import { SENSITIVE_LOG_FIELDS, type LogCategory } from "@management-bot/shared";
-import { and, desc, eq, lt, notInArray, or } from "drizzle-orm";
+import { SENSITIVE_LOG_FIELDS, isBulkDeleteLogEntry, type LogCategory } from "@management-bot/shared";
+import { and, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
 
@@ -32,9 +32,36 @@ export interface ListLogEntriesInput {
 }
 
 export interface ListLogEntriesResult {
-  entries: Array<{ id: string; entry: LogEntry }>;
+  entries: ListedLogEntry[];
   nextCursor: string | null;
 }
+
+export interface ListedLogEntry {
+  id: string;
+  entry: LogEntry;
+  collapsedEntries?: ListedLogEntry[];
+}
+
+const messageAction = sql<string>`${logEntries.payload}->>'action'`;
+const messageId = sql<string>`${logEntries.payload}->>'messageId'`;
+
+/** 集約bulkDeleteが参照するmessage/createは親へ付け替えるため、通常の一覧行から外す。 */
+const isNotCollapsedMessageCreate = sql`
+  NOT (
+    ${logEntries.category} = 'message'
+    AND ${messageAction} = 'create'
+    AND ${messageId} IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM log_entries AS bulk_delete
+      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(bulk_delete.payload->'deletedMessages', '[]'::jsonb)) AS deleted_message
+      WHERE bulk_delete.guild_id = ${logEntries.guildId}
+        AND bulk_delete.category = 'message'
+        AND bulk_delete.payload->>'action' = 'bulkDelete'
+        AND deleted_message->>'messageId' = ${messageId}
+    )
+  )
+`;
 
 /**
  * (createdAt, id)の複合カーソルによるcursorベースページネーション。
@@ -46,6 +73,7 @@ export async function listLogEntries(
   input: ListLogEntriesInput,
 ): Promise<ListLogEntriesResult> {
   const conditions = [eq(logEntries.guildId, input.guildId)];
+  if (!input.category || input.category === "message") conditions.push(isNotCollapsedMessageCreate);
   if (input.category) conditions.push(eq(logEntries.category, input.category));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
@@ -75,8 +103,44 @@ export async function listLogEntries(
   const page = rows.slice(0, input.limit);
   const last = page[page.length - 1];
 
+  const parsedPage = page.map((row) => ({ id: row.id, entry: parseLogEntry(row.payload) }));
+  const deletedMessageIds = parsedPage.flatMap(({ entry }) =>
+    isBulkDeleteLogEntry(entry)
+      ? entry.deletedMessages.flatMap((deletedMessage) => (deletedMessage.messageId ? [deletedMessage.messageId] : []))
+      : [],
+  );
+  const relatedRows =
+    deletedMessageIds.length === 0
+      ? []
+      : await db
+          .select({ id: logEntries.id, payload: logEntries.payload })
+          .from(logEntries)
+          .where(
+            and(
+              eq(logEntries.guildId, input.guildId),
+              eq(logEntries.category, "message"),
+              eq(messageAction, "create"),
+              inArray(messageId, deletedMessageIds),
+              ...(input.excludeBotEvents ? [eq(logEntries.authorIsBot, false)] : []),
+            ),
+          );
+  const relatedByMessageId = new Map<string, ListedLogEntry>();
+  for (const row of relatedRows) {
+    const entry = parseLogEntry(row.payload);
+    if (entry.category === "message" && entry.action === "create" && entry.messageId) {
+      relatedByMessageId.set(entry.messageId, { id: row.id, entry });
+    }
+  }
+
   return {
-    entries: page.map((row) => ({ id: row.id, entry: parseLogEntry(row.payload) })),
+    entries: parsedPage.map((parent) => {
+      if (!isBulkDeleteLogEntry(parent.entry)) return parent;
+      const collapsedEntries = parent.entry.deletedMessages.flatMap((deletedMessage) => {
+        const related = deletedMessage.messageId ? relatedByMessageId.get(deletedMessage.messageId) : undefined;
+        return related ? [related] : [];
+      });
+      return collapsedEntries.length > 0 ? { ...parent, collapsedEntries } : parent;
+    }),
     nextCursor:
       hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null,
   };

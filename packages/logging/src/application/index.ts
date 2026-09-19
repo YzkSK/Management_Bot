@@ -21,6 +21,7 @@ export {
   maskSensitiveFields,
   type ListLogEntriesInput,
   type ListLogEntriesResult,
+  type ListedLogEntry,
 } from "./list-log-entries.js";
 export {
   getDisplaySettings,
