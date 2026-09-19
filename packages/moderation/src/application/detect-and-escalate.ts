@@ -98,8 +98,10 @@ export interface EscalationOutcome {
    * バッファ自体は同一ユーザーのチャンネル横断・時刻フィルタなしの全件を保持しているため、
    * ここで同一チャンネル・時間窓に絞り込んでいる(別チャンネルのメッセージはchannel.bulkDelete
    * が対象にできず、時間窓外の古いメッセージは検知と無関係なため)。
-   */
+  */
   bufferedMessageIds: readonly string[];
+  /** burst型の検知後に、収束待ちを打ち切る追加投稿数。 */
+  settlementMessageThreshold?: number;
   incident: MessageModerationIncident;
 }
 
@@ -274,6 +276,9 @@ async function runViolationChecks(
       ...(escalation.timeoutMinutes === undefined ? {} : { timeoutMinutes: escalation.timeoutMinutes }),
       caseId: escalation.caseId,
       bufferedMessageIds: check.bufferedMessageIds,
+      ...(check.settlementMessageThreshold === undefined
+        ? {}
+        : { settlementMessageThreshold: check.settlementMessageThreshold }),
       incident: escalation.incident,
     });
   }

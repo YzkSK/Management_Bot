@@ -49,6 +49,11 @@ describe("checkFloodOrDuplicate (flood)", () => {
     const result = checkFloodOrDuplicate(buffer, message(), "medium", "flood");
     expect(result.hit).toBe(true);
   });
+
+  test("収束待ちの上限としてプリセットの投稿件数閾値を返す", () => {
+    expect(checkFloodOrDuplicate([], message(), "strong", "flood").settlementMessageThreshold).toBe(3);
+    expect(checkFloodOrDuplicate([], message(), "medium", "duplicate_content").settlementMessageThreshold).toBe(5);
+  });
 });
 
 describe("checkFloodOrDuplicate (duplicate_content)", () => {

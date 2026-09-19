@@ -37,6 +37,8 @@ export interface ViolationCheck {
   strikeLockWindowSeconds: number;
   strikeLockMode: StrikeLockMode;
   bufferedMessageIds: readonly string[];
+  /** burst型の検知後に、収束待ちを打ち切る追加投稿数。 */
+  settlementMessageThreshold?: number;
 }
 
 /** NGワードはメッセージ単発判定のため、strikeロックのバースト抑制ウィンドウとして固定値を使う。 */
@@ -120,6 +122,7 @@ export function checkFloodOrDuplicate(
     strikeLockWindowSeconds: floodPreset.frequency.windowSeconds,
     strikeLockMode: "burst",
     bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, floodPreset.frequency.windowSeconds),
+    settlementMessageThreshold: floodPreset.frequency.messageThreshold,
   };
 }
 

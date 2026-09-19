@@ -157,6 +157,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        settlementMessageThreshold: 3,
         incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
       },
     ]);
@@ -213,6 +214,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        settlementMessageThreshold: 3,
         incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
       },
     ]);
@@ -262,6 +264,7 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
         actionType: "warn",
         caseId: expect.any(String),
         bufferedMessageIds: expect.any(Array),
+        settlementMessageThreshold: 3,
         incident: expect.objectContaining({ violationType: "duplicate_content", strikeCount: 1, score: null }),
       },
     ]);
