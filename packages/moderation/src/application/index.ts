@@ -40,11 +40,15 @@ export {
 } from "./message-buffer.js";
 export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";
 export {
+  clearLockdownChannelSnapshots,
   getLockdownSettings,
+  listLockdownChannelSnapshots,
   markLockdownApplied,
+  saveLockdownChannelSnapshots,
   setAutoLockdownOnRaid,
   setLockdownRequested,
   type LockdownSettings,
+  type LockdownChannelSnapshot,
 } from "./lockdown-settings.js";
 export { listNgwords, addNgword, removeNgword, UnsafeNgwordRegexError, type NgwordRow } from "./ngwords.js";
 export { escalateAndRecordStrike, type EscalateAndRecordDeps, type EscalationResult } from "./escalate-and-record.js";

@@ -3,8 +3,11 @@ import { randomUUID } from "node:crypto";
 import { createDb, type Db, guilds } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import {
+  clearLockdownChannelSnapshots,
   getLockdownSettings,
+  listLockdownChannelSnapshots,
   markLockdownApplied,
+  saveLockdownChannelSnapshots,
   setAutoLockdownOnRaid,
   setLockdownRequested,
 } from "./lockdown-settings.js";
@@ -54,5 +57,23 @@ describe("lockdown-settings", () => {
       requestedLocked: false,
       isLocked: true,
     });
+  });
+
+  test("チャンネル権限スナップショットは初回の値を保持し、解除後に削除できる", async () => {
+    await saveLockdownChannelSnapshots(db, guildId, [
+      { channelId: "channel-allow", sendMessages: true },
+      { channelId: "channel-deny", sendMessages: false },
+      { channelId: "channel-inherit", sendMessages: null },
+    ]);
+    await saveLockdownChannelSnapshots(db, guildId, [{ channelId: "channel-allow", sendMessages: false }]);
+
+    expect(await listLockdownChannelSnapshots(db, guildId)).toEqual([
+      { channelId: "channel-allow", sendMessages: true },
+      { channelId: "channel-deny", sendMessages: false },
+      { channelId: "channel-inherit", sendMessages: null },
+    ]);
+
+    await clearLockdownChannelSnapshots(db, guildId);
+    expect(await listLockdownChannelSnapshots(db, guildId)).toEqual([]);
   });
 });
