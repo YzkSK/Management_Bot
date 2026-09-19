@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
 import { createModerationConfigCache } from "../application/index.js";
+import { setEscalationPreset } from "../application/escalation-settings.js";
 import { addNgword } from "../application/ngwords.js";
 import { handleMessageUpdate } from "./handle-message-update.js";
 
@@ -173,9 +174,10 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
       { guildId, violationType: "ngword", preset: "medium", enabled: true },
       { guildId, violationType: "invite_link", preset: "medium", enabled: true },
     ]);
+    await setEscalationPreset(db, guildId, "strong");
     await addNgword(db, guildId, "contains", "banned-word");
-    // ngword: strikeCount=1→ESCALATION_STEPS.medium[1]=warn
-    // invite_link: strikeCount=2(ngword加算後の合計)→ESCALATION_STEPS.medium[2]=timeout
+    // ngword: strikeCount=1→ESCALATION_STEPS.strong[1]=warn
+    // invite_link: strikeCount=2(ngword加算後の合計)→ESCALATION_STEPS.strong[2]=timeout
     // より重いtimeoutに集約され、ban/kick同様にDiscord APIは1回のみ実行される想定。
 
     const eventBus = fakeEventBus();
