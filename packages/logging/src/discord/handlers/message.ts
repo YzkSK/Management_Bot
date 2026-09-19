@@ -1,12 +1,12 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollection, Snowflake } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import { buildBulkDeleteSummaryContainers, type GetChannelId, type WriteLogEntryDeps } from "../../application/index.js";
+import { type GetChannelId, type WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntriesBulkSafely, writeLogEntrySafely } from "../write-log-entry-safely.js";
+import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
-type MessageAttachments = Extract<LogEntry, { category: "message" }>["attachments"];
+type MessageAttachments = { url: string; filename: string; contentType?: string }[] | undefined;
 
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
@@ -146,25 +146,39 @@ export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string |
   };
 }
 
-export function toMessageBulkDeleteLogEntries(
+export function toMessageBulkDeleteLogEntry(
   messages: ReadonlyCollection<Snowflake, Message<true> | PartialMessage<true>>,
   botUserId: string | undefined,
-): LogEntry[] {
+): LogEntry | undefined {
   const createdAt = new Date().toISOString();
-  const entries: LogEntry[] = [];
+  let aggregateFields: { guildId: string; channelId: string } | undefined;
+  const deletedMessages: {
+    messageId: string;
+    authorId: string;
+    authorName: string;
+    content?: string;
+    attachments?: MessageAttachments;
+  }[] = [];
   for (const message of messages.values()) {
-    const base = baseFields(message, botUserId);
-    if (!base) continue;
-    entries.push({
-      category: "message",
-      ...base,
-      createdAt,
-      action: "bulkDelete",
+    const fields = baseFields(message, botUserId);
+    if (!fields) continue;
+    aggregateFields ??= { guildId: fields.guildId, channelId: fields.channelId };
+    deletedMessages.push({
+      messageId: message.id,
+      authorId: fields.authorId,
+      authorName: fields.authorName,
       content: message.content || undefined,
       attachments: toAttachments(message),
     });
   }
-  return entries;
+  if (!aggregateFields || deletedMessages.length === 0) return undefined;
+  return {
+    category: "message",
+    ...aggregateFields,
+    createdAt,
+    action: "bulkDelete",
+    deletedMessages,
+  };
 }
 
 export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
@@ -189,19 +203,7 @@ export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId:
   });
 
   ctx.client.on("messageDeleteBulk", (messages) => {
-    const entries = toMessageBulkDeleteLogEntries(messages, ctx.client.user?.id);
-    if (entries.length === 0) return;
-    const channelId = messages.first()!.channelId;
-    writeLogEntriesBulkSafely(
-      deps,
-      entries,
-      (entries) => ({
-        components: buildBulkDeleteSummaryContainers({
-          count: entries.length,
-          channelId,
-          createdAt: entries[0]!.createdAt,
-        }),
-      }),
-    );
+    const entry = toMessageBulkDeleteLogEntry(messages, ctx.client.user?.id);
+    if (entry) writeLogEntrySafely(deps, entry);
   });
 }
