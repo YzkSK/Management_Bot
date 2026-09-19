@@ -116,6 +116,36 @@ export const moderationRaidState = pgTable(
   (table) => [check("moderation_raid_state_incident_count_check", sql`${table.incidentCount} >= 0`)],
 );
 
+/**
+ * ロックダウンの要求・適用状態。requestedLockedはDashboardまたはレイド検知が要求した状態、
+ * isLockedはDiscord側の@everyone送信権限変更まで完了した状態を表す。
+ */
+export const moderationLockdownSettings = pgTable(
+  "moderation_lockdown_settings",
+  {
+    guildId: text("guild_id")
+      .primaryKey()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    autoLockdownOnRaid: boolean("auto_lockdown_on_raid").notNull().default(false),
+    requestedLocked: boolean("requested_locked").notNull().default(false),
+    isLocked: boolean("is_locked").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/** ロック前の@everyone SendMessages overwriteを復元するためのチャンネル単位スナップショット。 */
+export const moderationLockdownChannelSnapshots = pgTable(
+  "moderation_lockdown_channel_snapshots",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    sendMessages: boolean("send_messages"),
+  },
+  (table) => [primaryKey({ columns: [table.guildId, table.channelId] })],
+);
+
 export const moderationEscalationSettings = pgTable(
   "moderation_escalation_settings",
   {

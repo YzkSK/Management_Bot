@@ -39,6 +39,13 @@ export {
   type BufferedMentionCount,
 } from "./message-buffer.js";
 export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.js";
+export {
+  getLockdownSettings,
+  markLockdownApplied,
+  setAutoLockdownOnRaid,
+  setLockdownRequested,
+  type LockdownSettings,
+} from "./lockdown-settings.js";
 export { listNgwords, addNgword, removeNgword, UnsafeNgwordRegexError, type NgwordRow } from "./ngwords.js";
 export { escalateAndRecordStrike, type EscalateAndRecordDeps, type EscalationResult } from "./escalate-and-record.js";
 export { pushRaidEntry } from "./raid-buffer.js";
