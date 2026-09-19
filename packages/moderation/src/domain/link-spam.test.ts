@@ -41,6 +41,10 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://discord.com/invite/abc123" }))).toBe(0);
   });
 
+  test("www.付きのDiscord招待リンクとの併用も加点されない(#370: invite-link.tsとの扱い統一の回帰テスト)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> https://www.discord.gg/abc123" }))).toBe(0);
+  });
+
   test("Discord招待ドメインへの先頭側部分一致(別ドメインの一部)は除去されず、外部URLとして加点される(Codexレビュー再指摘の回帰テスト)", () => {
     // "spamdiscord.gg/fake"は"discord.gg"を含むが実際は別ドメインの一部であり、
     // 招待リンクではないため外部URLとしてメンション併用の加点対象になるべき。
