@@ -563,10 +563,10 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
 
   /**
    * レイド対策(大量入室検知、#191)の垂直スライス全体を通しで検証する複合テスト(#197)。
-   * 「短時間大量入室(新規アカウント多数)→レイド検知→対象者一括timeout相当のイベント発行→
+   * 「短時間大量入室(新規アカウント多数)→レイド検知→対象者一括kick相当のイベント発行→
    * moderation.action.recorded複数発行→loggingに同一caseIdで相関記録される」までを検証する。
    * strong preset: window.memberThreshold=6, newAccountRatioThreshold=0.4。
-   * 実際のDiscord API呼び出し(discord層のtimeout実行)はスコープ外で、
+   * 実際のDiscord API呼び出し(discord層のkick実行)はスコープ外で、
    * application層(handleGuildMemberAdd)がmoderation.action.recordedをpublishするところまでを検証する。
    */
   test("短時間大量入室(新規アカウント多数)→レイド検知→対象者全員へのmoderation.action.recorded発行→loggingに同一caseIdで相関記録される", async () => {
@@ -617,7 +617,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       // (Codexレビュー指摘: caseId・件数だけでは全員が同じユーザーを指していても通ってしまうため)。
       expect(new Set(received.map((e) => e.targetUserId))).toEqual(new Set(userIds));
       for (const event of received) {
-        expect(event.actionType).toBe("timeout");
+        expect(event.actionType).toBe("kick");
       }
 
       const rows = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
@@ -630,7 +630,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
       for (const row of rows) {
         expect(row).toMatchObject({
           category: "moderationCase",
-          payload: expect.objectContaining({ category: "moderationCase", guildId, caseId, actionType: "timeout" }),
+          payload: expect.objectContaining({ category: "moderationCase", guildId, caseId, actionType: "kick" }),
         });
       }
 
@@ -721,10 +721,9 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
   /**
    * 新規アカウントガード(new_account_guard、#191)単体検知の垂直スライスを通しで検証する
    * 複合テスト(#197)。既存の共通エスカレーション処理(#173)にそのまま接続していることを、
-   * 「作成間もないアカウントの入室→strike加算→moderation.action.recorded発行→
-   * loggingへのmoderationCase記録」まで検証する。
+   * 「作成間もないアカウントの入室→new_account_guard検知→処罰・ログなし」まで検証する。
    */
-  test("作成間もないアカウントの入室→new_account_guard検知→エスカレーション適用→loggingへのmoderationCase記録まで一気通貫で行われる", async () => {
+  test("作成間もないアカウントの入室はnew_account_guard検知しても処罰・ログを残さない", async () => {
     const guildId = `test-guild-${randomUUID()}`;
     const userId = `u-${randomUUID()}`;
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
@@ -737,13 +736,13 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
     const moderationEventBus = new DomainEventBus(REDIS_URL, `test-moderation-${runId}`);
     const loggingEventBus = new DomainEventBus(REDIS_URL, `test-logging-${runId}`);
     const sendToChannel = mock(() => Promise.resolve());
-    const written = Promise.withResolvers<void>();
+    const received: ModerationActionRecordedEvent[] = [];
 
     try {
       await loggingEventBus.subscribe("moderation.action.recorded", async (event, entryId) => {
         if (event.guildId !== guildId) return;
+        received.push(event);
         await handleModerationEvent({ db, sendToChannel })(event, entryId);
-        written.resolve();
       });
       await new Promise((r) => setTimeout(r, 100));
 
@@ -754,33 +753,14 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
         guildMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now }),
       );
 
-      expect(result.newAccountGuardOutcome).toMatchObject({
-        violationType: "new_account_guard",
-        strikeCount: 1,
-        actionType: "warn",
-        caseId: expect.any(String),
-      });
+      await new Promise((r) => setTimeout(r, 300));
 
-      await withTimeout(written.promise, 5_000, "logging handler");
-
-      const [row] = await db.select().from(logEntries).where(eq(logEntries.guildId, guildId));
-      expect(row).toMatchObject({
-        category: "moderationCase",
-        payload: expect.objectContaining({
-          category: "moderationCase",
-          guildId,
-          targetUserId: userId,
-          actionType: "warn",
-          caseId: result.newAccountGuardOutcome?.caseId,
-        }),
-      });
-
-      const [state] = await db
-        .select()
-        .from(moderationEscalationState)
-        .where(eq(moderationEscalationState.userId, userId));
-      expect(state?.strikeCount).toBe(1);
-      expect(state?.violationType).toBe("new_account_guard");
+      expect(result.newAccountGuardOutcome).toBeNull();
+      expect(received).toEqual([]);
+      expect(
+        await db.select().from(moderationEscalationState).where(eq(moderationEscalationState.userId, userId)),
+      ).toEqual([]);
+      expect(await db.select().from(logEntries).where(eq(logEntries.guildId, guildId))).toEqual([]);
     } finally {
       await Promise.all([moderationEventBus.close(), loggingEventBus.close()]);
       await db.delete(guilds).where(eq(guilds.id, guildId));

@@ -10,7 +10,7 @@ import {
   RAID_PRESETS,
   type RaidSeverity,
 } from "../domain/index.js";
-import { escalateAndRecordStrike, SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
+import { SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
 import type { ModerationConfigCache } from "./moderation-config-cache.js";
 import { markRaidHitAndCheckNewIncident, pushRaidEntry } from "./raid-buffer.js";
 import { getRaidState, incrementRaidIncident } from "./raid-state.js";
@@ -51,10 +51,10 @@ export interface RaidHitResult {
 }
 
 export interface GuildMemberAddResult {
-  /** レイド(集団)ヒット時のみ設定。対象ユーザー全員への一括timeout実行は呼び出し側(discord層)の責務。 */
+  /** レイド(集団)ヒット時のみ設定。対象ユーザー全員への一括kick実行は呼び出し側(discord層)の責務。 */
   raidHit: RaidHitResult | null;
-  /** new_account_guard(単体)ヒット時のみ設定。既存の共通エスカレーション処理の結果をそのまま返す。 */
-  newAccountGuardOutcome: Awaited<ReturnType<typeof escalateAndRecordStrike>>;
+  /** new_account_guardは監視専用のため、処罰結果を返さない。 */
+  newAccountGuardOutcome: null;
 }
 
 /**
