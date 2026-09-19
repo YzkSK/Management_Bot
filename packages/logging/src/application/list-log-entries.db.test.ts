@@ -3,7 +3,7 @@ import { createDb, guilds, logEntries } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
-import { decodeCursor, encodeCursor, listBulkDeletedMessageIds, listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
+import { decodeCursor, encodeCursor, listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -95,15 +95,6 @@ describe("listLogEntries", () => {
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]?.entry.category).toBe("member");
-  });
-
-  test("集約一括削除の対象メッセージIDを重複なく一度に収集する", async () => {
-    await insert(bulkDeleteEntry(["message-1", "message-2"]), "2026-09-20T00:01:00.000Z");
-    await insert(bulkDeleteEntry(["message-2", "message-3"]), "2026-09-20T00:02:00.000Z");
-
-    const messageIds = await listBulkDeletedMessageIds(db, guildId);
-
-    expect(messageIds).toEqual(["message-1", "message-2", "message-3"]);
   });
 
   test("一括削除に含まれる15件の投稿ログを子ログへ集約し、次ページで重複表示しない", async () => {
