@@ -48,6 +48,19 @@ function withDefaults(settings: readonly ThresholdSetting[]): ThresholdSetting[]
   );
 }
 
+/**
+ * tRPC+TanStack QueryのqueryKeyは[path, {input, type}]の形で、inputはunknown型のため
+ * 安全に絞り込む。listStrikesはafterでページングされ複数のqueryKeyに分かれるため、
+ * 特定のguildId向けの全ページをまとめて無効化する際に使う(#368)。
+ */
+function matchesGuildId(query: { queryKey: readonly unknown[] }, guildId: string): boolean {
+  const opts = query.queryKey[1];
+  if (typeof opts !== "object" || opts === null || !("input" in opts)) return false;
+  const input = opts.input;
+  if (typeof input !== "object" || input === null || !("guildId" in input)) return false;
+  return input.guildId === guildId;
+}
+
 function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSetting }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -510,23 +523,32 @@ function groupStrikesByUser(
 
 function UserStrikeGroup({
   guildId,
-  after,
   group,
   userName,
+  onReset,
 }: {
   guildId: string;
-  after: string | undefined;
   group: { userId: string; total: number; entries: StrikeEntry[] };
   userName: string;
+  /** ページング結果を保持するstate(useStrikePagesのpages)をクリアし、先頭ページから読み直させる(#368)。 */
+  onReset: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
   const resetAllMutation = useMutation({
     ...trpc.moderation.resetAllStrikes.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+    // listStrikesはafterでページングされ複数のqueryKeyに分かれるため、現在ページ({guildId, after})
+    // のみのinvalidateだと、リセット対象のユーザーの行が他ページのキャッシュに残ってしまう
+    // (#367の複合カーソル化で同一userIdの行が複数ページに跨るケースが生じ得る、#368)。
+    // pathFilter+predicateでguildId一致の全ページのキャッシュを無効化しつつ、既に画面側に
+    // コピー済みのpages stateはinvalidateQueriesでは更新されないためonResetで別途クリアする
+    // (Codexレビュー指摘)。
+    onSuccess: () => {
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -565,7 +587,12 @@ function UserStrikeGroup({
               </TableHeader>
               <TableBody>
                 {group.entries.map((entry) => (
-                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} after={after} entry={entry} />
+                  <StrikeDetailRow
+                    key={`${entry.userId}-${entry.violationType}`}
+                    guildId={guildId}
+                    entry={entry}
+                    onReset={onReset}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -578,20 +605,24 @@ function UserStrikeGroup({
 
 function StrikeDetailRow({
   guildId,
-  after,
   entry,
+  onReset,
 }: {
   guildId: string;
-  after: string | undefined;
   entry: StrikeEntry;
+  onReset: () => void;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     ...trpc.moderation.resetStrike.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+    // resetAllMutation(UserStrikeGroup)と同様、guildId一致の全ページのキャッシュを無効化しつつ、
+    // pages state自体はonResetでクリアする(Codexレビュー指摘、#368)。
+    onSuccess: () => {
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -615,23 +646,58 @@ function StrikeDetailRow({
   );
 }
 
-/** AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果をカーソル単位で保持する。 */
+export interface StrikePageData {
+  rows: StrikeEntry[];
+  userNames: Record<string, string>;
+}
+
+/**
+ * 取得中(isFetching)はquery.dataがまだ古い(invalidate前の)値を保持していることがあり、
+ * resetPages直後にここでコピーするとpagesへ古いデータが再コピーされ、一瞬「履歴なし」に
+ * なった後古い行・合計が再表示されてしまう(Codexレビュー指摘)。再取得完了後の新しい
+ * query.dataでのみコピーする。
+ */
+export function canUpdateStrikePages(data: StrikePageData | undefined, isFetching: boolean): data is StrikePageData {
+  return data !== undefined && !isFetching;
+}
+
+/**
+ * rows.length===0の間にisFetchingがtrueなら、resetPages直後で再取得中の可能性がある
+ * (isPendingはキャッシュされたデータが全くない場合のみtrueになり、invalidateQueries
+ * 直後のように古いキャッシュがまだ残っている間はfalseのまま、Codexレビュー指摘)。
+ * isFetchingも見ることで「履歴なし」の誤表示を防ぐ。
+ */
+export function isStrikePagesPending(rowCount: number, isPending: boolean, isFetching: boolean): boolean {
+  return rowCount === 0 && (isPending || isFetching);
+}
+
+/**
+ * AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果を
+ * カーソル単位で保持する。invalidateQueriesはTanStack Queryのキャッシュを無効化する
+ * だけで、既にこのpages stateへコピー済みのデータや非アクティブ(現在表示されていない)
+ * ページの再取得までは行わない。そのためストライクリセット成功時は、単なる
+ * invalidateQueriesに加えてresetPagesでpages自体をクリアし、先頭ページから
+ * 読み直させる必要がある(Codexレビュー指摘、#368)。
+ */
 function useStrikePages(guildId: string) {
   const [after, setAfter] = useState<string | undefined>(undefined);
-  const [pages, setPages] = useState<Record<string, { rows: StrikeEntry[]; userNames: Record<string, string> }>>({});
+  const [pages, setPages] = useState<Record<string, StrikePageData>>({});
 
-  useEffect(() => {
+  const resetPages = () => {
     setAfter(undefined);
     setPages({});
-  }, [guildId]);
+  };
+
+  useEffect(resetPages, [guildId]);
 
   const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
 
   useEffect(() => {
-    if (!query.data) return;
+    const data = query.data;
+    if (!canUpdateStrikePages(data, query.isFetching)) return;
     const pageKey = after ?? FIRST_PAGE_KEY;
-    setPages((prev) => ({ ...prev, [pageKey]: { rows: query.data.rows, userNames: query.data.userNames } }));
-  }, [after, query.data]);
+    setPages((prev) => ({ ...prev, [pageKey]: { rows: data.rows, userNames: data.userNames } }));
+  }, [after, query.data, query.isFetching]);
 
   const rows = Object.values(pages).flatMap((p) => p.rows);
   const userNames = Object.assign({}, ...Object.values(pages).map((p) => p.userNames)) as Record<string, string>;
@@ -639,17 +705,17 @@ function useStrikePages(guildId: string) {
   return {
     rows,
     userNames,
-    after,
-    isPending: rows.length === 0 && query.isPending,
+    isPending: isStrikePagesPending(rows.length, query.isPending, query.isFetching),
     isError: query.isError,
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
     loadNextPage: () => setAfter(query.data?.nextAfter),
+    resetPages,
   };
 }
 
 function StrikeTab({ guildId }: { guildId: string }) {
-  const { rows, userNames, after, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
+  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage, resetPages } =
     useStrikePages(guildId);
 
   if (isPending) {
@@ -685,9 +751,9 @@ function StrikeTab({ guildId }: { guildId: string }) {
             <UserStrikeGroup
               key={group.userId}
               guildId={guildId}
-              after={after}
               group={group}
               userName={userNames[group.userId] ?? group.userId}
+              onReset={resetPages}
             />
           ))}
         </TableBody>
