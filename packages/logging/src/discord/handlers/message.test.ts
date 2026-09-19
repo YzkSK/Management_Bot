@@ -49,6 +49,7 @@ describe("toMessageCreateLogEntry", () => {
       channelId: "c1",
       authorId: "u1",
       authorName: "たろう",
+      messageId: "m1",
       createdAt: "2026-01-01T00:00:00.000Z",
       action: "create",
       content: "hello",

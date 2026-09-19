@@ -76,6 +76,7 @@ export function toMessageCreateLogEntry(
   return {
     category: "message",
     ...base,
+    messageId: message.id,
     createdAt: message.createdAt.toISOString(),
     action: "create",
     content: message.content || undefined,
