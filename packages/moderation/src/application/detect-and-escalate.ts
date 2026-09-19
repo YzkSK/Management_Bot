@@ -16,6 +16,7 @@ import type { EnabledThreshold } from "./thresholds.js";
 import {
   checkFloodOrDuplicate,
   checkInviteLink,
+  checkLinkSpam,
   checkMentionSpam,
   checkNgword,
   NGWORD_STRIKE_LOCK_WINDOW_SECONDS,
@@ -35,6 +36,7 @@ const MESSAGE_CREATE_VIOLATION_TYPES = [
   "ngword",
   "mention_spam",
   "invite_link",
+  "link_spam",
 ] as const satisfies readonly ModerationViolationType[];
 type MessageCreateViolationType = (typeof MESSAGE_CREATE_VIOLATION_TYPES)[number];
 
@@ -53,6 +55,11 @@ export interface IncomingMessage {
   messageId: string;
   content: string;
   createdAt: Date;
+  /**
+   * 投稿者がこのguildに参加した日時(GuildMember.joinedAt)。link_spamの「参加24時間以内」
+   * 加点判定に使う(改善案5.6節)。取得できない場合(取得失敗・partial member等)はundefined。
+   */
+  joinedAt?: Date;
 }
 
 export interface DetectAndEscalateDeps {
@@ -106,6 +113,25 @@ const PROCESSED_MARKER_TTL_SECONDS = 3600;
  * 空配列を返す。
  */
 /**
+ * メッセージ内の招待コードを解決する。悪意あるメッセージに大量の招待リンクを詰め込まれると
+ * fetchInvite呼び出しが際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
+ * 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
+ * invite_link・link_spamの両方から呼ばれる(resolveInviteGuildId自体はTTLキャッシュ済み、#362)。
+ */
+async function resolveInviteCodes(deps: DetectAndEscalateDeps, message: IncomingMessage): Promise<(string | null)[]> {
+  const codes = extractInviteCodes(message.content);
+  const resolvedGuildIds: (string | null)[] = [];
+  for (const code of codes) {
+    const resolvedGuildId = await deps.resolveInviteGuildId(code);
+    resolvedGuildIds.push(resolvedGuildId);
+    // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
+    // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
+    if (resolvedGuildId !== message.guildId) break;
+  }
+  return resolvedGuildIds;
+}
+
+/**
  * 副作用の前処理(Redis書き込み・招待リンク解決)を行った上で、violation-check.tsの
  * 副作用なし検知判定関数へ委譲する橋渡し。検知ロジック自体(hit判定の中身)は
  * violation-check.tsの各checkXxx関数が担う。
@@ -144,19 +170,12 @@ async function prepareAndCheckViolation(
   }
 
   if (violationType === "invite_link") {
-    const codes = extractInviteCodes(message.content);
-    // 悪意あるメッセージに大量の招待リンクを詰め込まれるとfetchInvite呼び出しが
-    // 際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
-    // 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
-    const resolvedGuildIds: (string | null)[] = [];
-    for (const code of codes) {
-      const resolvedGuildId = await deps.resolveInviteGuildId(code);
-      resolvedGuildIds.push(resolvedGuildId);
-      // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
-      // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
-      if (resolvedGuildId !== message.guildId) break;
-    }
+    const resolvedGuildIds = await resolveInviteCodes(deps, message);
     return checkInviteLink(message, resolvedGuildIds);
+  }
+
+  if (violationType === "link_spam") {
+    return checkLinkSpam(message, preset);
   }
 
   throw new Error(`unhandled violationType: ${violationType satisfies never}`);
@@ -188,9 +207,24 @@ async function runViolationChecks(
 ): Promise<DetectAndEscalateResult> {
   const outcomes: EscalationOutcome[] = [];
   const lockedMessageIds = new Set<string>();
-  for (const threshold of thresholds) {
+  // invite_linkがヒットした場合、同一メッセージのlink_spamは検知対象から除外する。
+  // link_spamは「メンション併用」以外の項目(宣伝語句・短縮URL・参加時間)だけでも
+  // 独立に閾値へ達し得るため、招待リンク部分をURL判定対象から除くだけでは不十分で、
+  // 両方が正当にヒットして二重にstrikeが加算されるケースが残っていた(Codexレビュー再指摘)。
+  // 同一の外部招待という事実を役割の重複するinvite_link/link_spamの両方でカウントしない
+  // ようにする(flood/duplicate_contentのような独立した正当な違反の同時ヒットとは異なり、
+  // 検知対象の実体が同じであるため)。thresholdsの入力順(DB由来)に依存しないよう、
+  // invite_linkを他より先に評価する順序へ明示的にソートする。
+  const orderedThresholds = [...thresholds].sort((a, b) =>
+    a.violationType === "invite_link" ? -1 : b.violationType === "invite_link" ? 1 : 0,
+  );
+  let inviteLinkHit = false;
+  for (const threshold of orderedThresholds) {
+    if (threshold.violationType === "link_spam" && inviteLinkHit) continue;
+
     const check = await prepareAndCheckViolation(deps, message, buffer, threshold.violationType, threshold.preset, ngwords);
     if (!check.hit) continue;
+    if (threshold.violationType === "invite_link") inviteLinkHit = true;
 
     const canStrike = await markStrikeHitAndCheckNewBurst(
       deps.redis,
@@ -277,8 +311,10 @@ export async function detectAndEscalate(
 }
 
 /**
- * messageUpdateを起点に、編集後の内容でngword/invite_linkのみ再検知するユースケース(改善案7.1節)。
- * 投稿後に編集でNGワード・招待リンクを後から仕込む回避を防ぐ。
+ * messageUpdateを起点に、編集後の内容でngword/invite_link/link_spamのみ再検知する
+ * ユースケース(改善案7.1節)。投稿後に編集でNGワード・招待リンク・宣伝文等を
+ * 後から仕込む回避を防ぐ。link_spamはメッセージ単体で判定でき、バッファ・累積状態を
+ * 伴わないため編集検知の対象に含められる(Codexレビュー指摘、#369)。
  * flood/duplicate_content(バッファ内の他メッセージとの比較が前提)とmention_spam(Redisバッファへの
  * 累積プッシュを伴い、編集のたびに再実行すると二重カウントになる)は対象外とする。
  * claimAndPushMessageによる同一messageIdの再処理防止は使わない(バッファに触れないため不要であり、
@@ -296,9 +332,10 @@ export async function detectAndEscalateOnEdit(
     return { outcomes: [], lockedMessageIds: [] };
   }
 
+  const EDIT_VIOLATION_TYPES = ["ngword", "invite_link", "link_spam"] as const;
   const thresholds = snapshot.enabledThresholds.filter(
-    (t): t is EnabledThreshold & { violationType: "ngword" | "invite_link" } =>
-      t.violationType === "ngword" || t.violationType === "invite_link",
+    (t): t is EnabledThreshold & { violationType: (typeof EDIT_VIOLATION_TYPES)[number] } =>
+      (EDIT_VIOLATION_TYPES as readonly string[]).includes(t.violationType),
   );
   if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
 

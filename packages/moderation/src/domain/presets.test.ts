@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   ESCALATION_STEPS,
   FLOOD_PRESETS,
+  LINK_SPAM_PRESETS,
   MENTION_SPAM_PRESETS,
   MODERATION_PRESETS,
   NEW_ACCOUNT_GUARD_PRESETS,
@@ -27,6 +28,14 @@ describe("MENTION_SPAM_PRESETS", () => {
     expect(MENTION_SPAM_PRESETS.medium.singleMessageThreshold).toBeLessThan(
       MENTION_SPAM_PRESETS.weak.singleMessageThreshold,
     );
+  });
+});
+
+describe("LINK_SPAM_PRESETS", () => {
+  test("weak/medium/strongの3プリセットを持ち、strongほど削除閾値が低い(検知しやすい)", () => {
+    expect(Object.keys(LINK_SPAM_PRESETS).sort()).toEqual(["medium", "strong", "weak"]);
+    expect(LINK_SPAM_PRESETS.strong.deleteThreshold).toBeLessThan(LINK_SPAM_PRESETS.medium.deleteThreshold);
+    expect(LINK_SPAM_PRESETS.medium.deleteThreshold).toBeLessThan(LINK_SPAM_PRESETS.weak.deleteThreshold);
   });
 });
 

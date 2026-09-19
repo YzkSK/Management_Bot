@@ -15,10 +15,11 @@ function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
 }
 
 /**
- * messageUpdateイベントを受けて、編集後の内容でngword/invite_linkのみ再検知する(改善案7.1節)。
- * 投稿時は無害だったメッセージに、編集でNGワード・招待リンクを後から仕込む回避を防ぐ。
- * flood/duplicate_content/mention_spamは対象外(detectAndEscalateOnEditのコメント参照)。
- * ngword/invite_linkが同一メッセージで同時にヒットした場合、Discord側への処罰
+ * messageUpdateイベントを受けて、編集後の内容でngword/invite_link/link_spamのみ再検知する
+ * (改善案7.1節)。投稿時は無害だったメッセージに、編集でNGワード・招待リンク・宣伝文等を
+ * 後から仕込む回避を防ぐ。flood/duplicate_content/mention_spamは対象外
+ * (detectAndEscalateOnEditのコメント参照)。
+ * ngword/invite_link/link_spamが同一メッセージで同時にヒットした場合、Discord側への処罰
  * (timeout/kick/ban)実行はhandleMessageCreateと同様に最も重いもの1件へ集約する
  * (二重実行を防ぐ、Codexレビュー指摘)。集約されなかった側もresult="skipped"でresolveする。
  */
@@ -39,6 +40,7 @@ export async function handleMessageUpdate(deps: DetectAndEscalateDeps, message: 
     messageId: message.id,
     content: message.content,
     createdAt: editedAt,
+    joinedAt: message.member.joinedAt ?? undefined,
   });
 
   if (outcomes.length === 0) {

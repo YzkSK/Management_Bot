@@ -6,6 +6,7 @@ export const VIOLATION_TYPE_LABELS: Record<ModerationViolationType, string> = {
   ngword: "NGワード",
   mention_spam: "メンションスパム",
   invite_link: "招待リンク",
+  link_spam: "外部リンク・宣伝",
   raid: "レイド(大量入室)",
   new_account_guard: "新規アカウントガード",
 };
@@ -63,6 +64,12 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     weak: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
     medium: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
     strong: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
+  },
+  // packages/moderation/src/domain/presets.ts のLINK_SPAM_PRESETSをUI表示用に説明文化したもの。
+  link_spam: {
+    weak: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が55点以上で検知",
+    medium: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が45点以上で検知",
+    strong: "参加24時間以内・宣伝語句・メンション併用・短縮URL等のスコア合計が35点以上で検知",
   },
   // packages/moderation/src/domain/presets.ts のRAID_PRESETSをUI表示用に説明文化したもの。
   // 新規アカウント比率が閾値以上、または同一ギルドでの検知が2回目以降の場合は

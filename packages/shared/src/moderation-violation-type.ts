@@ -8,6 +8,7 @@ export const MODERATION_ESCALATION_VIOLATION_TYPES = [
   "ngword",
   "mention_spam",
   "invite_link",
+  "link_spam",
   "new_account_guard",
 ] as const;
 

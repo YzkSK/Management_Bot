@@ -1,14 +1,17 @@
 import type { ModerationPreset } from "@management-bot/shared";
 import {
   FLOOD_PRESETS,
+  LINK_SPAM_PRESETS,
   MENTION_SPAM_PRESETS,
   countMentions,
   findMatchingNgword,
   hasCumulativeMentionSpam,
   hasFloodHit,
   hasInviteLinkHit,
+  hasLinkSpamHit,
   hasSingleMessageMentionSpam,
   isDuplicateContent,
+  scoreLinkSpam,
 } from "../domain/index.js";
 import type { IncomingMessage } from "./detect-and-escalate.js";
 import type { BufferedMessage } from "./message-buffer.js";
@@ -40,6 +43,9 @@ export const NGWORD_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
 /** 招待リンクもNGワードと同様メッセージ単発判定のため、同じ抑制ウィンドウを使う。 */
 export const INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS = 10;
+
+/** 外部リンク・宣伝のスコア判定(link_spam)もメッセージ単発判定のため、同じ抑制ウィンドウを使う。 */
+export const LINK_SPAM_STRIKE_LOCK_WINDOW_SECONDS = 10;
 
 /**
  * バッファ内の直前1件だけでなく、windowSeconds以内の直近バッファ全体(自分自身を除く)のいずれかと
@@ -161,6 +167,28 @@ export function checkInviteLink(message: IncomingMessage, resolvedGuildIds: read
   return {
     hit,
     strikeLockWindowSeconds: INVITE_LINK_STRIKE_LOCK_WINDOW_SECONDS,
+    strikeLockMode: "single-shot",
+    bufferedMessageIds: [message.messageId],
+  };
+}
+
+/**
+ * link_spam判定(外部リンク・宣伝のスコア方式検知、改善案5.6節)。副作用なし。
+ * 「外部Discord招待」自体は採点項目に含めない(invite_linkとの役割重複、Codexレビュー指摘)。
+ * ただし招待コードの有無でメッセージ単位に判定をスキップすることはしない
+ * (extractInviteCodesは候補抽出であり安全側=過剰検知寄りの設計のため、除外条件として使うと
+ * 実際には招待でない文字列を紛れ込ませるだけでlink_spamの検知を回避できてしまう、
+ * Codexレビュー再指摘)。invite_linkと同一メッセージで両方ヒットした場合の二重strike対策は
+ * 呼び出し側(handleMessageCreate/handleMessageUpdate)でのアクション集約に委ねる。
+ * DBアクセス・Discord API呼び出しを伴わない。
+ */
+export function checkLinkSpam(message: IncomingMessage, preset: ModerationPreset): ViolationCheck {
+  const msSinceJoined =
+    message.joinedAt !== undefined ? message.createdAt.getTime() - message.joinedAt.getTime() : undefined;
+  const score = scoreLinkSpam({ content: message.content, msSinceJoined });
+  return {
+    hit: hasLinkSpamHit(score, LINK_SPAM_PRESETS[preset].deleteThreshold),
+    strikeLockWindowSeconds: LINK_SPAM_STRIKE_LOCK_WINDOW_SECONDS,
     strikeLockMode: "single-shot",
     bufferedMessageIds: [message.messageId],
   };
