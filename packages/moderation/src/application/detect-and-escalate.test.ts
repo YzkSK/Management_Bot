@@ -15,6 +15,7 @@ import { Redis } from "ioredis";
 import {
   bufferedMessageIdsInWindow,
   detectAndEscalate,
+  detectAndEscalateOnEdit,
   type IncomingMessage,
   SYSTEM_MODERATOR_ID,
 } from "./detect-and-escalate.js";
@@ -23,6 +24,7 @@ import { setEscalationPreset } from "./escalation-settings.js";
 import type { BufferedMessage } from "./message-buffer.js";
 import { createModerationConfigCache } from "./moderation-config-cache.js";
 import { addNgword } from "./ngwords.js";
+import { addToWhitelist } from "./whitelist.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 
@@ -801,6 +803,99 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     }
 
     expect(lastResult.outcomes).toEqual([]);
+  });
+
+  describe("detectAndEscalateOnEdit(#362-7.1)", () => {
+    test("編集後の内容がNGワードに一致すればngwordとして検知される", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+      await addNgword(db, guildId, "exact", "banned-word");
+
+      const eventBus = fakeEventBus();
+      const messageId = randomUUID();
+      const result = await detectAndEscalateOnEdit(
+        deps(eventBus),
+        message({ guildId, userId, messageId, content: "banned-word" }),
+      );
+
+      expect(result.outcomes).toEqual([
+        {
+          violationType: "ngword",
+          strikeCount: 1,
+          actionType: "warn",
+          caseId: expect.any(String),
+          bufferedMessageIds: [messageId],
+        },
+      ]);
+    });
+
+    test("編集後の内容が他ギルドの招待リンクを含めばinvite_linkとして検知される", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalateOnEdit(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({ guildId, userId, content: "discord.gg/edited-in-code" }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("invite_link");
+    });
+
+    test("flood/duplicate_content/mention_spamはthresholdが有効でも対象外", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values([
+        { guildId, violationType: "flood", preset: "medium", enabled: true },
+        { guildId, violationType: "duplicate_content", preset: "medium", enabled: true },
+        { guildId, violationType: "mention_spam", preset: "medium", enabled: true },
+      ]);
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalateOnEdit(
+        deps(eventBus),
+        message({ guildId, userId, content: "<@1> <@2> <@3> <@4> <@5> <@6> <@7>" }),
+      );
+
+      expect(result).toEqual({ outcomes: [], lockedMessageIds: [] });
+    });
+
+    test("ホワイトリスト対象ユーザーの編集は検知されない", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+      await addNgword(db, guildId, "exact", "banned-word");
+      await addToWhitelist(db, { guildId, targetType: "user", targetId: userId });
+
+      const eventBus = fakeEventBus();
+      const result = await detectAndEscalateOnEdit(
+        deps(eventBus),
+        message({ guildId, userId, content: "banned-word" }),
+      );
+
+      expect(result).toEqual({ outcomes: [], lockedMessageIds: [] });
+    });
+
+    test("messageCreateで既にclaimAndPushMessage済みのmessageIdでも編集時は再度検知される(processedKeyを使わない)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+      await addNgword(db, guildId, "exact", "banned-word");
+
+      const eventBus = fakeEventBus();
+      const messageId = randomUUID();
+      // 投稿時点では無害な内容でcreateを通す(同一messageIdでprocessedKeyがマークされる)。
+      const created = await detectAndEscalate(deps(eventBus), message({ guildId, userId, messageId, content: "hello" }));
+      expect(created.outcomes).toEqual([]);
+
+      // 編集で禁止ワードを仕込んだ場合、processedKeyでブロックされず検知できることを確認する。
+      const edited = await detectAndEscalateOnEdit(
+        deps(eventBus),
+        message({ guildId, userId, messageId, content: "banned-word" }),
+      );
+      expect(edited.outcomes).toHaveLength(1);
+      expect(edited.outcomes[0]?.violationType).toBe("ngword");
+    });
   });
 });
 

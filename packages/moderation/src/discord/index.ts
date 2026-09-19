@@ -5,6 +5,7 @@ import { Redis } from "ioredis";
 import { createModerationConfigCache } from "../application/index.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 import { handleMessageCreate } from "./handle-message-create.js";
+import { handleMessageUpdate } from "./handle-message-update.js";
 
 /** 招待コードはグローバルに一意なためguild非依存でキャッシュ可能。TTLはmoderation-config-cacheと同じ5秒(#362)。 */
 const INVITE_RESOLUTION_TTL_MS = 5_000;
@@ -54,20 +55,26 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   });
   ctx.onShutdown(configChangeNotifications.close);
 
-  // messageCreateのみ購読する。メッセージ編集で後から招待リンク/NGワードが追加された場合の
-  // 検知はスコープ外(Issue #188)。対象にする場合はmessageUpdateハンドラの追加検討が必要。
+  const detectAndEscalateDeps = {
+    db: ctx.db,
+    redis,
+    eventBus: ctx.eventBus,
+    resolveInviteGuildId,
+    configCache,
+  };
+
   ctx.client.on("messageCreate", (message) => {
-    handleMessageCreate(
-      {
-        db: ctx.db,
-        redis,
-        eventBus: ctx.eventBus,
-        resolveInviteGuildId,
-        configCache,
-      },
-      message,
-    ).catch((error: unknown) => {
+    handleMessageCreate(detectAndEscalateDeps, message).catch((error: unknown) => {
       console.error("moderation: failed to handle messageCreate", error);
+    });
+  });
+
+  // 投稿後の編集でNGワード・招待リンクを後から仕込む回避を防ぐ(改善案7.1節、Issue #188)。
+  // flood/duplicate_content/mention_spamはバッファ・累積状態に依存するため編集時は再検知しない
+  // (detectAndEscalateOnEditのコメント参照)。
+  ctx.client.on("messageUpdate", (_oldMessage, newMessage) => {
+    handleMessageUpdate(detectAndEscalateDeps, newMessage).catch((error: unknown) => {
+      console.error("moderation: failed to handle messageUpdate", error);
     });
   });
 
