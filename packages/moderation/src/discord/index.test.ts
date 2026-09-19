@@ -20,6 +20,7 @@ describe("registerDiscordHandlers", () => {
 
     expect(on).toHaveBeenCalledTimes(2);
     expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "guildMemberAdd"]);
-    expect(onShutdown).toHaveBeenCalledTimes(1);
+    // redis(メッセージ処理用)とmoderation_config_changedのLISTEN接続(#353)の2つを解放する。
+    expect(onShutdown).toHaveBeenCalledTimes(2);
   });
 });
