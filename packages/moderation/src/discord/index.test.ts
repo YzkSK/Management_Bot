@@ -47,4 +47,15 @@ describe("createInviteGuildIdResolver", () => {
 
     expect(fetchInvite).toHaveBeenCalledTimes(2);
   });
+
+  test("guild.idが取得できない解決結果もキャッシュせず次回呼び出しで再試行する(Codexレビュー指摘)", async () => {
+    const fetchInvite = mock(() => Promise.resolve({ guild: undefined }));
+    const client = { fetchInvite } as unknown as FeatureModuleContext["client"];
+    const resolve = createInviteGuildIdResolver(client);
+
+    expect(await resolve("code-c")).toBeNull();
+    expect(await resolve("code-c")).toBeNull();
+
+    expect(fetchInvite).toHaveBeenCalledTimes(2);
+  });
 });

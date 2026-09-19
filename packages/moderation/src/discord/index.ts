@@ -18,12 +18,16 @@ export function createInviteGuildIdResolver(
 ): (code: string) => Promise<string | null> {
   // rejectしたPromiseをキャッシュに渡すことでTTL満了を待たずエントリが破棄される
   // (createTtlCacheの仕様)。ここでtry/catchしてnullに変換すると「成功」扱いになり
-  // 失敗までTTL分キャッシュされてしまうため、nullへの変換は呼び出し側で行う。
-  const cache = createTtlCache<string | null>(INVITE_RESOLUTION_TTL_MS);
+  // 失敗までTTL分キャッシュされてしまうため、nullへの変換は呼び出し側で行う
+  // (guild.idが取得できないケースもthrowしてreject扱いに揃える。Codexレビュー指摘)。
+  const cache = createTtlCache<string>(INVITE_RESOLUTION_TTL_MS);
   return (code) =>
     cache(code, async () => {
       const invite = await client.fetchInvite(code);
-      return invite.guild?.id ?? null;
+      if (invite.guild?.id === undefined) {
+        throw new Error(`invite ${code} has no guild`);
+      }
+      return invite.guild.id;
     }).catch(() => null);
 }
 
