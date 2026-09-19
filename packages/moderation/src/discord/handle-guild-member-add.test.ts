@@ -6,6 +6,7 @@ import {
   guilds,
   moderationEscalationState,
   moderationRaidState,
+  moderationLockdownSettings,
   moderationThresholds,
   moderationWhitelist,
 } from "@management-bot/db";
@@ -13,7 +14,7 @@ import type { ModerationActionRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { GuildMember } from "discord.js";
-import { createModerationConfigCache } from "../application/index.js";
+import { createModerationConfigCache, getLockdownSettings, markLockdownApplied, setAutoLockdownOnRaid } from "../application/index.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -104,6 +105,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     await db.delete(moderationWhitelist).where(eq(moderationWhitelist.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
     await db.delete(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
+    await db.delete(moderationLockdownSettings).where(eq(moderationLockdownSettings.guildId, guildId));
     const keys = [
       ...(await redis.keys(`moderation:raid:${guildId}`)),
       ...(await redis.keys(`moderation:raid-lock:${guildId}`)),
@@ -125,6 +127,18 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const now = new Date();
     const member = fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: now, joinedAt: now, bot: true });
     await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
+    expect(eventBus.published).toEqual([]);
+  });
+
+  test("ロックダウン中の新規参加者は通常の判定を行わず即座にkickする", async () => {
+    await markLockdownApplied(db, guildId, true);
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const member = fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: now, joinedAt: now });
+
+    await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
+
+    expect(member.kick).toHaveBeenCalledTimes(1);
     expect(eventBus.published).toEqual([]);
   });
 
@@ -158,6 +172,42 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const resolveEvents = kickEvents.filter((e) => e.action === "resolve");
     expect(resolveEvents).toHaveLength(6);
     expect(resolveEvents.every((e) => e.action === "resolve" && e.result === "success")).toBe(true);
+  });
+
+  test("自動ロックが有効ならレイド検知時に @everyone の送信権限を停止する", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    await setAutoLockdownOnRaid(db, guildId, true);
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const oldAccountCreatedAt = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const members = Array.from({ length: 6 }, () =>
+      fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+    );
+    const edit = mock(() => Promise.resolve());
+    const trigger = members[members.length - 1];
+    if (!trigger) throw new Error("raid trigger member is required");
+    Object.assign(trigger.guild, {
+      channels: {
+        cache: new Map([
+          [
+            "channel-1",
+            {
+              id: "channel-1",
+              isTextBased: () => true,
+              isThread: () => false,
+              permissionOverwrites: { cache: new Map(), edit },
+            },
+          ],
+        ]),
+      },
+    });
+
+    for (const member of members) {
+      await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
+    }
+
+    expect(edit).toHaveBeenCalledWith(guildId, { SendMessages: false });
+    expect(await getLockdownSettings(db, guildId)).toMatchObject({ requestedLocked: true, isLocked: true });
   });
 
   test("raid: ホワイトリスト対象の入室はカウントされず一括timeoutの対象にもならない", async () => {

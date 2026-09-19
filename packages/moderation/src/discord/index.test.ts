@@ -6,9 +6,10 @@ import { createInviteGuildIdResolver, registerDiscordHandlers } from "./index.js
 describe("registerDiscordHandlers", () => {
   test("messageCreate/messageUpdate/guildMemberAddの3つのハンドラを登録する(#362-7.1)", () => {
     const on = mock(() => undefined);
+    const once = mock(() => undefined);
     const onShutdown = mock(() => undefined);
     const ctx = {
-      client: { on },
+      client: { on, once, isReady: () => false },
       db: {} as Db,
       databaseUrl: "postgres://invalid-test-host/db",
       redisUrl: "redis://invalid-test-host:6379",
@@ -20,6 +21,7 @@ describe("registerDiscordHandlers", () => {
 
     expect(on).toHaveBeenCalledTimes(3);
     expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "messageUpdate", "guildMemberAdd"]);
+    expect(once).toHaveBeenCalledWith("ready", expect.any(Function));
     // redis(メッセージ処理用)とmoderation_config_changedのLISTEN接続(#353)の2つを解放する。
     expect(onShutdown).toHaveBeenCalledTimes(2);
   });

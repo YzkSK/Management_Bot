@@ -2,8 +2,9 @@ import type { FeatureModuleContext } from "@management-bot/core";
 import { listenForModerationConfigChanges } from "@management-bot/db";
 import { createTtlCache } from "@management-bot/shared";
 import { Redis } from "ioredis";
-import { createModerationConfigCache } from "../application/index.js";
+import { createModerationConfigCache, listLockdownsNeedingSynchronization } from "../application/index.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
+import { synchronizeLockdown } from "./lockdown.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 import { handleMessageUpdate } from "./handle-message-update.js";
 
@@ -49,11 +50,34 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // フォールバックさせる(bot起動をブロックしない、logging側のcreateChannelSettingResolverと同じ設計)。
   const configChangeNotifications = listenForModerationConfigChanges(ctx.databaseUrl, ({ guildId }) => {
     configCache.invalidate(guildId);
+    const guild = ctx.client.guilds.cache.get(guildId);
+    if (guild) {
+      synchronizeLockdown(ctx.db, guild).catch((error: unknown) => {
+        console.error(`moderation: failed to synchronize lockdown for guild ${guildId}`, error);
+      });
+    }
   });
   configChangeNotifications.ready.catch((error: unknown) => {
     console.error("Failed to listen for moderation_config_changed (cache invalidation disabled)", error);
   });
   ctx.onShutdown(configChangeNotifications.close);
+
+  const synchronizePendingLockdowns = () => {
+    listLockdownsNeedingSynchronization(ctx.db)
+      .then((guildIds) =>
+        Promise.all(
+          guildIds.map(async (guildId) => {
+            const guild = ctx.client.guilds.cache.get(guildId);
+            if (guild) await synchronizeLockdown(ctx.db, guild);
+          }),
+        ),
+      )
+      .catch((error: unknown) => {
+        console.error("moderation: failed to synchronize pending lockdowns", error);
+      });
+  };
+  if (ctx.client.isReady()) synchronizePendingLockdowns();
+  else ctx.client.once("ready", synchronizePendingLockdowns);
 
   const detectAndEscalateDeps = {
     db: ctx.db,

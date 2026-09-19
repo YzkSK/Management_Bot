@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, ne } from "drizzle-orm";
 import { moderationLockdownChannelSnapshots, moderationLockdownSettings, type Db } from "@management-bot/db";
 
 export interface LockdownSettings {
@@ -59,6 +59,16 @@ export async function markLockdownApplied(db: Db, guildId: string, isLocked: boo
       target: moderationLockdownSettings.guildId,
       set: { isLocked, updatedAt: new Date() },
     });
+}
+
+/** Bot 再起動中に変更された、Discord 側へ未反映のロックダウン設定を返す。 */
+export async function listLockdownsNeedingSynchronization(db: Db): Promise<string[]> {
+  const rows = await db
+    .select({ guildId: moderationLockdownSettings.guildId })
+    .from(moderationLockdownSettings)
+    .where(ne(moderationLockdownSettings.requestedLocked, moderationLockdownSettings.isLocked));
+
+  return rows.map((row) => row.guildId);
 }
 
 /** ロック前のチャンネル権限を初回のみ保存する。再試行で元の状態を上書きしない。 */

@@ -2,10 +2,13 @@ import type { GuildMember } from "discord.js";
 import { type ModerationActionType } from "@management-bot/shared";
 import {
   SYSTEM_MODERATOR_ID,
+  getLockdownSettings,
+  setLockdownRequested,
   type GuildMemberAddDeps,
   handleGuildMemberAdd,
   type RaidHitResult,
 } from "../application/index.js";
+import { synchronizeLockdown } from "./lockdown.js";
 
 interface ActionExecutionResult {
   result: "success" | "failed" | "skipped";
@@ -106,6 +109,12 @@ async function executeAndRecordRaidKick(
 export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member: GuildMember): Promise<void> {
   if (member.user.bot) return;
 
+  const lockdownSettings = await getLockdownSettings(deps.db, member.guild.id);
+  if (lockdownSettings.isLocked) {
+    await member.kick("moderation: lockdown active");
+    return;
+  }
+
   const result = await handleGuildMemberAdd(deps, {
     guildId: member.guild.id,
     userId: member.id,
@@ -115,6 +124,10 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
   });
 
   const raidHit = result.raidHit;
+  if (raidHit && lockdownSettings.autoLockdownOnRaid) {
+    await setLockdownRequested(deps.db, member.guild.id, true);
+    await synchronizeLockdown(deps.db, member.guild);
+  }
   const selfIsRaidTarget = raidHit !== null && raidHit.targetUserIds.includes(member.id);
 
   if (selfIsRaidTarget) {

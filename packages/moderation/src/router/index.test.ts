@@ -266,6 +266,28 @@ describe("moderationRouter.getEscalationPreset / setEscalationPreset", () => {
   });
 });
 
+describe("moderationRouter.getLockdownSettings / setLockdown", () => {
+  test("MANAGE_MODERATIONを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.getLockdownSettings({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("自動ロックと手動ロック要求を個別に保存して取得できる", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    await caller.setAutoLockdownOnRaid({ guildId, enabled: true });
+    await caller.setLockdownRequested({ guildId, requestedLocked: true });
+
+    expect(await caller.getLockdownSettings({ guildId })).toEqual({
+      autoLockdownOnRaid: true,
+      requestedLocked: true,
+      isLocked: false,
+    });
+  });
+});
+
 describe("moderationRouter.resetAllStrikes", () => {
   test("MANAGE_MODERATIONを持たない場合はFORBIDDEN", async () => {
     const caller = createCaller(buildContext());

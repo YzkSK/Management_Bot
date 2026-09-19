@@ -187,6 +187,68 @@ function EscalationPresetSelector({ guildId }: { guildId: string }) {
   );
 }
 
+function LockdownPanel({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const query = useQuery(trpc.moderation.getLockdownSettings.queryOptions({ guildId }));
+  const autoLockdownMutation = useMutation({
+    ...trpc.moderation.setAutoLockdownOnRaid.mutationOptions(),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey,
+      }),
+  });
+  const requestedLockMutation = useMutation({
+    ...trpc.moderation.setLockdownRequested.mutationOptions(),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey,
+      }),
+  });
+
+  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isError || !query.data) {
+    return <div className="text-destructive text-sm">ロックダウン設定の取得に失敗しました。</div>;
+  }
+
+  const isPending = autoLockdownMutation.isPending || requestedLockMutation.isPending;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">レイド時に自動でロックダウン</p>
+          <p className="text-muted-foreground text-xs">レイド検知時に @everyone のメッセージ送信を停止します。</p>
+        </div>
+        <Switch
+          checked={query.data.autoLockdownOnRaid}
+          disabled={isPending}
+          aria-label="レイド時に自動でロックダウン"
+          onCheckedChange={(enabled) => autoLockdownMutation.mutate({ guildId, enabled })}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t pt-3">
+        <div>
+          <p className="text-sm font-medium">現在の状態: {query.data.isLocked ? "ロック中" : "解除中"}</p>
+          <p className="text-muted-foreground text-xs">
+            ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={query.data.requestedLocked ? "outline" : "destructive"}
+          disabled={isPending}
+          onClick={() => requestedLockMutation.mutate({ guildId, requestedLocked: !query.data.requestedLocked })}
+        >
+          {query.data.requestedLocked ? "ロックダウンを解除" : "ロックダウンを開始"}
+        </Button>
+      </div>
+      {(autoLockdownMutation.isError || requestedLockMutation.isError) && (
+        <p className="text-destructive text-sm">ロックダウン設定の更新に失敗しました。</p>
+      )}
+    </div>
+  );
+}
+
 interface TargetOption {
   id: string;
   name: string;
@@ -948,6 +1010,7 @@ export function ModerationPage() {
 
         <TabsContent value="thresholds">
           <EscalationPresetSelector guildId={guildId} />
+          <LockdownPanel guildId={guildId} />
           <Table>
             <TableHeader>
               <TableRow>

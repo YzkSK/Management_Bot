@@ -42,6 +42,7 @@ export { getEscalationPreset, setEscalationPreset } from "./escalation-settings.
 export {
   clearLockdownChannelSnapshots,
   getLockdownSettings,
+  listLockdownsNeedingSynchronization,
   listLockdownChannelSnapshots,
   markLockdownApplied,
   saveLockdownChannelSnapshots,

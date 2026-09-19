@@ -131,6 +131,26 @@ describe("ModerationPage", () => {
   });
 });
 
+describe("Lockdown controls", () => {
+  test("renders configured lockdown state", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedBaseQueries(queryClient, guildId);
+    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, []);
+    queryClient.setQueryData(trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey, {
+      autoLockdownOnRaid: true,
+      requestedLocked: true,
+      isLocked: true,
+    });
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).toContain("レイド時に自動でロックダウン");
+    expect(html).toContain("現在の状態: ロック中");
+    expect(html).toContain("ロックダウンを解除");
+  });
+});
+
 describe("canUpdateStrikePages(#368のCodexレビュー指摘の回帰テスト)", () => {
   test("取得完了(isFetching=false)かつデータありならpagesを更新できる", () => {
     expect(canUpdateStrikePages({ rows: [], userNames: {} }, false)).toBe(true);

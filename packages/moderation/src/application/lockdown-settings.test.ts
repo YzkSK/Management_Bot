@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import {
   clearLockdownChannelSnapshots,
   getLockdownSettings,
+  listLockdownsNeedingSynchronization,
   listLockdownChannelSnapshots,
   markLockdownApplied,
   saveLockdownChannelSnapshots,
@@ -57,6 +58,13 @@ describe("lockdown-settings", () => {
       requestedLocked: false,
       isLocked: true,
     });
+  });
+
+  test("Discord 側へ未反映の設定だけを返す", async () => {
+    expect(await listLockdownsNeedingSynchronization(db)).toContain(guildId);
+
+    await markLockdownApplied(db, guildId, false);
+    expect(await listLockdownsNeedingSynchronization(db)).not.toContain(guildId);
   });
 
   test("チャンネル権限スナップショットは初回の値を保持し、解除後に削除できる", async () => {

@@ -13,6 +13,7 @@ import {
   addNgword,
   addToWhitelist,
   getEscalationPreset,
+  getLockdownSettings,
   listNgwords,
   listStrikes,
   listThresholds,
@@ -22,6 +23,8 @@ import {
   resetAllStrikes,
   resetStrike,
   setEscalationPreset,
+  setAutoLockdownOnRaid,
+  setLockdownRequested,
   setThreshold,
   UnsafeNgwordRegexError,
 } from "../application/index.js";
@@ -65,6 +68,8 @@ const strikeTargetInput = z.object({
 });
 
 const setEscalationPresetInput = z.object({ guildId: discordIdSchema, preset: presetSchema });
+const setAutoLockdownOnRaidInput = z.object({ guildId: discordIdSchema, enabled: z.boolean() });
+const setLockdownRequestedInput = z.object({ guildId: discordIdSchema, requestedLocked: z.boolean() });
 const resetAllStrikesInput = z.object({ guildId: discordIdSchema, userId: discordIdSchema });
 
 /**
@@ -181,6 +186,21 @@ export const moderationRouter = router({
     .input(setEscalationPresetInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => setEscalationPreset(ctx.db, input.guildId, input.preset)),
+
+  getLockdownSettings: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(({ ctx, input }) => getLockdownSettings(ctx.db, input.guildId)),
+
+  setAutoLockdownOnRaid: protectedProcedure
+    .input(setAutoLockdownOnRaidInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => setAutoLockdownOnRaid(ctx.db, input.guildId, input.enabled)),
+
+  setLockdownRequested: protectedProcedure
+    .input(setLockdownRequestedInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => setLockdownRequested(ctx.db, input.guildId, input.requestedLocked)),
 
   resetAllStrikes: protectedProcedure
     .input(resetAllStrikesInput)
