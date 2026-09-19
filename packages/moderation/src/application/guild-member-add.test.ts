@@ -139,7 +139,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     expect(eventBus.published).toHaveLength(6);
     expect(new Set(eventBus.published.map((e) => e.caseId)).size).toBe(1);
     for (const event of eventBus.published) {
-      expect(event.actionType).toBe("timeout");
+      expect(event.actionType).toBe("kick");
     }
 
     const [raidState] = await db.select().from(moderationRaidState).where(eq(moderationRaidState.guildId, guildId));
