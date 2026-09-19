@@ -6,6 +6,7 @@ import {
   decayStrikes,
   getTotalStrikeCount,
   incrementStrike,
+  LIST_STRIKES_PAGE_SIZE,
   listStrikes,
   resetAllStrikes,
   resetStrike,
@@ -263,24 +264,38 @@ describe("listStrikes", () => {
     expect(rows.some((r) => r.userId === userIds[2])).toBe(true);
   });
 
-  test("同一userIdに複数violationTypeがありページ境界にかかっても、次ページで残りのviolationType行が欠落しない(#367の回帰テスト)", async () => {
-    // このuserIdがページ最終行(LIST_STRIKES_PAGE_SIZE=50件目)に来るよう、ソート順で
-    // 先頭になるIDを用意した上で、同一userIdに2種のviolationTypeを積む。
-    const boundaryUserId = `0-boundary-${randomUUID()}`;
-    await incrementStrike(db, guildId, boundaryUserId, "duplicate_content");
-    await incrementStrike(db, guildId, boundaryUserId, "flood");
+  test("同一userIdに複数violationTypeがありページ境界(ちょうど50件目)にかかっても、次ページで残りのviolationType行が欠落しない(#367の回帰テスト)", async () => {
+    // guild内の全violationType行をuserId昇順でソートした際、boundaryUserIdが
+    // ちょうどLIST_STRIKES_PAGE_SIZE(50)件目・51件目に来るよう並びを構成する。
+    // 一意なsuffixのguildIdを使い、他テストのデータと混在しないようにする。
+    const runId = randomUUID();
+    const isolatedGuildId = `test-guild-boundary-${runId}`;
+    await db.insert(guilds).values({ id: isolatedGuildId, name: "Boundary Test Guild" });
 
-    const firstPage = await listStrikes(db, guildId);
-    const boundaryRows = firstPage.rows.filter((r) => r.userId === boundaryUserId);
-    // ページサイズ(50)に収まりきらない場合はnextAfterがboundaryUserIdの一部の行を指す。
-    // その場合、次ページで残りのviolationType行が取得できることを確認する。
-    if (firstPage.nextAfter?.startsWith(`${boundaryUserId}:`)) {
-      expect(boundaryRows.length).toBeLessThan(2);
-      const secondPage = await listStrikes(db, guildId, firstPage.nextAfter);
-      const remaining = secondPage.rows.filter((r) => r.userId === boundaryUserId);
-      expect(boundaryRows.length + remaining.length).toBe(2);
-    } else {
-      expect(boundaryRows).toHaveLength(2);
+    try {
+      const boundaryUserId = `0-boundary-${runId}`;
+      // ソート順でboundaryUserIdより後ろに来る49件のダミー行を作り、
+      // boundaryUserIdの2行(duplicate_content, flood)が50件目・51件目になるようにする。
+      const fillerUserIds = Array.from({ length: 49 }, (_, i) => `1-filler-${runId}-${String(i).padStart(2, "0")}`);
+      for (const userId of fillerUserIds) {
+        await incrementStrike(db, isolatedGuildId, userId, "flood");
+      }
+      await incrementStrike(db, isolatedGuildId, boundaryUserId, "duplicate_content");
+      await incrementStrike(db, isolatedGuildId, boundaryUserId, "flood");
+
+      const firstPage = await listStrikes(db, isolatedGuildId);
+      expect(firstPage.rows).toHaveLength(LIST_STRIKES_PAGE_SIZE);
+      // 50件目はboundaryUserIdのduplicate_content行(violationType昇順でflood<duplicate_contentより前)。
+      const boundaryRowsInFirstPage = firstPage.rows.filter((r) => r.userId === boundaryUserId);
+      expect(boundaryRowsInFirstPage).toHaveLength(1);
+      expect(firstPage.nextAfter).toBe(`${boundaryUserId}:${boundaryRowsInFirstPage[0]?.violationType}`);
+
+      const secondPage = await listStrikes(db, isolatedGuildId, firstPage.nextAfter);
+      const boundaryRowsInSecondPage = secondPage.rows.filter((r) => r.userId === boundaryUserId);
+      expect(boundaryRowsInSecondPage).toHaveLength(1);
+      expect(boundaryRowsInSecondPage[0]?.violationType).not.toBe(boundaryRowsInFirstPage[0]?.violationType);
+    } finally {
+      await db.delete(guilds).where(eq(guilds.id, isolatedGuildId));
     }
   });
 

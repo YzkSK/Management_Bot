@@ -42,7 +42,8 @@ export interface StrikeRow {
   lastViolationAt: Date;
 }
 
-const LIST_STRIKES_PAGE_SIZE = 50;
+/** テストから境界(ページちょうど50件目)を明示的に作るために公開する(#367の回帰テスト参照)。 */
+export const LIST_STRIKES_PAGE_SIZE = 50;
 
 export interface StrikePage {
   rows: StrikeRow[];
