@@ -127,6 +127,10 @@ const SUCCESS: ExecuteActionResult = { result: "success" };
  * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時も例外は投げず結果を返すのみとする。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
+ * warnはmemberの有無を問わず到達しうる(#377、Webhook投稿等)。sendWarningDm(message.author.send)は
+ * Webhookに対しては通常失敗するが、既存のDMブロックユーザーへの送信失敗と同様に例外を投げず
+ * 握りつぶす。warnの主目的は違反メッセージの削除であり、DM到達は副次的なベストエフォートの
+ * ため、DM失敗によってresultをfailedにはしない(Codexレビュー指摘、既存の意図的な設計)。
  */
 export async function executeEscalationAction(message: Message, outcome: EscalationOutcome): Promise<ExecuteActionResult> {
   try {
@@ -138,19 +142,21 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
       case "unban":
         return SUCCESS;
       case "timeout": {
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
+        // member不在(Webhook・Botメッセージ等、改善案7.2節)でも削除だけは実行する
+        // (処罰の集約と同様、削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.timeout(resolveTimeoutMinutes(outcome) * 60 * 1000, reasonFor(outcome));
         break;
       }
       case "kick":
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }

@@ -35,20 +35,31 @@ function mergeBufferedMessageIds(outcomes: readonly EscalationOutcome[]): readon
  * Discord側への処罰(timeout/kick/ban)実行は最も重いもの1件に集約する(同一メッセージへの
  * 二重実行を避ける)。メッセージ削除は集約対象と関係なく、ヒットした全violationTypeの
  * bufferedMessageIdsをマージして実行する(処罰の集約によって削除だけが漏れることを防ぐ)。
+ *
+ * Bot・Webhook投稿も検知対象に含める(改善案7.2節)。自Bot自身の投稿のみ除外し、他Bot・
+ * 侵害されたWebhookの投稿は通常のユーザー投稿と同様にホワイトリスト判定・違反検知にかける
+ * (信頼できるBotは既存のホワイトリスト機構でtargetType="user"にそのBotのユーザーIDを
+ * 登録することで除外できる)。WebhookメッセージはGuildMemberを持たない(message.memberが
+ * null)ため、ロール判定は空配列で行い、timeout/kick/banはexecuteEscalationActionの
+ * 既存のmember_not_foundフォールバックにより自動的に失敗扱いになる(削除は実行される)。
  */
 export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
-  if (message.author.bot) return;
-  if (!message.guild || !message.member) return;
+  // client.userが未確定(ログイン処理中等)の場合、自Bot判定が常にfalseになり自Bot自身の
+  // 投稿まで検知対象に含まれてしまう(fail-open)。安全側に倒し、確定するまで何もしない
+  // (Codexレビュー指摘)。
+  const selfBotId = message.client.user?.id;
+  if (!selfBotId || message.author.id === selfBotId) return;
+  if (!message.guild) return;
 
   const { outcomes, lockedMessageIds } = await detectAndEscalate(deps, {
     guildId: message.guild.id,
     userId: message.author.id,
     channelId: message.channelId,
-    roleIds: [...message.member.roles.cache.keys()],
+    roleIds: message.member ? [...message.member.roles.cache.keys()] : [],
     messageId: message.id,
     content: message.content,
     createdAt: message.createdAt,
-    joinedAt: message.member.joinedAt ?? undefined,
+    joinedAt: message.member?.joinedAt ?? undefined,
   });
 
   if (outcomes.length === 0) {

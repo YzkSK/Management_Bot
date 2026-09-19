@@ -22,10 +22,15 @@ function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
  * ngword/invite_link/link_spamが同一メッセージで同時にヒットした場合、Discord側への処罰
  * (timeout/kick/ban)実行はhandleMessageCreateと同様に最も重いもの1件へ集約する
  * (二重実行を防ぐ、Codexレビュー指摘)。集約されなかった側もresult="skipped"でresolveする。
+ *
+ * handleMessageCreateと同様、自Bot自身の投稿のみ除外しBot・Webhookの編集も検知対象に
+ * 含める(改善案7.2節)。
  */
 export async function handleMessageUpdate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
-  if (message.author.bot) return;
-  if (!message.guild || !message.member) return;
+  // client.userが未確定の場合はfail-closed(handleMessageCreateと同じ理由、Codexレビュー指摘)。
+  const selfBotId = message.client.user?.id;
+  if (!selfBotId || message.author.id === selfBotId) return;
+  if (!message.guild) return;
 
   // 編集で違反化したケースの記録日時は元投稿時刻ではなく編集時刻にする
   // (createdAtのままだと、過去の投稿を今編集した場合にログ・ケースの日時が過去になり
@@ -36,11 +41,11 @@ export async function handleMessageUpdate(deps: DetectAndEscalateDeps, message: 
     guildId: message.guild.id,
     userId: message.author.id,
     channelId: message.channelId,
-    roleIds: [...message.member.roles.cache.keys()],
+    roleIds: message.member ? [...message.member.roles.cache.keys()] : [],
     messageId: message.id,
     content: message.content,
     createdAt: editedAt,
-    joinedAt: message.member.joinedAt ?? undefined,
+    joinedAt: message.member?.joinedAt ?? undefined,
   });
 
   if (outcomes.length === 0) {
