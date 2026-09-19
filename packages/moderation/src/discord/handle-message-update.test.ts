@@ -129,8 +129,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
     const message = fakeMessage({ guildId, userId, content: "banned-word" });
     await handleMessageUpdate(deps(eventBus), message as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
-    expect(eventBus.published[0]).toMatchObject({ action: "resolve", result: "success" });
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create" });
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
   });
 
@@ -147,8 +148,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
       message as unknown as Message,
     );
 
-    expect(eventBus.published).toHaveLength(1);
-    expect(eventBus.published[0]).toMatchObject({ action: "resolve", result: "success" });
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create" });
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
     expect(message.deleteFn).toHaveBeenCalledTimes(1);
   });
 
@@ -171,7 +173,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
       { guildId, violationType: "ngword", preset: "medium", enabled: true },
       { guildId, violationType: "invite_link", preset: "medium", enabled: true },
     ]);
-    await addNgword(db, guildId, "exact", "banned-word");
+    await addNgword(db, guildId, "contains", "banned-word");
     // ngword: strikeCount=1→ESCALATION_STEPS.medium[1]=warn
     // invite_link: strikeCount=2(ngword加算後の合計)→ESCALATION_STEPS.medium[2]=timeout
     // より重いtimeoutに集約され、ban/kick同様にDiscord APIは1回のみ実行される想定。
@@ -222,7 +224,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
     const second = fakeMessage({ guildId, userId, content: "banned-word" });
     await handleMessageUpdate(deps(eventBus), second as unknown as Message);
 
-    expect(eventBus.published).toHaveLength(1);
+    expect(eventBus.published).toHaveLength(2);
     expect(second.deleteFn).toHaveBeenCalledTimes(1);
 
     const [row] = await db
