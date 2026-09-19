@@ -248,17 +248,51 @@ describe("listStrikes", () => {
     expect(firstPage.nextAfter).toBeUndefined();
   });
 
-  test("afterを指定するとそのuserIdより後の行のみ返す", async () => {
+  test("afterを指定するとそのカーソルより後の行のみ返す", async () => {
     const userIds = Array.from({ length: 3 }, () => `u-${randomUUID()}`).sort();
     for (const userId of userIds) {
       await incrementStrike(db, guildId, userId, "flood");
     }
 
-    const { rows } = await listStrikes(db, guildId, userIds[0]);
+    const firstPage = await listStrikes(db, guildId);
+    const cursorForFirstUser = firstPage.rows.find((r) => r.userId === userIds[0]);
+    const { rows } = await listStrikes(db, guildId, `${cursorForFirstUser?.userId}:${cursorForFirstUser?.violationType}`);
 
     expect(rows.some((r) => r.userId === userIds[0])).toBe(false);
     expect(rows.some((r) => r.userId === userIds[1])).toBe(true);
     expect(rows.some((r) => r.userId === userIds[2])).toBe(true);
+  });
+
+  test("同一userIdに複数violationTypeがありページ境界にかかっても、次ページで残りのviolationType行が欠落しない(#367の回帰テスト)", async () => {
+    // このuserIdがページ最終行(LIST_STRIKES_PAGE_SIZE=50件目)に来るよう、ソート順で
+    // 先頭になるIDを用意した上で、同一userIdに2種のviolationTypeを積む。
+    const boundaryUserId = `0-boundary-${randomUUID()}`;
+    await incrementStrike(db, guildId, boundaryUserId, "duplicate_content");
+    await incrementStrike(db, guildId, boundaryUserId, "flood");
+
+    const firstPage = await listStrikes(db, guildId);
+    const boundaryRows = firstPage.rows.filter((r) => r.userId === boundaryUserId);
+    // ページサイズ(50)に収まりきらない場合はnextAfterがboundaryUserIdの一部の行を指す。
+    // その場合、次ページで残りのviolationType行が取得できることを確認する。
+    if (firstPage.nextAfter?.startsWith(`${boundaryUserId}:`)) {
+      expect(boundaryRows.length).toBeLessThan(2);
+      const secondPage = await listStrikes(db, guildId, firstPage.nextAfter);
+      const remaining = secondPage.rows.filter((r) => r.userId === boundaryUserId);
+      expect(boundaryRows.length + remaining.length).toBe(2);
+    } else {
+      expect(boundaryRows).toHaveLength(2);
+    }
+  });
+
+  test("不正なafterカーソル(violationType不明・空userId)は先頭ページとして扱う", async () => {
+    const userId = `u-${randomUUID()}`;
+    await incrementStrike(db, guildId, userId, "flood");
+
+    const withUnknownViolationType = await listStrikes(db, guildId, `${userId}:unknown_type`);
+    const withEmptyUserId = await listStrikes(db, guildId, ":flood");
+
+    expect(withUnknownViolationType.rows.some((r) => r.userId === userId)).toBe(true);
+    expect(withEmptyUserId.rows.some((r) => r.userId === userId)).toBe(true);
   });
 });
 
