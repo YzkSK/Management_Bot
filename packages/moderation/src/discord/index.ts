@@ -1,18 +1,34 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { listenForModerationConfigChanges } from "@management-bot/db";
+import { createTtlCache } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import { createModerationConfigCache } from "../application/index.js";
 import { handleGuildMemberAddEvent } from "./handle-guild-member-add.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
-/** 無効なコード・Discord API障害等、解決に失敗した場合はnullを返す(呼び出し側で安全側=検知扱いに倒す)。 */
-async function resolveInviteGuildId(client: FeatureModuleContext["client"], code: string): Promise<string | null> {
-  try {
-    const invite = await client.fetchInvite(code);
-    return invite.guild?.id ?? null;
-  } catch {
-    return null;
-  }
+/** 招待コードはグローバルに一意なためguild非依存でキャッシュ可能。TTLはmoderation-config-cacheと同じ5秒(#362)。 */
+const INVITE_RESOLUTION_TTL_MS = 5_000;
+
+/**
+ * 同一招待コードが短時間に連投された場合のfetchInvite重複呼び出しを防ぐ(改善案5.5節)。
+ * 解決失敗はキャッシュしない(一時的なAPI障害でしばらく誤検知し続けるのを避けるため)。
+ */
+export function createInviteGuildIdResolver(
+  client: FeatureModuleContext["client"],
+): (code: string) => Promise<string | null> {
+  // rejectしたPromiseをキャッシュに渡すことでTTL満了を待たずエントリが破棄される
+  // (createTtlCacheの仕様)。ここでtry/catchしてnullに変換すると「成功」扱いになり
+  // 失敗までTTL分キャッシュされてしまうため、nullへの変換は呼び出し側で行う
+  // (guild.idが取得できないケースもthrowしてreject扱いに揃える。Codexレビュー指摘)。
+  const cache = createTtlCache<string>(INVITE_RESOLUTION_TTL_MS);
+  return (code) =>
+    cache(code, async () => {
+      const invite = await client.fetchInvite(code);
+      if (invite.guild?.id === undefined) {
+        throw new Error(`invite ${code} has no guild`);
+      }
+      return invite.guild.id;
+    }).catch(() => null);
 }
 
 export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
@@ -25,6 +41,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // whitelist/thresholds/ngwordsをguild単位でまとめてTTLキャッシュする(#352)。
   // プロセス起動時に1回生成し、messageCreate/guildMemberAdd両ハンドラで共有する。
   const configCache = createModerationConfigCache();
+  const resolveInviteGuildId = createInviteGuildIdResolver(ctx.client);
   // dashboard-api(別プロセス)での設定変更をTTL満了前に反映するため、
   // DBトリガー(migrations/0020)のpg_notifyをLISTENしてキャッシュを即時invalidateする(#353)。
   // 購読自体の失敗はログ出力のみに留め、TTL経由の最終的な反映(デフォルト5秒)に
@@ -45,7 +62,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
         db: ctx.db,
         redis,
         eventBus: ctx.eventBus,
-        resolveInviteGuildId: (code) => resolveInviteGuildId(ctx.client, code),
+        resolveInviteGuildId,
         configCache,
       },
       message,
