@@ -44,6 +44,8 @@ function fakeMessage(overrides: {
   hasMember?: boolean;
   /** timeout()がDiscord APIエラーで失敗するケースを再現する(#350の処罰失敗パス検証用)。 */
   timeoutRejects?: boolean;
+  /** client.userが未確定(ログイン処理中等)の状況を再現する(#377、fail-closedの回帰テスト用)。 */
+  clientUserUndefined?: boolean;
 }) {
   const deleteFn = mock(() => Promise.resolve());
   const bulkDelete = mock(() => Promise.resolve());
@@ -57,7 +59,7 @@ function fakeMessage(overrides: {
     author: { id: overrides.userId, bot: overrides.bot ?? false, send },
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
-    client: { user: { id: SELF_BOT_ID } },
+    client: { user: overrides.clientUserUndefined ? undefined : { id: SELF_BOT_ID } },
     id: randomUUID(),
     channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
@@ -129,6 +131,22 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId: SELF_BOT_ID, content: "hi", bot: true });
     await handleMessageCreate(deps(eventBus), message as unknown as Message);
+    expect(eventBus.published).toEqual([]);
+  });
+
+  test("client.userが未確定の場合は何も検知しない(fail-closed、Codexレビュー指摘の回帰テスト)", async () => {
+    const eventBus = fakeEventBus();
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const message = fakeMessage({
+      guildId,
+      userId: `u-${randomUUID()}`,
+      content: "banned-word",
+      clientUserUndefined: true,
+    });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
     expect(eventBus.published).toEqual([]);
   });
 

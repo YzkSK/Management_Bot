@@ -44,7 +44,11 @@ function mergeBufferedMessageIds(outcomes: readonly EscalationOutcome[]): readon
  * 既存のmember_not_foundフォールバックにより自動的に失敗扱いになる(削除は実行される)。
  */
 export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
-  if (message.author.id === message.client.user?.id) return;
+  // client.userが未確定(ログイン処理中等)の場合、自Bot判定が常にfalseになり自Bot自身の
+  // 投稿まで検知対象に含まれてしまう(fail-open)。安全側に倒し、確定するまで何もしない
+  // (Codexレビュー指摘)。
+  const selfBotId = message.client.user?.id;
+  if (!selfBotId || message.author.id === selfBotId) return;
   if (!message.guild) return;
 
   const { outcomes, lockedMessageIds } = await detectAndEscalate(deps, {

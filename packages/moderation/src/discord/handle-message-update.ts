@@ -27,7 +27,9 @@ function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
  * 含める(改善案7.2節)。
  */
 export async function handleMessageUpdate(deps: DetectAndEscalateDeps, message: Message): Promise<void> {
-  if (message.author.id === message.client.user?.id) return;
+  // client.userが未確定の場合はfail-closed(handleMessageCreateと同じ理由、Codexレビュー指摘)。
+  const selfBotId = message.client.user?.id;
+  if (!selfBotId || message.author.id === selfBotId) return;
   if (!message.guild) return;
 
   // 編集で違反化したケースの記録日時は元投稿時刻ではなく編集時刻にする

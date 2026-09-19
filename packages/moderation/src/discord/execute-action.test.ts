@@ -165,6 +165,15 @@ describe("executeEscalationAction", () => {
     expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
+  test("memberがnull(Webhook投稿等)のwarnは削除とDM送信試行を行い成功扱いになる(#377、DM失敗は握りつぶす既存設計)", async () => {
+    const message = fakeMessage(null, { send: mock(() => Promise.reject(new Error("Cannot send messages to this user"))) });
+    await expect(
+      executeEscalationAction(message as unknown as Message, outcome({ actionType: "warn" })),
+    ).resolves.toEqual({ result: "success" });
+    expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
+    expect(message.author.send).toHaveBeenCalledTimes(1);
+  });
+
   test("kick/banもmemberがnullの場合、処罰は行わないがメッセージ削除は実行する(#377)", async () => {
     const kickMessage = fakeMessage(null);
     await expect(
