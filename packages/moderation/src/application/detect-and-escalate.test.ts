@@ -909,6 +909,33 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
       expect(result.outcomes).toHaveLength(1);
       expect(result.outcomes[0]?.violationType).toBe("invite_link");
     });
+
+    test("参加24時間以内+宣伝語句+招待リンクでlink_spam側の閾値にも達する場合でも、strikeはinvite_link分の1回のみ加算される(Codexレビュー再指摘の回帰テスト)", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db.insert(moderationThresholds).values([
+        { guildId, violationType: "invite_link", preset: "medium", enabled: true },
+        { guildId, violationType: "link_spam", preset: "strong", enabled: true },
+      ]);
+
+      const eventBus = fakeEventBus();
+      const now = new Date();
+      // 参加24時間以内(20) + 宣伝語句(15) = 35点 >= strong閾値35。メンション併用を使わない
+      // ため、招待リンク部分の除去だけでは対策にならず、runViolationChecksの
+      // invite_linkヒット時のlink_spamスキップが正しく働くかを確認する。
+      const result = await detectAndEscalate(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({
+          guildId,
+          userId,
+          content: "ぜひ参加 discord.gg/external",
+          createdAt: now,
+          joinedAt: new Date(now.getTime() - 60 * 60 * 1000),
+        }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("invite_link");
+    });
   });
 
   describe("detectAndEscalateOnEdit(#362-7.1)", () => {

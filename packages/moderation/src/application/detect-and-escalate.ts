@@ -207,9 +207,24 @@ async function runViolationChecks(
 ): Promise<DetectAndEscalateResult> {
   const outcomes: EscalationOutcome[] = [];
   const lockedMessageIds = new Set<string>();
-  for (const threshold of thresholds) {
+  // invite_linkがヒットした場合、同一メッセージのlink_spamは検知対象から除外する。
+  // link_spamは「メンション併用」以外の項目(宣伝語句・短縮URL・参加時間)だけでも
+  // 独立に閾値へ達し得るため、招待リンク部分をURL判定対象から除くだけでは不十分で、
+  // 両方が正当にヒットして二重にstrikeが加算されるケースが残っていた(Codexレビュー再指摘)。
+  // 同一の外部招待という事実を役割の重複するinvite_link/link_spamの両方でカウントしない
+  // ようにする(flood/duplicate_contentのような独立した正当な違反の同時ヒットとは異なり、
+  // 検知対象の実体が同じであるため)。thresholdsの入力順(DB由来)に依存しないよう、
+  // invite_linkを他より先に評価する順序へ明示的にソートする。
+  const orderedThresholds = [...thresholds].sort((a, b) =>
+    a.violationType === "invite_link" ? -1 : b.violationType === "invite_link" ? 1 : 0,
+  );
+  let inviteLinkHit = false;
+  for (const threshold of orderedThresholds) {
+    if (threshold.violationType === "link_spam" && inviteLinkHit) continue;
+
     const check = await prepareAndCheckViolation(deps, message, buffer, threshold.violationType, threshold.preset, ngwords);
     if (!check.hit) continue;
+    if (threshold.violationType === "invite_link") inviteLinkHit = true;
 
     const canStrike = await markStrikeHitAndCheckNewBurst(
       deps.redis,

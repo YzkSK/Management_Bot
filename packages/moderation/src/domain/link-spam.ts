@@ -5,9 +5,12 @@ import { countMentions } from "./mention-spam.js";
  * invite-link.tsのINVITE_LINK_PATTERNとホスト部分は同じだが、こちらはプロトコル・
  * 招待コード自体も含めて丸ごとマッチさせ、メンション併用判定のURL検出対象から
  * 除外するために使う(招待リンクの検知はinvite_link専用とする、Codexレビュー指摘)。
+ * 左端に"(?<![\w.-])"を付け、invite-link.tsのINVITE_LINK_PATTERNと同様
+ * "spamdiscord.gg/fake"のような別ドメインへの部分一致(Codexレビュー再指摘: 境界なしだと
+ * "discord.gg"部分だけ誤って除去され、外部URLとの併用加点を回避できてしまう)を防ぐ。
  */
 const DISCORD_INVITE_URL_PATTERN =
-  /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-zA-Z0-9-]+/gi;
+  /(?<![\w.-])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-zA-Z0-9-]+/gi;
 
 /** メンション併用等の判定の前に、Discord招待リンク部分を本文から取り除く。 */
 function stripDiscordInviteUrls(content: string): string {
