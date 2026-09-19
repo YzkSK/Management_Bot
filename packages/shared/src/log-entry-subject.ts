@@ -1,4 +1,4 @@
-import type { LogEntry } from "./log-entry.js";
+import { isBulkDeleteLogEntry, type LogEntry } from "./log-entry.js";
 
 /**
  * カテゴリごとに異なる形のLogEntryから「誰の行動/誰に対する行動か」を表す
@@ -9,6 +9,7 @@ import type { LogEntry } from "./log-entry.js";
 export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
+      if (isBulkDeleteLogEntry(entry)) return undefined;
       return entry.authorId;
     case "reaction":
       return entry.userId;
@@ -45,6 +46,7 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
 export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
+      if (isBulkDeleteLogEntry(entry)) return undefined;
       return "authorId";
     case "reaction":
       return "userId";

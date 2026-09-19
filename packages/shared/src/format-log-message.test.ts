@@ -6,6 +6,39 @@ import type { LogEntry } from "./log-entry.js";
 const noNames = { users: {}, channels: {} };
 
 describe("formatLogMessage", () => {
+  test("集約bulkDeleteは投稿者や実行者を推測せず件数だけ表示する", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-20T00:00:00.000Z",
+      channelId: "c1",
+      action: "bulkDelete",
+      deletedMessages: [
+        { messageId: "m1", authorId: "u1", content: "first" },
+        { messageId: "m2", authorId: "u2", content: "second" },
+      ],
+    } satisfies LogEntry;
+
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), { users: {}, channels: { c1: "一般" } })).toBe(
+      "#一般 で 2件のメッセージが一括削除されました",
+    );
+  });
+
+  test("従来の個別bulkDeleteも投稿者や実行者を推測しない", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-20T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "bulkDelete",
+    } satisfies LogEntry;
+
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), { users: { u1: "mini" }, channels: { c1: "一般" } })).toBe(
+      "#一般 でメッセージが一括削除されました",
+    );
+  });
+
   test("メッセージ削除(自分で削除): 実行者=投稿者", () => {
     const entry = {
       category: "message",

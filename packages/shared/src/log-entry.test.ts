@@ -170,6 +170,52 @@ describe("logEntrySchema", () => {
     expect(() => parseLogEntry(legacyEntry)).not.toThrow();
   });
 
+  test("message: bulkDeleteの集約ペイロードは削除済みメッセージを保持してparseできる", () => {
+    const result = safeParseLogEntry({
+      category: "message",
+      guildId: "1",
+      createdAt: "2026-09-20T00:00:00.000Z",
+      channelId: "2",
+      action: "bulkDelete",
+      deletedMessages: [
+        { messageId: "3", authorId: "4", authorName: "投稿者A", content: "first" },
+        { messageId: "5", authorId: "6", content: "second" },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { action: "bulkDelete", deletedMessages: [{ authorId: "4" }, { authorId: "6" }] },
+    });
+  });
+
+  test("message: bulkDeleteの集約ペイロードは削除済みメッセージが空なら拒否する", () => {
+    expect(
+      safeParseLogEntry({
+        category: "message",
+        guildId: "1",
+        createdAt: "2026-09-20T00:00:00.000Z",
+        channelId: "2",
+        action: "bulkDelete",
+        deletedMessages: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("message: 従来の個別bulkDeleteペイロードもparseできる", () => {
+    expect(
+      safeParseLogEntry({
+        category: "message",
+        guildId: "1",
+        createdAt: "2026-09-20T00:00:00.000Z",
+        channelId: "2",
+        authorId: "3",
+        action: "bulkDelete",
+        content: "legacy",
+      }).success,
+    ).toBe(true);
+  });
+
   test("guildIdが空文字の場合は失敗する", () => {
     const result = safeParseLogEntry({
       ...validByCategory.message,

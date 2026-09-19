@@ -29,13 +29,25 @@ const base = {
  * 添付ファイルの実体は保存せずDiscord CDNのURLのみ保持する(ストレージ節約、Oracle Cloud A1 Flexの限られた容量を考慮)。
  * DiscordのCDN URLは一定期間・メッセージ削除後に失効しうるが、直近ログの確認用途としては許容する。
  */
-const messageAttachmentSchema = z.object({
+export const messageAttachmentSchema = z.object({
   url: z.url(),
   filename: z.string(),
   contentType: z.string().optional(),
 });
 
-export const messageLogEntrySchema = z.object({
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
+export const bulkDeletedMessageSchema = z.object({
+  messageId: nonEmptyString.optional(),
+  authorId: nonEmptyString,
+  authorName: nonEmptyString.optional(),
+  content: z.string().optional(),
+  attachments: z.array(messageAttachmentSchema).optional(),
+});
+
+export type BulkDeletedMessage = z.infer<typeof bulkDeletedMessageSchema>;
+
+const individualMessageLogEntrySchema = z.object({
   ...base,
   category: z.literal("message"),
   channelId: nonEmptyString,
@@ -51,6 +63,16 @@ export const messageLogEntrySchema = z.object({
   /** create/update/delete/bulkDeleteで添付ファイルがある場合のみ設定する。 */
   attachments: z.array(messageAttachmentSchema).optional(),
 });
+
+const bulkDeleteMessageLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("message"),
+  channelId: nonEmptyString,
+  action: z.literal("bulkDelete"),
+  deletedMessages: z.array(bulkDeletedMessageSchema).min(1),
+});
+
+export const messageLogEntrySchema = z.union([individualMessageLogEntrySchema, bulkDeleteMessageLogEntrySchema]);
 
 export const reactionLogEntrySchema = z.object({
   ...base,
@@ -313,9 +335,15 @@ const logEntrySchemaOptions = Object.values(LOG_ENTRY_SCHEMAS) as [
   ...(typeof LOG_ENTRY_SCHEMAS)[LogCategory][],
 ];
 
-export const logEntrySchema = z.discriminatedUnion("category", logEntrySchemaOptions);
+export const logEntrySchema = z.union(logEntrySchemaOptions);
 
 export type LogEntry = z.infer<typeof logEntrySchema>;
+
+export type BulkDeleteLogEntry = Extract<LogEntry, { category: "message"; action: "bulkDelete"; deletedMessages: unknown }>;
+
+export function isBulkDeleteLogEntry(entry: LogEntry): entry is BulkDeleteLogEntry {
+  return entry.category === "message" && entry.action === "bulkDelete" && "deletedMessages" in entry;
+}
 
 export function parseLogEntry(input: unknown): LogEntry {
   return logEntrySchema.parse(input);

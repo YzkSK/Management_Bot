@@ -1,4 +1,4 @@
-import type { LogEntry, VoiceStateFlagName } from "./log-entry.js";
+import { isBulkDeleteLogEntry, type LogEntry, type VoiceStateFlagName } from "./log-entry.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
@@ -91,16 +91,20 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
 
   switch (entry.category) {
     case "message": {
-      const authorName = userName(entry.authorId, names, entry.authorName);
       const channel = channelName(entry.channelId, names);
+      if (isBulkDeleteLogEntry(entry)) {
+        return `${channel} で ${entry.deletedMessages.length}件のメッセージが一括削除されました`;
+      }
+      const authorName = userName(entry.authorId, names, entry.authorName);
       switch (entry.action) {
         case "create":
           return `${channel} で ${authorName} がメッセージを投稿しました`;
         case "update":
           return `${channel} で ${authorName} がメッセージを編集しました`;
-        case "delete":
-        case "bulkDelete": {
-          const suffix = entry.action === "bulkDelete" ? "複数のメッセージを削除しました" : "メッセージを削除しました";
+        case "bulkDelete":
+          return `${channel} でメッセージが一括削除されました`;
+        case "delete": {
+          const suffix = "メッセージを削除しました";
           return entry.authorId === entry.executorId || entry.executorId === undefined
             ? `${channel} で ${authorName} が自分の${suffix}`
             : `${channel} で ${executorName} が ${authorName} の${suffix}`;

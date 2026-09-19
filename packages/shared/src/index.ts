@@ -37,6 +37,8 @@ export { MODERATION_PRESETS, type ModerationPreset } from "./moderation-preset.j
 export {
   LOG_ENTRY_SCHEMAS,
   messageLogEntrySchema,
+  messageAttachmentSchema,
+  bulkDeletedMessageSchema,
   reactionLogEntrySchema,
   memberLogEntrySchema,
   roleLogEntrySchema,
@@ -56,10 +58,14 @@ export {
   voiceLogEntrySchema,
   VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
+  isBulkDeleteLogEntry,
   parseLogEntry,
   safeParseLogEntry,
   SENSITIVE_LOG_FIELDS,
   type LogEntry,
+  type BulkDeleteLogEntry,
+  type BulkDeletedMessage,
+  type MessageAttachment,
   type VoiceStateFlagName,
 } from "./log-entry.js";
 export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
