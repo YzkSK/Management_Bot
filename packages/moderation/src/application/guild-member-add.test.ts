@@ -248,7 +248,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
     expect(lastResult?.raidHit).toBeNull();
   });
 
-  test("new_account_guard: 作成間もないアカウントの入室でstrikeが加算されイベントがpublishされる", async () => {
+  test("new_account_guard: 作成間もないアカウントの入室でもstrikeや処罰イベントを作らない", async () => {
     await db
       .insert(moderationThresholds)
       .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
@@ -261,16 +261,14 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAdd", () => {
       member({ guildId, userId, accountCreatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), joinedAt: now }),
     );
 
-    expect(result.newAccountGuardOutcome).not.toBeNull();
-    expect(result.newAccountGuardOutcome?.violationType).toBe("new_account_guard");
-    expect(eventBus.published).toHaveLength(1);
+    expect(result.newAccountGuardOutcome).toBeNull();
+    expect(eventBus.published).toEqual([]);
 
     const rows = await db
       .select()
       .from(moderationEscalationState)
       .where(eq(moderationEscalationState.userId, userId));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.violationType).toBe("new_account_guard");
+    expect(rows).toHaveLength(0);
   });
 
   test("new_account_guard: 作成から十分経過したアカウントの入室ではヒットしない", async () => {

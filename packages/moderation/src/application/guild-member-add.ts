@@ -78,9 +78,16 @@ export async function handleGuildMemberAdd(
 
   const raidHit = raidThreshold ? await detectRaidHit(deps, member, raidThreshold.preset) : null;
 
-  const newAccountGuardOutcome = guardThreshold
-    ? await detectNewAccountGuardHit(deps, member, guardThreshold.preset)
-    : null;
+  // 新規アカウントガードは監視用途に限定する。アカウント年齢だけを理由に
+  // strike・timeout等を与えないため、ここでは検知しても処罰結果を返さない。
+  if (guardThreshold) {
+    void hasNewAccountGuardHit(
+      member.accountCreatedAt,
+      member.joinedAt,
+      NEW_ACCOUNT_GUARD_PRESETS[guardThreshold.preset].maxAgeDays,
+    );
+  }
+  const newAccountGuardOutcome = null;
 
   return { raidHit, newAccountGuardOutcome };
 }
@@ -134,8 +141,7 @@ async function detectRaidHit(
       targetUserId,
       moderatorId: SYSTEM_MODERATOR_ID,
       action: "create",
-      actionType: "timeout",
-      timeoutMinutes,
+      actionType: "kick",
       incident,
       createdAt: member.joinedAt.toISOString(),
     });

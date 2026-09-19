@@ -41,23 +41,25 @@ function fakeMember(overrides: {
   const timeout = mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
+  const send = mock(() => Promise.resolve());
   const fetchedMembers = new Map<
     string,
-    { id: string; guild: { id: string }; timeout: ReturnType<typeof mock> }
+    { id: string; guild: { id: string }; kick: ReturnType<typeof mock>; user: { send: ReturnType<typeof mock> } }
   >();
   const fetch = mock(async (userId: string) => {
     if (!fetchedMembers.has(userId)) {
       fetchedMembers.set(userId, {
         id: userId,
         guild: { id: overrides.guildId },
-        timeout: mock(() => Promise.resolve()),
+        kick: mock(() => Promise.resolve()),
+        user: { send: mock(() => Promise.resolve()) },
       });
     }
     return fetchedMembers.get(userId);
   });
   return {
     id: overrides.userId,
-    user: { id: overrides.userId, bot: overrides.bot ?? false, createdAt: overrides.accountCreatedAt },
+    user: { id: overrides.userId, bot: overrides.bot ?? false, createdAt: overrides.accountCreatedAt, send },
     guild: { id: overrides.guildId, members: { fetch } },
     roles: { cache: new Map() },
     joinedAt: overrides.joinedAt,
@@ -127,7 +129,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     expect(eventBus.published).toEqual([]);
   });
 
-  test("raid: strong presetの閾値(6人)に達すると対象ユーザー全員にtimeoutが実行される", async () => {
+  test("raid: strong presetの閾値(6人)に達すると対象ユーザー全員にkickとDMが実行される", async () => {
     await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
     const eventBus = fakeEventBus();
     const now = new Date();
@@ -141,21 +143,20 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
       await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
     }
 
-    // 6人目(トリガーとなった入室者自身)は直接member.timeout()が呼ばれ、
-    // 残り5人はguild.members.fetch()経由でtimeoutが実行される(Codexレビュー指摘対応:
-    // raid対象とnew_account_guard対象が同一人物の場合の二重timeout上書きを防ぐため、
-    // トリガー本人にはfetchを経由せず直接実行する設計)。
+    // 6人目は直接kick、残り5人はguild.members.fetch()経由でkickする。
     const lastMember = members[members.length - 1];
     expect(lastMember?.fetch).toHaveBeenCalledTimes(5);
-    expect(lastMember?.timeout).toHaveBeenCalledTimes(1);
+    expect(lastMember?.kick).toHaveBeenCalledTimes(1);
+    expect(lastMember?.user.send).toHaveBeenCalledTimes(1);
     for (const fetched of lastMember?.fetchedMembers.values() ?? []) {
-      expect(fetched.timeout).toHaveBeenCalledTimes(1);
+      expect(fetched.kick).toHaveBeenCalledTimes(1);
+      expect(fetched.user.send).toHaveBeenCalledTimes(1);
     }
     // create×6(対象ユーザー全員分)→resolve×6(実行結果、#350)。
-    const timeoutEvents = eventBus.published.filter((e) => e.actionType === "timeout");
-    expect(timeoutEvents).toHaveLength(12);
-    expect(timeoutEvents.filter((e) => e.action === "create")).toHaveLength(6);
-    const resolveEvents = timeoutEvents.filter((e) => e.action === "resolve");
+    const kickEvents = eventBus.published.filter((e) => e.actionType === "kick");
+    expect(kickEvents).toHaveLength(12);
+    expect(kickEvents.filter((e) => e.action === "create")).toHaveLength(6);
+    const resolveEvents = kickEvents.filter((e) => e.action === "resolve");
     expect(resolveEvents).toHaveLength(6);
     expect(resolveEvents.every((e) => e.action === "resolve" && e.result === "success")).toBe(true);
   });
@@ -174,13 +175,10 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     expect(eventBus.published).toEqual([]);
   });
 
-  test("new_account_guard: 作成間もないアカウントの入室にtimeoutが実行される", async () => {
+  test("new_account_guard: 作成間もないアカウントの入室にも処罰を実行しない", async () => {
     await db
       .insert(moderationThresholds)
       .values({ guildId, violationType: "new_account_guard", preset: "strong", enabled: true });
-    // strong preset(エスカレーション強度)を明示指定。ESCALATION_STEPS.strong[1]=warn/[2]=timeoutなので、
-    // まず1回warnさせてから2回目でtimeoutを確認する。
-    await setEscalationPreset(db, guildId, "strong");
     const eventBus = fakeEventBus();
     const now = new Date();
     const userId = `u-${randomUUID()}`;
@@ -192,17 +190,12 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
 
     const second = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
     await handleGuildMemberAddEvent(deps(eventBus), second as unknown as GuildMember);
-    expect(second.timeout).toHaveBeenCalledTimes(1);
-
-    // 1件目: warn(create+resolve)、2件目: timeout(create+resolve)の計4件(#350)。
-    expect(eventBus.published).toHaveLength(4);
-    expect(eventBus.published[0]).toMatchObject({ action: "create", actionType: "warn" });
-    expect(eventBus.published[1]).toMatchObject({ action: "resolve", actionType: "warn", result: "success" });
-    expect(eventBus.published[2]).toMatchObject({ action: "create", actionType: "timeout" });
-    expect(eventBus.published[3]).toMatchObject({ action: "resolve", actionType: "timeout", result: "success" });
+    expect(second.timeout).not.toHaveBeenCalled();
+    expect(second.kick).not.toHaveBeenCalled();
+    expect(eventBus.published).toEqual([]);
   });
 
-  test("raid+new_account_guardが同一入室者に同時ヒットした場合、より重いraidのtimeoutのみが実行される(new_account_guardのtimeoutで上書きされない)", async () => {
+  test("raid+new_account_guardが同一入室者に同時ヒットした場合、raidのkickのみが実行される", async () => {
     await db.insert(moderationThresholds).values([
       { guildId, violationType: "raid", preset: "strong", enabled: true },
       { guildId, violationType: "new_account_guard", preset: "strong", enabled: true },
@@ -210,7 +203,6 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     // new_account_guardのESCALATION_STEPS.strong[1]=warn/[2]=timeout(5分)。
     // raidのstrong presetのtimeoutMinutesはnormal=60分/high=1440分、どちらもnew_account_guardの
     // 5分より長いため、raid側のtimeoutだけが実行されればよい。
-    await setEscalationPreset(db, guildId, "strong");
     const eventBus = fakeEventBus();
     const now = new Date();
     const recentAccountCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -233,17 +225,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
     const trigger = fakeMember({ guildId, userId, accountCreatedAt: recentAccountCreatedAt, joinedAt: now });
     await handleGuildMemberAddEvent(deps(eventBus), trigger as unknown as GuildMember);
 
-    // raid(1440分 or 60分)のtimeoutが1回だけ呼ばれ、new_account_guardの5分timeoutでは上書きされない。
-    expect(trigger.timeout).toHaveBeenCalledTimes(1);
-    const timeoutCallArgs = trigger.timeout.mock.calls[0] as unknown[] | undefined;
-    const timeoutMs = timeoutCallArgs?.[0] as number | undefined;
-    expect(timeoutMs).toBeGreaterThan(5 * 60 * 1000);
-
-    // 実行されなかったnew_account_guard側(trigger分)のcreateには、未解決のまま残さないよう
-    // result="skipped"のresolveがpublishされる(#350)。
-    const skippedResolves = eventBus.published.filter((e) => e.action === "resolve" && e.result === "skipped");
-    expect(skippedResolves).toHaveLength(1);
-    expect(skippedResolves[0]).toMatchObject({ targetUserId: userId, actionType: "timeout" });
+    expect(trigger.timeout).not.toHaveBeenCalled();
+    expect(trigger.kick).toHaveBeenCalledTimes(1);
+    expect(trigger.user.send).toHaveBeenCalledTimes(1);
   });
 
   test("new_account_guard: 作成から十分経過したアカウントの入室では何も実行されない", async () => {
