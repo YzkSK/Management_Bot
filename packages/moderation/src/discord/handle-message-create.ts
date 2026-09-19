@@ -48,6 +48,7 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
     messageId: message.id,
     content: message.content,
     createdAt: message.createdAt,
+    joinedAt: message.member.joinedAt ?? undefined,
   });
 
   if (outcomes.length === 0) {

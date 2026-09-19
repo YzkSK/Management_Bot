@@ -2,12 +2,14 @@ export {
   MODERATION_PRESETS,
   FLOOD_PRESETS,
   MENTION_SPAM_PRESETS,
+  LINK_SPAM_PRESETS,
   RAID_PRESETS,
   NEW_ACCOUNT_GUARD_PRESETS,
   ESCALATION_STEPS,
   type ModerationPreset,
   type FloodPresetConfig,
   type MentionSpamPresetConfig,
+  type LinkSpamPresetConfig,
   type RaidPresetConfig,
   type NewAccountGuardPresetConfig,
   type EscalationStep,
@@ -19,6 +21,7 @@ export { matchesNgword, findMatchingNgword, type NgwordMatchType, type NgwordEnt
 export { checkRegexSafety, type RegexSafetyResult } from "./regex-safety.js";
 export { countMentions, hasSingleMessageMentionSpam, hasCumulativeMentionSpam } from "./mention-spam.js";
 export { extractInviteCodes, hasInviteLinkHit } from "./invite-link.js";
+export { scoreLinkSpam, hasLinkSpamHit, type LinkSpamScoreInput } from "./link-spam.js";
 export {
   entriesInWindow,
   hasRaidHit,

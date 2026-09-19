@@ -805,6 +805,65 @@ describe.skipIf(!(await isRedisAvailable()))("detectAndEscalate", () => {
     expect(lastResult.outcomes).toEqual([]);
   });
 
+  describe("link_spam検知(#369)", () => {
+    test("外部招待+メンション併用のスコア合計がstrong presetの閾値(50)以上ならlink_spamとして検知される", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
+
+      const eventBus = fakeEventBus();
+      // 外部招待50 + メンション併用20 = 70点 >= strong閾値50
+      const result = await detectAndEscalate(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({ guildId, userId, content: "<@123> discord.gg/other-guild-code" }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("link_spam");
+    });
+
+    test("スコアが閾値未満ならlink_spamとして検知されない", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
+
+      const eventBus = fakeEventBus();
+      // 宣伝語句15点のみ < strong閾値50
+      const result = await detectAndEscalate(
+        deps(eventBus),
+        message({ guildId, userId, content: "サーバー宣伝します" }),
+      );
+
+      expect(result.outcomes).toEqual([]);
+    });
+
+    test("参加直後(24時間以内)の投稿はjoinedAtのスコア加点が反映される", async () => {
+      const userId = `u-${randomUUID()}`;
+      await db
+        .insert(moderationThresholds)
+        .values({ guildId, violationType: "link_spam", preset: "strong", enabled: true });
+
+      const eventBus = fakeEventBus();
+      const now = new Date();
+      // 外部招待50 + 参加24時間以内20 = 70点 >= strong閾値50
+      const result = await detectAndEscalate(
+        deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+        message({
+          guildId,
+          userId,
+          content: "discord.gg/other-guild-code",
+          createdAt: now,
+          joinedAt: new Date(now.getTime() - 60 * 60 * 1000),
+        }),
+      );
+
+      expect(result.outcomes).toHaveLength(1);
+      expect(result.outcomes[0]?.violationType).toBe("link_spam");
+    });
+  });
+
   describe("detectAndEscalateOnEdit(#362-7.1)", () => {
     test("編集後の内容がNGワードに一致すればngwordとして検知される", async () => {
       const userId = `u-${randomUUID()}`;

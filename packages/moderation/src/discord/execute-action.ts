@@ -16,6 +16,7 @@ const VIOLATION_LABELS = {
   ngword: "NGワードの投稿",
   mention_spam: "大量メンション",
   invite_link: "招待リンクの投稿",
+  link_spam: "外部リンク・宣伝行為",
 } satisfies Record<EscalationOutcome["violationType"], string>;
 
 const ACTION_LABELS = {

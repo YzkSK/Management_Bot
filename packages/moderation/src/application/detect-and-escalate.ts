@@ -16,6 +16,7 @@ import type { EnabledThreshold } from "./thresholds.js";
 import {
   checkFloodOrDuplicate,
   checkInviteLink,
+  checkLinkSpam,
   checkMentionSpam,
   checkNgword,
   NGWORD_STRIKE_LOCK_WINDOW_SECONDS,
@@ -35,6 +36,7 @@ const MESSAGE_CREATE_VIOLATION_TYPES = [
   "ngword",
   "mention_spam",
   "invite_link",
+  "link_spam",
 ] as const satisfies readonly ModerationViolationType[];
 type MessageCreateViolationType = (typeof MESSAGE_CREATE_VIOLATION_TYPES)[number];
 
@@ -53,6 +55,11 @@ export interface IncomingMessage {
   messageId: string;
   content: string;
   createdAt: Date;
+  /**
+   * 投稿者がこのguildに参加した日時(GuildMember.joinedAt)。link_spamの「参加24時間以内」
+   * 加点判定に使う(改善案5.6節)。取得できない場合(取得失敗・partial member等)はundefined。
+   */
+  joinedAt?: Date;
 }
 
 export interface DetectAndEscalateDeps {
@@ -106,6 +113,25 @@ const PROCESSED_MARKER_TTL_SECONDS = 3600;
  * 空配列を返す。
  */
 /**
+ * メッセージ内の招待コードを解決する。悪意あるメッセージに大量の招待リンクを詰め込まれると
+ * fetchInvite呼び出しが際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
+ * 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
+ * invite_link・link_spamの両方から呼ばれる(resolveInviteGuildId自体はTTLキャッシュ済み、#362)。
+ */
+async function resolveInviteCodes(deps: DetectAndEscalateDeps, message: IncomingMessage): Promise<(string | null)[]> {
+  const codes = extractInviteCodes(message.content);
+  const resolvedGuildIds: (string | null)[] = [];
+  for (const code of codes) {
+    const resolvedGuildId = await deps.resolveInviteGuildId(code);
+    resolvedGuildIds.push(resolvedGuildId);
+    // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
+    // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
+    if (resolvedGuildId !== message.guildId) break;
+  }
+  return resolvedGuildIds;
+}
+
+/**
  * 副作用の前処理(Redis書き込み・招待リンク解決)を行った上で、violation-check.tsの
  * 副作用なし検知判定関数へ委譲する橋渡し。検知ロジック自体(hit判定の中身)は
  * violation-check.tsの各checkXxx関数が担う。
@@ -144,19 +170,13 @@ async function prepareAndCheckViolation(
   }
 
   if (violationType === "invite_link") {
-    const codes = extractInviteCodes(message.content);
-    // 悪意あるメッセージに大量の招待リンクを詰め込まれるとfetchInvite呼び出しが
-    // 際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
-    // 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
-    const resolvedGuildIds: (string | null)[] = [];
-    for (const code of codes) {
-      const resolvedGuildId = await deps.resolveInviteGuildId(code);
-      resolvedGuildIds.push(resolvedGuildId);
-      // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
-      // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
-      if (resolvedGuildId !== message.guildId) break;
-    }
+    const resolvedGuildIds = await resolveInviteCodes(deps, message);
     return checkInviteLink(message, resolvedGuildIds);
+  }
+
+  if (violationType === "link_spam") {
+    const resolvedGuildIds = await resolveInviteCodes(deps, message);
+    return checkLinkSpam(message, preset, resolvedGuildIds);
   }
 
   throw new Error(`unhandled violationType: ${violationType satisfies never}`);

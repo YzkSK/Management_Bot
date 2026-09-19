@@ -46,6 +46,18 @@ export const MENTION_SPAM_PRESETS: Readonly<Record<ModerationPreset, MentionSpam
   },
 };
 
+export interface LinkSpamPresetConfig {
+  /** scoreLinkSpamの合計スコアがこの値以上でヒット(削除対象)とする。 */
+  deleteThreshold: number;
+}
+
+/** 外部リンク・宣伝のスコア方式検知(改善案5.6節)のプリセット。strikeによる段階的処罰は既存のESCALATION_STEPSに委ねる。 */
+export const LINK_SPAM_PRESETS: Readonly<Record<ModerationPreset, LinkSpamPresetConfig>> = {
+  weak: { deleteThreshold: 80 },
+  medium: { deleteThreshold: 65 },
+  strong: { deleteThreshold: 50 },
+};
+
 export interface RaidPresetConfig {
   /** 直近windowSeconds秒間にmemberThreshold人以上入室でヒット。 */
   window: { windowSeconds: number; memberThreshold: number };
