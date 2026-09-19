@@ -239,6 +239,14 @@ describe("toMessageBulkDeleteLogEntry", () => {
       ],
     });
   });
+
+  test("モデレーションケースが関連付く一括削除にはcaseIdを含める", () => {
+    const messages = new Map([["1", fakeMessage({ author: { id: "u1" } })]]);
+
+    expect(toMessageBulkDeleteLogEntry(messages as never, BOT_USER_ID, "case-1")).toMatchObject({
+      moderationCaseId: "case-1",
+    });
+  });
 });
 
 describe("registerMessageHandlers", () => {
@@ -293,6 +301,40 @@ describe("registerMessageHandlers", () => {
         deletedMessages: [{ messageId: "1" }, { messageId: "2" }, { messageId: "3" }],
       },
     });
+  });
+
+  test("messageDeleteBulkは削除対象が同じケースに関連付くとcaseIdをログへ記録する", async () => {
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    const on = mock((event: string, handler: (...args: never[]) => unknown) => {
+      handlers.set(event, handler);
+    });
+    const insertCalls: unknown[] = [];
+    const db = {
+      insert: () => ({
+        values: (values: unknown) => {
+          insertCalls.push(values);
+          return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "log-1" }]) }) };
+        },
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([{ messageId: "1", caseId: "case-1" }, { messageId: "2", caseId: "case-1" }]),
+        }),
+      }),
+    };
+    const ctx = { client: { on, user: { id: BOT_USER_ID } }, db } as unknown as FeatureModuleContext;
+
+    registerMessageHandlers(ctx);
+    const messages = new Map([
+      ["1", fakeMessage({ id: "1", author: { id: "u1" } })],
+      ["2", fakeMessage({ id: "2", author: { id: "u2" } })],
+    ]) as unknown as Map<string, unknown> & { first: () => unknown };
+    messages.first = () => [...messages.values()][0];
+
+    await handlers.get("messageDeleteBulk")!(messages as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(insertCalls[0]).toMatchObject({ payload: { moderationCaseId: "case-1" } });
   });
 
   test("messageDeleteBulkは一括削除サマリーをComponents V2カードとして送信する", async () => {

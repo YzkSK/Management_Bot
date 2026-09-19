@@ -131,3 +131,23 @@ export const moderationEscalationSettings = pgTable(
     ),
   ],
 );
+
+/**
+ * モデレーション処理がDiscordへ削除を依頼する直前に保存する、メッセージIDとcaseIdの短期対応表。
+ * GatewayのmessageDeleteBulkは元の処分操作を持たないため、logging側が因果関係を復元するために使う。
+ */
+export const moderationMessageDeletionLinks = pgTable(
+  "moderation_message_deletion_links",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    messageId: text("message_id").notNull(),
+    caseId: text("case_id").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.guildId, table.messageId] }),
+    index("moderation_message_deletion_links_expires_at_idx").on(table.expiresAt),
+  ],
+);

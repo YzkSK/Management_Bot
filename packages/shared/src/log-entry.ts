@@ -69,6 +69,8 @@ const bulkDeleteMessageLogEntrySchema = z.object({
   category: z.literal("message"),
   channelId: nonEmptyString,
   action: z.literal("bulkDelete"),
+  /** モデレーション処分に起因する一括削除の場合、そのケースIDを設定する。 */
+  moderationCaseId: nonEmptyString.optional(),
   deletedMessages: z.array(bulkDeletedMessageSchema).min(1),
 });
 

@@ -1,4 +1,5 @@
 import type { Message } from "discord.js";
+import { recordModerationMessageDeletionLinks } from "@management-bot/db";
 import { ACTION_SEVERITY } from "@management-bot/shared";
 import {
   detectAndEscalate,
@@ -76,9 +77,19 @@ export async function handleMessageCreate(deps: DetectAndEscalateDeps, message: 
   }
 
   const target = mostSevere(outcomes);
+  const bufferedMessageIds = mergeBufferedMessageIds(outcomes);
+  // DiscordのmessageDeleteBulkイベントはbulkDelete()の実行中にも届きうるため、先に永続化する。
+  // 関連付けが書き込めなければアクションを実行せず、因果関係が欠けたログを作らない。
+  if (bufferedMessageIds.length >= 2 && "bulkDelete" in message.channel) {
+    await recordModerationMessageDeletionLinks(deps.db, {
+      guildId: message.guild.id,
+      caseId: target.caseId,
+      messageIds: bufferedMessageIds,
+    });
+  }
   const execResult = await executeEscalationAction(message, {
     ...target,
-    bufferedMessageIds: mergeBufferedMessageIds(outcomes),
+    bufferedMessageIds,
   });
   await deps.eventBus.publish({
     type: "moderation.action.recorded",

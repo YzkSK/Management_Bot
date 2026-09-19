@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { LogCategory } from "@management-bot/shared";
+import type { LogCategory, LogEntry } from "@management-bot/shared";
 import {
   CHANGE_FIELD_LABELS,
   CHANNEL_REFERENCE_CHANGE_FIELDS,
@@ -52,6 +52,12 @@ const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number]
   userId: "userName",
 };
 
+type ListedLogEntry = { id: string; entry: LogEntry; collapsedEntries?: ListedLogEntry[] };
+
+function flattenLogEntries(entries: readonly ListedLogEntry[]): LogEntry[] {
+  return entries.flatMap(({ entry, collapsedEntries }) => [entry, ...flattenLogEntries(collapsedEntries ?? [])]);
+}
+
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [category, setCategory] = useState<LogCategory | "">("");
@@ -73,8 +79,7 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              logsQuery.data.entries.flatMap(({ entry, collapsedEntries }) =>
-                [entry, ...(collapsedEntries?.map(({ entry: collapsedEntry }) => collapsedEntry) ?? [])].flatMap((visibleEntry) =>
+              flattenLogEntries(logsQuery.data.entries).flatMap((visibleEntry) =>
                 USER_ID_FIELDS.flatMap((key) => {
                   // スナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
                   const snapshotField = SNAPSHOT_FIELD_BY_ID_FIELD[key];
@@ -83,7 +88,6 @@ export function LogListPage() {
                   return typeof value === "string" ? [value] : [];
                 }),
                 ),
-              ),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
@@ -95,8 +99,7 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              logsQuery.data.entries.flatMap(({ entry, collapsedEntries }) =>
-                [entry, ...(collapsedEntries?.map(({ entry: collapsedEntry }) => collapsedEntry) ?? [])].flatMap((visibleEntry) => {
+              flattenLogEntries(logsQuery.data.entries).flatMap((visibleEntry) => {
                 const direct = Object.entries(visibleEntry).flatMap(([key, value]) =>
                   (key === "channelId" || key === "previousChannelId" || key === "threadId") && typeof value === "string"
                     ? [value]
@@ -110,7 +113,6 @@ export function LogListPage() {
                 );
                 return [...direct, ...fromChanges];
               }),
-              ),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
@@ -433,11 +435,13 @@ export function LogListPage() {
                             style={{ backgroundColor: CATEGORY_ACCENT.message }}
                             aria-hidden="true"
                           />
-                          <span className="flex-1 text-sm">削除された投稿ログ（{collapsedEntries.length}件）</span>
+                          <span className="flex-1 text-sm">
+                            {entry.category === "moderationCase" ? "関連する削除ログ" : "削除された投稿ログ"}（{collapsedEntries.length}件）
+                          </span>
                         </button>
                         {isCollapsedExpanded && (
                           <div id={collapsedDetailId} className="flex flex-col gap-2 border-t bg-muted/40 p-3">
-                            {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry }) => {
+                            {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
                               const collapsedSummary = summarizeLogEntry(collapsedEntry);
                               const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, names);
                               return (
@@ -470,6 +474,28 @@ export function LogListPage() {
                                         ),
                                       )}
                                     </div>
+                                  )}
+                                  {nestedEntries && nestedEntries.length > 0 && (
+                                    <details className="rounded-md border bg-muted/40 p-2">
+                                      <summary className="cursor-pointer text-sm">
+                                        削除された投稿ログ（{nestedEntries.length}件）
+                                      </summary>
+                                      <div className="mt-2 flex flex-col gap-2">
+                                        {nestedEntries.map(({ id: nestedId, entry: nestedEntry }) => {
+                                          const nestedSummary = summarizeLogEntry(nestedEntry);
+                                          return (
+                                            <article key={nestedId} className="rounded-md border bg-card p-2">
+                                              <p className="text-sm">{formatLogMessage(nestedEntry, nestedSummary, names)}</p>
+                                              {nestedSummary.content !== null && (
+                                                <p className="mt-1 text-sm whitespace-pre-wrap">
+                                                  {nestedSummary.content || "本文なし"}
+                                                </p>
+                                              )}
+                                            </article>
+                                          );
+                                        })}
+                                      </div>
+                                    </details>
                                   )}
                                 </article>
                               );

@@ -5,11 +5,12 @@ import {
   type Db,
   guilds,
   moderationEscalationState,
+  moderationMessageDeletionLinks,
   moderationNgwords,
   moderationThresholds,
 } from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
 import { createModerationConfigCache } from "../application/index.js";
@@ -213,6 +214,37 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(eventBus.published).toHaveLength(2);
     expect(eventBus.published[0]).toMatchObject({ action: "create" });
     expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+  });
+
+  test("一括削除の直前に削除メッセージ群とモデレーションケースを関連付ける", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const messages = [] as ReturnType<typeof fakeMessage>[];
+    for (let i = 0; i < 3; i++) {
+      const message = fakeMessage({ guildId, userId, content: `msg-${i}` });
+      messages.push(message);
+      await handleMessageCreate(deps(eventBus), message as unknown as Message);
+    }
+
+    const links = await db
+      .select({ messageId: moderationMessageDeletionLinks.messageId, caseId: moderationMessageDeletionLinks.caseId })
+      .from(moderationMessageDeletionLinks)
+      .where(
+        and(
+          eq(moderationMessageDeletionLinks.guildId, guildId),
+          inArray(
+            moderationMessageDeletionLinks.messageId,
+            messages.map((message) => message.id),
+          ),
+        ),
+      );
+    expect(links).toEqual(
+      expect.arrayContaining(messages.map((message) => expect.objectContaining({ messageId: message.id }))),
+    );
+    expect(new Set(links.map((link) => link.caseId))).toEqual(new Set([eventBus.published[0]?.caseId]));
   });
 
   test("Discord API(timeout)がエラーで失敗した場合、resolveイベントはresult=failedでpublishされる(#350)", async () => {

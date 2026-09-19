@@ -1,4 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import { findModerationCaseIdForDeletedMessages } from "@management-bot/db";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollection, Snowflake } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
 import { type GetChannelId, type WriteLogEntryDeps } from "../../application/index.js";
@@ -7,6 +8,18 @@ import { writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 type MessageAttachments = { url: string; filename: string; contentType?: string }[] | undefined;
+type BulkDeleteMessageLogEntry = LogEntry & {
+  category: "message";
+  action: "bulkDelete";
+  moderationCaseId?: string;
+  deletedMessages: {
+    messageId: string;
+    authorId: string;
+    authorName: string;
+    content?: string;
+    attachments?: MessageAttachments;
+  }[];
+};
 
 /**
  * DMメッセージ(guildIdなし)・author未解決のpartial messageは
@@ -150,7 +163,8 @@ export function toMessageDeleteLogEntry(message: AnyMessage, botUserId: string |
 export function toMessageBulkDeleteLogEntry(
   messages: ReadonlyCollection<Snowflake, Message<true> | PartialMessage<true>>,
   botUserId: string | undefined,
-): LogEntry | undefined {
+  moderationCaseId?: string,
+): BulkDeleteMessageLogEntry | undefined {
   const createdAt = new Date().toISOString();
   let aggregateFields: { guildId: string; channelId: string } | undefined;
   const deletedMessages: {
@@ -178,8 +192,31 @@ export function toMessageBulkDeleteLogEntry(
     ...aggregateFields,
     createdAt,
     action: "bulkDelete",
+    ...(moderationCaseId ? { moderationCaseId } : {}),
     deletedMessages,
   };
+}
+
+async function writeMessageBulkDeleteLogEntry(
+  ctx: FeatureModuleContext,
+  deps: WriteLogEntryDeps,
+  messages: ReadonlyCollection<Snowflake, Message<true> | PartialMessage<true>>,
+): Promise<void> {
+  const entry = toMessageBulkDeleteLogEntry(messages, ctx.client.user?.id);
+  if (!entry) return;
+
+  try {
+    const moderationCaseId = await findModerationCaseIdForDeletedMessages(
+      ctx.db,
+      entry.guildId,
+      entry.deletedMessages.map((message) => message.messageId),
+    );
+    writeLogEntrySafely(deps, moderationCaseId ? { ...entry, moderationCaseId } : entry);
+  } catch (error) {
+    // ログ連携失敗でDiscordのイベント処理を止めず、因果関係なしの通常一括削除ログとして残す。
+    console.error("logging: failed to resolve moderation case for bulk deletion", error);
+    writeLogEntrySafely(deps, entry);
+  }
 }
 
 export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
@@ -204,7 +241,6 @@ export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId:
   });
 
   ctx.client.on("messageDeleteBulk", (messages) => {
-    const entry = toMessageBulkDeleteLogEntry(messages, ctx.client.user?.id);
-    if (entry) writeLogEntrySafely(deps, entry);
+    void writeMessageBulkDeleteLogEntry(ctx, deps, messages);
   });
 }

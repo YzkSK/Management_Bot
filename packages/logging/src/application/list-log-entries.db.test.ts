@@ -62,14 +62,29 @@ function messageCreateEntry(messageId: string, content: string): LogEntry {
   };
 }
 
-function bulkDeleteEntry(messageIds: readonly string[]): LogEntry {
+function bulkDeleteEntry(messageIds: readonly string[], moderationCaseId?: string): LogEntry {
   return {
     category: "message",
     guildId,
     createdAt: "2026-09-20T00:01:00.000Z",
     channelId: "c1",
     action: "bulkDelete",
+    ...(moderationCaseId ? { moderationCaseId } : {}),
     deletedMessages: messageIds.map((messageId) => ({ messageId, authorId: "u1" })),
+  };
+}
+
+function moderationCaseEntry(caseId: string): LogEntry {
+  return {
+    category: "moderationCase",
+    guildId,
+    createdAt: "2026-09-20T00:02:00.000Z",
+    caseId,
+    targetUserId: "u1",
+    moderatorId: "system",
+    action: "resolve",
+    actionType: "warn",
+    result: "success",
   };
 }
 
@@ -119,6 +134,30 @@ describe("listLogEntries", () => {
     const secondPage = await listLogEntries(db, { guildId, limit: 50, cursor: firstPage.nextCursor! });
 
     expect(secondPage.entries.map(({ entry }) => entry)).toEqual([expect.objectContaining({ userId: "unrelated" })]);
+  });
+
+  test("モデレーションケースに関連付く一括削除と投稿ログを再帰的に集約する", async () => {
+    await insert(messageCreateEntry("message-1", "content-1"), "2026-09-20T00:00:00.000Z");
+    await insert(messageCreateEntry("message-2", "content-2"), "2026-09-20T00:00:01.000Z");
+    await insert(bulkDeleteEntry(["message-1", "message-2"], "case-1"), "2026-09-20T00:01:00.000Z");
+    await insert(moderationCaseEntry("case-1"), "2026-09-20T00:02:00.000Z");
+
+    const result = await listLogEntries(db, { guildId, limit: 50 });
+
+    expect(result.entries).toMatchObject([
+      {
+        entry: { category: "moderationCase", caseId: "case-1" },
+        collapsedEntries: [
+          {
+            entry: { action: "bulkDelete", moderationCaseId: "case-1" },
+            collapsedEntries: [
+              { entry: { action: "create", messageId: "message-1", content: "content-1" } },
+              { entry: { action: "create", messageId: "message-2", content: "content-2" } },
+            ],
+          },
+        ],
+      },
+    ]);
   });
 
   test("messageIdを持たない既存の投稿ログは一括削除の子ログにせず通常表示する", async () => {
