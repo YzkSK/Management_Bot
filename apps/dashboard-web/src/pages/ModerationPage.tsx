@@ -48,6 +48,19 @@ function withDefaults(settings: readonly ThresholdSetting[]): ThresholdSetting[]
   );
 }
 
+/**
+ * tRPC+TanStack QueryのqueryKeyは[path, {input, type}]の形で、inputはunknown型のため
+ * 安全に絞り込む。listStrikesはafterでページングされ複数のqueryKeyに分かれるため、
+ * 特定のguildId向けの全ページをまとめて無効化する際に使う(#368)。
+ */
+function matchesGuildId(query: { queryKey: readonly unknown[] }, guildId: string): boolean {
+  const opts = query.queryKey[1];
+  if (typeof opts !== "object" || opts === null || !("input" in opts)) return false;
+  const input = opts.input;
+  if (typeof input !== "object" || input === null || !("guildId" in input)) return false;
+  return input.guildId === guildId;
+}
+
 function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSetting }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -510,12 +523,10 @@ function groupStrikesByUser(
 
 function UserStrikeGroup({
   guildId,
-  after,
   group,
   userName,
 }: {
   guildId: string;
-  after: string | undefined;
   group: { userId: string; total: number; entries: StrikeEntry[] };
   userName: string;
 }) {
@@ -523,10 +534,14 @@ function UserStrikeGroup({
   const queryClient = useQueryClient();
   const resetAllMutation = useMutation({
     ...trpc.moderation.resetAllStrikes.mutationOptions(),
+    // listStrikesはafterでページングされ複数のqueryKeyに分かれるため、現在ページ({guildId, after})
+    // のみのinvalidateだと、リセット対象のユーザーの行が他ページのキャッシュに残ってしまう
+    // (#367の複合カーソル化で同一userIdの行が複数ページに跨るケースが生じ得る、#368)。
+    // pathFilter+predicateでguildId一致の全ページを無効化する。
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      ),
   });
 
   return (
@@ -565,7 +580,7 @@ function UserStrikeGroup({
               </TableHeader>
               <TableBody>
                 {group.entries.map((entry) => (
-                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} after={after} entry={entry} />
+                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} entry={entry} />
                 ))}
               </TableBody>
             </Table>
@@ -578,20 +593,19 @@ function UserStrikeGroup({
 
 function StrikeDetailRow({
   guildId,
-  after,
   entry,
 }: {
   guildId: string;
-  after: string | undefined;
   entry: StrikeEntry;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     ...trpc.moderation.resetStrike.mutationOptions(),
+    // resetAllMutation(UserStrikeGroup)と同様、guildId一致の全ページを無効化する(#368)。
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      ),
   });
 
   return (
@@ -639,7 +653,6 @@ function useStrikePages(guildId: string) {
   return {
     rows,
     userNames,
-    after,
     isPending: rows.length === 0 && query.isPending,
     isError: query.isError,
     nextAfter: query.data?.nextAfter,
@@ -649,7 +662,7 @@ function useStrikePages(guildId: string) {
 }
 
 function StrikeTab({ guildId }: { guildId: string }) {
-  const { rows, userNames, after, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
+  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
     useStrikePages(guildId);
 
   if (isPending) {
@@ -685,7 +698,6 @@ function StrikeTab({ guildId }: { guildId: string }) {
             <UserStrikeGroup
               key={group.userId}
               guildId={guildId}
-              after={after}
               group={group}
               userName={userNames[group.userId] ?? group.userId}
             />
