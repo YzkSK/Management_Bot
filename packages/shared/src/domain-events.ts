@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
+import { moderationIncidentSchema } from "./moderation-incident.js";
 
 /**
  * 機能パッケージ間の連携はRedis Pub/Sub経由のイベントで疎結合にする(直接import禁止)。
@@ -31,6 +32,7 @@ const moderationActionBaseFields = {
   actionType: z.enum(MODERATION_ACTION_TYPES),
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes: z.number().int().positive().optional(),
+  incident: moderationIncidentSchema,
   createdAt: z.iso.datetime(),
 };
 

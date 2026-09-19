@@ -138,6 +138,13 @@ const validByCategory = {
     moderatorId: "4",
     action: "create",
     actionType: "warn",
+    incident: {
+      violationType: "link_spam",
+      score: 78,
+      matchedMessageCount: 1,
+      deletedMessageCount: 1,
+      strikeCount: 1,
+    },
   },
   voice: {
     category: "voice",

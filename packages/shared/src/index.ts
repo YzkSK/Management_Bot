@@ -22,6 +22,7 @@ export {
   type VoiceSessionEndedEvent,
   type ModerationActionRecordedEvent,
 } from "./domain-events.js";
+export { moderationIncidentSchema, type ModerationIncident } from "./moderation-incident.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
 export { MODERATION_ACTION_TYPES, type ModerationActionType } from "./moderation-action-type.js";

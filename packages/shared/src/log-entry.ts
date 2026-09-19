@@ -2,6 +2,7 @@ import { z } from "zod";
 import { discordIdSchema } from "./discord-id.js";
 import { LOG_CATEGORIES } from "./log-category.js";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
+import { moderationIncidentSchema } from "./moderation-incident.js";
 
 /** LogEntryのID系フィールド(userId/channelId等)はほぼ全てDiscord IDのため、共通スキーマをそのまま使う(issue #227)。 */
 const nonEmptyString = discordIdSchema;
@@ -230,6 +231,7 @@ const moderationCaseBase = {
   actionType: z.enum(MODERATION_ACTION_TYPES),
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes: z.number().int().positive().optional(),
+  incident: moderationIncidentSchema,
 };
 
 /**
