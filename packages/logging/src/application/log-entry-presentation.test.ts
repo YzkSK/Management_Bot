@@ -10,10 +10,15 @@ function actionsOf(category: keyof typeof LOG_ENTRY_SCHEMAS): string[] {
   const schema = LOG_ENTRY_SCHEMAS[category];
   const def = schema.def as {
     shape?: { action: { def: { entries?: Record<string, string> } } };
-    options?: { def: { shape: { action: { def: { values: string[] } } } } }[];
+    options?: { def: { shape: { action: { def: { entries?: Record<string, string>; values?: string[] } } } } }[];
   };
   if (def.shape) return Object.values(def.shape.action.def.entries ?? {});
-  if (def.options) return def.options.map((option) => option.def.shape.action.def.values[0]!);
+  if (def.options) {
+    return def.options.flatMap((option) => {
+      const actionDef = option.def.shape.action.def;
+      return Object.values(actionDef.entries ?? actionDef.values ?? []);
+    });
+  }
   return [];
 }
 
