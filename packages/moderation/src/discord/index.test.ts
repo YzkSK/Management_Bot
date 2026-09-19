@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { DomainEventBus, FeatureModuleContext } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
-import { registerDiscordHandlers } from "./index.js";
+import { createInviteGuildIdResolver, registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
   test("messageCreate/guildMemberAddの両ハンドラを登録する", () => {
@@ -22,5 +22,29 @@ describe("registerDiscordHandlers", () => {
     expect(on.mock.calls.map((call) => call[0])).toEqual(["messageCreate", "guildMemberAdd"]);
     // redis(メッセージ処理用)とmoderation_config_changedのLISTEN接続(#353)の2つを解放する。
     expect(onShutdown).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createInviteGuildIdResolver", () => {
+  test("同一コードの再解決はTTL内ならfetchInviteを再実行しない(#362)", async () => {
+    const fetchInvite = mock(() => Promise.resolve({ guild: { id: "guild-1" } }));
+    const client = { fetchInvite } as unknown as FeatureModuleContext["client"];
+    const resolve = createInviteGuildIdResolver(client);
+
+    expect(await resolve("code-a")).toBe("guild-1");
+    expect(await resolve("code-a")).toBe("guild-1");
+
+    expect(fetchInvite).toHaveBeenCalledTimes(1);
+  });
+
+  test("解決失敗はキャッシュせず次回呼び出しで再試行する", async () => {
+    const fetchInvite = mock(() => Promise.reject(new Error("invalid invite")));
+    const client = { fetchInvite } as unknown as FeatureModuleContext["client"];
+    const resolve = createInviteGuildIdResolver(client);
+
+    expect(await resolve("code-b")).toBeNull();
+    expect(await resolve("code-b")).toBeNull();
+
+    expect(fetchInvite).toHaveBeenCalledTimes(2);
   });
 });
