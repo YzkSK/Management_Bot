@@ -1,7 +1,7 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
 import { SENSITIVE_LOG_FIELDS, isBulkDeleteLogEntry, type LogCategory } from "@management-bot/shared";
-import { and, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
 
@@ -45,23 +45,22 @@ export interface ListedLogEntry {
 const messageAction = sql<string>`${logEntries.payload}->>'action'`;
 const messageId = sql<string>`${logEntries.payload}->>'messageId'`;
 
-/** 集約bulkDeleteが参照するmessage/createは親へ付け替えるため、通常の一覧行から外す。 */
-const isNotCollapsedMessageCreate = sql`
-  NOT (
-    ${logEntries.category} = 'message'
-    AND ${messageAction} = 'create'
-    AND ${messageId} IS NOT NULL
-    AND EXISTS (
-      SELECT 1
-      FROM log_entries AS bulk_delete
-      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(bulk_delete.payload->'deletedMessages', '[]'::jsonb)) AS deleted_message
-      WHERE bulk_delete.guild_id = ${logEntries.guildId}
-        AND bulk_delete.category = 'message'
-        AND bulk_delete.payload->>'action' = 'bulkDelete'
-        AND deleted_message->>'messageId' = ${messageId}
-    )
-  )
-`;
+/** 主クエリの候補ごとにbulkDeleteを走査しないよう、対象メッセージIDを一度だけ取得する。 */
+export async function listBulkDeletedMessageIds(db: Db, guildId: string): Promise<string[]> {
+  const rows = await db
+    .select({ payload: logEntries.payload })
+    .from(logEntries)
+    .where(and(eq(logEntries.guildId, guildId), eq(logEntries.category, "message"), eq(messageAction, "bulkDelete")));
+  const messageIds = new Set<string>();
+  for (const row of rows) {
+    const entry = parseLogEntry(row.payload);
+    if (!isBulkDeleteLogEntry(entry)) continue;
+    for (const deletedMessage of entry.deletedMessages) {
+      if (deletedMessage.messageId) messageIds.add(deletedMessage.messageId);
+    }
+  }
+  return [...messageIds];
+}
 
 /**
  * (createdAt, id)の複合カーソルによるcursorベースページネーション。
@@ -72,8 +71,18 @@ export async function listLogEntries(
   db: Db,
   input: ListLogEntriesInput,
 ): Promise<ListLogEntriesResult> {
+  const collapsedMessageIds = !input.category || input.category === "message" ? await listBulkDeletedMessageIds(db, input.guildId) : [];
   const conditions = [eq(logEntries.guildId, input.guildId)];
-  if (!input.category || input.category === "message") conditions.push(isNotCollapsedMessageCreate);
+  if (collapsedMessageIds.length > 0) {
+    conditions.push(
+      or(
+        ne(logEntries.category, "message"),
+        ne(messageAction, "create"),
+        sql`${messageId} IS NULL`,
+        notInArray(messageId, collapsedMessageIds),
+      )!,
+    );
+  }
   if (input.category) conditions.push(eq(logEntries.category, input.category));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));

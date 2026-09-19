@@ -58,7 +58,7 @@ const individualMessageLogEntrySchema = z.object({
   content: z.string().optional(),
   /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
   previousContent: z.string().optional().meta({ sensitive: true }),
-  /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
+  /** action=create/pin/unpinで対象メッセージを特定するために設定する。update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
   /** create/update/delete/bulkDeleteで添付ファイルがある場合のみ設定する。 */
   attachments: z.array(messageAttachmentSchema).optional(),
