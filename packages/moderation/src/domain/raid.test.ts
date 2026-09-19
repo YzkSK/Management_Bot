@@ -3,6 +3,7 @@ import {
   decideRaidSeverity,
   detectRaid,
   entriesInWindow,
+  escalateSeverityByIncidentCount,
   hasRaidHit,
   newAccountRatio,
   type RaidBufferEntry,
@@ -80,6 +81,21 @@ describe("decideRaidSeverity", () => {
 
   test("比率が閾値超ならhigh", () => {
     expect(decideRaidSeverity(0.9, 0.6)).toBe("high");
+  });
+});
+
+describe("escalateSeverityByIncidentCount", () => {
+  test("priorIncidentCount=0(初回)なら元のseverityを維持する", () => {
+    expect(escalateSeverityByIncidentCount("normal", 0)).toBe("normal");
+    expect(escalateSeverityByIncidentCount("high", 0)).toBe("high");
+  });
+
+  test("priorIncidentCount=1(2回目以降)ならnormalをhighへ引き上げる(境界値)", () => {
+    expect(escalateSeverityByIncidentCount("normal", 1)).toBe("high");
+  });
+
+  test("priorIncidentCountが閾値超でもhighを維持する", () => {
+    expect(escalateSeverityByIncidentCount("normal", 5)).toBe("high");
   });
 });
 

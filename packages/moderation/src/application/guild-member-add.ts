@@ -1,7 +1,15 @@
 import type { Redis } from "ioredis";
 import type { Db } from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
-import { detectRaid, hasNewAccountGuardHit, isWhitelistMatch, NEW_ACCOUNT_GUARD_PRESETS, RAID_PRESETS, type RaidSeverity } from "../domain/index.js";
+import {
+  detectRaid,
+  escalateSeverityByIncidentCount,
+  hasNewAccountGuardHit,
+  isWhitelistMatch,
+  NEW_ACCOUNT_GUARD_PRESETS,
+  RAID_PRESETS,
+  type RaidSeverity,
+} from "../domain/index.js";
 import { escalateAndRecordStrike, SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
 import type { ModerationConfigCache } from "./moderation-config-cache.js";
 import { markRaidHitAndCheckNewIncident, pushRaidEntry } from "./raid-buffer.js";
@@ -66,18 +74,6 @@ export async function handleGuildMemberAdd(
     : null;
 
   return { raidHit, newAccountGuardOutcome };
-}
-
-/**
- * 過去にこのguildで検知したレイド件数(moderation_raid_state.incidentCount、UPSERT前の値)。
- * 1件以上(=今回が2件目以降)なら、新規アカウント比率に関わらずseverityをhighへ引き上げる
- * (繰り返しレイドを受けているギルドはより悪質とみなす、設計spec「incidentCountを
- * 強度プリセットのエスカレーション判断に使用」節、Codexレビュー指摘対応)。
- */
-const REPEAT_INCIDENT_SEVERITY_THRESHOLD = 1;
-
-function escalateSeverityByIncidentCount(severity: RaidSeverity, priorIncidentCount: number): RaidSeverity {
-  return priorIncidentCount >= REPEAT_INCIDENT_SEVERITY_THRESHOLD ? "high" : severity;
 }
 
 async function detectRaidHit(
