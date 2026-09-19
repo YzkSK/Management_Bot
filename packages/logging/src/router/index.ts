@@ -14,6 +14,7 @@ import {
   setDisplaySetting,
   setRetentionSetting,
   setRetentionSettingForAllCategories,
+  type ListedLogEntry,
 } from "../application/index.js";
 import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
@@ -93,13 +94,15 @@ export const loggingRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
       }
       const hasRawAccess = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_LOGS_RAW);
+      const present = (row: ListedLogEntry): ListedLogEntry => ({
+        ...row,
+        entry: hasRawAccess ? row.entry : maskSensitiveFields(row.entry),
+        ...(row.collapsedEntries ? { collapsedEntries: row.collapsedEntries.map(present) } : {}),
+      });
 
       return {
         hasRawAccess,
-        entries: result.entries.map(({ id, entry }) => ({
-          id,
-          entry: hasRawAccess ? entry : maskSensitiveFields(entry),
-        })),
+        entries: result.entries.map(present),
         nextCursor: result.nextCursor,
       };
     }),
