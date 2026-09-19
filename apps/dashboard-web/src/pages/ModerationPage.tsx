@@ -525,10 +525,13 @@ function UserStrikeGroup({
   guildId,
   group,
   userName,
+  onReset,
 }: {
   guildId: string;
   group: { userId: string; total: number; entries: StrikeEntry[] };
   userName: string;
+  /** ページング結果を保持するstate(useStrikePagesのpages)をクリアし、先頭ページから読み直させる(#368)。 */
+  onReset: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
@@ -537,11 +540,15 @@ function UserStrikeGroup({
     // listStrikesはafterでページングされ複数のqueryKeyに分かれるため、現在ページ({guildId, after})
     // のみのinvalidateだと、リセット対象のユーザーの行が他ページのキャッシュに残ってしまう
     // (#367の複合カーソル化で同一userIdの行が複数ページに跨るケースが生じ得る、#368)。
-    // pathFilter+predicateでguildId一致の全ページを無効化する。
-    onSuccess: () =>
+    // pathFilter+predicateでguildId一致の全ページのキャッシュを無効化しつつ、既に画面側に
+    // コピー済みのpages stateはinvalidateQueriesでは更新されないためonResetで別途クリアする
+    // (Codexレビュー指摘)。
+    onSuccess: () => {
       queryClient.invalidateQueries(
         trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
-      ),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -580,7 +587,12 @@ function UserStrikeGroup({
               </TableHeader>
               <TableBody>
                 {group.entries.map((entry) => (
-                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} entry={entry} />
+                  <StrikeDetailRow
+                    key={`${entry.userId}-${entry.violationType}`}
+                    guildId={guildId}
+                    entry={entry}
+                    onReset={onReset}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -594,18 +606,23 @@ function UserStrikeGroup({
 function StrikeDetailRow({
   guildId,
   entry,
+  onReset,
 }: {
   guildId: string;
   entry: StrikeEntry;
+  onReset: () => void;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     ...trpc.moderation.resetStrike.mutationOptions(),
-    // resetAllMutation(UserStrikeGroup)と同様、guildId一致の全ページを無効化する(#368)。
-    onSuccess: () =>
+    // resetAllMutation(UserStrikeGroup)と同様、guildId一致の全ページのキャッシュを無効化しつつ、
+    // pages state自体はonResetでクリアする(Codexレビュー指摘、#368)。
+    onSuccess: () => {
       queryClient.invalidateQueries(
         trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
-      ),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -629,15 +646,24 @@ function StrikeDetailRow({
   );
 }
 
-/** AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果をカーソル単位で保持する。 */
+/**
+ * AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果を
+ * カーソル単位で保持する。invalidateQueriesはTanStack Queryのキャッシュを無効化する
+ * だけで、既にこのpages stateへコピー済みのデータや非アクティブ(現在表示されていない)
+ * ページの再取得までは行わない。そのためストライクリセット成功時は、単なる
+ * invalidateQueriesに加えてresetPagesでpages自体をクリアし、先頭ページから
+ * 読み直させる必要がある(Codexレビュー指摘、#368)。
+ */
 function useStrikePages(guildId: string) {
   const [after, setAfter] = useState<string | undefined>(undefined);
   const [pages, setPages] = useState<Record<string, { rows: StrikeEntry[]; userNames: Record<string, string> }>>({});
 
-  useEffect(() => {
+  const resetPages = () => {
     setAfter(undefined);
     setPages({});
-  }, [guildId]);
+  };
+
+  useEffect(resetPages, [guildId]);
 
   const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
 
@@ -658,11 +684,12 @@ function useStrikePages(guildId: string) {
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
     loadNextPage: () => setAfter(query.data?.nextAfter),
+    resetPages,
   };
 }
 
 function StrikeTab({ guildId }: { guildId: string }) {
-  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
+  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage, resetPages } =
     useStrikePages(guildId);
 
   if (isPending) {
@@ -700,6 +727,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
               guildId={guildId}
               group={group}
               userName={userNames[group.userId] ?? group.userId}
+              onReset={resetPages}
             />
           ))}
         </TableBody>
