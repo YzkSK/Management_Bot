@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import type { ModerationActionType } from "@management-bot/shared";
+import { ACTION_SEVERITY } from "@management-bot/shared";
 import {
   detectAndEscalate,
   SYSTEM_MODERATOR_ID,
@@ -7,14 +7,6 @@ import {
   type EscalationOutcome,
 } from "../application/index.js";
 import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
-
-const ACTION_SEVERITY: Record<ModerationActionType, number> = {
-  warn: 0,
-  timeout: 1,
-  kick: 2,
-  ban: 3,
-  unban: -1,
-};
 
 function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
   return outcomes.reduce((most, outcome) =>
