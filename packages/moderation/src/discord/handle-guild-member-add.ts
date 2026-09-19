@@ -17,6 +17,12 @@ interface ActionExecutionResult {
 
 const SUCCESS: ActionExecutionResult = { result: "success" };
 
+async function sendRaidKickDm(member: GuildMember): Promise<void> {
+  await member.user
+    .send("レイド対策のため、一時的にサーバーから退出させました。誤判定の場合はサーバー管理者へ連絡してください。")
+    .catch((error) => console.error(`moderation: failed to send raid kick DM to ${member.id}`, error));
+}
+
 /** raid/new_account_guardが同一入室者に同時ヒットし、重さ比較でより軽い側が実行されなかったことを表す(#350)。 */
 /** 自動検知によるアクションであることを表すreason(execute-action.tsのSYSTEM_MODERATOR_IDと対になる文言)。 */
 function raidKickReason(caseId: string, incidentCount: number): string {
@@ -33,9 +39,7 @@ async function executeRaidKick(target: GuildMember, raidHit: RaidHitResult): Pro
   const reason = raidKickReason(raidHit.caseId, raidHit.incidentCount);
   try {
     await target.kick(reason);
-    await target.user.send("レイド対策のため、一時的にサーバーから退出させました。誤判定の場合はサーバー管理者へ連絡してください。").catch(
-      (error) => console.error(`moderation: failed to send raid kick DM to ${target.id}`, error),
-    );
+    await sendRaidKickDm(target);
     return SUCCESS;
   } catch (error) {
     console.error(`moderation: failed to kick raid target ${target.id} for case ${raidHit.caseId}`, error);
@@ -112,6 +116,7 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
   const lockdownSettings = await getLockdownSettings(deps.db, member.guild.id);
   if (lockdownSettings.isLocked) {
     await member.kick("moderation: lockdown active");
+    await sendRaidKickDm(member);
     return;
   }
 

@@ -138,6 +138,9 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
 
     await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
 
+    expect(member.user.send).toHaveBeenCalledWith(
+      "レイド対策のため、一時的にサーバーから退出させました。誤判定の場合はサーバー管理者へ連絡してください。",
+    );
     expect(member.kick).toHaveBeenCalledTimes(1);
     expect(eventBus.published).toEqual([]);
   });
