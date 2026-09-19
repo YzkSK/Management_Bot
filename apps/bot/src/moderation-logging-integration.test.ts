@@ -138,6 +138,7 @@ describe.skipIf(!(await isRedisAvailable()))("moderation → logging 複合テ�
           actionType: "warn",
           caseId: expect.any(String),
           bufferedMessageIds: expect.any(Array),
+          settlementMessageThreshold: 3,
           incident: expect.objectContaining({ violationType: "flood", strikeCount: 1, score: null }),
         },
       ]);
