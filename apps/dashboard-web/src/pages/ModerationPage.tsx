@@ -774,7 +774,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
   );
 }
 
-function ModerationHistoryTab({ guildId }: { guildId: string }) {
+export function ModerationHistoryTab({ guildId }: { guildId: string }) {
   const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }));
 
   if (query.isPending) return <div className="text-sm">読み込み中...</div>;
@@ -796,7 +796,8 @@ function ModerationHistoryTab({ guildId }: { guildId: string }) {
           <TableHead>対象</TableHead>
           <TableHead>スコア</TableHead>
           <TableHead>ストライク</TableHead>
-          <TableHead>処分結果</TableHead>
+          <TableHead>処分 / 結果</TableHead>
+          <TableHead>検知詳細</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -804,14 +805,26 @@ function ModerationHistoryTab({ guildId }: { guildId: string }) {
           if (entry.category !== "moderationCase") return null;
           const { incident } = entry;
           const result = entry.action === "resolve" ? entry.result : "実行中";
+          const actionResult = `${entry.actionType} / ${result}${entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}`;
+          const violation = incident
+            ? incident.violationType === "raid"
+              ? "レイド"
+              : VIOLATION_TYPE_LABELS[incident.violationType]
+            : "旧ログ";
+          const details = incident
+            ? incident.violationType === "raid"
+              ? `${incident.raidSeverity === "high" ? "高危険度" : "通常"} / 対象 ${incident.raidTargetCount}件 / 削除 ${incident.deletedMessageCount}件`
+              : `一致 ${incident.matchedMessageCount}件 / 削除 ${incident.deletedMessageCount}件`
+            : "旧ログ（詳細なし）";
           return (
             <TableRow key={id}>
               <TableCell>{entry.caseId}</TableCell>
-              <TableCell>{incident.violationType === "raid" ? "レイド" : VIOLATION_TYPE_LABELS[incident.violationType]}</TableCell>
+              <TableCell>{violation}</TableCell>
               <TableCell>{entry.targetUserId}</TableCell>
-              <TableCell>{incident.score ?? "—"}</TableCell>
-              <TableCell>{incident.strikeCount ?? "—"}</TableCell>
-              <TableCell>{result}{entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}</TableCell>
+              <TableCell>{incident?.score ?? "—"}</TableCell>
+              <TableCell>{incident?.strikeCount ?? "—"}</TableCell>
+              <TableCell>{actionResult}</TableCell>
+              <TableCell>{details}</TableCell>
             </TableRow>
           );
         })}

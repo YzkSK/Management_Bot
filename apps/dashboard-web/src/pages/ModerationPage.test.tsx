@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { canUpdateStrikePages, isStrikePagesPending, ModerationPage } from "./ModerationPage.js";
+import { canUpdateStrikePages, isStrikePagesPending, ModerationHistoryTab, ModerationPage } from "./ModerationPage.js";
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
@@ -17,6 +17,14 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
   );
 }
 
+function renderHistory(guildId: string, queryClient: QueryClient): string {
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <ModerationHistoryTab guildId={guildId} />
+    </QueryClientProvider>,
+  );
+}
+
 function seedBaseQueries(queryClient: QueryClient, guildId: string): void {
   queryClient.setQueryData(trpc.moderation.getRequiredPermissionStatus.queryOptions({ guildId }).queryKey, {
     accessStatus: "ok",
@@ -25,6 +33,67 @@ function seedBaseQueries(queryClient: QueryClient, guildId: string): void {
 }
 
 describe("ModerationPage", () => {
+  test("検知履歴に処分・失敗内容・レイド詳細と旧ログのフォールバックを表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedBaseQueries(queryClient, guildId);
+    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, []);
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-raid",
+            entry: {
+              category: "moderationCase",
+              guildId,
+              createdAt: "2026-09-20T00:00:00.000Z",
+              caseId: "case-raid",
+              targetUserId: "u1",
+              moderatorId: "system",
+              action: "resolve",
+              actionType: "timeout",
+              timeoutMinutes: 10,
+              result: "failed",
+              failureCode: "MISSING_PERMISSIONS",
+              incident: {
+                violationType: "raid",
+                score: null,
+                matchedMessageCount: 6,
+                deletedMessageCount: 0,
+                strikeCount: null,
+                raidSeverity: "high",
+                raidTargetCount: 6,
+              },
+            },
+          },
+          {
+            id: "log-legacy",
+            entry: {
+              category: "moderationCase",
+              guildId,
+              createdAt: "2026-08-01T00:00:00.000Z",
+              caseId: "case-legacy",
+              targetUserId: "u2",
+              moderatorId: "system",
+              action: "create",
+              actionType: "warn",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+
+    const html = renderHistory(guildId, queryClient);
+
+    expect(html).toContain("case-raid");
+    expect(html).toContain("timeout / failed (MISSING_PERMISSIONS)");
+    expect(html).toContain("高危険度 / 対象 6件 / 削除 0件");
+    expect(html).toContain("case-legacy");
+    expect(html).toContain("旧ログ（詳細なし）");
+  });
+
   test("検知履歴タブを表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";

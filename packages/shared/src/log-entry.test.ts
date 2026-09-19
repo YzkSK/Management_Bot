@@ -163,6 +163,13 @@ describe("logEntrySchema", () => {
     });
   }
 
+  test("moderationCase: incident導入前の既存ログもparseに成功する", () => {
+    const legacyEntry = { ...validByCategory.moderationCase };
+    Reflect.deleteProperty(legacyEntry, "incident");
+
+    expect(() => parseLogEntry(legacyEntry)).not.toThrow();
+  });
+
   test("guildIdが空文字の場合は失敗する", () => {
     const result = safeParseLogEntry({
       ...validByCategory.message,

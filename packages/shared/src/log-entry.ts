@@ -231,7 +231,8 @@ const moderationCaseBase = {
   actionType: z.enum(MODERATION_ACTION_TYPES),
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes: z.number().int().positive().optional(),
-  incident: moderationIncidentSchema,
+  /** incident導入前に保存されたmoderationCaseとの後方互換のため省略を許容する。 */
+  incident: moderationIncidentSchema.optional(),
 };
 
 /**
