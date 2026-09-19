@@ -273,10 +273,10 @@ describe("listStrikes", () => {
     await db.insert(guilds).values({ id: isolatedGuildId, name: "Boundary Test Guild" });
 
     try {
-      const boundaryUserId = `0-boundary-${runId}`;
-      // ソート順でboundaryUserIdより後ろに来る49件のダミー行を作り、
+      const boundaryUserId = `1-boundary-${runId}`;
+      // ソート順でboundaryUserIdより前に来る49件のダミー行を作り、
       // boundaryUserIdの2行(duplicate_content, flood)が50件目・51件目になるようにする。
-      const fillerUserIds = Array.from({ length: 49 }, (_, i) => `1-filler-${runId}-${String(i).padStart(2, "0")}`);
+      const fillerUserIds = Array.from({ length: 49 }, (_, i) => `0-filler-${runId}-${String(i).padStart(2, "0")}`);
       for (const userId of fillerUserIds) {
         await incrementStrike(db, isolatedGuildId, userId, "flood");
       }
