@@ -646,6 +646,31 @@ function StrikeDetailRow({
   );
 }
 
+export interface StrikePageData {
+  rows: StrikeEntry[];
+  userNames: Record<string, string>;
+}
+
+/**
+ * 取得中(isFetching)はquery.dataがまだ古い(invalidate前の)値を保持していることがあり、
+ * resetPages直後にここでコピーするとpagesへ古いデータが再コピーされ、一瞬「履歴なし」に
+ * なった後古い行・合計が再表示されてしまう(Codexレビュー指摘)。再取得完了後の新しい
+ * query.dataでのみコピーする。
+ */
+export function canUpdateStrikePages(data: StrikePageData | undefined, isFetching: boolean): data is StrikePageData {
+  return data !== undefined && !isFetching;
+}
+
+/**
+ * rows.length===0の間にisFetchingがtrueなら、resetPages直後で再取得中の可能性がある
+ * (isPendingはキャッシュされたデータが全くない場合のみtrueになり、invalidateQueries
+ * 直後のように古いキャッシュがまだ残っている間はfalseのまま、Codexレビュー指摘)。
+ * isFetchingも見ることで「履歴なし」の誤表示を防ぐ。
+ */
+export function isStrikePagesPending(rowCount: number, isPending: boolean, isFetching: boolean): boolean {
+  return rowCount === 0 && (isPending || isFetching);
+}
+
 /**
  * AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果を
  * カーソル単位で保持する。invalidateQueriesはTanStack Queryのキャッシュを無効化する
@@ -656,7 +681,7 @@ function StrikeDetailRow({
  */
 function useStrikePages(guildId: string) {
   const [after, setAfter] = useState<string | undefined>(undefined);
-  const [pages, setPages] = useState<Record<string, { rows: StrikeEntry[]; userNames: Record<string, string> }>>({});
+  const [pages, setPages] = useState<Record<string, StrikePageData>>({});
 
   const resetPages = () => {
     setAfter(undefined);
@@ -668,10 +693,11 @@ function useStrikePages(guildId: string) {
   const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
 
   useEffect(() => {
-    if (!query.data) return;
+    const data = query.data;
+    if (!canUpdateStrikePages(data, query.isFetching)) return;
     const pageKey = after ?? FIRST_PAGE_KEY;
-    setPages((prev) => ({ ...prev, [pageKey]: { rows: query.data.rows, userNames: query.data.userNames } }));
-  }, [after, query.data]);
+    setPages((prev) => ({ ...prev, [pageKey]: { rows: data.rows, userNames: data.userNames } }));
+  }, [after, query.data, query.isFetching]);
 
   const rows = Object.values(pages).flatMap((p) => p.rows);
   const userNames = Object.assign({}, ...Object.values(pages).map((p) => p.userNames)) as Record<string, string>;
@@ -679,7 +705,7 @@ function useStrikePages(guildId: string) {
   return {
     rows,
     userNames,
-    isPending: rows.length === 0 && query.isPending,
+    isPending: isStrikePagesPending(rows.length, query.isPending, query.isFetching),
     isError: query.isError,
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
