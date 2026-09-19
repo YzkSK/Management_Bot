@@ -24,6 +24,9 @@ async function isRedisAvailable(): Promise<boolean> {
   }
 }
 
+/** 自Bot自身のユーザーID(client.user.id)の固定値。他テストのuserIdとは常に異なる。 */
+const SELF_BOT_ID = "self-bot-id";
+
 function fakeMessage(overrides: {
   guildId: string;
   userId: string;
@@ -45,6 +48,7 @@ function fakeMessage(overrides: {
     author: { id: overrides.userId, bot: overrides.bot ?? false, send },
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
+    client: { user: { id: SELF_BOT_ID } },
     id: randomUUID(),
     channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
@@ -107,11 +111,25 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
     return { db, redis, eventBus, resolveInviteGuildId, configCache, ...overrides };
   }
 
-  test("botのメッセージ編集は無視する", async () => {
+  test("自Bot自身のメッセージ編集は無視する(改善案7.2節)", async () => {
     const eventBus = fakeEventBus();
-    const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", bot: true });
+    const message = fakeMessage({ guildId, userId: SELF_BOT_ID, content: "hi", bot: true });
     await handleMessageUpdate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
+  });
+
+  test("他Bot・Webhookのメッセージ編集(自Bot以外)は通常のユーザー投稿と同様に検知対象になる(改善案7.2節)", async () => {
+    const userId = `bot-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "banned-word", bot: true, hasMember: false });
+    await handleMessageUpdate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
   });
 
   test("guild/memberがないメッセージ編集(DM等)は無視する", async () => {

@@ -138,19 +138,21 @@ export async function executeEscalationAction(message: Message, outcome: Escalat
       case "unban":
         return SUCCESS;
       case "timeout": {
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
+        // member不在(Webhook・Botメッセージ等、改善案7.2節)でも削除だけは実行する
+        // (処罰の集約と同様、削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.timeout(resolveTimeoutMinutes(outcome) * 60 * 1000, reasonFor(outcome));
         break;
       }
       case "kick":
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
-        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }

@@ -155,13 +155,28 @@ describe("executeEscalationAction", () => {
     expect(message.author.send).toHaveBeenCalledTimes(1);
   });
 
-  test("memberがnull(既に退出済み等)の場合、処罰もメッセージ削除もDM送信も行わない", async () => {
+  test("memberがnull(既に退出済み・Webhook投稿等、改善案7.2節)の場合、処罰・DM送信は行わないがメッセージ削除は実行する", async () => {
     const message = fakeMessage(null);
     await expect(
       executeEscalationAction(message as unknown as Message, outcome({ actionType: "timeout" })),
     ).resolves.toEqual({ result: "failed", failureCode: "member_not_found" });
     expect(message.author.send).not.toHaveBeenCalled();
-    expect(message.channel.bulkDelete).not.toHaveBeenCalled();
+    // 削除は独立したアクション種別ではなく全段階共通の付随処理のため、member不在でも実行される(#377)。
+    expect(message.channel.bulkDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test("kick/banもmemberがnullの場合、処罰は行わないがメッセージ削除は実行する(#377)", async () => {
+    const kickMessage = fakeMessage(null);
+    await expect(
+      executeEscalationAction(kickMessage as unknown as Message, outcome({ actionType: "kick" })),
+    ).resolves.toEqual({ result: "failed", failureCode: "member_not_found" });
+    expect(kickMessage.channel.bulkDelete).toHaveBeenCalledTimes(1);
+
+    const banMessage = fakeMessage(null);
+    await expect(
+      executeEscalationAction(banMessage as unknown as Message, outcome({ actionType: "ban" })),
+    ).resolves.toEqual({ result: "failed", failureCode: "member_not_found" });
+    expect(banMessage.channel.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
   test("Discord API呼び出し(member.kick())が失敗した場合、例外を投げず警告DMも送らない", async () => {

@@ -31,6 +31,9 @@ async function isRedisAvailable(): Promise<boolean> {
   }
 }
 
+/** 自Bot自身のユーザーID(client.user.id)の固定値。他テストのuserIdとは常に異なる。 */
+const SELF_BOT_ID = "self-bot-id";
+
 function fakeMessage(overrides: {
   guildId: string;
   userId: string;
@@ -54,6 +57,7 @@ function fakeMessage(overrides: {
     author: { id: overrides.userId, bot: overrides.bot ?? false, send },
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
+    client: { user: { id: SELF_BOT_ID } },
     id: randomUUID(),
     channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
@@ -121,11 +125,50 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     return { db, redis, eventBus, resolveInviteGuildId, configCache, ...overrides };
   }
 
-  test("botのメッセージは無視する", async () => {
+  test("自Bot自身のメッセージは無視する(改善案7.2節)", async () => {
     const eventBus = fakeEventBus();
-    const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", bot: true });
+    const message = fakeMessage({ guildId, userId: SELF_BOT_ID, content: "hi", bot: true });
     await handleMessageCreate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
+  });
+
+  test("他Bot・Webhookのメッセージ(自Bot以外)は通常のユーザー投稿と同様に検知対象になる(改善案7.2節)", async () => {
+    const userId = `bot-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "banned-word", bot: true });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("Webhook投稿(memberなし)が違反検知された場合、timeout等の処罰はmember_not_foundで失敗するが削除は実行される(改善案7.2節)", async () => {
+    const userId = `webhook-${randomUUID()}`;
+    // strong preset: strikeCount=2でtimeout(改善案7.2節、Webhookはmemberを持たないためtimeout不可)。
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
+
+    const eventBus = fakeEventBus();
+    let last: ReturnType<typeof fakeMessage> | undefined;
+    for (let i = 0; i < 3; i++) {
+      last = fakeMessage({ guildId, userId, content: `msg-${i}`, bot: true, hasMember: false });
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
+    }
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({
+      action: "resolve",
+      actionType: "timeout",
+      result: "failed",
+      failureCode: "member_not_found",
+    });
+    // deleteBufferedMessagesSafely自体はmember不要のため実行される。
+    expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
   test("guild/memberがないメッセージ(DM等)は無視する", async () => {
