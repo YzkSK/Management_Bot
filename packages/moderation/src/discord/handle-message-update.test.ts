@@ -31,6 +31,8 @@ function fakeMessage(overrides: {
   bot?: boolean;
   hasGuild?: boolean;
   hasMember?: boolean;
+  createdAt?: Date;
+  editedAt?: Date | null;
 }) {
   const deleteFn = mock(() => Promise.resolve());
   const bulkDelete = mock(() => Promise.resolve());
@@ -45,7 +47,8 @@ function fakeMessage(overrides: {
     id: randomUUID(),
     channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
-    createdAt: new Date(),
+    createdAt: overrides.createdAt ?? new Date(),
+    editedAt: overrides.editedAt === undefined ? new Date() : overrides.editedAt,
     delete: deleteFn,
     deleteFn,
     channel: { bulkDelete },
@@ -160,6 +163,51 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageUpdate(#362-7.1)", ()
 
     expect(eventBus.published).toEqual([]);
     expect(message.deleteFn).not.toHaveBeenCalled();
+  });
+
+  test("ngwordとinvite_linkが同時にヒットしても処罰は最も重い方1件に集約される(Codexレビュー指摘の回帰テスト)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values([
+      { guildId, violationType: "ngword", preset: "medium", enabled: true },
+      { guildId, violationType: "invite_link", preset: "medium", enabled: true },
+    ]);
+    await addNgword(db, guildId, "exact", "banned-word");
+    // ngword: strikeCount=1→ESCALATION_STEPS.medium[1]=warn
+    // invite_link: strikeCount=2(ngword加算後の合計)→ESCALATION_STEPS.medium[2]=timeout
+    // より重いtimeoutに集約され、ban/kick同様にDiscord APIは1回のみ実行される想定。
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({
+      guildId,
+      userId,
+      content: "banned-word discord.gg/other-guild-code",
+    });
+    await handleMessageUpdate(
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+      message as unknown as Message,
+    );
+
+    const resolves = eventBus.published.filter((e) => e.action === "resolve");
+    expect(resolves).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(1);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(1);
+    // warn(ngword)・timeout(invite_link)いずれもDiscord API実行は1回に集約される。
+    expect(message.timeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("編集イベントのcaseId作成日時はcreatedAt(元投稿時刻)ではなくeditedAt(編集時刻)になる(Codexレビュー指摘の回帰テスト)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const oldCreatedAt = new Date("2020-01-01T00:00:00.000Z");
+    const editedAt = new Date("2026-09-19T00:00:00.000Z");
+    const message = fakeMessage({ guildId, userId, content: "banned-word", createdAt: oldCreatedAt, editedAt });
+    await handleMessageUpdate(deps(eventBus), message as unknown as Message);
+
+    const createEvent = eventBus.published.find((e) => e.action === "create");
+    expect(createEvent?.createdAt).toBe(editedAt.toISOString());
   });
 
   test("strikeロック中(10秒以内)の連続編集は、strikeは進まないがトリガーメッセージは削除される(#338と同様の扱い)", async () => {
