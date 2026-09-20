@@ -1,17 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,
+  type ModerationEscalationViolationType,
   type ModerationPreset,
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { describePreset, ESCALATION_DESCRIPTIONS, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
+import {
+  describePreset,
+  ESCALATION_DESCRIPTIONS,
+  isPresetIndependentViolationType,
+  NGWORD_MATCH_TYPE_LABELS,
+  PRESET_LABELS,
+  VIOLATION_TYPE_LABELS,
+  type NgwordMatchType,
+} from "./moderation-labels.js";
+import { formatCreatedAt } from "./format-created-at.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -39,6 +50,19 @@ function withDefaults(settings: readonly ThresholdSetting[]): ThresholdSetting[]
   );
 }
 
+/**
+ * tRPC+TanStack QueryのqueryKeyは[path, {input, type}]の形で、inputはunknown型のため
+ * 安全に絞り込む。listStrikesはafterでページングされ複数のqueryKeyに分かれるため、
+ * 特定のguildId向けの全ページをまとめて無効化する際に使う(#368)。
+ */
+function matchesGuildId(query: { queryKey: readonly unknown[] }, guildId: string): boolean {
+  const opts = query.queryKey[1];
+  if (typeof opts !== "object" || opts === null || !("input" in opts)) return false;
+  const input = opts.input;
+  if (typeof input !== "object" || input === null || !("guildId" in input)) return false;
+  return input.guildId === guildId;
+}
+
 function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSetting }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -61,43 +85,45 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
         />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Select
-            value={row.preset}
-            disabled={mutation.isPending}
-            onValueChange={(value) =>
-              mutation.mutate({
-                guildId,
-                violationType: row.violationType,
-                preset: value as ModerationPreset,
-                enabled: row.enabled,
-              })
-            }
-          >
-            <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODERATION_PRESETS.map((preset) => (
-                <SelectItem key={preset} value={preset}>
-                  {PRESET_LABELS[preset]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
-                aria-label={`${PRESET_LABELS[row.preset]}の検知条件を表示`}
-              >
-                詳細
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{describePreset(row.violationType, row.preset)}</TooltipContent>
-          </Tooltip>
-        </div>
+        {!isPresetIndependentViolationType(row.violationType) && (
+          <div className="flex items-center gap-2">
+            <Select
+              value={row.preset}
+              disabled={mutation.isPending}
+              onValueChange={(value) =>
+                mutation.mutate({
+                  guildId,
+                  violationType: row.violationType,
+                  preset: value as ModerationPreset,
+                  enabled: row.enabled,
+                })
+              }
+            >
+              <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODERATION_PRESETS.map((preset) => (
+                  <SelectItem key={preset} value={preset}>
+                    {PRESET_LABELS[preset]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
+                  aria-label={`${PRESET_LABELS[row.preset]}の検知条件を表示`}
+                >
+                  詳細
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{describePreset(row.violationType, row.preset)}</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-destructive text-xs">{mutation.isError ? "保存に失敗しました" : null}</TableCell>
     </TableRow>
@@ -151,6 +177,68 @@ function EscalationPresetSelector({ guildId }: { guildId: string }) {
         </Tooltip>
       )}
       {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました</p>}
+    </div>
+  );
+}
+
+function LockdownPanel({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const query = useQuery(trpc.moderation.getLockdownSettings.queryOptions({ guildId }));
+  const autoLockdownMutation = useMutation({
+    ...trpc.moderation.setAutoLockdownOnRaid.mutationOptions(),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey,
+      }),
+  });
+  const requestedLockMutation = useMutation({
+    ...trpc.moderation.setLockdownRequested.mutationOptions(),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey,
+      }),
+  });
+
+  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isError || !query.data) {
+    return <div className="text-destructive text-sm">ロックダウン設定の取得に失敗しました。</div>;
+  }
+
+  const isPending = autoLockdownMutation.isPending || requestedLockMutation.isPending;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">レイド時に自動でロックダウン</p>
+          <p className="text-muted-foreground text-xs">レイド検知時に @everyone のメッセージ送信を停止します。</p>
+        </div>
+        <Switch
+          checked={query.data.autoLockdownOnRaid}
+          disabled={isPending}
+          aria-label="レイド時に自動でロックダウン"
+          onCheckedChange={(enabled) => autoLockdownMutation.mutate({ guildId, enabled })}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t pt-3">
+        <div>
+          <p className="text-sm font-medium">現在の状態: {query.data.isLocked ? "ロック中" : "解除中"}</p>
+          <p className="text-muted-foreground text-xs">
+            ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={query.data.requestedLocked ? "outline" : "destructive"}
+          disabled={isPending}
+          onClick={() => requestedLockMutation.mutate({ guildId, requestedLocked: !query.data.requestedLocked })}
+        >
+          {query.data.requestedLocked ? "ロックダウンを解除" : "ロックダウンを開始"}
+        </Button>
+      </div>
+      {(autoLockdownMutation.isError || requestedLockMutation.isError) && (
+        <p className="text-destructive text-sm">ロックダウン設定の更新に失敗しました。</p>
+      )}
     </div>
   );
 }
@@ -343,9 +431,142 @@ function WhitelistTableRow({
   );
 }
 
+interface NgwordEntry {
+  id: string;
+  matchType: NgwordMatchType;
+  pattern: string;
+}
+
+function NgwordForm({ guildId }: { guildId: string }) {
+  const queryClient = useQueryClient();
+  const [matchType, setMatchType] = useState<NgwordMatchType>("exact");
+  const [pattern, setPattern] = useState("");
+
+  const mutation = useMutation({
+    ...trpc.moderation.addNgword.mutationOptions(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: trpc.moderation.listNgwords.queryOptions({ guildId }).queryKey });
+      setPattern("");
+    },
+  });
+
+  const isUnsafeRegexError =
+    mutation.error instanceof TRPCClientError && mutation.error.data?.code === "BAD_REQUEST";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <h2 className="text-sm font-semibold">NGワードの追加</h2>
+      <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">種類</label>
+          <Select value={matchType} onValueChange={(value) => setMatchType(value as NgwordMatchType)}>
+            <SelectTrigger className="w-32" aria-label="NGワードの一致方式">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(NGWORD_MATCH_TYPE_LABELS) as NgwordMatchType[]).map((type) => (
+                <SelectItem key={type} value={type}>
+                  {NGWORD_MATCH_TYPE_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">パターン</label>
+          <Input
+            className="w-64"
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            placeholder={matchType === "regex" ? "^ng-word\\d*$" : "NGワード"}
+            aria-label="NGワードのパターン"
+          />
+        </div>
+        <Button
+          type="button"
+          disabled={pattern === "" || mutation.isPending}
+          onClick={() => mutation.mutate({ guildId, matchType, pattern })}
+        >
+          追加
+        </Button>
+      </div>
+      {mutation.isError && (
+        <p className="text-destructive text-xs">
+          {isUnsafeRegexError
+            ? "安全性が確認できない正規表現のため登録できません(ネストした量指定子等)。パターンを見直してください。"
+            : "保存に失敗しました。"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function NgwordTableRow({ guildId, entry }: { guildId: string; entry: NgwordEntry }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    ...trpc.moderation.removeNgword.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.moderation.listNgwords.queryOptions({ guildId }).queryKey }),
+  });
+
+  return (
+    <TableRow>
+      <TableCell>{NGWORD_MATCH_TYPE_LABELS[entry.matchType]}</TableCell>
+      <TableCell className="font-mono text-sm">{entry.pattern}</TableCell>
+      <TableCell>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ guildId, id: entry.id })}
+        >
+          削除
+        </Button>
+        {mutation.isError && <p className="text-destructive text-xs">失敗しました</p>}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function NgwordTab({ guildId }: { guildId: string }) {
+  const query = useQuery(trpc.moderation.listNgwords.queryOptions({ guildId }));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <NgwordForm guildId={guildId} />
+      {query.isPending && <div className="text-sm">読み込み中...</div>}
+      {query.isError && (
+        <Alert variant="destructive">
+          <AlertDescription>NGワード一覧の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+        </Alert>
+      )}
+      {query.data && query.data.length === 0 && (
+        <p className="text-muted-foreground text-sm">登録されたNGワードはありません。</p>
+      )}
+      {query.data && query.data.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>種類</TableHead>
+              <TableHead>パターン</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {query.data.map((entry) => (
+              <NgwordTableRow key={entry.id} guildId={guildId} entry={entry} />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
 interface StrikeEntry {
   userId: string;
-  violationType: ModerationViolationType;
+  violationType: ModerationEscalationViolationType;
   strikeCount: number;
   lastViolationAt: string | Date;
 }
@@ -368,23 +589,32 @@ function groupStrikesByUser(
 
 function UserStrikeGroup({
   guildId,
-  after,
   group,
   userName,
+  onReset,
 }: {
   guildId: string;
-  after: string | undefined;
   group: { userId: string; total: number; entries: StrikeEntry[] };
   userName: string;
+  /** ページング結果を保持するstate(useStrikePagesのpages)をクリアし、先頭ページから読み直させる(#368)。 */
+  onReset: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
   const resetAllMutation = useMutation({
     ...trpc.moderation.resetAllStrikes.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+    // listStrikesはafterでページングされ複数のqueryKeyに分かれるため、現在ページ({guildId, after})
+    // のみのinvalidateだと、リセット対象のユーザーの行が他ページのキャッシュに残ってしまう
+    // (#367の複合カーソル化で同一userIdの行が複数ページに跨るケースが生じ得る、#368)。
+    // pathFilter+predicateでguildId一致の全ページのキャッシュを無効化しつつ、既に画面側に
+    // コピー済みのpages stateはinvalidateQueriesでは更新されないためonResetで別途クリアする
+    // (Codexレビュー指摘)。
+    onSuccess: () => {
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -423,7 +653,12 @@ function UserStrikeGroup({
               </TableHeader>
               <TableBody>
                 {group.entries.map((entry) => (
-                  <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} after={after} entry={entry} />
+                  <StrikeDetailRow
+                    key={`${entry.userId}-${entry.violationType}`}
+                    guildId={guildId}
+                    entry={entry}
+                    onReset={onReset}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -436,20 +671,24 @@ function UserStrikeGroup({
 
 function StrikeDetailRow({
   guildId,
-  after,
   entry,
+  onReset,
 }: {
   guildId: string;
-  after: string | undefined;
   entry: StrikeEntry;
+  onReset: () => void;
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     ...trpc.moderation.resetStrike.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.moderation.listStrikes.queryOptions({ guildId, after }).queryKey,
-      }),
+    // resetAllMutation(UserStrikeGroup)と同様、guildId一致の全ページのキャッシュを無効化しつつ、
+    // pages state自体はonResetでクリアする(Codexレビュー指摘、#368)。
+    onSuccess: () => {
+      queryClient.invalidateQueries(
+        trpc.moderation.listStrikes.pathFilter({ predicate: (query) => matchesGuildId(query, guildId) }),
+      );
+      onReset();
+    },
   });
 
   return (
@@ -473,23 +712,58 @@ function StrikeDetailRow({
   );
 }
 
-/** AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果をカーソル単位で保持する。 */
+export interface StrikePageData {
+  rows: StrikeEntry[];
+  userNames: Record<string, string>;
+}
+
+/**
+ * 取得中(isFetching)はquery.dataがまだ古い(invalidate前の)値を保持していることがあり、
+ * resetPages直後にここでコピーするとpagesへ古いデータが再コピーされ、一瞬「履歴なし」に
+ * なった後古い行・合計が再表示されてしまう(Codexレビュー指摘)。再取得完了後の新しい
+ * query.dataでのみコピーする。
+ */
+export function canUpdateStrikePages(data: StrikePageData | undefined, isFetching: boolean): data is StrikePageData {
+  return data !== undefined && !isFetching;
+}
+
+/**
+ * rows.length===0の間にisFetchingがtrueなら、resetPages直後で再取得中の可能性がある
+ * (isPendingはキャッシュされたデータが全くない場合のみtrueになり、invalidateQueries
+ * 直後のように古いキャッシュがまだ残っている間はfalseのまま、Codexレビュー指摘)。
+ * isFetchingも見ることで「履歴なし」の誤表示を防ぐ。
+ */
+export function isStrikePagesPending(rowCount: number, isPending: boolean, isFetching: boolean): boolean {
+  return rowCount === 0 && (isPending || isFetching);
+}
+
+/**
+ * AccessPageのuseMemberOptions/useMemberOptions(本ファイル)と同様、ページング結果を
+ * カーソル単位で保持する。invalidateQueriesはTanStack Queryのキャッシュを無効化する
+ * だけで、既にこのpages stateへコピー済みのデータや非アクティブ(現在表示されていない)
+ * ページの再取得までは行わない。そのためストライクリセット成功時は、単なる
+ * invalidateQueriesに加えてresetPagesでpages自体をクリアし、先頭ページから
+ * 読み直させる必要がある(Codexレビュー指摘、#368)。
+ */
 function useStrikePages(guildId: string) {
   const [after, setAfter] = useState<string | undefined>(undefined);
-  const [pages, setPages] = useState<Record<string, { rows: StrikeEntry[]; userNames: Record<string, string> }>>({});
+  const [pages, setPages] = useState<Record<string, StrikePageData>>({});
 
-  useEffect(() => {
+  const resetPages = () => {
     setAfter(undefined);
     setPages({});
-  }, [guildId]);
+  };
+
+  useEffect(resetPages, [guildId]);
 
   const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
 
   useEffect(() => {
-    if (!query.data) return;
+    const data = query.data;
+    if (!canUpdateStrikePages(data, query.isFetching)) return;
     const pageKey = after ?? FIRST_PAGE_KEY;
-    setPages((prev) => ({ ...prev, [pageKey]: { rows: query.data.rows, userNames: query.data.userNames } }));
-  }, [after, query.data]);
+    setPages((prev) => ({ ...prev, [pageKey]: { rows: data.rows, userNames: data.userNames } }));
+  }, [after, query.data, query.isFetching]);
 
   const rows = Object.values(pages).flatMap((p) => p.rows);
   const userNames = Object.assign({}, ...Object.values(pages).map((p) => p.userNames)) as Record<string, string>;
@@ -497,17 +771,17 @@ function useStrikePages(guildId: string) {
   return {
     rows,
     userNames,
-    after,
-    isPending: rows.length === 0 && query.isPending,
+    isPending: isStrikePagesPending(rows.length, query.isPending, query.isFetching),
     isError: query.isError,
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
     loadNextPage: () => setAfter(query.data?.nextAfter),
+    resetPages,
   };
 }
 
 function StrikeTab({ guildId }: { guildId: string }) {
-  const { rows, userNames, after, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage } =
+  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage, resetPages } =
     useStrikePages(guildId);
 
   if (isPending) {
@@ -543,9 +817,9 @@ function StrikeTab({ guildId }: { guildId: string }) {
             <UserStrikeGroup
               key={group.userId}
               guildId={guildId}
-              after={after}
               group={group}
               userName={userNames[group.userId] ?? group.userId}
+              onReset={resetPages}
             />
           ))}
         </TableBody>
@@ -566,7 +840,111 @@ function StrikeTab({ guildId }: { guildId: string }) {
   );
 }
 
-type ModerationTab = "thresholds" | "whitelist" | "strikes";
+export function ModerationHistoryTab({ guildId }: { guildId: string }) {
+  const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }));
+  const targetUserIds = useMemo(
+    () =>
+      query.data
+        ? Array.from(
+            new Set(
+              query.data.entries.flatMap(({ entry }) => (entry.category === "moderationCase" ? [entry.targetUserId] : [])),
+            ),
+          ).sort()
+        : [],
+    [query.data],
+  );
+  const namesQuery = useQuery({
+    ...trpc.logging.resolveDisplayNames.queryOptions({ guildId, userIds: targetUserIds, channelIds: [] }),
+    enabled: targetUserIds.length > 0,
+  });
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isError || !query.data) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>検知履歴の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
+      </Alert>
+    );
+  }
+  if (query.data.entries.length === 0) return <div className="text-sm">検知履歴はありません。</div>;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {query.data.entries.map(({ id, entry }) => {
+        if (entry.category !== "moderationCase") return null;
+        const { incident } = entry;
+        const violation = incident
+          ? incident.violationType === "raid"
+            ? "レイド"
+            : VIOLATION_TYPE_LABELS[incident.violationType]
+          : "旧ログ";
+        const result = entry.action === "resolve" ? entry.result : "実行中";
+        const actionResult = `${entry.actionType} / ${result}${entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}`;
+        const details = incident
+          ? incident.violationType === "raid"
+            ? `${incident.raidSeverity === "high" ? "高危険度" : "通常"} / 対象 ${incident.raidTargetCount}件 / 削除 ${incident.deletedMessageCount}件`
+            : `一致 ${incident.matchedMessageCount}件 / 削除 ${incident.deletedMessageCount}件`
+          : "旧ログ（詳細なし）";
+        const detailId = `moderation-history-detail-${id}`;
+        const isExpanded = expandedIds.has(id);
+        const userName = namesQuery.data?.users[entry.targetUserId] ?? entry.targetUserId;
+        return (
+          <div key={id} className="rounded-lg border">
+            <button
+              type="button"
+              onClick={() => toggleExpanded(id)}
+              aria-expanded={isExpanded}
+              aria-controls={detailId}
+              className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
+            >
+              <span className="flex-1 text-sm">
+                {userName} / {violation}
+              </span>
+              <time dateTime={entry.createdAt} className="text-muted-foreground shrink-0 text-xs">
+                {formatCreatedAt(entry.createdAt)}
+              </time>
+            </button>
+            {isExpanded && (
+              <div id={detailId} className="grid grid-cols-2 gap-3 border-t bg-muted/40 p-3 text-xs">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">ケース ID</span>
+                  <span className="font-mono">{entry.caseId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">対象</span>
+                  <span>{userName}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">ストライク</span>
+                  <span>{incident?.strikeCount ?? "—"}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">処分 / 結果</span>
+                  <span>{actionResult}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">検知詳細</span>
+                  <span>{details}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes" | "history";
 
 export function ModerationPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -663,12 +1041,15 @@ export function ModerationPage() {
       <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
         <TabsList aria-label="スパム対策の設定">
           <TabsTrigger value="thresholds">検知設定</TabsTrigger>
+          <TabsTrigger value="ngwords">NGワード</TabsTrigger>
           <TabsTrigger value="whitelist">ホワイトリスト</TabsTrigger>
           <TabsTrigger value="strikes">警告回数</TabsTrigger>
+          <TabsTrigger value="history">検知履歴</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds">
           <EscalationPresetSelector guildId={guildId} />
+          <LockdownPanel guildId={guildId} />
           <Table>
             <TableHeader>
               <TableRow>
@@ -684,6 +1065,10 @@ export function ModerationPage() {
               ))}
             </TableBody>
           </Table>
+        </TabsContent>
+
+        <TabsContent value="ngwords">
+          <NgwordTab guildId={guildId} />
         </TabsContent>
 
         <TabsContent value="whitelist">
@@ -723,6 +1108,10 @@ export function ModerationPage() {
 
         <TabsContent value="strikes">
           <StrikeTab guildId={guildId} />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <ModerationHistoryTab guildId={guildId} />
         </TabsContent>
       </Tabs>
     </div>

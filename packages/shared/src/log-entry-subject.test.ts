@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getLogEntrySubjectId } from "./log-entry-subject.js";
+import { getLogEntrySubjectField, getLogEntrySubjectId } from "./log-entry-subject.js";
 import type { LogEntry } from "./log-entry.js";
 
 describe("getLogEntrySubjectId", () => {
@@ -13,6 +13,23 @@ describe("getLogEntrySubjectId", () => {
       action: "delete",
     } satisfies LogEntry;
     expect(getLogEntrySubjectId(entry)).toBe("a1");
+  });
+
+  test("集約bulkDeleteには単一の対象ユーザーを設定しない", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-20T00:00:00.000Z",
+      channelId: "c1",
+      action: "bulkDelete",
+      deletedMessages: [
+        { messageId: "m1", authorId: "a1", content: "first" },
+        { messageId: "m2", authorId: "a2", content: "second" },
+      ],
+    } satisfies LogEntry;
+
+    expect(getLogEntrySubjectId(entry)).toBeUndefined();
+    expect(getLogEntrySubjectField(entry)).toBeUndefined();
   });
 
   test("memberはuserIdを返す", () => {

@@ -3,7 +3,7 @@ import type { FeatureModuleContext } from "@management-bot/core";
 import { MessageFlags } from "discord.js";
 import {
   registerMessageHandlers,
-  toMessageBulkDeleteLogEntries,
+  toMessageBulkDeleteLogEntry,
   toMessageCreateLogEntry,
   toMessageDeleteLogEntry,
   toMessagePinLogEntry,
@@ -49,6 +49,7 @@ describe("toMessageCreateLogEntry", () => {
       channelId: "c1",
       authorId: "u1",
       authorName: "たろう",
+      messageId: "m1",
       createdAt: "2026-01-01T00:00:00.000Z",
       action: "create",
       content: "hello",
@@ -221,16 +222,30 @@ describe("toMessageDeleteLogEntry", () => {
   });
 });
 
-describe("toMessageBulkDeleteLogEntries", () => {
+describe("toMessageBulkDeleteLogEntry", () => {
   test("メッセージごとに1件、bulkDeleteエントリを返す(自Botのメッセージは除外)", () => {
     const messages = new Map([
       ["1", fakeMessage({ author: { id: "u1" } })],
       ["2", fakeMessage({ author: { id: "u2" } })],
       ["3", fakeMessage({ author: { id: BOT_USER_ID } })],
     ]);
-    const entries = toMessageBulkDeleteLogEntries(messages as never, BOT_USER_ID);
-    expect(entries).toHaveLength(2);
-    expect(entries.every((e) => e.action === "bulkDelete")).toBe(true);
+    const entry = toMessageBulkDeleteLogEntry(messages as never, BOT_USER_ID);
+    expect(entry).toMatchObject({
+      category: "message",
+      action: "bulkDelete",
+      deletedMessages: [
+        { messageId: "m1", authorId: "u1", content: "hello" },
+        { messageId: "m1", authorId: "u2", content: "hello" },
+      ],
+    });
+  });
+
+  test("モデレーションケースが関連付く一括削除にはcaseIdを含める", () => {
+    const messages = new Map([["1", fakeMessage({ author: { id: "u1" } })]]);
+
+    expect(toMessageBulkDeleteLogEntry(messages as never, BOT_USER_ID, "case-1")).toMatchObject({
+      moderationCaseId: "case-1",
+    });
   });
 });
 
@@ -257,7 +272,7 @@ describe("registerMessageHandlers", () => {
       insert: () => ({
         values: (values: unknown) => {
           insertCalls.push(values);
-          return { onConflictDoNothing: () => Promise.resolve() };
+          return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "log-1" }]) }) };
         },
       }),
       select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
@@ -279,7 +294,47 @@ describe("registerMessageHandlers", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(insertCalls).toHaveLength(1);
-    expect((insertCalls[0] as unknown[]).length).toBe(3);
+    expect(insertCalls[0]).toMatchObject({
+      category: "message",
+      payload: {
+        action: "bulkDelete",
+        deletedMessages: [{ messageId: "1" }, { messageId: "2" }, { messageId: "3" }],
+      },
+    });
+  });
+
+  test("messageDeleteBulkは削除対象が同じケースに関連付くとcaseIdをログへ記録する", async () => {
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    const on = mock((event: string, handler: (...args: never[]) => unknown) => {
+      handlers.set(event, handler);
+    });
+    const insertCalls: unknown[] = [];
+    const db = {
+      insert: () => ({
+        values: (values: unknown) => {
+          insertCalls.push(values);
+          return { onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "log-1" }]) }) };
+        },
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([{ messageId: "1", caseId: "case-1" }, { messageId: "2", caseId: "case-1" }]),
+        }),
+      }),
+    };
+    const ctx = { client: { on, user: { id: BOT_USER_ID } }, db } as unknown as FeatureModuleContext;
+
+    registerMessageHandlers(ctx);
+    const messages = new Map([
+      ["1", fakeMessage({ id: "1", author: { id: "u1" } })],
+      ["2", fakeMessage({ id: "2", author: { id: "u2" } })],
+    ]) as unknown as Map<string, unknown> & { first: () => unknown };
+    messages.first = () => [...messages.values()][0];
+
+    await handlers.get("messageDeleteBulk")!(messages as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(insertCalls[0]).toMatchObject({ payload: { moderationCaseId: "case-1" } });
   });
 
   test("messageDeleteBulkは一括削除サマリーをComponents V2カードとして送信する", async () => {
@@ -289,7 +344,7 @@ describe("registerMessageHandlers", () => {
     });
     const send = mock(() => Promise.resolve());
     const db = {
-      insert: () => ({ values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }),
+      insert: () => ({ values: () => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "log-1" }]) }) }) }),
       select: () => ({ from: () => ({ where: () => Promise.resolve([{ channelId: "log1" }]) }) }),
     };
     const ctx = {

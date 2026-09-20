@@ -1,20 +1,54 @@
-import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
 import type { Db } from "@management-bot/db";
 import type {
   ModerationActionRecordedEvent,
   ModerationActionType,
+  ModerationPreset,
   ModerationViolationType,
 } from "@management-bot/shared";
-import { FLOOD_PRESETS, ESCALATION_STEPS, decideEscalationAction, hasFloodHit, isDuplicateContent } from "../domain/index.js";
-import { getEscalationPreset } from "./escalation-settings.js";
-import { getTotalStrikeCount, incrementStrike } from "./escalation-state.js";
-import { type BufferedMessage, claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
-import { getEnabledThresholds } from "./thresholds.js";
-import { isWhitelisted } from "./whitelist.js";
+import { MENTION_SPAM_PRESETS, FLOOD_PRESETS, countMentions, extractInviteCodes, isWhitelistMatch } from "../domain/index.js";
+import { escalateAndRecordStrike, type MessageModerationIncident } from "./escalate-and-record.js";
+import {
+  type BufferedMessage,
+  claimAndPushMessage,
+  markStrikeHitAndCheckNewBurst,
+  mentionCountsInWindow,
+  pushMentionCount,
+} from "./message-buffer.js";
+import type { ModerationConfigCache, ModerationConfigSnapshot } from "./moderation-config-cache.js";
+import type { NgwordRow } from "./ngwords.js";
+import type { EnabledThreshold } from "./thresholds.js";
+import {
+  checkFloodOrDuplicate,
+  checkInviteLink,
+  checkLinkSpam,
+  checkMentionSpam,
+  checkNgword,
+  NGWORD_STRIKE_LOCK_WINDOW_SECONDS,
+  type ViolationCheck,
+} from "./violation-check.js";
 
-/** 自動検知によるアクションであることを表すmoderatorId。人間の実行者は存在しない。 */
-export const SYSTEM_MODERATOR_ID = "system";
+export { SYSTEM_MODERATOR_ID } from "./escalate-and-record.js";
+export { bufferedMessageIdsInWindow } from "./violation-check.js";
+
+/**
+ * MessageCreate起点で判定する違反種別。raidはGuildMemberAdd起点のため、このフローでは扱わない。
+ */
+const MESSAGE_CREATE_VIOLATION_TYPES = [
+  "flood",
+  "duplicate_content",
+  "ngword",
+  "mention_spam",
+  "invite_link",
+  "link_spam",
+] as const satisfies readonly ModerationViolationType[];
+type MessageCreateViolationType = (typeof MESSAGE_CREATE_VIOLATION_TYPES)[number];
+
+function isMessageCreateViolationType(
+  violationType: ModerationViolationType,
+): violationType is MessageCreateViolationType {
+  return (MESSAGE_CREATE_VIOLATION_TYPES as readonly string[]).includes(violationType);
+}
 
 export interface IncomingMessage {
   guildId: string;
@@ -25,16 +59,32 @@ export interface IncomingMessage {
   messageId: string;
   content: string;
   createdAt: Date;
+  /**
+   * 投稿者がこのguildに参加した日時(GuildMember.joinedAt)。link_spamの「参加24時間以内」
+   * 加点判定に使う(改善案5.6節)。取得できない場合(取得失敗・partial member等)はundefined。
+   */
+  joinedAt?: Date;
 }
 
 export interface DetectAndEscalateDeps {
   db: Db;
   redis: Redis;
   eventBus: { publish: (event: ModerationActionRecordedEvent) => Promise<void> };
+  /**
+   * 招待コードを解決し、遷移先のguildIdを返す(discord.jsのclient.fetchInvite相当)。
+   * 無効なコード・Discord API障害等、解決に失敗した場合はnullを返す想定。
+   */
+  resolveInviteGuildId: (code: string) => Promise<string | null>;
+  /**
+   * whitelist/thresholds/ngwordsをguild単位でまとめてTTLキャッシュする(#352)。
+   * メッセージ受信ごとの個別DB問い合わせを避けるため、プロセス起動時に1回生成し共有する
+   * (discord/index.tsのcreateModerationConfigCache呼び出し箇所を参照)。
+   */
+  configCache: ModerationConfigCache;
 }
 
 export interface EscalationOutcome {
-  violationType: ModerationViolationType;
+  violationType: MessageCreateViolationType;
   /** このエスカレーション判定時点の、violationTypeを跨いだ合計ストライク数(統一ストライクカウンター、#311)。 */
   strikeCount: number;
   actionType: ModerationActionType;
@@ -48,41 +98,15 @@ export interface EscalationOutcome {
    * バッファ自体は同一ユーザーのチャンネル横断・時刻フィルタなしの全件を保持しているため、
    * ここで同一チャンネル・時間窓に絞り込んでいる(別チャンネルのメッセージはchannel.bulkDelete
    * が対象にできず、時間窓外の古いメッセージは検知と無関係なため)。
-   */
+  */
   bufferedMessageIds: readonly string[];
+  /** burst型の検知後に、収束待ちを打ち切る追加投稿数。 */
+  settlementMessageThreshold?: number;
+  incident: MessageModerationIncident;
 }
 
 /** 処理済みメッセージのSETNXマーカーをどれだけ保持するか。実際のwindowSecondsより十分長く取る。 */
 const PROCESSED_MARKER_TTL_SECONDS = 3600;
-
-function isDuplicateHit(buffer: readonly BufferedMessage[], message: IncomingMessage, threshold: number): boolean {
-  const previous = buffer.find((m) => m.messageId !== message.messageId);
-  if (!previous) return false;
-  return isDuplicateContent(message.content, previous.content, threshold);
-}
-
-/**
- * bufferedMessageIds(削除対象)を、検知トリガーメッセージと同一チャンネルかつ直近windowSeconds
- * 秒以内([windowStart, message.createdAt]の範囲)のものだけに絞り込む。バッファ自体は
- * チャンネル横断・時刻フィルタなしで同一ユーザーの直近メッセージを保持しているため
- * (連投・重複検知はチャンネルを跨いで動作させる設計)、削除対象だけはDiscordのbulkDeleteが
- * チャンネル単位でしか実行できないことを踏まえてここで絞り込む。上限側(message.createdAt以下)
- * も確認するのは、Redis Streams等での配送順の入れ替わりでバッファに検知トリガーより後に
- * 作成されたメッセージが紛れていても削除対象に含めないため(hasFloodHitの判定と同様の範囲)。
- */
-export function bufferedMessageIdsInWindow(
-  buffer: readonly BufferedMessage[],
-  message: IncomingMessage,
-  windowSeconds: number,
-): readonly string[] {
-  const windowStart = message.createdAt.getTime() - windowSeconds * 1000;
-  const windowEnd = message.createdAt.getTime();
-  return buffer
-    .filter(
-      (m) => m.channelId === message.channelId && m.createdAt.getTime() >= windowStart && m.createdAt.getTime() <= windowEnd,
-    )
-    .map((m) => m.messageId);
-}
 
 /**
  * メッセージ受信を起点に、ホワイトリスト判定→Redisバッファ更新→頻度/重複判定→
@@ -95,18 +119,195 @@ export function bufferedMessageIdsInWindow(
  * 同じmessageIdでの再配送・ハンドラ再試行は(claimAndPushMessageにより)判定・strike加算をスキップし、
  * 空配列を返す。
  */
+/**
+ * メッセージ内の招待コードを解決する。悪意あるメッセージに大量の招待リンクを詰め込まれると
+ * fetchInvite呼び出しが際限なく増えDiscord REST APIのレート制限を消費しうるため、逐次解決し
+ * 他ギルドの招待(=ヒット確定)を1件見つけた時点で打ち切る(Codexレビュー指摘)。
+ * invite_link・link_spamの両方から呼ばれる(resolveInviteGuildId自体はTTLキャッシュ済み、#362)。
+ */
+async function resolveInviteCodes(deps: DetectAndEscalateDeps, message: IncomingMessage): Promise<(string | null)[]> {
+  const codes = extractInviteCodes(message.content);
+  const resolvedGuildIds: (string | null)[] = [];
+  for (const code of codes) {
+    const resolvedGuildId = await deps.resolveInviteGuildId(code);
+    resolvedGuildIds.push(resolvedGuildId);
+    // 解決失敗(null)もcheckInviteLinkでは「他ギルドの招待」としてヒット確定になるため、
+    // 自ギルド招待以外(nullを含む)を1件見つけた時点で打ち切る(旧checkViolationと同じ挙動)。
+    if (resolvedGuildId !== message.guildId) break;
+  }
+  return resolvedGuildIds;
+}
+
+/**
+ * 副作用の前処理(Redis書き込み・招待リンク解決)を行った上で、violation-check.tsの
+ * 副作用なし検知判定関数へ委譲する橋渡し。検知ロジック自体(hit判定の中身)は
+ * violation-check.tsの各checkXxx関数が担う。
+ */
+async function prepareAndCheckViolation(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+  buffer: readonly BufferedMessage[],
+  violationType: MessageCreateViolationType,
+  preset: ModerationPreset,
+  ngwords: readonly NgwordRow[],
+): Promise<ViolationCheck> {
+  if (violationType === "flood" || violationType === "duplicate_content") {
+    return checkFloodOrDuplicate(buffer, message, preset, violationType);
+  }
+
+  if (violationType === "ngword") {
+    return checkNgword(message, ngwords);
+  }
+
+  if (violationType === "mention_spam") {
+    const mentionPreset = MENTION_SPAM_PRESETS[preset];
+    const mentionCount = countMentions(message.content);
+    const rawMentionBuffer = await pushMentionCount(
+      deps.redis,
+      message.guildId,
+      message.userId,
+      mentionCount,
+      message.createdAt,
+      mentionPreset.cumulative.windowSeconds,
+    );
+    // TTLだけではwindowSeconds経過後もキー全体が消えるまでの間は古いエントリが混入するため、
+    // hasFloodHitと同様にcreatedAtで時刻フィルタしてから合算する(Codexレビュー指摘)。
+    const mentionCounts = mentionCountsInWindow(rawMentionBuffer, message.createdAt, mentionPreset.cumulative.windowSeconds);
+    return checkMentionSpam(message, preset, mentionCounts);
+  }
+
+  if (violationType === "invite_link") {
+    const resolvedGuildIds = await resolveInviteCodes(deps, message);
+    return checkInviteLink(message, resolvedGuildIds);
+  }
+
+  if (violationType === "link_spam") {
+    return checkLinkSpam(message, preset);
+  }
+
+  throw new Error(`unhandled violationType: ${violationType satisfies never}`);
+}
+
+export interface DetectAndEscalateResult {
+  outcomes: EscalationOutcome[];
+  /**
+   * strikeロック中(同一ユーザーが直近strikeLockWindowSeconds秒以内に既にstrikeを加算済み)のため
+   * outcomesには含まれないが、違反として検知され削除が必要なメッセージID一覧(#338)。
+   * ngword/mention_spam/invite_linkはbufferedMessageIdsが検知トリガーメッセージ自身のみのため、
+   * ロックによりoutcomesから漏れるとそのメッセージが二度と削除対象に含まれなくなる
+   * (flood/duplicate_contentはバースト全体を返すため次のhit時にまとめて削除されるが、
+   * 単発判定の3種別はロック中の個別メッセージがここでしか伝わらない)。
+   */
+  lockedMessageIds: readonly string[];
+}
+
+/**
+ * thresholdごとにcheck→strikeロック確認→エスカレーション記録までを行う共通ループ。
+ * messageCreate(detectAndEscalate)・messageUpdate(detectAndEscalateOnEdit)の両方から使う。
+ */
+async function runViolationChecks(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+  buffer: readonly BufferedMessage[],
+  thresholds: readonly (EnabledThreshold & { violationType: MessageCreateViolationType })[],
+  ngwords: readonly NgwordRow[],
+): Promise<DetectAndEscalateResult> {
+  const outcomes: EscalationOutcome[] = [];
+  const lockedMessageIds = new Set<string>();
+  // invite_linkがヒットした場合、同一メッセージのlink_spamは検知対象から除外する。
+  // link_spamは「メンション併用」以外の項目(宣伝語句・短縮URL・参加時間)だけでも
+  // 独立に閾値へ達し得るため、招待リンク部分をURL判定対象から除くだけでは不十分で、
+  // 両方が正当にヒットして二重にstrikeが加算されるケースが残っていた(Codexレビュー再指摘)。
+  // 同一の外部招待という事実を役割の重複するinvite_link/link_spamの両方でカウントしない
+  // ようにする(flood/duplicate_contentのような独立した正当な違反の同時ヒットとは異なり、
+  // 検知対象の実体が同じであるため)。thresholdsの入力順(DB由来)に依存しないよう、
+  // invite_linkを他より先に評価する順序へ明示的にソートする。
+  const orderedThresholds = [...thresholds].sort((a, b) =>
+    a.violationType === "invite_link" ? -1 : b.violationType === "invite_link" ? 1 : 0,
+  );
+  let inviteLinkHit = false;
+  for (const threshold of orderedThresholds) {
+    if (threshold.violationType === "link_spam" && inviteLinkHit) continue;
+
+    const check = await prepareAndCheckViolation(deps, message, buffer, threshold.violationType, threshold.preset, ngwords);
+    if (!check.hit) continue;
+    if (threshold.violationType === "invite_link") inviteLinkHit = true;
+
+    const canStrike = await markStrikeHitAndCheckNewBurst(
+      deps.redis,
+      message.guildId,
+      message.userId,
+      threshold.violationType,
+      check.strikeLockWindowSeconds,
+    );
+    if (!canStrike) {
+      // "burst"(flood/duplicate_content)はcheck.bufferedMessageIdsがバースト全体(同一チャンネル・
+      // window内の全メッセージ)を指すため、ロック中でも次にhitした際にまとめて削除される。
+      // ここで加えると、strike済みバーストの古いメッセージまで無関係に再削除対象へ混入するため、
+      // "single-shot"(bufferedMessageIdsは検知トリガー自身のみ)に限定する。
+      if (check.strikeLockMode === "single-shot") {
+        lockedMessageIds.add(message.messageId);
+      }
+      continue;
+    }
+
+    // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
+    // 検知条件(hasFloodHit/isDuplicateHit/findMatchingNgword/hasSingleMessageMentionSpam等)は
+    // violationTypeごとのプリセットのまま、アクション決定(何回目でwarn/timeout/kick/ban)だけを
+    // guild単位で統一する。
+    const escalation = await escalateAndRecordStrike(
+      deps,
+      message.guildId,
+      message.userId,
+      threshold.violationType,
+      message.createdAt,
+      {
+        score: check.score,
+        matchedMessageCount: check.bufferedMessageIds.length,
+        deletedMessageCount: check.bufferedMessageIds.length,
+      },
+    );
+    if (escalation === null) continue;
+
+    outcomes.push({
+      violationType: threshold.violationType,
+      strikeCount: escalation.strikeCount,
+      actionType: escalation.actionType,
+      ...(escalation.timeoutMinutes === undefined ? {} : { timeoutMinutes: escalation.timeoutMinutes }),
+      caseId: escalation.caseId,
+      bufferedMessageIds: check.bufferedMessageIds,
+      ...(check.settlementMessageThreshold === undefined
+        ? {}
+        : { settlementMessageThreshold: check.settlementMessageThreshold }),
+      incident: escalation.incident,
+    });
+  }
+
+  return { outcomes, lockedMessageIds: [...lockedMessageIds] };
+}
+
 export async function detectAndEscalate(
   deps: DetectAndEscalateDeps,
   message: IncomingMessage,
-): Promise<EscalationOutcome[]> {
-  if (await isWhitelisted(deps.db, message.guildId, message.userId, message.roleIds)) {
-    return [];
+): Promise<DetectAndEscalateResult> {
+  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
+
+  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
+    return { outcomes: [], lockedMessageIds: [] };
   }
 
-  const thresholds = await getEnabledThresholds(deps.db, message.guildId);
-  if (thresholds.length === 0) return [];
+  const thresholds = snapshot.enabledThresholds.filter(
+    (t): t is EnabledThreshold & { violationType: MessageCreateViolationType } =>
+      isMessageCreateViolationType(t.violationType),
+  );
+  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
 
-  const windowSeconds = Math.max(...thresholds.map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds));
+  const floodWindowSeconds = thresholds
+    .filter((t) => t.violationType === "flood" || t.violationType === "duplicate_content")
+    .map((t) => FLOOD_PRESETS[t.preset].frequency.windowSeconds);
+  // flood/duplicate_content以外しか有効でないguildでも、直近メッセージの重複判定用に
+  // 最低限のバッファウィンドウ(NGWORD_STRIKE_LOCK_WINDOW_SECONDS)は確保する。
+  const windowSeconds = Math.max(NGWORD_STRIKE_LOCK_WINDOW_SECONDS, ...floodWindowSeconds);
   const buffer = await claimAndPushMessage(
     deps.redis,
     message.guildId,
@@ -120,65 +321,39 @@ export async function detectAndEscalate(
     PROCESSED_MARKER_TTL_SECONDS,
     windowSeconds,
   );
-  if (buffer === null) return [];
+  if (buffer === null) return { outcomes: [], lockedMessageIds: [] };
 
-  const outcomes: EscalationOutcome[] = [];
-  for (const threshold of thresholds) {
-    const preset = FLOOD_PRESETS[threshold.preset];
-    const hit =
-      threshold.violationType === "flood"
-        ? hasFloodHit(
-            buffer.map((m) => m.createdAt),
-            message.createdAt,
-            preset.frequency,
-          )
-        : isDuplicateHit(buffer, message, preset.duplicateSimilarityThreshold);
-    if (!hit) continue;
+  return runViolationChecks(deps, message, buffer, thresholds, snapshot.ngwords);
+}
 
-    const canStrike = await markStrikeHitAndCheckNewBurst(
-      deps.redis,
-      message.guildId,
-      message.userId,
-      threshold.violationType,
-      preset.frequency.windowSeconds,
-    );
-    if (!canStrike) continue;
+/**
+ * messageUpdateを起点に、編集後の内容でngword/invite_link/link_spamのみ再検知する
+ * ユースケース(改善案7.1節)。投稿後に編集でNGワード・招待リンク・宣伝文等を
+ * 後から仕込む回避を防ぐ。link_spamはメッセージ単体で判定でき、バッファ・累積状態を
+ * 伴わないため編集検知の対象に含められる(Codexレビュー指摘、#369)。
+ * flood/duplicate_content(バッファ内の他メッセージとの比較が前提)とmention_spam(Redisバッファへの
+ * 累積プッシュを伴い、編集のたびに再実行すると二重カウントになる)は対象外とする。
+ * claimAndPushMessageによる同一messageIdの再処理防止は使わない(バッファに触れないため不要であり、
+ * 使うと同じmessageIdの初回create処理でスキップ済みとなり編集時の判定が常にブロックされてしまう)。
+ * そのため同一メッセージへの複数回の編集はその都度評価されるが、strikeロック(markStrikeHitAndCheckNewBurst)
+ * により短時間の連続ヒットは抑制される。
+ */
+export async function detectAndEscalateOnEdit(
+  deps: DetectAndEscalateDeps,
+  message: IncomingMessage,
+): Promise<DetectAndEscalateResult> {
+  const snapshot: ModerationConfigSnapshot = await deps.configCache.get(deps.db, message.guildId);
 
-    // incrementStrike失敗時、意図的にロックを解放しない。接続断絶やタイムアウト等の
-    // エラーはSQL自体がcommit済みかどうか判別できないため、ここで解放して再試行を
-    // 許すと(実はcommit済みだった場合に)二重にstrikeが進みうる。ロックはwindowSeconds
-    // 経過後に自動的に次のstrikeを許可するため、最悪でも検知がその分遅れるだけで済む。
-    await incrementStrike(deps.db, message.guildId, message.userId, threshold.violationType);
-    // エスカレーション判定は違反種別を跨いだ合計strikeCountに対して行う(統一ストライクカウンター、#311)。
-    // 検知条件(hasFloodHit/isDuplicateHitの閾値)はviolationTypeごとのプリセットのまま、
-    // アクション決定(何回目でwarn/timeout/kick/ban)だけをguild単位で統一する。
-    const totalStrikeCount = await getTotalStrikeCount(deps.db, message.guildId, message.userId);
-    const escalationPreset = await getEscalationPreset(deps.db, message.guildId);
-    const step = decideEscalationAction(totalStrikeCount, ESCALATION_STEPS[escalationPreset]);
-    if (step === null) continue;
-
-    const caseId = randomUUID();
-    await deps.eventBus.publish({
-      type: "moderation.action.recorded",
-      guildId: message.guildId,
-      caseId,
-      targetUserId: message.userId,
-      moderatorId: SYSTEM_MODERATOR_ID,
-      action: "create",
-      actionType: step.actionType,
-      timeoutMinutes: step.timeoutMinutes,
-      createdAt: message.createdAt.toISOString(),
-    });
-
-    outcomes.push({
-      violationType: threshold.violationType,
-      strikeCount: totalStrikeCount,
-      actionType: step.actionType,
-      timeoutMinutes: step.timeoutMinutes,
-      caseId,
-      bufferedMessageIds: bufferedMessageIdsInWindow(buffer, message, preset.frequency.windowSeconds),
-    });
+  if (isWhitelistMatch(snapshot.whitelist, message.guildId, message.userId, message.roleIds)) {
+    return { outcomes: [], lockedMessageIds: [] };
   }
 
-  return outcomes;
+  const EDIT_VIOLATION_TYPES = ["ngword", "invite_link", "link_spam"] as const;
+  const thresholds = snapshot.enabledThresholds.filter(
+    (t): t is EnabledThreshold & { violationType: (typeof EDIT_VIOLATION_TYPES)[number] } =>
+      (EDIT_VIOLATION_TYPES as readonly string[]).includes(t.violationType),
+  );
+  if (thresholds.length === 0) return { outcomes: [], lockedMessageIds: [] };
+
+  return runViolationChecks(deps, message, [], thresholds, snapshot.ngwords);
 }

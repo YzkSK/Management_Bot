@@ -1,7 +1,7 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
-import { SENSITIVE_LOG_FIELDS, type LogCategory } from "@management-bot/shared";
-import { and, desc, eq, lt, notInArray, or } from "drizzle-orm";
+import { SENSITIVE_LOG_FIELDS, isBulkDeleteLogEntry, type LogCategory } from "@management-bot/shared";
+import { and, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
 
@@ -32,8 +32,53 @@ export interface ListLogEntriesInput {
 }
 
 export interface ListLogEntriesResult {
-  entries: Array<{ id: string; entry: LogEntry }>;
+  entries: ListedLogEntry[];
   nextCursor: string | null;
+}
+
+export interface ListedLogEntry {
+  id: string;
+  entry: LogEntry;
+  collapsedEntries?: ListedLogEntry[];
+}
+
+const messageAction = sql<string>`${logEntries.payload}->>'action'`;
+const messageId = sql<string>`${logEntries.payload}->>'messageId'`;
+const moderationCaseId = sql<string>`${logEntries.payload}->>'moderationCaseId'`;
+
+/** 主クエリの候補ごとにbulkDeleteを走査しないよう、対象メッセージIDを一度だけ取得する。 */
+/**
+ * 対象IDをアプリケーション側の配列に展開せず、非相関の副問合せで通常の投稿ログから除外する。
+ * bulkDeleteの履歴数が増えてもPostgreSQLのbind parameter上限を超えないようにする。
+ */
+function isNotCollapsedMessageCreate(guildId: string) {
+  return sql`
+    (
+      ${logEntries.category} <> 'message'
+      OR ${messageAction} <> 'create'
+      OR ${messageId} IS NULL
+      OR ${messageId} NOT IN (
+        SELECT deleted_message ->> 'messageId'
+        FROM "log_entries" AS "bulk_log_entries"
+        CROSS JOIN LATERAL jsonb_array_elements("bulk_log_entries"."payload" -> 'deletedMessages') AS deleted_message
+        WHERE "bulk_log_entries"."guild_id" = ${guildId}
+          AND "bulk_log_entries"."category" = 'message'
+          AND "bulk_log_entries"."payload" ->> 'action' = 'bulkDelete'
+          AND deleted_message ->> 'messageId' IS NOT NULL
+      )
+    )
+  `;
+}
+
+/** モデレーションケースへ集約される一括削除は、通常の一覧では親ケース配下でのみ表示する。 */
+function isNotCollapsedModerationBulkDelete() {
+  return sql`
+    (
+      ${logEntries.category} <> 'message'
+      OR ${messageAction} <> 'bulkDelete'
+      OR ${moderationCaseId} IS NULL
+    )
+  `;
 }
 
 /**
@@ -45,7 +90,9 @@ export async function listLogEntries(
   db: Db,
   input: ListLogEntriesInput,
 ): Promise<ListLogEntriesResult> {
-  const conditions = [eq(logEntries.guildId, input.guildId)];
+  const conditions = [eq(logEntries.guildId, input.guildId), isNotCollapsedMessageCreate(input.guildId)];
+  // メッセージだけに絞った画面では親ケースが表示されないため、一括削除を通常どおり表示する。
+  if (input.category !== "message") conditions.push(isNotCollapsedModerationBulkDelete());
   if (input.category) conditions.push(eq(logEntries.category, input.category));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
@@ -75,8 +122,82 @@ export async function listLogEntries(
   const page = rows.slice(0, input.limit);
   const last = page[page.length - 1];
 
+  const parsedPage = page.map((row) => ({ id: row.id, entry: parseLogEntry(row.payload) }));
+  const moderationCaseIds = parsedPage.flatMap(({ entry }) =>
+    entry.category === "moderationCase" ? [entry.caseId] : [],
+  );
+  const moderationBulkRows =
+    moderationCaseIds.length === 0
+      ? []
+      : await db
+          .select({ id: logEntries.id, payload: logEntries.payload })
+          .from(logEntries)
+          .where(
+            and(
+              eq(logEntries.guildId, input.guildId),
+              eq(logEntries.category, "message"),
+              eq(messageAction, "bulkDelete"),
+              inArray(moderationCaseId, moderationCaseIds),
+            ),
+          );
+  const moderationBulks = moderationBulkRows.flatMap((row) => {
+    const entry = parseLogEntry(row.payload);
+    return isBulkDeleteLogEntry(entry) ? [{ id: row.id, entry }] : [];
+  });
+  const visibleBulks = parsedPage.filter(({ entry }) => isBulkDeleteLogEntry(entry));
+  const allBulks = [...visibleBulks, ...moderationBulks];
+  const deletedMessageIds = allBulks.flatMap(({ entry }) =>
+    isBulkDeleteLogEntry(entry)
+      ? entry.deletedMessages.flatMap((deletedMessage) => (deletedMessage.messageId ? [deletedMessage.messageId] : []))
+      : [],
+  );
+  const relatedRows =
+    deletedMessageIds.length === 0
+      ? []
+      : await db
+          .select({ id: logEntries.id, payload: logEntries.payload })
+          .from(logEntries)
+          .where(
+            and(
+              eq(logEntries.guildId, input.guildId),
+              eq(logEntries.category, "message"),
+              eq(messageAction, "create"),
+              inArray(messageId, deletedMessageIds),
+              ...(input.excludeBotEvents ? [eq(logEntries.authorIsBot, false)] : []),
+            ),
+          );
+  const relatedByMessageId = new Map<string, ListedLogEntry>();
+  for (const row of relatedRows) {
+    const entry = parseLogEntry(row.payload);
+    if (entry.category === "message" && entry.action === "create" && entry.messageId) {
+      relatedByMessageId.set(entry.messageId, { id: row.id, entry });
+    }
+  }
+
+  const withDeletedMessageEntries = (parent: ListedLogEntry): ListedLogEntry => {
+    if (!isBulkDeleteLogEntry(parent.entry)) return parent;
+    const collapsedEntries = parent.entry.deletedMessages.flatMap((deletedMessage) => {
+        const related = deletedMessage.messageId ? relatedByMessageId.get(deletedMessage.messageId) : undefined;
+        return related ? [related] : [];
+    });
+    return collapsedEntries.length > 0 ? { ...parent, collapsedEntries } : parent;
+  };
+  const moderatedBulksByCaseId = new Map<string, ListedLogEntry[]>();
+  for (const bulk of moderationBulks) {
+    if (!bulk.entry.moderationCaseId) continue;
+    const current = moderatedBulksByCaseId.get(bulk.entry.moderationCaseId) ?? [];
+    current.push(withDeletedMessageEntries(bulk));
+    moderatedBulksByCaseId.set(bulk.entry.moderationCaseId, current);
+  }
+
   return {
-    entries: page.map((row) => ({ id: row.id, entry: parseLogEntry(row.payload) })),
+    entries: parsedPage.map((parent) => {
+      if (parent.entry.category === "moderationCase") {
+        const collapsedEntries = moderatedBulksByCaseId.get(parent.entry.caseId);
+        return collapsedEntries && collapsedEntries.length > 0 ? { ...parent, collapsedEntries } : parent;
+      }
+      return withDeletedMessageEntries(parent);
+    }),
     nextCursor:
       hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null,
   };

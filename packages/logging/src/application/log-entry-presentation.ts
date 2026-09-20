@@ -112,8 +112,7 @@ const PRESENTATION: {
   auditLogCorrelation: {},
   moderationCase: {
     create: { accent: "negative", title: "モデレーション対応が記録されました", icon: "🛑" },
-    update: { accent: "warning", title: "モデレーション対応が更新されました", icon: "🛑" },
-    resolve: { accent: "positive", title: "モデレーション対応が解決しました", icon: "✅" },
+    // resolveはMODERATION_CASE_RESOLVE_PRESENTATION(result別)で出し分けるためここには定義しない。
   },
   voice: {
     join: { accent: "positive", title: "ボイスチャンネルに参加しました", icon: "🔊" },
@@ -125,7 +124,20 @@ const PRESENTATION: {
 
 const FALLBACK = { accent: "neutral" as const, title: "ログイベント", icon: "ℹ️" };
 
+/**
+ * moderationCaseのresolveのみ、action固定ではなくresult(success/failed/skipped)ごとに
+ * 出し分ける(#350、codexレビュー指摘: failed/skippedもsuccessと同じ緑色表示になっていた)。
+ */
+const MODERATION_CASE_RESOLVE_PRESENTATION: Record<"success" | "failed" | "skipped", { accent: AccentKind; title: string; icon: string }> = {
+  success: { accent: "positive", title: "モデレーション対応が解決しました", icon: "✅" },
+  failed: { accent: "negative", title: "モデレーション対応の実行に失敗しました", icon: "⚠️" },
+  skipped: { accent: "neutral", title: "モデレーション対応はより重い処分に集約されました", icon: "➖" },
+};
+
 export function getPresentation(entry: LogEntry): { accent: AccentKind; title: string; icon: string } {
   if (entry.category === "auditLogCorrelation") return FALLBACK;
+  if (entry.category === "moderationCase" && entry.action === "resolve") {
+    return MODERATION_CASE_RESOLVE_PRESENTATION[entry.result];
+  }
   return PRESENTATION[entry.category]?.[entry.action] ?? FALLBACK;
 }

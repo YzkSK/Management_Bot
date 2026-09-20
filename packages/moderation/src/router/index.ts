@@ -3,22 +3,30 @@ import {
   buildInviteUrl,
   CAPABILITIES,
   discordIdSchema,
+  MODERATION_ESCALATION_VIOLATION_TYPES,
   MODERATION_VIOLATION_TYPES,
 } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
+  addNgword,
   addToWhitelist,
   getEscalationPreset,
+  getLockdownSettings,
+  listNgwords,
   listStrikes,
   listThresholds,
   listWhitelist,
   removeFromWhitelist,
+  removeNgword,
   resetAllStrikes,
   resetStrike,
   setEscalationPreset,
+  setAutoLockdownOnRaid,
+  setLockdownRequested,
   setThreshold,
+  UnsafeNgwordRegexError,
 } from "../application/index.js";
 import { MODERATION_PRESETS } from "../domain/index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
@@ -26,8 +34,19 @@ import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
 const violationTypeSchema = z.enum(MODERATION_VIOLATION_TYPES);
+/** moderation_escalation_state(ストライク)はraidを扱わない(raidはmoderation_raid_stateで別管理)。 */
+const escalationViolationTypeSchema = z.enum(MODERATION_ESCALATION_VIOLATION_TYPES);
 const presetSchema = z.enum(MODERATION_PRESETS);
 const targetTypeSchema = z.enum(["user", "role"]);
+const ngwordMatchTypeSchema = z.enum(["exact", "contains", "regex"]);
+
+const addNgwordInput = z.object({
+  guildId: discordIdSchema,
+  matchType: ngwordMatchTypeSchema,
+  pattern: z.string().min(1).max(500),
+});
+
+const removeNgwordInput = z.object({ guildId: discordIdSchema, id: z.string().min(1) });
 
 const setThresholdInput = z.object({
   guildId: discordIdSchema,
@@ -45,10 +64,12 @@ const whitelistTargetInput = z.object({
 const strikeTargetInput = z.object({
   guildId: discordIdSchema,
   userId: discordIdSchema,
-  violationType: violationTypeSchema,
+  violationType: escalationViolationTypeSchema,
 });
 
 const setEscalationPresetInput = z.object({ guildId: discordIdSchema, preset: presetSchema });
+const setAutoLockdownOnRaidInput = z.object({ guildId: discordIdSchema, enabled: z.boolean() });
+const setLockdownRequestedInput = z.object({ guildId: discordIdSchema, requestedLocked: z.boolean() });
 const resetAllStrikesInput = z.object({ guildId: discordIdSchema, userId: discordIdSchema });
 
 /**
@@ -166,10 +187,54 @@ export const moderationRouter = router({
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => setEscalationPreset(ctx.db, input.guildId, input.preset)),
 
+  getLockdownSettings: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(({ ctx, input }) => getLockdownSettings(ctx.db, input.guildId)),
+
+  setAutoLockdownOnRaid: protectedProcedure
+    .input(setAutoLockdownOnRaidInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => setAutoLockdownOnRaid(ctx.db, input.guildId, input.enabled)),
+
+  setLockdownRequested: protectedProcedure
+    .input(setLockdownRequestedInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => setLockdownRequested(ctx.db, input.guildId, input.requestedLocked)),
+
   resetAllStrikes: protectedProcedure
     .input(resetAllStrikesInput)
     .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
     .mutation(({ ctx, input }) => resetAllStrikes(ctx.db, input.guildId, input.userId)),
+
+  listNgwords: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .query(({ ctx, input }) => listNgwords(ctx.db, input.guildId)),
+
+  /**
+   * matchType="regex"の場合、addNgword内でcheckRegexSafetyによる危険パターン検証を行う。
+   * application層はtRPCに依存させない設計のため(Codexレビュー指摘)、application層が投げる
+   * UnsafeNgwordRegexErrorをここでTRPCError(BAD_REQUEST)にマップする。
+   */
+  addNgword: protectedProcedure
+    .input(addNgwordInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await addNgword(ctx.db, input.guildId, input.matchType, input.pattern);
+      } catch (error) {
+        if (error instanceof UnsafeNgwordRegexError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
+    }),
+
+  removeNgword: protectedProcedure
+    .input(removeNgwordInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+    .mutation(({ ctx, input }) => removeNgword(ctx.db, input.guildId, input.id)),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。

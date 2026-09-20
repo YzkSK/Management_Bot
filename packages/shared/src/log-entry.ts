@@ -2,6 +2,7 @@ import { z } from "zod";
 import { discordIdSchema } from "./discord-id.js";
 import { LOG_CATEGORIES } from "./log-category.js";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
+import { moderationIncidentSchema } from "./moderation-incident.js";
 
 /** LogEntryのID系フィールド(userId/channelId等)はほぼ全てDiscord IDのため、共通スキーマをそのまま使う(issue #227)。 */
 const nonEmptyString = discordIdSchema;
@@ -28,13 +29,25 @@ const base = {
  * 添付ファイルの実体は保存せずDiscord CDNのURLのみ保持する(ストレージ節約、Oracle Cloud A1 Flexの限られた容量を考慮)。
  * DiscordのCDN URLは一定期間・メッセージ削除後に失効しうるが、直近ログの確認用途としては許容する。
  */
-const messageAttachmentSchema = z.object({
+export const messageAttachmentSchema = z.object({
   url: z.url(),
   filename: z.string(),
   contentType: z.string().optional(),
 });
 
-export const messageLogEntrySchema = z.object({
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
+export const bulkDeletedMessageSchema = z.object({
+  messageId: nonEmptyString.optional(),
+  authorId: nonEmptyString,
+  authorName: nonEmptyString.optional(),
+  content: z.string().optional(),
+  attachments: z.array(messageAttachmentSchema).optional(),
+});
+
+export type BulkDeletedMessage = z.infer<typeof bulkDeletedMessageSchema>;
+
+const individualMessageLogEntrySchema = z.object({
   ...base,
   category: z.literal("message"),
   channelId: nonEmptyString,
@@ -45,11 +58,23 @@ export const messageLogEntrySchema = z.object({
   content: z.string().optional(),
   /** action=updateのみ設定する編集前本文。移行前に記録された既存updateエントリには存在しないため未設定を許容する。 */
   previousContent: z.string().optional().meta({ sensitive: true }),
-  /** action=pin/unpinで対象メッセージを特定するために設定する。create/update/delete/bulkDeleteでは設定しない。 */
+  /** action=create/pin/unpinで対象メッセージを特定するために設定する。update/delete/bulkDeleteでは設定しない。 */
   messageId: nonEmptyString.optional(),
   /** create/update/delete/bulkDeleteで添付ファイルがある場合のみ設定する。 */
   attachments: z.array(messageAttachmentSchema).optional(),
 });
+
+const bulkDeleteMessageLogEntrySchema = z.object({
+  ...base,
+  category: z.literal("message"),
+  channelId: nonEmptyString,
+  action: z.literal("bulkDelete"),
+  /** モデレーション処分に起因する一括削除の場合、そのケースIDを設定する。 */
+  moderationCaseId: nonEmptyString.optional(),
+  deletedMessages: z.array(bulkDeletedMessageSchema).min(1),
+});
+
+export const messageLogEntrySchema = z.union([individualMessageLogEntrySchema, bulkDeleteMessageLogEntrySchema]);
 
 export const reactionLogEntrySchema = z.object({
   ...base,
@@ -221,17 +246,32 @@ export const auditLogCorrelationEntrySchema = z.object({
   actionType: nonEmptyString,
 });
 
-export const moderationCaseLogEntrySchema = z.object({
+const moderationCaseBase = {
   ...base,
   category: z.literal("moderationCase"),
   caseId: nonEmptyString,
   targetUserId: nonEmptyString,
   moderatorId: nonEmptyString,
-  action: z.enum(["create", "update", "resolve"]),
   actionType: z.enum(MODERATION_ACTION_TYPES),
   /** actionType==="timeout"の場合のみ設定するタイムアウト時間(分)。5→10→30分と多段階化する(#322)。 */
   timeoutMinutes: z.number().int().positive().optional(),
-});
+  /** incident導入前に保存されたmoderationCaseとの後方互換のため省略を許容する。 */
+  incident: moderationIncidentSchema.optional(),
+};
+
+/**
+ * action="create"は処罰予定の記録、action="resolve"はDiscord API実行後の結果確定(#350)。
+ * resolveのみDiscord APIの実行結果(result/failureCode)を持つ。
+ */
+export const moderationCaseLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({ ...moderationCaseBase, action: z.literal("create") }),
+  z.object({
+    ...moderationCaseBase,
+    action: z.literal("resolve"),
+    result: z.enum(["success", "failed", "skipped"]),
+    failureCode: z.string().optional(),
+  }),
+]);
 
 const voiceBase = {
   ...base,
@@ -297,9 +337,15 @@ const logEntrySchemaOptions = Object.values(LOG_ENTRY_SCHEMAS) as [
   ...(typeof LOG_ENTRY_SCHEMAS)[LogCategory][],
 ];
 
-export const logEntrySchema = z.discriminatedUnion("category", logEntrySchemaOptions);
+export const logEntrySchema = z.union(logEntrySchemaOptions);
 
 export type LogEntry = z.infer<typeof logEntrySchema>;
+
+export type BulkDeleteLogEntry = Extract<LogEntry, { category: "message"; action: "bulkDelete"; deletedMessages: unknown }>;
+
+export function isBulkDeleteLogEntry(entry: LogEntry): entry is BulkDeleteLogEntry {
+  return entry.category === "message" && entry.action === "bulkDelete" && "deletedMessages" in entry;
+}
 
 export function parseLogEntry(input: unknown): LogEntry {
   return logEntrySchema.parse(input);

@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
-import { claimAndPushMessage, markStrikeHitAndCheckNewBurst } from "./message-buffer.js";
+import {
+  claimAndPushMessage,
+  markStrikeHitAndCheckNewBurst,
+  mentionCountsInWindow,
+  pushMentionCount,
+} from "./message-buffer.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,6 +94,54 @@ describe.skipIf(!(await isRedisAvailable()))("claimAndPushMessage", () => {
     expect(first).not.toBeNull();
     expect(second).toBeNull();
     expect(first).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!(await isRedisAvailable()))("pushMentionCount", () => {
+  const redis = new Redis(REDIS_URL);
+  const guildId = `g-${randomUUID()}`;
+  const userId = `u-${randomUUID()}`;
+
+  afterEach(async () => {
+    const keys = await redis.keys(`moderation:*:${guildId}:*`);
+    if (keys.length > 0) await redis.del(...keys);
+  });
+
+  test("新しい順(先頭が最新)でメンション数バッファを返す", async () => {
+    await pushMentionCount(redis, guildId, userId, 3, new Date("2026-01-01T00:00:00.000Z"), 60);
+    const buffer = await pushMentionCount(redis, guildId, userId, 5, new Date("2026-01-01T00:00:01.000Z"), 60);
+    expect(buffer.map((b) => b.mentionCount)).toEqual([5, 3]);
+    expect(buffer[0]?.createdAt).toEqual(new Date("2026-01-01T00:00:01.000Z"));
+  });
+
+  test("TTLをwindowSecondsで設定する", async () => {
+    await pushMentionCount(redis, guildId, userId, 1, new Date(), 60);
+    const ttl = await redis.ttl(`moderation:mention:${guildId}:${userId}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60);
+  });
+});
+
+describe("mentionCountsInWindow", () => {
+  test("windowSeconds以内のエントリのmentionCountのみを返す", () => {
+    const now = new Date("2026-01-01T00:00:10.000Z");
+    const buffer = [
+      { mentionCount: 3, createdAt: now },
+      { mentionCount: 4, createdAt: new Date(now.getTime() - 5000) },
+      { mentionCount: 5, createdAt: new Date(now.getTime() - 20_000) },
+    ];
+
+    expect(mentionCountsInWindow(buffer, now, 10)).toEqual([3, 4]);
+  });
+
+  test("検知トリガーより後に作成されたエントリ(配送順の入れ替わり)は含めない", () => {
+    const now = new Date("2026-01-01T00:00:10.000Z");
+    const buffer = [
+      { mentionCount: 3, createdAt: now },
+      { mentionCount: 4, createdAt: new Date(now.getTime() + 5000) },
+    ];
+
+    expect(mentionCountsInWindow(buffer, now, 10)).toEqual([3]);
   });
 });
 

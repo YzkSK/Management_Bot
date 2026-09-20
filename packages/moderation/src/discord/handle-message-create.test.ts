@@ -1,11 +1,22 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { createDb, type Db, guilds, moderationEscalationState, moderationThresholds } from "@management-bot/db";
+import {
+  createDb,
+  type Db,
+  guilds,
+  moderationEscalationState,
+  moderationMessageDeletionLinks,
+  moderationNgwords,
+  moderationThresholds,
+} from "@management-bot/db";
 import type { ModerationActionRecordedEvent } from "@management-bot/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Redis } from "ioredis";
 import type { Message } from "discord.js";
+import { createModerationConfigCache } from "../application/index.js";
+import { addNgword } from "../application/ngwords.js";
 import { setEscalationPreset } from "../application/escalation-settings.js";
+import { BurstSettlementCoordinator, type SettlementScheduler } from "./burst-settlement.js";
 import { handleMessageCreate } from "./handle-message-create.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -22,6 +33,9 @@ async function isRedisAvailable(): Promise<boolean> {
   }
 }
 
+/** 自Bot自身のユーザーID(client.user.id)の固定値。他テストのuserIdとは常に異なる。 */
+const SELF_BOT_ID = "self-bot-id";
+
 function fakeMessage(overrides: {
   guildId: string;
   userId: string;
@@ -30,16 +44,24 @@ function fakeMessage(overrides: {
   bot?: boolean;
   hasGuild?: boolean;
   hasMember?: boolean;
+  /** timeout()がDiscord APIエラーで失敗するケースを再現する(#350の処罰失敗パス検証用)。 */
+  timeoutRejects?: boolean;
+  /** client.userが未確定(ログイン処理中等)の状況を再現する(#377、fail-closedの回帰テスト用)。 */
+  clientUserUndefined?: boolean;
 }) {
   const deleteFn = mock(() => Promise.resolve());
   const bulkDelete = mock(() => Promise.resolve());
-  const timeout = mock(() => Promise.resolve());
+  const timeout = overrides.timeoutRejects
+    ? mock(() => Promise.reject(new Error("Missing Permissions")))
+    : mock(() => Promise.resolve());
   const kick = mock(() => Promise.resolve());
   const ban = mock(() => Promise.resolve());
+  const send = mock(() => Promise.resolve());
   return {
-    author: { id: overrides.userId, bot: overrides.bot ?? false },
+    author: { id: overrides.userId, bot: overrides.bot ?? false, send },
     guild: overrides.hasGuild === false ? null : { id: overrides.guildId },
     member: overrides.hasMember === false ? null : { roles: { cache: new Map() }, timeout, kick, ban },
+    client: { user: overrides.clientUserUndefined ? undefined : { id: SELF_BOT_ID } },
     id: randomUUID(),
     channelId: overrides.channelId ?? "channel-1",
     content: overrides.content,
@@ -51,7 +73,53 @@ function fakeMessage(overrides: {
     timeout,
     kick,
     ban,
+    send,
   };
+}
+
+function fakeSettlementScheduler(): {
+  scheduler: SettlementScheduler;
+  waitForTimer: () => Promise<void>;
+  runOnlyTimer: () => void;
+} {
+  let nextId = 0;
+  const callbacks = new Map<number, () => void>();
+  return {
+    scheduler: {
+      setTimeout(callback): ReturnType<typeof setTimeout> {
+        const id = nextId++;
+        callbacks.set(id, callback);
+        return id as ReturnType<typeof setTimeout>;
+      },
+      clearTimeout(timer): void {
+        callbacks.delete(timer as number);
+      },
+    },
+    async waitForTimer(): Promise<void> {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (callbacks.size === 1) return;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      throw new Error("settlement timer was not registered");
+    },
+    runOnlyTimer(): void {
+      expect([...callbacks]).toHaveLength(1);
+      const callback = [...callbacks.values()][0];
+      if (!callback) throw new Error("timer callback is missing");
+      callbacks.clear();
+      callback();
+    },
+  };
+}
+
+function immediateBurstSettlementCoordinator(): BurstSettlementCoordinator {
+  return new BurstSettlementCoordinator({
+    setTimeout(callback): ReturnType<typeof setTimeout> {
+      queueMicrotask(callback);
+      return 0 as ReturnType<typeof setTimeout>;
+    },
+    clearTimeout(): void {},
+  });
 }
 
 describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
@@ -59,12 +127,22 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   let close: () => Promise<void>;
   const redis = new Redis(REDIS_URL);
   const guildId = `test-guild-${randomUUID()}`;
+  /**
+   * configCacheはguild単位でTTLキャッシュするため(#352)、テスト間で使い回すと前のテストの
+   * DB設定がキャッシュに残り、afterEachでDB削除しても次のテストに漏れ残る。
+   * beforeEachでテストごとに新規生成し、1テスト内の複数呼び出し(deps())では共有する。
+   */
+  let configCache: ReturnType<typeof createModerationConfigCache>;
 
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
     ({ db, close } = createDb(databaseUrl));
     await db.insert(guilds).values({ id: guildId, name: "Test Guild" });
+  });
+
+  beforeEach(() => {
+    configCache = createModerationConfigCache();
   });
 
   afterAll(async () => {
@@ -76,6 +154,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
   afterEach(async () => {
     await db.delete(moderationThresholds).where(eq(moderationThresholds.guildId, guildId));
     await db.delete(moderationEscalationState).where(eq(moderationEscalationState.guildId, guildId));
+    await db.delete(moderationNgwords).where(eq(moderationNgwords.guildId, guildId));
     const keys = await redis.keys(`moderation:*:${guildId}:*`);
     if (keys.length > 0) await redis.del(...keys);
   });
@@ -85,17 +164,90 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     return { published, publish: async (event: ModerationActionRecordedEvent) => void published.push(event) };
   }
 
-  test("botのメッセージは無視する", async () => {
+  /** invite_link以外のテストでは呼ばれない想定のダミー実装(常に自ギルド扱い)。 */
+  const resolveInviteGuildId = async (): Promise<string | null> => guildId;
+
+  function deps(
+    eventBus: ReturnType<typeof fakeEventBus>,
+    overrides: Partial<Parameters<typeof handleMessageCreate>[0]> = {},
+  ) {
+    return {
+      db,
+      redis,
+      eventBus,
+      resolveInviteGuildId,
+      configCache,
+      burstSettlementCoordinator: immediateBurstSettlementCoordinator(),
+      ...overrides,
+    };
+  }
+
+  test("自Bot自身のメッセージは無視する(改善案7.2節)", async () => {
     const eventBus = fakeEventBus();
-    const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", bot: true });
-    await handleMessageCreate({ db, redis, eventBus }, message as unknown as Message);
+    const message = fakeMessage({ guildId, userId: SELF_BOT_ID, content: "hi", bot: true });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
+  });
+
+  test("client.userが未確定の場合は何も検知しない(fail-closed、Codexレビュー指摘の回帰テスト)", async () => {
+    const eventBus = fakeEventBus();
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const message = fakeMessage({
+      guildId,
+      userId: `u-${randomUUID()}`,
+      content: "banned-word",
+      clientUserUndefined: true,
+    });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toEqual([]);
+  });
+
+  test("他Bot・Webhookのメッセージ(自Bot以外)は通常のユーザー投稿と同様に検知対象になる(改善案7.2節)", async () => {
+    const userId = `bot-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "banned-word", bot: true });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("Webhook投稿(memberなし)が違反検知された場合、timeout等の処罰はmember_not_foundで失敗するが削除は実行される(改善案7.2節)", async () => {
+    const userId = `webhook-${randomUUID()}`;
+    // strong preset: strikeCount=2でtimeout(改善案7.2節、Webhookはmemberを持たないためtimeout不可)。
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
+
+    const eventBus = fakeEventBus();
+    let last: ReturnType<typeof fakeMessage> | undefined;
+    for (let i = 0; i < 3; i++) {
+      last = fakeMessage({ guildId, userId, content: `msg-${i}`, bot: true, hasMember: false });
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
+    }
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({
+      action: "resolve",
+      actionType: "timeout",
+      result: "failed",
+      failureCode: "member_not_found",
+    });
+    // deleteBufferedMessagesSafely自体はmember不要のため実行される。
+    expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
   });
 
   test("guild/memberがないメッセージ(DM等)は無視する", async () => {
     const eventBus = fakeEventBus();
     const message = fakeMessage({ guildId, userId: `u-${randomUUID()}`, content: "hi", hasGuild: false });
-    await handleMessageCreate({ db, redis, eventBus }, message as unknown as Message);
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
     expect(eventBus.published).toEqual([]);
   });
 
@@ -108,11 +260,200 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (let i = 0; i < 3; i++) {
       last = fakeMessage({ guildId, userId, content: `msg-${i}` });
-      await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
-    expect(eventBus.published).toHaveLength(1);
+    // create(処罰予定)→resolve(実行結果)の2段階でpublishされる(#350)。
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create" });
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+  });
+
+  test("連投検知後の投稿が1秒間止まるまで、同じバーストとして削除を待機する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const first = fakeMessage({ guildId, userId, content: "first" });
+    const second = fakeMessage({ guildId, userId, content: "second" });
+    const trigger = fakeMessage({ guildId, userId, content: "trigger" });
+    const trailing = fakeMessage({ guildId, userId, content: "trailing" });
+    const otherUser = fakeMessage({ guildId, userId: `other-${randomUUID()}`, content: "other user" });
+    const otherChannel = fakeMessage({ guildId, userId, channelId: "channel-2", content: "other channel" });
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), first as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), second as unknown as Message);
+    const triggerTask = handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trigger as unknown as Message);
+    await clock.waitForTimer();
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trailing as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), otherUser as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), otherChannel as unknown as Message);
+
+    expect(trigger.bulkDelete).not.toHaveBeenCalled();
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(0);
+
+    clock.runOnlyTimer();
+    await triggerTask;
+
+    expect(trigger.bulkDelete).toHaveBeenCalledWith(expect.arrayContaining([first.id, second.id, trigger.id, trailing.id]));
+    expect(trigger.bulkDelete).not.toHaveBeenCalledWith(expect.arrayContaining([otherUser.id, otherChannel.id]));
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(1);
+
+    const links = await db
+      .select({ messageId: moderationMessageDeletionLinks.messageId, caseId: moderationMessageDeletionLinks.caseId })
+      .from(moderationMessageDeletionLinks)
+      .where(
+        and(
+          eq(moderationMessageDeletionLinks.guildId, guildId),
+          inArray(moderationMessageDeletionLinks.messageId, [first.id, second.id, trigger.id, trailing.id]),
+        ),
+      );
+    expect(new Set(links.map((link) => link.messageId))).toEqual(new Set([first.id, second.id, trigger.id, trailing.id]));
+    expect(new Set(links.map((link) => link.caseId))).toEqual(new Set([eventBus.published[0]?.caseId]));
+  });
+
+  test("収束前の追加投稿が既存の件数閾値に達すると、タイマーを待たずに削除する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const initialMessages = [
+      fakeMessage({ guildId, userId, content: "first" }),
+      fakeMessage({ guildId, userId, content: "second" }),
+      fakeMessage({ guildId, userId, content: "trigger" }),
+    ];
+    const trailingMessages = [
+      fakeMessage({ guildId, userId, content: "trailing-1" }),
+      fakeMessage({ guildId, userId, content: "trailing-2" }),
+      fakeMessage({ guildId, userId, content: "trailing-3" }),
+    ];
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[0] as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[1] as unknown as Message);
+    const triggerTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      initialMessages[2] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    for (const trailingMessage of trailingMessages) {
+      await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), trailingMessage as unknown as Message);
+    }
+    await triggerTask;
+
+    expect(initialMessages[2].bulkDelete).toHaveBeenCalledWith(
+      expect.arrayContaining([...initialMessages, ...trailingMessages].map((message) => message.id)),
+    );
+    expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(1);
+  });
+
+  test("収束待ちの上限到達後も続く連投を削除する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const initialMessages = [
+      fakeMessage({ guildId, userId, content: "first" }),
+      fakeMessage({ guildId, userId, content: "second" }),
+      fakeMessage({ guildId, userId, content: "trigger" }),
+    ];
+    const thresholdMessages = [
+      fakeMessage({ guildId, userId, content: "trailing-1" }),
+      fakeMessage({ guildId, userId, content: "trailing-2" }),
+      fakeMessage({ guildId, userId, content: "trailing-3" }),
+    ];
+    const afterLimit = [
+      fakeMessage({ guildId, userId, content: "trailing-4" }),
+      fakeMessage({ guildId, userId, content: "trailing-5" }),
+    ];
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[0] as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[1] as unknown as Message);
+    const triggerTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      initialMessages[2] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    for (const message of thresholdMessages) {
+      await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), message as unknown as Message);
+    }
+    await triggerTask;
+
+    const afterLimitTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      afterLimit[0] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), afterLimit[1] as unknown as Message);
+    clock.runOnlyTimer();
+    await afterLimitTask;
+
+    expect(afterLimit[0]?.bulkDelete).toHaveBeenCalledWith(afterLimit.map((message) => message.id));
+  });
+
+  test("一括削除の直前に削除メッセージ群とモデレーションケースを関連付ける", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const messages = [] as ReturnType<typeof fakeMessage>[];
+    for (let i = 0; i < 3; i++) {
+      const message = fakeMessage({ guildId, userId, content: `msg-${i}` });
+      messages.push(message);
+      await handleMessageCreate(deps(eventBus), message as unknown as Message);
+    }
+
+    const links = await db
+      .select({ messageId: moderationMessageDeletionLinks.messageId, caseId: moderationMessageDeletionLinks.caseId })
+      .from(moderationMessageDeletionLinks)
+      .where(
+        and(
+          eq(moderationMessageDeletionLinks.guildId, guildId),
+          inArray(
+            moderationMessageDeletionLinks.messageId,
+            messages.map((message) => message.id),
+          ),
+        ),
+      );
+    expect(links).toEqual(
+      expect.arrayContaining(messages.map((message) => expect.objectContaining({ messageId: message.id }))),
+    );
+    expect(new Set(links.map((link) => link.caseId))).toEqual(new Set([eventBus.published[0]?.caseId]));
+  });
+
+  test("Discord API(timeout)がエラーで失敗した場合、resolveイベントはresult=failedでpublishされる(#350)", async () => {
+    const userId = `u-${randomUUID()}`;
+    // strong preset: ESCALATION_STEPS.strong[2]=timeout(5分)。strikeCountを1でseedし、
+    // 1件目のflood検知で合計2に到達させてtimeoutを引き当てる。
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+    await db.insert(moderationEscalationState).values({ guildId, userId, violationType: "flood", strikeCount: 1 });
+
+    const eventBus = fakeEventBus();
+    let last: ReturnType<typeof fakeMessage> | undefined;
+    for (let i = 0; i < 3; i++) {
+      last = fakeMessage({ guildId, userId, content: `msg-${i}`, timeoutRejects: true });
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
+    }
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[0]).toMatchObject({ action: "create", actionType: "timeout" });
+    expect(eventBus.published[1]).toMatchObject({
+      action: "resolve",
+      actionType: "timeout",
+      result: "failed",
+      failureCode: "discord_api_error",
+    });
   });
 
   test("flood/duplicate_contentが同時にヒットしても、それぞれ同一バースト中は1回しかstrikeが進まない", async () => {
@@ -129,7 +470,7 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (let i = 0; i < 3; i++) {
       last = fakeMessage({ guildId, userId, content });
-      await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     // 2件目: duplicate_content(合計strikeCount=1)がヒットしESCALATION_STEPS.strong[1]=warn。
@@ -138,7 +479,16 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     // ESCALATION_STEPS.strong[2]=timeoutに到達する。duplicate_contentも閾値には達し続けるが、
     // 同一バースト中(ロック保持中)のためstrikeは進まずイベントもpublishされない。
     // timeout実行時もdeleteBufferedMessagesSafely経由でバッファの削除は必ず行われる。
-    expect(eventBus.published).toHaveLength(2);
+    // create×2(warn, timeout)→実際にDiscord APIへ実行されるのはmostSevere(timeout)の1回のみ。
+    // 2件目のwarnと3件目のtimeoutは別のmessageCreateイベントで実行されるため、
+    // どちらもresult="success"でresolveされる。result="skipped"になるのは同一イベントで
+    // 複数outcomeが同時にヒットした場合のみ。
+    expect(eventBus.published).toHaveLength(4);
+    expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
+    const resolves = eventBus.published.filter((e) => e.action === "resolve");
+    expect(resolves).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(0);
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
     expect(last?.timeout).toHaveBeenCalledTimes(1);
   });
@@ -169,16 +519,170 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     let last: ReturnType<typeof fakeMessage> | undefined;
     for (const content of ["A", "B", "B"]) {
       last = fakeMessage({ guildId, userId, content });
-      await handleMessageCreate({ db, redis, eventBus }, last as unknown as Message);
+      await handleMessageCreate(deps(eventBus), last as unknown as Message);
     }
 
     // 3件目: floodがtimeout(合計4)、duplicate_content("B"が2連続)がkick(合計5)に到達。
-    // moderation.action.recordedは両方publishされるが、Discord側の処罰実行はより重いkickに
-    // 集約される(mostSevere)。バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
+    // moderation.action.recordedのcreateは両方publishされるが、Discord側の処罰実行はより重いkickに
+    // 集約される(mostSevere)。kick側はresult="success"でresolveされ、集約されなかったtimeout側も
+    // result="skipped"でresolveされる(未解決のまま残さないため、#350)。
+    // バッファ済みメッセージの削除は処罰の集約とは関係なく実行される
     // (連投メッセージが削除されずに残らないようにするため)。
-    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published).toHaveLength(4);
+    expect(eventBus.published.filter((e) => e.action === "create")).toHaveLength(2);
+    const resolves = eventBus.published.filter((e) => e.action === "resolve");
+    expect(resolves).toHaveLength(2);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "success")).toHaveLength(1);
+    expect(resolves.filter((e) => e.action === "resolve" && e.result === "skipped")).toHaveLength(1);
     expect(last?.kick).toHaveBeenCalledTimes(1);
     expect(last?.timeout).not.toHaveBeenCalled();
     expect(last?.bulkDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test("NGワードに一致するメッセージは検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  test("1メッセージ内の大量メンションはmention_spamとして検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const message = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate(deps(eventBus), message as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  test("他ギルドへの招待リンクは検知され、そのメッセージ自身が削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/other-guild-code" });
+    await handleMessageCreate(
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+      message as unknown as Message,
+    );
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(eventBus.published[1]).toMatchObject({ action: "resolve", result: "success" });
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
+    expect(message.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  test("自ギルドへの招待リンクは検知されず、メッセージは削除されない", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/own-guild-code" });
+    await handleMessageCreate(
+      deps(eventBus, { resolveInviteGuildId: async () => guildId }),
+      message as unknown as Message,
+    );
+
+    expect(eventBus.published).toEqual([]);
+    expect(message.deleteFn).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続NGワード投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "ngword", preset: "medium", enabled: true });
+    await addNgword(db, guildId, "exact", "banned-word");
+
+    const eventBus = fakeEventBus();
+    const first = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate(deps(eventBus), first as unknown as Message);
+    const second = fakeMessage({ guildId, userId, content: "banned-word" });
+    await handleMessageCreate(deps(eventBus), second as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(first.send).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続メンションスパム投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "mention_spam", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const mentions = Array.from({ length: 6 }, (_, i) => `<@${i}>`).join(" ");
+    const first = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate(deps(eventBus), first as unknown as Message);
+    const second = fakeMessage({ guildId, userId, content: mentions });
+    await handleMessageCreate(deps(eventBus), second as unknown as Message);
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
+  });
+
+  test("strikeロック中(10秒以内)の連続招待リンク投稿は、strike加算やDM通知なしで2件目のメッセージ自身が削除される(#338)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const content = "join us: discord.gg/other-guild-code";
+    const first = fakeMessage({ guildId, userId, content });
+    await handleMessageCreate(
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+      first as unknown as Message,
+    );
+    const second = fakeMessage({ guildId, userId, content });
+    await handleMessageCreate(
+      deps(eventBus, { resolveInviteGuildId: async () => "other-guild-id" }),
+      second as unknown as Message,
+    );
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(first.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.deleteFn).toHaveBeenCalledTimes(1);
+    expect(second.send).not.toHaveBeenCalled();
+  });
+
+  test("招待コード解決失敗時は安全側(検知扱い)に倒れ、メッセージが削除される", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db
+      .insert(moderationThresholds)
+      .values({ guildId, violationType: "invite_link", preset: "medium", enabled: true });
+
+    const eventBus = fakeEventBus();
+    const message = fakeMessage({ guildId, userId, content: "join us: discord.gg/unresolvable-code" });
+    await handleMessageCreate(
+      deps(eventBus, { resolveInviteGuildId: async () => null }),
+      message as unknown as Message,
+    );
+
+    expect(eventBus.published).toHaveLength(2);
+    expect(message.deleteFn).toHaveBeenCalledTimes(1);
   });
 });

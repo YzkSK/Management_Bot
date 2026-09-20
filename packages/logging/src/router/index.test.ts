@@ -176,6 +176,71 @@ describe("loggingRouter.listLogEntries", () => {
     ).toBe("secret previous message");
   });
 
+  test("VIEW_LOGSのみの場合、折りたたまれた投稿ログにも機微フィールドのマスキングを適用する", async () => {
+    await db.insert(capabilityGrants).values({
+      id: randomUUID(),
+      guildId,
+      targetType: "user",
+      targetId: "user-1",
+      capabilities: CAPABILITIES.VIEW_LOGS,
+    });
+    await db.insert(logEntries).values([
+      {
+        id: randomUUID(),
+        guildId,
+        category: "message",
+        payload: {
+          category: "message",
+          guildId,
+          createdAt: "2026-09-20T00:00:00.000Z",
+          channelId: "c1",
+          authorId: "a1",
+          messageId: "message-1",
+          action: "create",
+          content: "visible content",
+          previousContent: "sensitive previous content",
+        },
+        createdAt: new Date("2026-09-20T00:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        guildId,
+        category: "message",
+        payload: {
+          category: "message",
+          guildId,
+          createdAt: "2026-09-20T00:01:00.000Z",
+          channelId: "c1",
+          action: "bulkDelete",
+          deletedMessages: [{ messageId: "message-1", authorId: "a1" }],
+        },
+        createdAt: new Date("2026-09-20T00:01:00.000Z"),
+      },
+    ]);
+    const caller = createCaller({
+      db,
+      sessionId: "session-1",
+      getGuildMembership: memberOf(guildId),
+      getGuildChannels: channelsOf(),
+      getAllGuildChannels: channelsOf(),
+      verifyGuildChannel: verifyGuildChannelOf(),
+      getGuildMemberNames: memberNamesOf({}),
+      getBotPermissions: botPermissionsOf(),
+      getGuildRoles: rolesOf(),
+      getGuildAccessStatus: accessStatusOf(),
+      getGuildMembersPage: membersPageOf(),
+      discordClientId: "test-client-id",
+    });
+
+    const result = await caller.listLogEntries({ guildId, limit: 50 });
+
+    expect(result.entries.find(({ entry }) => entry.action === "bulkDelete")?.collapsedEntries?.[0]?.entry).toMatchObject({
+      action: "create",
+      content: "visible content",
+      previousContent: undefined,
+    });
+  });
+
   test("VIEW_LOGSを持たない場合はFORBIDDEN", async () => {
     const caller = createCaller({
       db,

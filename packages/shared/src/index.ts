@@ -22,17 +22,23 @@ export {
   type VoiceSessionEndedEvent,
   type ModerationActionRecordedEvent,
 } from "./domain-events.js";
+export { moderationIncidentSchema, type ModerationIncident } from "./moderation-incident.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
 export { MODERATION_ACTION_TYPES, type ModerationActionType } from "./moderation-action-type.js";
+export { ACTION_SEVERITY } from "./moderation-action-severity.js";
 export {
   MODERATION_VIOLATION_TYPES,
+  MODERATION_ESCALATION_VIOLATION_TYPES,
   type ModerationViolationType,
+  type ModerationEscalationViolationType,
 } from "./moderation-violation-type.js";
 export { MODERATION_PRESETS, type ModerationPreset } from "./moderation-preset.js";
 export {
   LOG_ENTRY_SCHEMAS,
   messageLogEntrySchema,
+  messageAttachmentSchema,
+  bulkDeletedMessageSchema,
   reactionLogEntrySchema,
   memberLogEntrySchema,
   roleLogEntrySchema,
@@ -52,10 +58,14 @@ export {
   voiceLogEntrySchema,
   VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
+  isBulkDeleteLogEntry,
   parseLogEntry,
   safeParseLogEntry,
   SENSITIVE_LOG_FIELDS,
   type LogEntry,
+  type BulkDeleteLogEntry,
+  type BulkDeletedMessage,
+  type MessageAttachment,
   type VoiceStateFlagName,
 } from "./log-entry.js";
 export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";

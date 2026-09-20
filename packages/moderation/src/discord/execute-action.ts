@@ -13,6 +13,10 @@ function reasonFor(outcome: EscalationOutcome): string {
 const VIOLATION_LABELS = {
   flood: "短時間の連続投稿",
   duplicate_content: "同一・類似内容の繰り返し投稿",
+  ngword: "NGワードの投稿",
+  mention_spam: "大量メンション",
+  invite_link: "招待リンクの投稿",
+  link_spam: "外部リンク・宣伝行為",
 } satisfies Record<EscalationOutcome["violationType"], string>;
 
 const ACTION_LABELS = {
@@ -85,7 +89,7 @@ async function sendWarningDm(message: Message, outcome: EscalationOutcome): Prom
  * windowSeconds(最大でも数十秒)以内のメッセージのみのため実質問題にならない。
  * 失敗時は例外を投げる(呼び出し側の責務でハンドリングする)。
  */
-async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
+export async function deleteBufferedMessages(message: Message, bufferedMessageIds: readonly string[]): Promise<void> {
   const channel = message.channel;
   if ("bulkDelete" in channel && bufferedMessageIds.length >= 2) {
     await channel.bulkDelete(bufferedMessageIds);
@@ -108,44 +112,59 @@ async function deleteBufferedMessagesSafely(message: Message, outcome: Escalatio
   }
 }
 
+export interface ExecuteActionResult {
+  result: "success" | "failed";
+  /** result="failed"の場合のみ設定する、失敗理由を表す短いコード(#350)。 */
+  failureCode?: string;
+}
+
+const SUCCESS: ExecuteActionResult = { result: "success" };
+
 /**
- * エスカレーションアクションをDiscord API経由で実行する。
+ * エスカレーションアクションをDiscord API経由で実行し、実行結果を返す(#350)。
  * bufferedMessageIds(検知の元になったバースト全体)は、warn以降どの段階に到達した場合でも
  * 常に削除する(メッセージ削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
- * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時は例外を投げずログのみ行う。
+ * 呼び出し元(gatewayイベントハンドラ)を止めないよう、失敗時も例外は投げず結果を返すのみとする。
  * 警告DMは処罰の成功後に送る(先に送ると、処罰APIが権限不足等で失敗した/memberが
  * 取得できず処罰自体が行われなかった場合に「適用されました」という誤通知になるため)。
+ * warnはmemberの有無を問わず到達しうる(#377、Webhook投稿等)。sendWarningDm(message.author.send)は
+ * Webhookに対しては通常失敗するが、既存のDMブロックユーザーへの送信失敗と同様に例外を投げず
+ * 握りつぶす。warnの主目的は違反メッセージの削除であり、DM到達は副次的なベストエフォートの
+ * ため、DM失敗によってresultをfailedにはしない(Codexレビュー指摘、既存の意図的な設計)。
  */
-export async function executeEscalationAction(message: Message, outcome: EscalationOutcome): Promise<void> {
+export async function executeEscalationAction(message: Message, outcome: EscalationOutcome): Promise<ExecuteActionResult> {
   try {
     switch (outcome.actionType) {
       case "warn":
         await deleteBufferedMessagesSafely(message, outcome);
         await sendWarningDm(message, outcome);
-        return;
+        return SUCCESS;
       case "unban":
-        return;
+        return SUCCESS;
       case "timeout": {
-        if (!message.member) return;
+        // member不在(Webhook・Botメッセージ等、改善案7.2節)でも削除だけは実行する
+        // (処罰の集約と同様、削除は独立したアクション種別ではなく全段階共通の付随処理、#321)。
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.timeout(resolveTimeoutMinutes(outcome) * 60 * 1000, reasonFor(outcome));
         break;
       }
       case "kick":
-        if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.kick(reasonFor(outcome));
         break;
       case "ban":
-        if (!message.member) return;
         await deleteBufferedMessagesSafely(message, outcome);
+        if (!message.member) return { result: "failed", failureCode: "member_not_found" };
         await message.member.ban({ reason: reasonFor(outcome) });
         break;
     }
   } catch (error) {
     console.error(`moderation: failed to execute action "${outcome.actionType}" for case ${outcome.caseId}`, error);
-    return;
+    return { result: "failed", failureCode: "discord_api_error" };
   }
 
   await sendWarningDm(message, outcome);
+  return SUCCESS;
 }

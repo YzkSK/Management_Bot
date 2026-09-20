@@ -24,6 +24,86 @@ export const FLOOD_PRESETS: Readonly<Record<ModerationPreset, FloodPresetConfig>
   },
 };
 
+export interface MentionSpamPresetConfig {
+  /** 1メッセージ内のメンション数がこの値以上で単発ヒット。 */
+  singleMessageThreshold: number;
+  /** 直近windowSeconds秒間の合計メンション数がこの値以上で累積ヒット。 */
+  cumulative: { windowSeconds: number; mentionThreshold: number };
+}
+
+export const MENTION_SPAM_PRESETS: Readonly<Record<ModerationPreset, MentionSpamPresetConfig>> = {
+  weak: {
+    singleMessageThreshold: 10,
+    cumulative: { windowSeconds: 10, mentionThreshold: 15 },
+  },
+  medium: {
+    singleMessageThreshold: 6,
+    cumulative: { windowSeconds: 10, mentionThreshold: 10 },
+  },
+  strong: {
+    singleMessageThreshold: 4,
+    cumulative: { windowSeconds: 8, mentionThreshold: 6 },
+  },
+};
+
+export interface LinkSpamPresetConfig {
+  /** scoreLinkSpamの合計スコアがこの値以上でヒット(削除対象)とする。 */
+  deleteThreshold: number;
+}
+
+/**
+ * 外部リンク・宣伝のスコア方式検知(改善案5.6節)のプリセット。strikeによる段階的処罰は
+ * 既存のESCALATION_STEPSに委ねる。採点項目から外部Discord招待(+50点、invite_linkとの
+ * 役割重複のため対象外、scoreLinkSpamのコメント参照)を除いたため、理論上の最大スコアは
+ * 65点(参加24時間以内20+宣伝語句15+メンション併用20+短縮URL10)。各閾値はこの範囲に収まる
+ * よう設定する(Codexレビュー指摘: 旧weak閾値80点は最大スコアを超えヒットし得なかった)。
+ */
+export const LINK_SPAM_PRESETS: Readonly<Record<ModerationPreset, LinkSpamPresetConfig>> = {
+  weak: { deleteThreshold: 55 },
+  medium: { deleteThreshold: 45 },
+  strong: { deleteThreshold: 35 },
+};
+
+export interface RaidPresetConfig {
+  /** 直近windowSeconds秒間にmemberThreshold人以上入室でヒット。 */
+  window: { windowSeconds: number; memberThreshold: number };
+  /** 入室から起算してこの日数以内のアカウントを「新規アカウント」とみなす。 */
+  newAccountMaxAgeDays: number;
+  /** ウィンドウ内入室者に占める新規アカウント比率(0〜1)がこの値以上なら重い危険度とする。 */
+  newAccountRatioThreshold: number;
+  /**
+   * レイドヒット時、対象ユーザー全員へ一括実行するtimeoutの時間(分)。
+   * 危険度(RaidSeverity)がhighならnewAccountRatioThreshold以上の比率が新規アカウントで
+   * 占められている=より悪質とみなし、normalより長いtimeoutを適用する(設計spec「重み付け」節)。
+   */
+  timeoutMinutes: { normal: number; high: number };
+}
+
+/**
+ * レイド(大量入室)検知のプリセット。weak/medium/strongの強度ごとに
+ * ウィンドウ・人数閾値・新規アカウント判定日数・比率閾値を定義する(設計spec「重み付け」節)。
+ */
+export const RAID_PRESETS: Readonly<Record<ModerationPreset, RaidPresetConfig>> = {
+  weak: {
+    window: { windowSeconds: 30, memberThreshold: 15 },
+    newAccountMaxAgeDays: 3,
+    newAccountRatioThreshold: 0.8,
+    timeoutMinutes: { normal: 10, high: 30 },
+  },
+  medium: {
+    window: { windowSeconds: 30, memberThreshold: 10 },
+    newAccountMaxAgeDays: 7,
+    newAccountRatioThreshold: 0.6,
+    timeoutMinutes: { normal: 30, high: 60 },
+  },
+  strong: {
+    window: { windowSeconds: 30, memberThreshold: 6 },
+    newAccountMaxAgeDays: 14,
+    newAccountRatioThreshold: 0.4,
+    timeoutMinutes: { normal: 60, high: 1440 },
+  },
+};
+
 /**
  * エスカレーション段階1件分。actionType="timeout"の場合のみtimeoutMinutesを持つ
  * (#322、タイムアウトの多段階化)。それ以外のactionTypeではtimeoutMinutesを持たない。

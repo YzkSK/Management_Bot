@@ -11,6 +11,7 @@ import {
 } from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type GuildAccessStatus, type GuildMembership, type MemberPage, type RoleOption } from "@management-bot/dashboard-access";
+import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { moderationRouter } from "./index.js";
 import { MODERATION_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
@@ -173,6 +174,36 @@ describe("moderationRouter.listWhitelist / addToWhitelist / removeFromWhitelist"
   });
 });
 
+describe("moderationRouter.listNgwords / addNgword / removeNgword", () => {
+  test("MANAGE_MODERATIONを持たない場合listNgwordsはFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.listNgwords({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("追加したNGワードがlistNgwordsに反映され、削除すると消える", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    const row = await caller.addNgword({ guildId, matchType: "exact", pattern: "banned" });
+    expect(await caller.listNgwords({ guildId })).toEqual([{ id: row.id, matchType: "exact", pattern: "banned" }]);
+
+    await caller.removeNgword({ guildId, id: row.id });
+    expect(await caller.listNgwords({ guildId })).toEqual([]);
+  });
+
+  test("危険な正規表現(ネストした量指定子)の追加はBAD_REQUEST", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(caller.addNgword({ guildId, matchType: "regex", pattern: "(a+)+" }));
+
+    expect(error).toBeInstanceOf(TRPCError);
+    expect((error as TRPCError).code).toBe("BAD_REQUEST");
+    expect(await caller.listNgwords({ guildId })).toEqual([]);
+  });
+});
+
 describe("moderationRouter.listStrikes / resetStrike", () => {
   test("MANAGE_MODERATIONを持たない場合listStrikesはFORBIDDEN", async () => {
     const caller = createCaller(buildContext());
@@ -232,6 +263,28 @@ describe("moderationRouter.getEscalationPreset / setEscalationPreset", () => {
     await caller.setEscalationPreset({ guildId, preset: "strong" });
 
     expect(await caller.getEscalationPreset({ guildId })).toBe("strong");
+  });
+});
+
+describe("moderationRouter.getLockdownSettings / setLockdown", () => {
+  test("MANAGE_MODERATIONを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.getLockdownSettings({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("自動ロックと手動ロック要求を個別に保存して取得できる", async () => {
+    await grant(CAPABILITIES.MANAGE_MODERATION);
+    const caller = createCaller(buildContext());
+
+    await caller.setAutoLockdownOnRaid({ guildId, enabled: true });
+    await caller.setLockdownRequested({ guildId, requestedLocked: true });
+
+    expect(await caller.getLockdownSettings({ guildId })).toEqual({
+      autoLockdownOnRaid: true,
+      requestedLocked: true,
+      isLocked: false,
+    });
   });
 });
 

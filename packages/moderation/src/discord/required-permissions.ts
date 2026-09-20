@@ -6,6 +6,7 @@ import { PermissionFlagsBits } from "discord.js";
  */
 export const MODERATION_REQUIRED_PERMISSIONS =
   PermissionFlagsBits.ManageMessages |
+  PermissionFlagsBits.ManageChannels |
   PermissionFlagsBits.ModerateMembers |
   PermissionFlagsBits.KickMembers |
   PermissionFlagsBits.BanMembers;

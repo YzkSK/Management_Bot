@@ -10,8 +10,9 @@ describe("moderationFeatureModule", () => {
 
   test("registerDiscordHandlersはエラーなく実行できる", () => {
     const on = mock(() => undefined);
+    const once = mock(() => undefined);
     const ctx = {
-      client: { on },
+      client: { on, once, isReady: () => false },
       db: {} as Db,
       databaseUrl: "postgres://invalid-test-host/db",
       redisUrl: "redis://invalid-test-host:6379",

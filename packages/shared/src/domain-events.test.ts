@@ -54,9 +54,47 @@ describe("moderationActionRecordedSchema", () => {
       moderatorId: "3",
       action: "create",
       actionType: "ban",
+      incident: {
+        violationType: "link_spam",
+        score: 78,
+        matchedMessageCount: 1,
+        deletedMessageCount: 2,
+        strikeCount: 3,
+      },
       createdAt: "2026-08-29T00:00:00.000Z",
     });
     expect(result.actionType).toBe("ban");
+    expect(result.incident).toEqual({
+      violationType: "link_spam",
+      score: 78,
+      matchedMessageCount: 1,
+      deletedMessageCount: 2,
+      strikeCount: 3,
+    });
+  });
+
+  test("raid incident retains severity and target count", () => {
+    const result = moderationActionRecordedSchema.parse({
+      type: "moderation.action.recorded",
+      guildId: "1",
+      caseId: "case-1",
+      targetUserId: "2",
+      moderatorId: "3",
+      action: "create",
+      actionType: "timeout",
+      timeoutMinutes: 10,
+      incident: {
+        violationType: "raid",
+        score: null,
+        matchedMessageCount: 6,
+        deletedMessageCount: 0,
+        strikeCount: null,
+        raidSeverity: "high",
+        raidTargetCount: 6,
+      },
+      createdAt: "2026-08-29T00:00:00.000Z",
+    });
+    expect(result.incident.raidTargetCount).toBe(6);
   });
 
   test("未知のactionTypeは拒否する", () => {
@@ -69,6 +107,63 @@ describe("moderationActionRecordedSchema", () => {
         moderatorId: "3",
         action: "create",
         actionType: "notAnActionType",
+        createdAt: "2026-08-29T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  test("action=resolveはresultを含めてparseできる", () => {
+    const result = moderationActionRecordedSchema.parse({
+      type: "moderation.action.recorded",
+      guildId: "1",
+      caseId: "case-1",
+      targetUserId: "2",
+      moderatorId: "3",
+      action: "resolve",
+      actionType: "ban",
+      result: "failed",
+      failureCode: "member_not_found",
+      incident: {
+        violationType: "link_spam",
+        score: 78,
+        matchedMessageCount: 1,
+        deletedMessageCount: 2,
+        strikeCount: 3,
+      },
+      createdAt: "2026-08-29T00:00:00.000Z",
+    });
+    expect(result.action).toBe("resolve");
+    if (result.action === "resolve") {
+      expect(result.result).toBe("failed");
+      expect(result.failureCode).toBe("member_not_found");
+    }
+  });
+
+  test("action=resolveでresultが欠けている場合は拒否する", () => {
+    expect(() =>
+      moderationActionRecordedSchema.parse({
+        type: "moderation.action.recorded",
+        guildId: "1",
+        caseId: "case-1",
+        targetUserId: "2",
+        moderatorId: "3",
+        action: "resolve",
+        actionType: "ban",
+        createdAt: "2026-08-29T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  test("action=updateは拒否する(未使用のため選択肢から除外)", () => {
+    expect(() =>
+      moderationActionRecordedSchema.parse({
+        type: "moderation.action.recorded",
+        guildId: "1",
+        caseId: "case-1",
+        targetUserId: "2",
+        moderatorId: "3",
+        action: "update",
+        actionType: "ban",
         createdAt: "2026-08-29T00:00:00.000Z",
       }),
     ).toThrow();

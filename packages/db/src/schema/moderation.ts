@@ -1,14 +1,19 @@
-import { boolean, check, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
 import {
+  MODERATION_ESCALATION_VIOLATION_TYPES,
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,
+  type ModerationEscalationViolationType,
   type ModerationPreset,
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { guilds } from "./core.js";
 
 type ModerationWhitelistTargetType = "user" | "role";
+type ModerationNgwordMatchType = "exact" | "contains" | "regex";
+
+const MODERATION_NGWORD_MATCH_TYPES = ["exact", "contains", "regex"] as const;
 
 function enumCheck(column: Column, values: readonly string[]): SQL {
   return sql`${column} IN (${sql.join(
@@ -44,7 +49,7 @@ export const moderationEscalationState = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    violationType: text("violation_type").$type<ModerationViolationType>().notNull(),
+    violationType: text("violation_type").$type<ModerationEscalationViolationType>().notNull(),
     strikeCount: integer("strike_count").notNull().default(0),
     lastViolationAt: timestamp("last_violation_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -52,7 +57,7 @@ export const moderationEscalationState = pgTable(
     primaryKey({ columns: [table.guildId, table.userId, table.violationType] }),
     check(
       "moderation_escalation_state_violation_type_check",
-      enumCheck(table.violationType, MODERATION_VIOLATION_TYPES),
+      enumCheck(table.violationType, MODERATION_ESCALATION_VIOLATION_TYPES),
     ),
     check("moderation_escalation_state_strike_count_check", sql`${table.strikeCount} >= 0`),
   ],
@@ -82,6 +87,65 @@ export const moderationWhitelist = pgTable(
   ],
 );
 
+export const moderationNgwords = pgTable(
+  "moderation_ngwords",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    matchType: text("match_type").$type<ModerationNgwordMatchType>().notNull(),
+    pattern: text("pattern").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("moderation_ngwords_match_type_check", enumCheck(table.matchType, MODERATION_NGWORD_MATCH_TYPES)),
+    index("moderation_ngwords_guild_id_idx").on(table.guildId),
+  ],
+);
+
+export const moderationRaidState = pgTable(
+  "moderation_raid_state",
+  {
+    guildId: text("guild_id")
+      .primaryKey()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    incidentCount: integer("incident_count").notNull().default(0),
+    lastRaidAt: timestamp("last_raid_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("moderation_raid_state_incident_count_check", sql`${table.incidentCount} >= 0`)],
+);
+
+/**
+ * ロックダウンの要求・適用状態。requestedLockedはDashboardまたはレイド検知が要求した状態、
+ * isLockedはDiscord側の@everyone送信権限変更まで完了した状態を表す。
+ */
+export const moderationLockdownSettings = pgTable(
+  "moderation_lockdown_settings",
+  {
+    guildId: text("guild_id")
+      .primaryKey()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    autoLockdownOnRaid: boolean("auto_lockdown_on_raid").notNull().default(false),
+    requestedLocked: boolean("requested_locked").notNull().default(false),
+    isLocked: boolean("is_locked").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/** ロック前の@everyone SendMessages overwriteを復元するためのチャンネル単位スナップショット。 */
+export const moderationLockdownChannelSnapshots = pgTable(
+  "moderation_lockdown_channel_snapshots",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    sendMessages: boolean("send_messages"),
+  },
+  (table) => [primaryKey({ columns: [table.guildId, table.channelId] })],
+);
+
 export const moderationEscalationSettings = pgTable(
   "moderation_escalation_settings",
   {
@@ -95,5 +159,25 @@ export const moderationEscalationSettings = pgTable(
       "moderation_escalation_settings_preset_check",
       enumCheck(table.preset, MODERATION_PRESETS),
     ),
+  ],
+);
+
+/**
+ * モデレーション処理がDiscordへ削除を依頼する直前に保存する、メッセージIDとcaseIdの短期対応表。
+ * GatewayのmessageDeleteBulkは元の処分操作を持たないため、logging側が因果関係を復元するために使う。
+ */
+export const moderationMessageDeletionLinks = pgTable(
+  "moderation_message_deletion_links",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    messageId: text("message_id").notNull(),
+    caseId: text("case_id").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.guildId, table.messageId] }),
+    index("moderation_message_deletion_links_expires_at_idx").on(table.expiresAt),
   ],
 );

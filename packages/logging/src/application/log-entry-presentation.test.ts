@@ -10,10 +10,15 @@ function actionsOf(category: keyof typeof LOG_ENTRY_SCHEMAS): string[] {
   const schema = LOG_ENTRY_SCHEMAS[category];
   const def = schema.def as {
     shape?: { action: { def: { entries?: Record<string, string> } } };
-    options?: { def: { shape: { action: { def: { values: string[] } } } } }[];
+    options?: { def: { shape: { action: { def: { entries?: Record<string, string>; values?: string[] } } } } }[];
   };
   if (def.shape) return Object.values(def.shape.action.def.entries ?? {});
-  if (def.options) return def.options.map((option) => option.def.shape.action.def.values[0]!);
+  if (def.options) {
+    return def.options.flatMap((option) => {
+      const actionDef = option.def.shape.action.def;
+      return Object.values(actionDef.entries ?? actionDef.values ?? []);
+    });
+  }
   return [];
 }
 
@@ -22,7 +27,11 @@ describe("getPresentation", () => {
     for (const category of Object.keys(LOG_ENTRY_SCHEMAS) as (keyof typeof LOG_ENTRY_SCHEMAS)[]) {
       if (category === "auditLogCorrelation") continue;
       for (const action of actionsOf(category)) {
-        const presentation = getPresentation({ category, action } as never);
+        const entry =
+          category === "moderationCase" && action === "resolve"
+            ? { category, action, result: "success" }
+            : { category, action };
+        const presentation = getPresentation(entry as never);
         expect(presentation.title, `${category}/${action}`).not.toBe("ログイベント");
         expect(presentation.icon, `${category}/${action}`).not.toBe("ℹ️");
       }
