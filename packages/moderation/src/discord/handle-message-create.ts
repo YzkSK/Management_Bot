@@ -80,8 +80,12 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
     joinedAt: message.member?.joinedAt ?? undefined,
   });
 
-  const appendedToSettlingBurst =
-    outcomes.length === 0 && lockedMessageIds.length === 0 && deps.burstSettlementCoordinator.append(key, message.id);
+  const canSettleAdditionalMessage = outcomes.length === 0 && lockedMessageIds.length === 0;
+  const appendedToSettlingBurst = canSettleAdditionalMessage && deps.burstSettlementCoordinator.append(key, message.id);
+  const postLimitDrain =
+    canSettleAdditionalMessage && !appendedToSettlingBurst
+      ? deps.burstSettlementCoordinator.appendPostLimitDrain(key, message.id)
+      : undefined;
 
   if (outcomes.length === 0) {
     // strikeロック中でも検知されたメッセージ(ngword/mention_spam/invite_link)は
@@ -92,11 +96,19 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
       } catch (error) {
         console.error("moderation: failed to delete locked messages", error);
       }
-    } else if (!appendedToSettlingBurst && deps.burstSettlementCoordinator.consumePostLimitDrain(key)) {
+    } else if (postLimitDrain?.role === "leader") {
       // 収束待ちが上限に達した後も連投が続く場合、strike lockのため次のoutcomeにはならない。
-      // 1秒の無投稿期間までこの経路で削除し、削除漏れを防ぐ。
+      // 追加分も別バッチで削除し、投稿ログを一括削除ログの配下へ畳めるようにする。
       try {
-        await deleteBufferedMessages(message, [message.id]);
+        const settled = await postLimitDrain.settled;
+        if (settled.messageIds.length >= 2 && "bulkDelete" in message.channel) {
+          await recordModerationMessageDeletionLinks(deps.db, {
+            guildId: message.guild.id,
+            caseId: settled.caseId,
+            messageIds: settled.messageIds,
+          });
+        }
+        await deleteBufferedMessages(message, settled.messageIds);
       } catch (error) {
         console.error("moderation: failed to delete post-limit messages", error);
       }
@@ -114,6 +126,7 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
             key,
             initialMessageIds: mergeBufferedMessageIds(outcomes),
             maxAdditionalMessages: threshold,
+            postLimitCaseId: target.caseId,
           })
         ).messageIds;
   // DiscordのmessageDeleteBulkイベントはbulkDelete()の実行中にも届きうるため、先に永続化する。

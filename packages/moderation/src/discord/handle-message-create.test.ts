@@ -371,7 +371,10 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
       fakeMessage({ guildId, userId, content: "trailing-2" }),
       fakeMessage({ guildId, userId, content: "trailing-3" }),
     ];
-    const afterLimit = fakeMessage({ guildId, userId, content: "trailing-4" });
+    const afterLimit = [
+      fakeMessage({ guildId, userId, content: "trailing-4" }),
+      fakeMessage({ guildId, userId, content: "trailing-5" }),
+    ];
 
     await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[0] as unknown as Message);
     await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[1] as unknown as Message);
@@ -385,9 +388,16 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     }
     await triggerTask;
 
-    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), afterLimit as unknown as Message);
+    const afterLimitTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      afterLimit[0] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), afterLimit[1] as unknown as Message);
+    clock.runOnlyTimer();
+    await afterLimitTask;
 
-    expect(afterLimit.deleteFn).toHaveBeenCalledTimes(1);
+    expect(afterLimit[0]?.bulkDelete).toHaveBeenCalledWith(afterLimit.map((message) => message.id));
   });
 
   test("一括削除の直前に削除メッセージ群とモデレーションケースを関連付ける", async () => {
