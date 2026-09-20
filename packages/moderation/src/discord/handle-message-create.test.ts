@@ -353,6 +353,43 @@ describe.skipIf(!(await isRedisAvailable()))("handleMessageCreate", () => {
     expect(eventBus.published.filter((event) => event.action === "resolve")).toHaveLength(1);
   });
 
+  test("収束待ちの上限到達後も続く連投を削除する", async () => {
+    const userId = `u-${randomUUID()}`;
+    await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });
+    await setEscalationPreset(db, guildId, "strong");
+
+    const eventBus = fakeEventBus();
+    const clock = fakeSettlementScheduler();
+    const coordinator = new BurstSettlementCoordinator(clock.scheduler);
+    const initialMessages = [
+      fakeMessage({ guildId, userId, content: "first" }),
+      fakeMessage({ guildId, userId, content: "second" }),
+      fakeMessage({ guildId, userId, content: "trigger" }),
+    ];
+    const thresholdMessages = [
+      fakeMessage({ guildId, userId, content: "trailing-1" }),
+      fakeMessage({ guildId, userId, content: "trailing-2" }),
+      fakeMessage({ guildId, userId, content: "trailing-3" }),
+    ];
+    const afterLimit = fakeMessage({ guildId, userId, content: "trailing-4" });
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[0] as unknown as Message);
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), initialMessages[1] as unknown as Message);
+    const triggerTask = handleMessageCreate(
+      deps(eventBus, { burstSettlementCoordinator: coordinator }),
+      initialMessages[2] as unknown as Message,
+    );
+    await clock.waitForTimer();
+    for (const message of thresholdMessages) {
+      await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), message as unknown as Message);
+    }
+    await triggerTask;
+
+    await handleMessageCreate(deps(eventBus, { burstSettlementCoordinator: coordinator }), afterLimit as unknown as Message);
+
+    expect(afterLimit.deleteFn).toHaveBeenCalledTimes(1);
+  });
+
   test("一括削除の直前に削除メッセージ群とモデレーションケースを関連付ける", async () => {
     const userId = `u-${randomUUID()}`;
     await db.insert(moderationThresholds).values({ guildId, violationType: "flood", preset: "strong", enabled: true });

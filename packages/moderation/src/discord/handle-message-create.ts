@@ -80,9 +80,8 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
     joinedAt: message.member?.joinedAt ?? undefined,
   });
 
-  if (outcomes.length === 0 && lockedMessageIds.length === 0) {
-    deps.burstSettlementCoordinator.append(key, message.id);
-  }
+  const appendedToSettlingBurst =
+    outcomes.length === 0 && lockedMessageIds.length === 0 && deps.burstSettlementCoordinator.append(key, message.id);
 
   if (outcomes.length === 0) {
     // strikeロック中でも検知されたメッセージ(ngword/mention_spam/invite_link)は
@@ -92,6 +91,14 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
         await deleteBufferedMessages(message, lockedMessageIds);
       } catch (error) {
         console.error("moderation: failed to delete locked messages", error);
+      }
+    } else if (!appendedToSettlingBurst && deps.burstSettlementCoordinator.consumePostLimitDrain(key)) {
+      // 収束待ちが上限に達した後も連投が続く場合、strike lockのため次のoutcomeにはならない。
+      // 1秒の無投稿期間までこの経路で削除し、削除漏れを防ぐ。
+      try {
+        await deleteBufferedMessages(message, [message.id]);
+      } catch (error) {
+        console.error("moderation: failed to delete post-limit messages", error);
       }
     }
     return;
