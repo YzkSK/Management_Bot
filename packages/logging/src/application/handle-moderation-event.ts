@@ -5,6 +5,15 @@ import type { WriteLogEntryDeps } from "./write-log-entry.js";
 
 type ModerationCaseLogEntry = Extract<LogEntry, { category: "moderationCase" }>;
 
+function isDeletedGuildForeignKeyViolation(error: unknown): boolean {
+  const matches = (value: unknown): boolean => {
+    if (typeof value !== "object" || value === null) return false;
+    const candidate = value as { code?: unknown; constraint_name?: unknown };
+    return candidate.code === "23503" && candidate.constraint_name === "log_entries_guild_id_guilds_id_fk";
+  };
+  return matches(error) || (error instanceof Error && matches(error.cause));
+}
+
 function toLogEntry(event: ModerationActionRecordedEvent): ModerationCaseLogEntry {
   const base = {
     category: "moderationCase" as const,
@@ -33,5 +42,13 @@ function toLogEntry(event: ModerationActionRecordedEvent): ModerationCaseLogEntr
 export function handleModerationEvent(
   deps: WriteLogEntryDeps,
 ): (event: ModerationActionRecordedEvent, entryId: string) => Promise<void> {
-  return (event) => writeModerationCaseLogEntry(deps, toLogEntry(event));
+  return async (event) => {
+    try {
+      await writeModerationCaseLogEntry(deps, toLogEntry(event));
+    } catch (error) {
+      // guild削除後の古いイベントは再試行しても成功しない。正常終了としてACKする。
+      if (isDeletedGuildForeignKeyViolation(error)) return;
+      throw error;
+    }
+  };
 }

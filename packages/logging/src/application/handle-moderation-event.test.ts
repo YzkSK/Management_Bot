@@ -174,4 +174,21 @@ describe("handleModerationEvent", () => {
 
     expect(insertedTables[0]).toBe(logEntries);
   });
+
+  test("削除済みguildへのログ書き込みが外部キー違反なら、イベントを再試行対象に残さない", async () => {
+    const missingGuildError = Object.assign(new Error("guild was deleted"), {
+      code: "23503",
+      constraint_name: "log_entries_guild_id_guilds_id_fk",
+    });
+    const db = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: () => ({ returning: () => Promise.reject(missingGuildError) }),
+        }),
+      }),
+    } as unknown as Db;
+    const handler = handleModerationEvent({ db, sendToChannel: mock(() => Promise.resolve()) });
+
+    await expect(handler(createEvent, "1234-0")).resolves.toBeUndefined();
+  });
 });
