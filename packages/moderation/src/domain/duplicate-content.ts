@@ -4,6 +4,53 @@ function normalize(content: string): string {
   return content.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+const CHARACTER_COSINE_SIMILARITY_THRESHOLD = 0.95;
+const COMMON_SUBSTRING_COVERAGE_THRESHOLD = 0.75;
+
+function characterFrequencies(content: string): ReadonlyMap<string, number> {
+  const frequencies = new Map<string, number>();
+  for (const character of Array.from(content)) {
+    frequencies.set(character, (frequencies.get(character) ?? 0) + 1);
+  }
+  return frequencies;
+}
+
+function characterCosineSimilarity(normA: string, normB: string): number {
+  const frequenciesA = characterFrequencies(normA);
+  const frequenciesB = characterFrequencies(normB);
+  if (frequenciesA.size === 0 || frequenciesB.size === 0) return 0;
+
+  let dotProduct = 0;
+  let magnitudeASquared = 0;
+  let magnitudeBSquared = 0;
+  for (const count of frequenciesA.values()) magnitudeASquared += count * count;
+  for (const count of frequenciesB.values()) magnitudeBSquared += count * count;
+  for (const [character, countA] of frequenciesA) {
+    dotProduct += countA * (frequenciesB.get(character) ?? 0);
+  }
+  return dotProduct / Math.sqrt(magnitudeASquared * magnitudeBSquared);
+}
+
+function hasCommonSubstringCoverage(normA: string, normB: string): boolean {
+  const charactersA = Array.from(normA);
+  const charactersB = Array.from(normB);
+  const shorterLength = Math.min(charactersA.length, charactersB.length);
+  if (shorterLength < 2) return false;
+
+  let previousRow = Array<number>(charactersB.length + 1).fill(0);
+  let longestLength = 0;
+  for (let aIndex = 1; aIndex <= charactersA.length; aIndex++) {
+    const currentRow = Array<number>(charactersB.length + 1).fill(0);
+    for (let bIndex = 1; bIndex <= charactersB.length; bIndex++) {
+      if (charactersA[aIndex - 1] !== charactersB[bIndex - 1]) continue;
+      currentRow[bIndex] = (previousRow[bIndex - 1] ?? 0) + 1;
+      longestLength = Math.max(longestLength, currentRow[bIndex] ?? 0);
+    }
+    previousRow = currentRow;
+  }
+  return longestLength / shorterLength >= COMMON_SUBSTRING_COVERAGE_THRESHOLD;
+}
+
 function similarityOfNormalized(normA: string, normB: string): number {
   const maxLength = Math.max(normA.length, normB.length);
   if (maxLength === 0) return 1;
@@ -32,5 +79,9 @@ export function isDuplicateContent(a: string, b: string, similarityThreshold: nu
   const normA = normalize(a);
   const normB = normalize(b);
   if (normA === "" && normB === "") return false;
-  return similarityOfNormalized(normA, normB) >= similarityThreshold;
+  return (
+    similarityOfNormalized(normA, normB) >= similarityThreshold ||
+    characterCosineSimilarity(normA, normB) >= CHARACTER_COSINE_SIMILARITY_THRESHOLD ||
+    hasCommonSubstringCoverage(normA, normB)
+  );
 }

@@ -37,6 +37,23 @@ describe("isDuplicateContent", () => {
     expect(isDuplicateContent("hello world", "hallo world", 0.9)).toBe(true);
   });
 
+  test("同じ一文字を繰り返す短文は高閾値でもコサイン類似度でヒットする", () => {
+    expect(isDuplicateContent("a", "aa", 0.95)).toBe(true);
+    expect(isDuplicateContent("aa", "aaa", 0.95)).toBe(true);
+  });
+
+  test("語尾や補足を加えた投稿は共通連続文字列の被覆率でヒットする", () => {
+    expect(isDuplicateContent("これはテストです", "これはテストみたいです", 0.95)).toBe(true);
+  });
+
+  test("1文字だけの偶然の共通部分は共通文字列判定でヒットしない", () => {
+    expect(isDuplicateContent("a", "ab", 0.95)).toBe(false);
+  });
+
+  test("共通文字列を持たない投稿は新しい判定でもヒットしない", () => {
+    expect(isDuplicateContent("apple", "banana", 0.95)).toBe(false);
+  });
+
   test("similarityThresholdが0〜1の範囲外はRangeError", () => {
     expect(() => isDuplicateContent("a", "b", -0.01)).toThrow(RangeError);
     expect(() => isDuplicateContent("a", "b", 1.01)).toThrow(RangeError);
