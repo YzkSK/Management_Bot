@@ -28,6 +28,14 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "サーバー宣伝させてください" }))).toBe(15);
   });
 
+  test("宣伝語句に近い表記でも15点", () => {
+    expect(scoreLinkSpam(baseInput({ content: "相互フォロ一お願いします" }))).toBe(15);
+  });
+
+  test("一部の文字が偶然共通するだけの文面は宣伝語句として加点しない", () => {
+    expect(scoreLinkSpam(baseInput({ content: "相互案内をします" }))).toBe(0);
+  });
+
   test("メンションとURL(プロトコルあり)の併用で20点", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://example.com/join" }))).toBe(20);
   });

@@ -1,4 +1,5 @@
 import { countMentions } from "./mention-spam.js";
+import { isDuplicateContent } from "./duplicate-content.js";
 
 /**
  * Discord招待リンクのURL部分(https?://含む)を検出して除去するための正規表現。
@@ -58,6 +59,15 @@ const PROMOTIONAL_PHRASES = [
   "参加してね",
 ] as const;
 
+/** 宣伝語句の表記ゆれを狭く検知するため、duplicate_contentと同じ高い閾値を使う。 */
+const PROMOTIONAL_PHRASE_SIMILARITY_THRESHOLD = 0.95;
+
+function hasPromotionalPhrase(content: string): boolean {
+  return PROMOTIONAL_PHRASES.some((phrase) =>
+    isDuplicateContent(content, phrase, PROMOTIONAL_PHRASE_SIMILARITY_THRESHOLD),
+  );
+}
+
 /**
  * メンション併用判定用のURL検出。プロトコルあり("https://...")に加え、
  * プロトコルなしのドメイン形式(例: "example.com/path")も拾う。
@@ -92,7 +102,7 @@ export function scoreLinkSpam(input: LinkSpamScoreInput): number {
   if (input.msSinceJoined !== undefined && input.msSinceJoined >= 0 && input.msSinceJoined <= RECENTLY_JOINED_MS) {
     score += 20;
   }
-  if (PROMOTIONAL_PHRASES.some((phrase) => input.content.includes(phrase))) score += 15;
+  if (hasPromotionalPhrase(input.content)) score += 15;
   // メンション併用のURL判定はDiscord招待リンク部分を除いた本文で行う(招待リンクの検知は
   // invite_link専用とし、link_spam側で間接的にヒットさせて二重にstrikeが加算されるのを防ぐ)。
   const contentWithoutInviteUrls = stripDiscordInviteUrls(input.content);
