@@ -924,10 +924,6 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
                   <span>{userName}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">スコア</span>
-                  <span>{incident?.score ?? "—"}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
                   <span className="text-muted-foreground font-semibold tracking-wide uppercase">ストライク</span>
                   <span>{incident?.strikeCount ?? "—"}</span>
                 </div>

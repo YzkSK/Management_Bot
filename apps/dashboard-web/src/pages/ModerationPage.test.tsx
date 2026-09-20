@@ -162,6 +162,7 @@ describe("ModerationPage", () => {
 
       expect(html).toContain('aria-expanded="true"');
       expect(html).toContain("case-raid");
+      expect(html).not.toContain("スコア");
       expect(html).toContain("timeout / failed (MISSING_PERMISSIONS)");
       expect(html).toContain("高危険度 / 対象 6件 / 削除 0件");
     } finally {
