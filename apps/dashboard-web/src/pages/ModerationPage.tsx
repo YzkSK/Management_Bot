@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   MODERATION_PRESETS,
@@ -19,6 +19,7 @@ import {
   VIOLATION_TYPE_LABELS,
   type NgwordMatchType,
 } from "./moderation-labels.js";
+import { formatCreatedAt } from "./format-created-at.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -841,6 +842,30 @@ function StrikeTab({ guildId }: { guildId: string }) {
 
 export function ModerationHistoryTab({ guildId }: { guildId: string }) {
   const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }));
+  const targetUserIds = useMemo(
+    () =>
+      query.data
+        ? Array.from(
+            new Set(
+              query.data.entries.flatMap(({ entry }) => (entry.category === "moderationCase" ? [entry.targetUserId] : [])),
+            ),
+          ).sort()
+        : [],
+    [query.data],
+  );
+  const namesQuery = useQuery({
+    ...trpc.logging.resolveDisplayNames.queryOptions({ guildId, userIds: targetUserIds, channelIds: [] }),
+    enabled: targetUserIds.length > 0,
+  });
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   if (query.isPending) return <div className="text-sm">読み込み中...</div>;
   if (query.isError || !query.data) {
@@ -853,48 +878,73 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
   if (query.data.entries.length === 0) return <div className="text-sm">検知履歴はありません。</div>;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>ケース ID</TableHead>
-          <TableHead>違反</TableHead>
-          <TableHead>対象</TableHead>
-          <TableHead>スコア</TableHead>
-          <TableHead>ストライク</TableHead>
-          <TableHead>処分 / 結果</TableHead>
-          <TableHead>検知詳細</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {query.data.entries.map(({ id, entry }) => {
-          if (entry.category !== "moderationCase") return null;
-          const { incident } = entry;
-          const result = entry.action === "resolve" ? entry.result : "実行中";
-          const actionResult = `${entry.actionType} / ${result}${entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}`;
-          const violation = incident
-            ? incident.violationType === "raid"
-              ? "レイド"
-              : VIOLATION_TYPE_LABELS[incident.violationType]
-            : "旧ログ";
-          const details = incident
-            ? incident.violationType === "raid"
-              ? `${incident.raidSeverity === "high" ? "高危険度" : "通常"} / 対象 ${incident.raidTargetCount}件 / 削除 ${incident.deletedMessageCount}件`
-              : `一致 ${incident.matchedMessageCount}件 / 削除 ${incident.deletedMessageCount}件`
-            : "旧ログ（詳細なし）";
-          return (
-            <TableRow key={id}>
-              <TableCell>{entry.caseId}</TableCell>
-              <TableCell>{violation}</TableCell>
-              <TableCell>{entry.targetUserId}</TableCell>
-              <TableCell>{incident?.score ?? "—"}</TableCell>
-              <TableCell>{incident?.strikeCount ?? "—"}</TableCell>
-              <TableCell>{actionResult}</TableCell>
-              <TableCell>{details}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <div className="flex flex-col gap-2">
+      {query.data.entries.map(({ id, entry }) => {
+        if (entry.category !== "moderationCase") return null;
+        const { incident } = entry;
+        const violation = incident
+          ? incident.violationType === "raid"
+            ? "レイド"
+            : VIOLATION_TYPE_LABELS[incident.violationType]
+          : "旧ログ";
+        const result = entry.action === "resolve" ? entry.result : "実行中";
+        const actionResult = `${entry.actionType} / ${result}${entry.action === "resolve" && entry.failureCode ? ` (${entry.failureCode})` : ""}`;
+        const details = incident
+          ? incident.violationType === "raid"
+            ? `${incident.raidSeverity === "high" ? "高危険度" : "通常"} / 対象 ${incident.raidTargetCount}件 / 削除 ${incident.deletedMessageCount}件`
+            : `一致 ${incident.matchedMessageCount}件 / 削除 ${incident.deletedMessageCount}件`
+          : "旧ログ（詳細なし）";
+        const detailId = `moderation-history-detail-${id}`;
+        const isExpanded = expandedIds.has(id);
+        const userName = namesQuery.data?.users[entry.targetUserId] ?? entry.targetUserId;
+        return (
+          <div key={id} className="rounded-lg border">
+            <button
+              type="button"
+              onClick={() => toggleExpanded(id)}
+              aria-expanded={isExpanded}
+              aria-controls={detailId}
+              className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
+            >
+              <span className="flex-1 text-sm">
+                {userName} / {violation}
+              </span>
+              <time dateTime={entry.createdAt} className="text-muted-foreground shrink-0 text-xs">
+                {formatCreatedAt(entry.createdAt)}
+              </time>
+            </button>
+            {isExpanded && (
+              <div id={detailId} className="grid grid-cols-2 gap-3 border-t bg-muted/40 p-3 text-xs">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">ケース ID</span>
+                  <span className="font-mono">{entry.caseId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">対象</span>
+                  <span>{userName}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">スコア</span>
+                  <span>{incident?.score ?? "—"}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">ストライク</span>
+                  <span>{incident?.strikeCount ?? "—"}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">処分 / 結果</span>
+                  <span>{actionResult}</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-semibold tracking-wide uppercase">検知詳細</span>
+                  <span>{details}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
