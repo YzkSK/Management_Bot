@@ -84,52 +84,45 @@ function ThresholdTableRow({ guildId, row }: { guildId: string; row: ThresholdSe
         />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          {isPresetIndependentViolationType(row.violationType) ? (
+        {!isPresetIndependentViolationType(row.violationType) && (
+          <div className="flex items-center gap-2">
+            <Select
+              value={row.preset}
+              disabled={mutation.isPending}
+              onValueChange={(value) =>
+                mutation.mutate({
+                  guildId,
+                  violationType: row.violationType,
+                  preset: value as ModerationPreset,
+                  enabled: row.enabled,
+                })
+              }
+            >
+              <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODERATION_PRESETS.map((preset) => (
+                  <SelectItem key={preset} value={preset}>
+                    {PRESET_LABELS[preset]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-muted-foreground text-sm underline decoration-dotted">強度共通</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
+                  aria-label={`${PRESET_LABELS[row.preset]}の検知条件を表示`}
+                >
+                  詳細
+                </button>
               </TooltipTrigger>
-              <TooltipContent>{describePreset(row.violationType, "medium")}</TooltipContent>
+              <TooltipContent>{describePreset(row.violationType, row.preset)}</TooltipContent>
             </Tooltip>
-          ) : (
-          <Select
-            value={row.preset}
-            disabled={mutation.isPending}
-            onValueChange={(value) =>
-              mutation.mutate({
-                guildId,
-                violationType: row.violationType,
-                preset: value as ModerationPreset,
-                enabled: row.enabled,
-              })
-            }
-          >
-            <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODERATION_PRESETS.map((preset) => (
-                <SelectItem key={preset} value={preset}>
-                  {PRESET_LABELS[preset]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground text-xs underline decoration-dotted"
-                aria-label={`${PRESET_LABELS[row.preset]}の検知条件を表示`}
-              >
-                詳細
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{describePreset(row.violationType, row.preset)}</TooltipContent>
-          </Tooltip>
-        </div>
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-destructive text-xs">{mutation.isError ? "保存に失敗しました" : null}</TableCell>
     </TableRow>

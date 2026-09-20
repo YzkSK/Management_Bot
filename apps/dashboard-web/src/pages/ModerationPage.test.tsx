@@ -114,6 +114,19 @@ describe("ModerationPage", () => {
     expect(html).toContain("レイド(大量入室)");
     expect(html).not.toContain("新規アカウントガード");
   });
+
+  test("強度が不要な違反種別には共通表示や詳細を出さない", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedBaseQueries(queryClient, guildId);
+    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, []);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).not.toContain("強度共通");
+    expect(html).not.toContain("強度に関わらず共通");
+    expect(html).toContain('aria-label="連投の強度"');
+  });
 });
 
 describe("Lockdown controls", () => {

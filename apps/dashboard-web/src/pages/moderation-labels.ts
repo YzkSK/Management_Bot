@@ -53,9 +53,9 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
     strong: "投稿内容の類似度が85%以上で検知",
   },
   ngword: {
-    weak: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
-    medium: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
-    strong: "登録済みNGワードに一致した投稿を検知(強度に関わらず共通)",
+    weak: "登録済みNGワードに一致した投稿を検知",
+    medium: "登録済みNGワードに一致した投稿を検知",
+    strong: "登録済みNGワードに一致した投稿を検知",
   },
   // packages/moderation/src/domain/presets.ts のMENTION_SPAM_PRESETSをUI表示用に説明文化したもの。
   mention_spam: {
@@ -65,9 +65,9 @@ const CONDITION_DESCRIPTIONS: Record<ModerationViolationType, Record<ModerationP
   },
   // packages/moderation/src/domain/presets.ts のINVITE_LINK_PRESETSをUI表示用に説明文化したもの(#186実装後に確定)。
   invite_link: {
-    weak: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
-    medium: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
-    strong: "他ギルドへの招待リンクを含む投稿を検知(強度に関わらず共通)",
+    weak: "他ギルドへの招待リンクを含む投稿を検知",
+    medium: "他ギルドへの招待リンクを含む投稿を検知",
+    strong: "他ギルドへの招待リンクを含む投稿を検知",
   },
   // packages/moderation/src/domain/presets.ts のLINK_SPAM_PRESETSをUI表示用に説明文化したもの。
   link_spam: {
