@@ -8,6 +8,7 @@ import {
 } from "@management-bot/shared";
 import { buildTempVoiceChannelName, canCreateTempVoiceInCategory } from "../domain/index.js";
 import { findOwnedTempVoiceChannelId, getTempVoiceConfig, insertTempVoiceChannel } from "../application/index.js";
+import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
 import {
   ChannelType,
   MessageFlags,
@@ -142,7 +143,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   await controlChannel
     .send({
       flags: MessageFlags.IsComponentsV2,
-      components: [new TextDisplayBuilder().setContent("一時VCの制御パネルです。(操作ボタンは今後の実装で追加されます)")],
+      components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
     })
     .then((message) => message.pin().catch(() => {}))
     .catch(() => {
