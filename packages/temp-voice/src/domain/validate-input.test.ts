@@ -48,6 +48,10 @@ describe("validateUserLimit", () => {
   test("小数は拒否する", () => {
     expect(validateUserLimit("5.5").ok).toBe(false);
   });
+
+  test("空白のみの入力は拒否する(Number('')===0による無制限への誤変換を防ぐ)", () => {
+    expect(validateUserLimit("   ").ok).toBe(false);
+  });
 });
 
 describe("validateBitrateKbps", () => {
@@ -69,7 +73,19 @@ describe("validateBitrateKbps", () => {
     expect(validateBitrateKbps("0", 128_000).ok).toBe(false);
   });
 
+  test("8kbps未満(Discordの下限未満)は拒否する", () => {
+    expect(validateBitrateKbps("7", 128_000).ok).toBe(false);
+  });
+
+  test("8kbpsちょうどは許可する", () => {
+    expect(validateBitrateKbps("8", 128_000)).toEqual({ ok: true, value: 8_000 });
+  });
+
   test("数値でない文字列は拒否する", () => {
     expect(validateBitrateKbps("abc", 128_000).ok).toBe(false);
+  });
+
+  test("空白のみの入力は拒否する", () => {
+    expect(validateBitrateKbps("   ", 128_000).ok).toBe(false);
   });
 });

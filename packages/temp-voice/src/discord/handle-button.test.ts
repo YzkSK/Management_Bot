@@ -13,7 +13,7 @@ function fakeDb(row: typeof OWNED_ROW | null) {
 
 function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
   const overwriteStore = new Map<string, { deny: { has: (bit: bigint) => boolean } }>();
-  return {
+  const channel: Record<string, unknown> = {
     id: "vc-1",
     name: "太郎のVC",
     userLimit: 5,
@@ -21,6 +21,7 @@ function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
     guild: { roles: { everyone: { id: "everyone-id" } } },
     permissionOverwrites: {
       cache: { get: (id: string) => overwriteStore.get(id) },
+      // editの戻り値は更新後のチャンネル(discord.jsの実挙動)。呼び出し元がこれを使ってパネルを再描画する。
       edit: mock((_id: string, changes: Record<string, unknown>) => {
         overwriteStore.set("everyone-id", {
           deny: {
@@ -31,12 +32,13 @@ function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
             },
           },
         });
-        return Promise.resolve();
+        return Promise.resolve(channel);
       }),
     },
     isVoiceBased: () => true,
     ...overrides,
   };
+  return channel;
 }
 
 function fakeInteraction(customId: string, userId: string, voiceChannel: unknown) {
@@ -47,12 +49,17 @@ function fakeInteraction(customId: string, userId: string, voiceChannel: unknown
     reply: mock(() => Promise.resolve()),
     update: mock(() => Promise.resolve()),
     showModal: mock(() => Promise.resolve()),
+    deferUpdate: mock(() => Promise.resolve()),
+    editReply: mock(() => Promise.resolve()),
+    followUp: mock(() => Promise.resolve()),
   } as unknown as ButtonInteraction;
 }
 
+const ALWAYS_ALLOW_RENAME = () => true;
+
 describe("handleTempVoiceButton", () => {
   test("temp-voice以外のcustomIdは無視する", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("other:action:1", "owner-1", fakeVoiceChannel());
 
     await handleTempVoiceButton(deps, interaction);
@@ -61,7 +68,7 @@ describe("handleTempVoiceButton", () => {
   });
 
   test("DBにレコードが無ければオーナー拒否メッセージを返す", async () => {
-    const deps = { db: fakeDb(null), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(null), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("temp-voice:toggleLock:vc-1", "owner-1", fakeVoiceChannel());
 
     await handleTempVoiceButton(deps, interaction);
@@ -70,7 +77,7 @@ describe("handleTempVoiceButton", () => {
   });
 
   test("オーナー以外が押すと拒否メッセージを返す", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("temp-voice:toggleLock:vc-1", "someone-else", fakeVoiceChannel());
 
     await handleTempVoiceButton(deps, interaction);
@@ -79,7 +86,7 @@ describe("handleTempVoiceButton", () => {
   });
 
   test("VCが既に削除されている場合は案内する", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("temp-voice:toggleLock:vc-1", "owner-1", undefined);
 
     await handleTempVoiceButton(deps, interaction);
@@ -88,7 +95,7 @@ describe("handleTempVoiceButton", () => {
   });
 
   test("rename: レート制限内ならモーダルを表示する", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("temp-voice:rename:vc-1", "owner-1", fakeVoiceChannel());
 
     await handleTempVoiceButton(deps, interaction);
@@ -96,10 +103,8 @@ describe("handleTempVoiceButton", () => {
     expect(interaction.showModal).toHaveBeenCalledTimes(1);
   });
 
-  test("rename: 直近10分に2回実行済みならレート制限メッセージを返す", async () => {
-    const now = Date.now();
-    const renameTimestamps = new Map([["vc-1", [now - 60_000, now - 30_000]]]);
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps } as unknown as HandleButtonDeps;
+  test("rename: canRenameがfalseを返せばレート制限メッセージを返す", async () => {
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: () => false } as unknown as HandleButtonDeps;
     const interaction = fakeInteraction("temp-voice:rename:vc-1", "owner-1", fakeVoiceChannel());
 
     await handleTempVoiceButton(deps, interaction);
@@ -109,34 +114,53 @@ describe("handleTempVoiceButton", () => {
   });
 
   test("userLimit/bitrate: モーダルを表示する", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
 
     await handleTempVoiceButton(deps, fakeInteraction("temp-voice:userLimit:vc-1", "owner-1", fakeVoiceChannel()));
     await handleTempVoiceButton(deps, fakeInteraction("temp-voice:bitrate:vc-1", "owner-1", fakeVoiceChannel()));
   });
 
-  test("toggleLock: 未ロックならConnectをfalseにし、update+イベント発行する", async () => {
+  test("toggleLock: 未ロックならConnectをfalseにし、deferUpdate+editReply+イベント発行する", async () => {
     const publish = mock(() => Promise.resolve());
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const voiceChannel = fakeVoiceChannel();
     const interaction = fakeInteraction("temp-voice:toggleLock:vc-1", "owner-1", voiceChannel);
 
     await handleTempVoiceButton(deps, interaction);
 
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
     expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
       "everyone-id",
       { Connect: false },
       expect.objectContaining({ reason: expect.any(String) }),
     );
-    expect(interaction.update).toHaveBeenCalledTimes(1);
+    expect(interaction.editReply).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ action: "permissionChanged", permission: "connect", allowed: false }),
     );
   });
 
+  test("toggleLock: permissionOverwrites.editが失敗したらephemeralフォローアップを送り例外をthrowする", async () => {
+    const publish = mock(() => Promise.resolve());
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
+    const voiceChannel = fakeVoiceChannel({
+      permissionOverwrites: {
+        cache: { get: () => undefined },
+        edit: mock(() => Promise.reject(new Error("missing permissions"))),
+      },
+    });
+    const interaction = fakeInteraction("temp-voice:toggleLock:vc-1", "owner-1", voiceChannel);
+
+    await expect(handleTempVoiceButton(deps, interaction)).rejects.toThrow();
+
+    expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.any(String) }));
+    expect(interaction.editReply).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   test("toggleHide: 未非表示ならViewChannelをfalseにする", async () => {
     const publish = mock(() => Promise.resolve());
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish }, renameTimestamps: new Map() } as unknown as HandleButtonDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
     const voiceChannel = fakeVoiceChannel();
     const interaction = fakeInteraction("temp-voice:toggleHide:vc-1", "owner-1", voiceChannel);
 
