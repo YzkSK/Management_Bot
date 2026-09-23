@@ -5,9 +5,18 @@ import { handleTempVoiceButton, type HandleButtonDeps } from "./handle-button.js
 
 const OWNED_ROW = { channelId: "vc-1", guildId: "g1", controlChannelId: "ctrl-1", ownerId: "owner-1" };
 
-function fakeDb(row: typeof OWNED_ROW | null) {
+function fakeDb(row: typeof OWNED_ROW | null, overrides: unknown[] = []) {
+  let selectCallCount = 0;
   return {
-    select: () => ({ from: () => ({ where: () => Promise.resolve(row ? [row] : []) }) }),
+    select: () => ({
+      from: () => ({
+        where: () => {
+          selectCallCount += 1;
+          // 1回目=findTempVoiceChannel、2回目以降=listPermissionOverrides(manageMembers時のみ)。
+          return Promise.resolve(selectCallCount === 1 ? (row ? [row] : []) : overrides);
+        },
+      }),
+    }),
   };
 }
 
@@ -45,7 +54,11 @@ function fakeInteraction(customId: string, userId: string, voiceChannel: unknown
   return {
     customId,
     user: { id: userId, displayName: "user" },
-    guild: { channels: { cache: { get: () => voiceChannel } } },
+    guild: {
+      channels: { cache: { get: () => voiceChannel } },
+      members: { cache: { get: () => undefined } },
+      roles: { cache: { get: () => undefined } },
+    },
     reply: mock(() => Promise.resolve()),
     update: mock(() => Promise.resolve()),
     showModal: mock(() => Promise.resolve()),
@@ -174,5 +187,36 @@ describe("handleTempVoiceButton", () => {
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ action: "permissionChanged", permission: "view", allowed: false }),
     );
+  });
+
+  test("permitMember: セレクトUIをephemeralでreplyする", async () => {
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
+    const interaction = fakeInteraction("temp-voice:permitMember:vc-1", "owner-1", fakeVoiceChannel());
+
+    await handleTempVoiceButton(deps, interaction);
+
+    const replyArg = (interaction.reply as ReturnType<typeof mock>).mock.calls[0]?.[0];
+    expect(JSON.stringify(replyArg)).toContain("temp-voice:permitMemberUser:vc-1");
+  });
+
+  test("denyMember: セレクトUIをephemeralでreplyする", async () => {
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
+    const interaction = fakeInteraction("temp-voice:denyMember:vc-1", "owner-1", fakeVoiceChannel());
+
+    await handleTempVoiceButton(deps, interaction);
+
+    const replyArg = (interaction.reply as ReturnType<typeof mock>).mock.calls[0]?.[0];
+    expect(JSON.stringify(replyArg)).toContain("temp-voice:denyMemberUser:vc-1");
+  });
+
+  test("manageMembers: 登録済みoverride一覧をephemeralでreplyする", async () => {
+    const overrides = [{ channelId: "vc-1", targetType: "user", targetId: "user-1", state: "allow" }];
+    const deps = { db: fakeDb(OWNED_ROW, overrides), eventBus: { publish: mock() }, canRename: ALWAYS_ALLOW_RENAME } as unknown as HandleButtonDeps;
+    const interaction = fakeInteraction("temp-voice:manageMembers:vc-1", "owner-1", fakeVoiceChannel());
+
+    await handleTempVoiceButton(deps, interaction);
+
+    const replyArg = (interaction.reply as ReturnType<typeof mock>).mock.calls[0]?.[0];
+    expect(JSON.stringify(replyArg)).toContain("temp-voice:removeMember:vc-1:user:user-1");
   });
 });

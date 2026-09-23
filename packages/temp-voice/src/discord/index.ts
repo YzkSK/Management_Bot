@@ -3,6 +3,8 @@ import { canRenameWithinRateLimit } from "../domain/index.js";
 import { handleVoiceCreate } from "./voice-create.js";
 import { handleTempVoiceButton } from "./handle-button.js";
 import { handleTempVoiceModalSubmit } from "./handle-modal-submit.js";
+import { handleTempVoiceSelectMenu } from "./handle-select-menu.js";
+import { handleTempVoiceRemoveMember } from "./handle-remove-member.js";
 
 export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   const voiceCreateDeps = { db: ctx.db, eventBus: ctx.eventBus };
@@ -34,16 +36,33 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   };
 
   ctx.client.on("interactionCreate", (interaction) => {
-    // 他機能パッケージのボタン/モーダルと混在するため、customIdのprefixで早期に絞り込む。
-    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+    // 他機能パッケージのボタン/モーダル/セレクトメニューと混在するため、customIdのprefixで早期に絞り込む。
+    if (!interaction.isButton() && !interaction.isModalSubmit() && !interaction.isUserSelectMenu() && !interaction.isRoleSelectMenu()) {
+      return;
+    }
     if (!interaction.customId.startsWith("temp-voice:")) return;
 
     if (interaction.isButton()) {
+      // removeMember(メンバー管理一覧の解除ボタン、#409)はTEMP_VOICE_BUTTON_ACTIONSに含まれない
+      // 別のcustomId形式(temp-voice:removeMember:<channelId>:<targetType>:<targetId>)のため、
+      // 専用ハンドラに先に振り分ける(handleTempVoiceButtonはparseTempVoiceCustomIdで弾かれ無視する)。
+      if (interaction.customId.startsWith("temp-voice:removeMember:")) {
+        handleTempVoiceRemoveMember({ db: ctx.db, eventBus: ctx.eventBus }, interaction).catch((error: unknown) => {
+          console.error("temp-voice: failed to handle remove-member interaction", error);
+        });
+        return;
+      }
       handleTempVoiceButton({ db: ctx.db, eventBus: ctx.eventBus, canRename }, interaction).catch(
         (error: unknown) => {
           console.error("temp-voice: failed to handle button interaction", error);
         },
       );
+      return;
+    }
+    if (interaction.isUserSelectMenu() || interaction.isRoleSelectMenu()) {
+      handleTempVoiceSelectMenu({ db: ctx.db, eventBus: ctx.eventBus }, interaction).catch((error: unknown) => {
+        console.error("temp-voice: failed to handle select menu interaction", error);
+      });
       return;
     }
     handleTempVoiceModalSubmit({ db: ctx.db, eventBus: ctx.eventBus, tryReserveRenameSlot }, interaction).catch(
