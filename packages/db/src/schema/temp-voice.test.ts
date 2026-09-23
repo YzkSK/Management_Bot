@@ -143,4 +143,53 @@ describe("temp-voice schema", () => {
       "temp_voice_deny_protected_roles_guild_id_role_id_pk",
     );
   });
+
+  test("guild削除時にtemp_voice_configs/temp_voice_channels/temp_voice_deny_protected_rolesがカスケード削除される", async () => {
+    const cascadeGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: cascadeGuildId, name: "Cascade Test" });
+
+    await db.insert(tempVoiceConfigs).values({
+      guildId: cascadeGuildId,
+      createChannelId: `create-ch-${randomUUID()}`,
+      categoryId: `category-${randomUUID()}`,
+    });
+    const channelId = `channel-${randomUUID()}`;
+    await db.insert(tempVoiceChannels).values({
+      channelId,
+      guildId: cascadeGuildId,
+      controlChannelId: `control-${randomUUID()}`,
+      ownerId: `test-user-${randomUUID()}`,
+    });
+    await db.insert(tempVoiceDenyProtectedRoles).values({ guildId: cascadeGuildId, roleId: `test-role-${randomUUID()}` });
+
+    await db.delete(guilds).where(eq(guilds.id, cascadeGuildId));
+
+    expect(await db.select().from(tempVoiceConfigs).where(eq(tempVoiceConfigs.guildId, cascadeGuildId))).toHaveLength(0);
+    expect(await db.select().from(tempVoiceChannels).where(eq(tempVoiceChannels.guildId, cascadeGuildId))).toHaveLength(0);
+    expect(
+      await db.select().from(tempVoiceDenyProtectedRoles).where(eq(tempVoiceDenyProtectedRoles.guildId, cascadeGuildId)),
+    ).toHaveLength(0);
+  });
+
+  test("temp_voice_channels削除時にtemp_voice_permission_overridesがカスケード削除される", async () => {
+    const channelId = `channel-${randomUUID()}`;
+    await db.insert(tempVoiceChannels).values({
+      channelId,
+      guildId,
+      controlChannelId: `control-${randomUUID()}`,
+      ownerId: `test-user-${randomUUID()}`,
+    });
+    await db.insert(tempVoicePermissionOverrides).values({
+      channelId,
+      targetType: "user",
+      targetId: `test-user-${randomUUID()}`,
+      state: "allow",
+    });
+
+    await db.delete(tempVoiceChannels).where(eq(tempVoiceChannels.channelId, channelId));
+
+    expect(
+      await db.select().from(tempVoicePermissionOverrides).where(eq(tempVoicePermissionOverrides.channelId, channelId)),
+    ).toHaveLength(0);
+  });
 });
