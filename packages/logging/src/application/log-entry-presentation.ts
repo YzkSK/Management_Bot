@@ -120,6 +120,16 @@ const PRESENTATION: {
     move: { accent: "warning", title: "ボイスチャンネルを移動しました", icon: "↔️" },
     update: { accent: "warning", title: "ボイス状態が更新されました", icon: "🎚️" },
   },
+  tempVoice: {
+    created: { accent: "positive", title: "一時VCが作成されました", icon: "🆕" },
+    deleted: { accent: "negative", title: "一時VCが削除されました", icon: "🗑️" },
+    renamed: { accent: "warning", title: "一時VCの名前が変更されました", icon: "✏️" },
+    permissionChanged: { accent: "warning", title: "一時VCの権限が変更されました", icon: "🔒" },
+    userLimitChanged: { accent: "warning", title: "一時VCの人数制限が変更されました", icon: "👥" },
+    bitrateChanged: { accent: "warning", title: "一時VCの音質が変更されました", icon: "🎚️" },
+    ownerTransferred: { accent: "warning", title: "一時VCのオーナーが移譲されました", icon: "👑" },
+    memberPermissionChanged: { accent: "warning", title: "一時VCの個別メンバー権限が変更されました", icon: "🔑" },
+  },
 };
 
 const FALLBACK = { accent: "neutral" as const, title: "ログイベント", icon: "ℹ️" };

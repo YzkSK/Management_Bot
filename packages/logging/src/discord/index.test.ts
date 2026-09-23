@@ -4,7 +4,7 @@ import type { Db } from "@management-bot/db";
 import { createSendToChannel, registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
-  test("moderation.action.recordedをlogging自身のeventBusで購読する", async () => {
+  test("moderation.action.recorded/temp-voice.event.recordedをlogging自身のeventBusで購読する", async () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
@@ -13,8 +13,11 @@ describe("registerDiscordHandlers", () => {
 
     await registerDiscordHandlers(ctx);
 
-    expect(subscribe).toHaveBeenCalledTimes(1);
-    expect(subscribe.mock.calls[0]?.[0]).toBe("moderation.action.recorded");
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    const subscribedTypes = subscribe.mock.calls.map((call) => call[0]);
+    expect(subscribedTypes).toEqual(
+      expect.arrayContaining(["moderation.action.recorded", "temp-voice.event.recorded"]),
+    );
   });
 
   test("eventBus.subscribeが失敗したら呼び出し元に伝播する(BotClient.registerFeaturesが起動失敗として検知できるように)", async () => {

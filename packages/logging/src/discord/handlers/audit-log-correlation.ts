@@ -122,6 +122,7 @@ export function toAuditLogEntryInfo(
     executorName: executorGuildDisplayName,
     targetId: extractInviteTargetId(entry),
     createdAt: entry.createdAt.toISOString(),
+    reason: entry.reason,
     roleChanges: extractRoleChanges(entry),
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),
     voiceDisconnectOrMove: extractVoiceDisconnectOrMove(entry),

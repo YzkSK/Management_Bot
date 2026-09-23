@@ -39,17 +39,32 @@ const CONNECTION_STATUS_LABELS = {
 const INVALIDATE_DEBOUNCE_MS = 300;
 
 /** formatLogMessageが参照しうる全ユーザーIDフィールド。新カテゴリ追加時はここにも追記する。 */
-const USER_ID_FIELDS = ["executorId", "authorId", "userId", "targetUserId", "moderatorId"] as const;
+const USER_ID_FIELDS = [
+  "executorId",
+  "authorId",
+  "userId",
+  "targetUserId",
+  "moderatorId",
+  "ownerId",
+  "previousOwnerId",
+  "newOwnerId",
+  "targetId",
+] as const;
 
 /**
  * 各IDフィールドに対応するDiscord表示名スナップショットフィールド。スナップショットが存在すれば
  * Discord APIへの名前解決(resolveDisplayNames)を省略できる。targetUserId/moderatorIdは
  * moderationCase(#212時点で書き込み経路が未実装)のため対応するスナップショットがない。
+ * targetId(tempVoice memberPermissionChanged)はuser/role両対応のためtargetNameを常にログ側で
+ * 保持しており(#413)、user以外(role)をDiscord APIの表示名解決対象に含めないためスナップショット対応は行わない。
  */
 const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number], string>> = {
   executorId: "executorName",
   authorId: "authorName",
   userId: "userName",
+  ownerId: "ownerName",
+  previousOwnerId: "previousOwnerName",
+  newOwnerId: "newOwnerName",
 };
 
 type ListedLogEntry = { id: string; entry: LogEntry; collapsedEntries?: ListedLogEntry[] };

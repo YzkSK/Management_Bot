@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { voiceSessionEndedSchema, moderationActionRecordedSchema } from "./domain-events.ts";
+import { voiceSessionEndedSchema, moderationActionRecordedSchema, tempVoiceEventRecordedSchema } from "./domain-events.ts";
 
 describe("voiceSessionEndedSchema", () => {
   test("正しいpayloadをparseできる", () => {
@@ -165,6 +165,169 @@ describe("moderationActionRecordedSchema", () => {
         action: "update",
         actionType: "ban",
         createdAt: "2026-08-29T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("tempVoiceEventRecordedSchema", () => {
+  test("action=createdをparseできる(executorIdはオーナー入室起点のため未設定)", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "created",
+      ownerId: "2",
+      ownerName: "owner",
+      controlChannelId: "11",
+    });
+    expect(result.action).toBe("created");
+    expect(result.executorId).toBeUndefined();
+  });
+
+  test("action=deletedをparseできる", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "deleted",
+      ownerId: "2",
+    });
+    expect(result.action).toBe("deleted");
+  });
+
+  test("action=renamedはbefore/afterを保持する", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "renamed",
+      executorId: "2",
+      before: "旧VC",
+      after: "新VC",
+    });
+    expect(result.action).toBe("renamed");
+    if (result.action === "renamed") {
+      expect(result.before).toBe("旧VC");
+      expect(result.after).toBe("新VC");
+    }
+  });
+
+  test("action=permissionChangedはpermission/allowedを検証する", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "permissionChanged",
+      executorId: "2",
+      permission: "connect",
+      allowed: false,
+    });
+    expect(result.action).toBe("permissionChanged");
+  });
+
+  test("action=permissionChangedで未知のpermissionは拒否する", () => {
+    expect(() =>
+      tempVoiceEventRecordedSchema.parse({
+        type: "temp-voice.event.recorded",
+        guildId: "1",
+        channelId: "10",
+        createdAt: "2026-09-22T00:00:00.000Z",
+        action: "permissionChanged",
+        permission: "speak",
+        allowed: false,
+      }),
+    ).toThrow();
+  });
+
+  test("action=userLimitChanged/bitrateChangedはbefore/afterの整数を保持する", () => {
+    const userLimit = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "userLimitChanged",
+      executorId: "2",
+      before: 0,
+      after: 5,
+    });
+    expect(userLimit.action).toBe("userLimitChanged");
+
+    const bitrate = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "bitrateChanged",
+      executorId: "2",
+      before: 64000,
+      after: 96000,
+    });
+    expect(bitrate.action).toBe("bitrateChanged");
+  });
+
+  test("action=ownerTransferredはtrigger=manualでexecutorId=previousOwnerIdを設定できる", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "ownerTransferred",
+      executorId: "2",
+      previousOwnerId: "2",
+      newOwnerId: "3",
+      trigger: "manual",
+    });
+    expect(result.action).toBe("ownerTransferred");
+    if (result.action === "ownerTransferred") {
+      expect(result.trigger).toBe("manual");
+    }
+  });
+
+  test("action=ownerTransferredはtrigger=autoGraceExpiredでexecutorId未設定を許容する(システム起因)", () => {
+    const result = tempVoiceEventRecordedSchema.parse({
+      type: "temp-voice.event.recorded",
+      guildId: "1",
+      channelId: "10",
+      createdAt: "2026-09-22T00:00:00.000Z",
+      action: "ownerTransferred",
+      previousOwnerId: "2",
+      newOwnerId: "3",
+      trigger: "autoGraceExpired",
+    });
+    expect(result.executorId).toBeUndefined();
+  });
+
+  test("action=memberPermissionChangedはstate=clearedを含む3状態を検証する", () => {
+    for (const state of ["allow", "deny", "cleared"] as const) {
+      const result = tempVoiceEventRecordedSchema.parse({
+        type: "temp-voice.event.recorded",
+        guildId: "1",
+        channelId: "10",
+        createdAt: "2026-09-22T00:00:00.000Z",
+        action: "memberPermissionChanged",
+        executorId: "2",
+        state,
+        targetType: "role",
+        targetId: "99",
+      });
+      expect(result.action).toBe("memberPermissionChanged");
+    }
+  });
+
+  test("未知のactionは拒否する", () => {
+    expect(() =>
+      tempVoiceEventRecordedSchema.parse({
+        type: "temp-voice.event.recorded",
+        guildId: "1",
+        channelId: "10",
+        createdAt: "2026-09-22T00:00:00.000Z",
+        action: "locked",
+        executorId: "2",
       }),
     ).toThrow();
   });

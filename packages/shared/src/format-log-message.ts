@@ -378,6 +378,51 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     }
     case "guild":
       return "サーバー設定が更新されました";
+    case "tempVoice": {
+      const channel = channelName(entry.channelId, names);
+      switch (entry.action) {
+        case "created": {
+          const ownerLabel = userName(entry.ownerId, names, entry.ownerName);
+          return `${ownerLabel} が一時VC ${channel} を作成しました`;
+        }
+        case "deleted": {
+          const ownerLabel = userName(entry.ownerId, names, entry.ownerName);
+          return `一時VC ${channel}(オーナー: ${ownerLabel})が削除されました`;
+        }
+        case "renamed":
+          return `${executorName} が一時VCの名前を「${entry.before}」から「${entry.after}」に変更しました`;
+        case "permissionChanged": {
+          const permissionLabel = entry.permission === "connect" ? "接続" : "閲覧";
+          return entry.allowed
+            ? `${executorName} が一時VCの${permissionLabel}を許可しました`
+            : `${executorName} が一時VCの${permissionLabel}を制限しました`;
+        }
+        case "userLimitChanged":
+          return `${executorName} が一時VCの人数制限を ${entry.before} から ${entry.after} に変更しました`;
+        case "bitrateChanged":
+          return `${executorName} が一時VCの音質を ${entry.before} から ${entry.after} に変更しました`;
+        case "ownerTransferred": {
+          const previousOwnerLabel = userName(entry.previousOwnerId, names, entry.previousOwnerName);
+          const newOwnerLabel = userName(entry.newOwnerId, names, entry.newOwnerName);
+          return entry.trigger === "manual"
+            ? `${previousOwnerLabel} が ${newOwnerLabel} に一時VCのオーナーを移譲しました`
+            : `${previousOwnerLabel} の不在により ${newOwnerLabel} に一時VCのオーナーが自動移譲されました`;
+        }
+        case "memberPermissionChanged": {
+          const targetLabel =
+            entry.targetType === "user" ? userName(entry.targetId, names, entry.targetName) : (entry.targetName ?? entry.targetId);
+          switch (entry.state) {
+            case "allow":
+              return `${executorName} が ${targetLabel} の一時VCへのアクセスを許可しました`;
+            case "deny":
+              return `${executorName} が ${targetLabel} の一時VCへのアクセスを拒否しました`;
+            case "cleared":
+              return `${executorName} が ${targetLabel} の一時VC個別設定を解除しました`;
+          }
+        }
+      }
+      break;
+    }
     case "moderationCase": {
       const targetName = userName(entry.targetUserId, names);
       const moderatorName = userName(entry.moderatorId, names);

@@ -25,6 +25,21 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
       return entry.userId;
     case "moderationCase":
       return entry.targetUserId;
+    case "tempVoice":
+      switch (entry.action) {
+        case "created":
+        case "deleted":
+          return entry.ownerId;
+        case "memberPermissionChanged":
+          return entry.targetId;
+        case "renamed":
+        case "permissionChanged":
+        case "userLimitChanged":
+        case "bitrateChanged":
+        case "ownerTransferred":
+          return undefined;
+      }
+      return undefined;
     case "channel":
     case "guild":
     case "invite":
@@ -62,6 +77,21 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
       return "userId";
     case "moderationCase":
       return "targetUserId";
+    case "tempVoice":
+      switch (entry.action) {
+        case "created":
+        case "deleted":
+          return "ownerId";
+        case "memberPermissionChanged":
+          return "targetId";
+        case "renamed":
+        case "permissionChanged":
+        case "userLimitChanged":
+        case "bitrateChanged":
+        case "ownerTransferred":
+          return undefined;
+      }
+      return undefined;
     case "channel":
     case "guild":
     case "invite":

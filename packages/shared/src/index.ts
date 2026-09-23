@@ -17,10 +17,12 @@ export {
   DOMAIN_EVENT_SCHEMAS,
   voiceSessionEndedSchema,
   moderationActionRecordedSchema,
+  tempVoiceEventRecordedSchema,
   type DomainEvent,
   type DomainEventType,
   type VoiceSessionEndedEvent,
   type ModerationActionRecordedEvent,
+  type TempVoiceEventRecordedEvent,
 } from "./domain-events.js";
 export { moderationIncidentSchema, type ModerationIncident } from "./moderation-incident.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
@@ -56,6 +58,7 @@ export {
   auditLogCorrelationEntrySchema,
   moderationCaseLogEntrySchema,
   voiceLogEntrySchema,
+  tempVoiceLogEntrySchema,
   VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
   isBulkDeleteLogEntry,
@@ -87,3 +90,12 @@ export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
 export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
 export { discordIdSchema } from "./discord-id.js";
+export {
+  TEMP_VOICE_CREATE_REASON,
+  TEMP_VOICE_CONTROL_CREATE_REASON,
+  TEMP_VOICE_DELETE_REASON,
+  TEMP_VOICE_UPDATE_REASON,
+  isTempVoiceAuditReason,
+  suppressTempVoiceChannelLog,
+  shouldSuppressTempVoiceChannelLog,
+} from "./log-suppression.js";

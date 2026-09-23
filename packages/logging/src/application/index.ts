@@ -10,6 +10,7 @@ export {
   type GetChannelId,
 } from "./write-log-entry.js";
 export { handleModerationEvent } from "./handle-moderation-event.js";
+export { handleTempVoiceEvent } from "./handle-temp-voice-event.js";
 export { getMemberJoinFlags, type MemberJoinFlags } from "./get-member-join-flags.js";
 export { getPresentation, ACCENT_COLORS, type AccentKind } from "./log-entry-presentation.js";
 export { buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
