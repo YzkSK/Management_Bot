@@ -176,6 +176,13 @@
       "when": 1789857884178,
       "tag": "0024_sudden_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790163878709,
+      "tag": "0025_overrated_tigra",
+      "breakpoints": true
     }
   ]
 }
