@@ -40,7 +40,7 @@ export function buildMemberListMessage(
   if (overrides.length === 0) {
     container.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent("登録はありません。"));
-    return { flags: MessageFlags.Ephemeral, components: [container] };
+    return { flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2, components: [container] };
   }
 
   for (const override of overrides) {
@@ -61,5 +61,17 @@ export function buildMemberListMessage(
     );
   }
 
-  return { flags: MessageFlags.Ephemeral, components: [container] };
+  return { flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2, components: [container] };
+}
+
+/**
+ * 解除完了メッセージ(#409)。メンバー管理一覧(Components V2)を編集する応答のため、
+ * Components V2メッセージは`content`を持てず`components`のみで構成する必要がある
+ * (codexレビュー指摘: contentで送ると解除自体が失敗する)。
+ */
+export function buildRemoveMemberSuccessMessage(): { flags: number; components: ContainerBuilder[] } {
+  const container = new ContainerBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent("解除しました。"),
+  );
+  return { flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2, components: [container] };
 }

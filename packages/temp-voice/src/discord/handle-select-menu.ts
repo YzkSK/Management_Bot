@@ -1,6 +1,6 @@
 import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
-import { TEMP_VOICE_UPDATE_REASON, suppressTempVoiceChannelLog } from "@management-bot/shared";
+import { TEMP_VOICE_UPDATE_REASON, shouldSuppressTempVoiceChannelLog, suppressTempVoiceChannelLog } from "@management-bot/shared";
 import {
   findTempVoiceChannel,
   isDenyProtectedRole,
@@ -90,11 +90,28 @@ export async function handleTempVoiceSelectMenu(
       { reason: TEMP_VOICE_UPDATE_REASON },
     )) as VoiceBasedChannel;
   } catch (error) {
+    // API呼び出し自体が失敗した場合、抑制エントリが消費されないまま30秒残り、
+    // 無関係な次のchannelUpdateを誤って抑制してしまう(codexレビュー指摘)。ここで消費して無効化する。
+    shouldSuppressTempVoiceChannelLog(voiceChannel.id);
     await interaction.followUp({ content: "権限の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
     throw error;
   }
 
-  await upsertPermissionOverride(deps.db, { channelId: voiceChannel.id, targetType, targetId, state });
+  try {
+    await upsertPermissionOverride(deps.db, { channelId: voiceChannel.id, targetType, targetId, state });
+  } catch (error) {
+    // DB書き込みが失敗すると、Discord側だけ変更が反映されメンバー管理一覧に載らない
+    // 孤立したoverwriteが残ってしまう(codexレビュー指摘)。Discord側を元の状態に戻す。
+    suppressTempVoiceChannelLog(voiceChannel.id);
+    await voiceChannel.permissionOverwrites
+      .edit(targetId, { Connect: null }, { reason: TEMP_VOICE_UPDATE_REASON })
+      .catch((rollbackError: unknown) => {
+        shouldSuppressTempVoiceChannelLog(voiceChannel.id);
+        console.error(`temp-voice: failed to roll back overwrite for ${targetId} after DB error`, rollbackError);
+      });
+    await interaction.followUp({ content: "権限の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+    throw error;
+  }
 
   if (state === "deny") {
     if (targetType === "user") {

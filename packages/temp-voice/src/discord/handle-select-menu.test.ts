@@ -142,4 +142,29 @@ describe("handleTempVoiceSelectMenu", () => {
     expect(voiceChannel.permissionOverwrites.edit).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("拒否指定できません") }));
   });
+
+  test("DB UPSERT失敗時はDiscord側のoverwriteをロールバックし、ephemeralフォローアップを送り例外をthrowする(codexレビュー指摘)", async () => {
+    const voiceChannel = fakeVoiceChannel();
+    const db = {
+      select: () => ({ from: () => ({ where: () => Promise.resolve([OWNED_ROW]) }) }),
+      insert: () => ({
+        values: () => ({ onConflictDoUpdate: () => Promise.reject(new Error("connection lost")) }),
+      }),
+    };
+    const deps = { db, eventBus: { publish: mock() } } as unknown as HandleSelectMenuDeps;
+    const interaction = fakeInteraction("temp-voice:permitMemberUser:vc-1", "owner-1", voiceChannel, ["user-1"]);
+
+    await expect(handleTempVoiceSelectMenu(deps, interaction)).rejects.toThrow();
+
+    // 1回目: Connect:trueの付与、2回目: ロールバックのConnect:nullクリア。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledTimes(2);
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenNthCalledWith(
+      2,
+      "user-1",
+      { Connect: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.any(String) }));
+    expect(interaction.editReply).not.toHaveBeenCalled();
+  });
 });

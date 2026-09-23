@@ -14,7 +14,7 @@ function fakeDb(row: typeof OWNED_ROW | null) {
 function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "vc-1",
-    permissionOverwrites: { delete: mock(() => Promise.resolve()) },
+    permissionOverwrites: { edit: mock(() => Promise.resolve()) },
     isVoiceBased: () => true,
     ...overrides,
   };
@@ -51,7 +51,7 @@ describe("handleTempVoiceRemoveMember", () => {
     expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("オーナー") }));
   });
 
-  test("正常系: overwriteを削除しイベント発行する", async () => {
+  test("正常系: Connectキーをクリアするeditを呼びComponents V2で解除完了を返す", async () => {
     const publish = mock(() => Promise.resolve());
     const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish } } as unknown as HandleRemoveMemberDeps;
     const voiceChannel = fakeVoiceChannel();
@@ -59,15 +59,21 @@ describe("handleTempVoiceRemoveMember", () => {
 
     await handleTempVoiceRemoveMember(deps, interaction);
 
-    expect(voiceChannel.permissionOverwrites.delete).toHaveBeenCalledWith("user-1", expect.any(String));
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "user-1",
+      { Connect: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
     expect(interaction.editReply).toHaveBeenCalledTimes(1);
+    const replyArg = (interaction.editReply as ReturnType<typeof mock>).mock.calls[0]?.[0];
+    expect(replyArg.content).toBeUndefined();
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ action: "memberPermissionChanged", state: "cleared", targetType: "user", targetId: "user-1" }),
     );
   });
 
-  test("overwrite削除失敗時はephemeralフォローアップを送り例外をthrowする", async () => {
-    const voiceChannel = fakeVoiceChannel({ permissionOverwrites: { delete: mock(() => Promise.reject(new Error("missing permissions"))) } });
+  test("overwrite編集失敗時はephemeralフォローアップを送り例外をthrowする", async () => {
+    const voiceChannel = fakeVoiceChannel({ permissionOverwrites: { edit: mock(() => Promise.reject(new Error("missing permissions"))) } });
     const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } } as unknown as HandleRemoveMemberDeps;
     const interaction = fakeInteraction("temp-voice:removeMember:vc-1:role:role-1", "owner-1", voiceChannel);
 

@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { buildMemberListMessage, buildRemoveMemberCustomId, parseRemoveMemberCustomId } from "./member-list-message.js";
+import { MessageFlags } from "discord.js";
+import {
+  buildMemberListMessage,
+  buildRemoveMemberCustomId,
+  buildRemoveMemberSuccessMessage,
+  parseRemoveMemberCustomId,
+} from "./member-list-message.js";
+
+function hasFlag(flags: number, flag: number): boolean {
+  return (flags & flag) === flag;
+}
 
 describe("buildRemoveMemberCustomId / parseRemoveMemberCustomId", () => {
   test("組み立ててパースすると元に戻る", () => {
@@ -52,5 +62,29 @@ describe("buildMemberListMessage", () => {
     const text = JSON.stringify(message);
 
     expect(text).toContain("unknown-user");
+  });
+
+  test("Components V2フラグとEphemeralフラグの両方を持つ(codexレビュー指摘: IsComponentsV2欠落でContainerが送信できなかった問題の回帰確認)", () => {
+    const withOverrides = buildMemberListMessage(
+      "channel-1",
+      [{ channelId: "channel-1", targetType: "user" as const, targetId: "user-1", state: "allow" as const }],
+      new Map(),
+    );
+    const empty = buildMemberListMessage("channel-1", [], new Map());
+
+    for (const message of [withOverrides, empty]) {
+      expect(hasFlag(message.flags, MessageFlags.IsComponentsV2)).toBe(true);
+      expect(hasFlag(message.flags, MessageFlags.Ephemeral)).toBe(true);
+    }
+  });
+});
+
+describe("buildRemoveMemberSuccessMessage", () => {
+  test("Components V2形式でcontentを持たない(codexレビュー指摘: content併用はComponents V2で送信エラーになる)", () => {
+    const message = buildRemoveMemberSuccessMessage();
+
+    expect(hasFlag(message.flags, MessageFlags.IsComponentsV2)).toBe(true);
+    expect("content" in message).toBe(false);
+    expect(JSON.stringify(message)).toContain("解除しました");
   });
 });
