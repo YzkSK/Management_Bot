@@ -154,6 +154,15 @@ const validByCategory = {
     channelId: "3",
     action: "join",
   },
+  tempVoice: {
+    category: "tempVoice",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    channelId: "2",
+    action: "created",
+    ownerId: "3",
+    controlChannelId: "4",
+  },
 } satisfies Record<LogCategory, unknown>;
 
 describe("logEntrySchema", () => {

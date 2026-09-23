@@ -1,4 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import { shouldSuppressTempVoiceChannelLog } from "@management-bot/shared";
 import type { DMChannel, NonThreadGuildBasedChannel } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
 import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
@@ -70,15 +71,27 @@ export function toChannelDeleteLogEntry(channel: DMChannel | NonThreadGuildBased
   };
 }
 
+/**
+ * 一時VC・制御チャンネルの作成/削除/属性変更は、`channel`カテゴリではなく専用の`tempVoice`カテゴリで
+ * 記録される(#413)。監査ログへの反映タイムラグに備えたプロセス内メモリの即時抑制
+ * (suppressTempVoiceChannelLog、temp-voice側がAPI呼び出し前後に呼ぶ)を第一段、
+ * 監査ログのreason文字列判定(isTempVoiceAuditReason、audit-log-correlation.ts側で実施)を
+ * フォールバックとする2段構えの重複記録防止のうち、ここでは第一段のみを扱う。
+ */
 export function registerChannelHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
-  ctx.client.on("channelCreate", (channel) => writeLogEntrySafely(deps, toChannelCreateLogEntry(channel)));
+  ctx.client.on("channelCreate", (channel) => {
+    if (shouldSuppressTempVoiceChannelLog(channel.id)) return;
+    writeLogEntrySafely(deps, toChannelCreateLogEntry(channel));
+  });
   ctx.client.on("channelUpdate", (oldChannel, newChannel) => {
+    if (shouldSuppressTempVoiceChannelLog(newChannel.id)) return;
     const entry = toChannelUpdateLogEntry(oldChannel, newChannel);
     if (entry) writeLogEntrySafely(deps, entry);
   });
   ctx.client.on("channelDelete", (channel) => {
+    if (shouldSuppressTempVoiceChannelLog(channel.id)) return;
     const entry = toChannelDeleteLogEntry(channel);
     if (entry) writeLogEntrySafely(deps, entry);
   });

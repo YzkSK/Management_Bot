@@ -1,7 +1,7 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { listenForLogChannelSettingChanges } from "@management-bot/db";
 import { LOG_CATEGORIES } from "@management-bot/shared";
-import { createChannelSettingResolver, handleModerationEvent } from "../application/index.js";
+import { createChannelSettingResolver, handleModerationEvent, handleTempVoiceEvent } from "../application/index.js";
 import { registerMessageHandlers } from "./handlers/message.js";
 import { registerReactionHandlers } from "./handlers/reaction.js";
 import { registerMemberHandlers } from "./handlers/member.js";
@@ -53,6 +53,10 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   await ctx.eventBus.subscribe(
     "moderation.action.recorded",
     handleModerationEvent({ db: ctx.db, sendToChannel, getChannelId }),
+  );
+  await ctx.eventBus.subscribe(
+    "temp-voice.event.recorded",
+    handleTempVoiceEvent({ db: ctx.db, sendToChannel, getChannelId }),
   );
 
   registerMessageHandlers(ctx, getChannelId);

@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import type { FeatureModuleContext } from "@management-bot/core";
+import { suppressTempVoiceChannelLog } from "@management-bot/shared";
 import { registerChannelHandlers, toChannelCreateLogEntry, toChannelDeleteLogEntry, toChannelUpdateLogEntry } from "./channel.js";
 
 function fakeGuildChannel(id = "c1", overrides: Partial<Record<"name" | "topic" | "nsfw" | "rateLimitPerUser" | "bitrate" | "userLimit", unknown>> = {}) {
@@ -81,5 +83,46 @@ describe("registerChannelHandlers", () => {
 
     const events = on.mock.calls.map((call) => call[0]);
     expect(events).toEqual(expect.arrayContaining(["channelCreate", "channelUpdate", "channelDelete"]));
+  });
+
+  test("suppressTempVoiceChannelLog済みのchannelIdはchannelCreate/Update/Deleteいずれも書き込みしない(#413)", () => {
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const on = mock((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, listener);
+    });
+    const insertValues = mock(() => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([]) }) }));
+    const db = { insert: () => ({ values: insertValues }) };
+    const ctx = { client: { on }, db } as unknown as FeatureModuleContext;
+
+    registerChannelHandlers(ctx);
+
+    const suppressedId = randomUUID();
+    suppressTempVoiceChannelLog(suppressedId);
+    listeners.get("channelCreate")?.(fakeGuildChannel(suppressedId));
+    expect(insertValues).not.toHaveBeenCalled();
+
+    suppressTempVoiceChannelLog(suppressedId);
+    listeners.get("channelUpdate")?.(fakeGuildChannel(suppressedId, { name: "old" }), fakeGuildChannel(suppressedId, { name: "new" }));
+    expect(insertValues).not.toHaveBeenCalled();
+
+    suppressTempVoiceChannelLog(suppressedId);
+    listeners.get("channelDelete")?.(fakeGuildChannel(suppressedId));
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  test("抑制されていないchannelIdは通常通り書き込む", () => {
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const on = mock((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, listener);
+    });
+    const insertValues = mock(() => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "x" }]) }) }));
+    const db = { insert: () => ({ values: insertValues }), select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) };
+    const ctx = { client: { on }, db } as unknown as FeatureModuleContext;
+
+    registerChannelHandlers(ctx);
+
+    listeners.get("channelCreate")?.(fakeGuildChannel(randomUUID()));
+
+    expect(insertValues).toHaveBeenCalledTimes(1);
   });
 });

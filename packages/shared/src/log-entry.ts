@@ -304,6 +304,74 @@ export const voiceLogEntrySchema = z.discriminatedUnion("action", [
   }),
 ]);
 
+const tempVoiceBase = {
+  ...base,
+  category: z.literal("tempVoice"),
+  /** ログ相関キーを兼ねる(#406参照、専用UUIDは発行しない)。 */
+  channelId: nonEmptyString,
+};
+
+/**
+ * domain-events(tempVoiceEventRecordedSchema)のactionバリアントをそのまま踏襲する。
+ * 表示名フィールド(ownerName/targetName等)は機微情報ではないため.meta({ sensitive: true })を付けない。
+ */
+export const tempVoiceLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("created"),
+    ownerId: nonEmptyString,
+    ownerName: nonEmptyString.optional(),
+    controlChannelId: nonEmptyString,
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("deleted"),
+    ownerId: nonEmptyString,
+    ownerName: nonEmptyString.optional(),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("renamed"),
+    before: z.string(),
+    after: z.string(),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("permissionChanged"),
+    permission: z.enum(["connect", "view"]),
+    allowed: z.boolean(),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("userLimitChanged"),
+    before: z.number().int(),
+    after: z.number().int(),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("bitrateChanged"),
+    before: z.number().int(),
+    after: z.number().int(),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("ownerTransferred"),
+    previousOwnerId: nonEmptyString,
+    previousOwnerName: nonEmptyString.optional(),
+    newOwnerId: nonEmptyString,
+    newOwnerName: nonEmptyString.optional(),
+    trigger: z.enum(["manual", "autoGraceExpired"]),
+  }),
+  z.object({
+    ...tempVoiceBase,
+    action: z.literal("memberPermissionChanged"),
+    state: z.enum(["allow", "deny", "cleared"]),
+    targetType: z.enum(["user", "role"]),
+    targetId: nonEmptyString,
+    targetName: nonEmptyString.optional(),
+  }),
+]);
+
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
   reaction: reactionLogEntrySchema,
@@ -323,6 +391,7 @@ export const LOG_ENTRY_SCHEMAS = {
   auditLogCorrelation: auditLogCorrelationEntrySchema,
   moderationCase: moderationCaseLogEntrySchema,
   voice: voiceLogEntrySchema,
+  tempVoice: tempVoiceLogEntrySchema,
 } as const;
 
 export type LogCategory = keyof typeof LOG_ENTRY_SCHEMAS;

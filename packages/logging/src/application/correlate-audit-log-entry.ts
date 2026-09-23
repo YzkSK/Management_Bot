@@ -1,5 +1,6 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
+import { isTempVoiceAuditReason } from "@management-bot/shared";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { LogCategory } from "../domain/index.js";
 import { emitCorrelated } from "./correlation-events.js";
@@ -23,6 +24,8 @@ export interface AuditLogEntryInfo {
    */
   targetId: string | null;
   createdAt: string;
+  /** ChannelCreate/ChannelUpdate/ChannelDeleteのみ設定する監査ログのreason文字列(一時VC重複抑制のフォールバック判定用、#413)。 */
+  reason?: string | null;
   roleChanges?: { added: string[]; removed: string[] };
   /** MessageDelete限定。監査ログのextra.channel.idから取得する(targetId=投稿者IDのみでは対象チャンネルを特定できないため)。 */
   messageDeleteChannelId?: string;
@@ -286,11 +289,52 @@ async function correlateJobs(
  * executorId(必要ならactionも)を追記する。(1)はダッシュボードの通常表示には出さず、
  * 必要な時に参照する想定(表示側は本タスクのスコープ外)。
  */
+/**
+ * ChannelCreate/ChannelUpdate/ChannelDeleteの監査ログreasonが一時VC由来(isTempVoiceAuditReason)
+ * であれば、即時抑制(shouldSuppressTempVoiceChannelLog)をすり抜けて既に書き込まれてしまった
+ * channelカテゴリ行を削除する。時間窓・対象channelId一致で1件に絞れる場合のみ削除する
+ * (複数候補があれば誤削除を避けて何もしない、findUnannotatedRowと同じ考え方)。
+ */
+async function suppressCorrelatedTempVoiceChannelLog(db: Db, entry: AuditLogEntryInfo): Promise<boolean> {
+  if (!isTempVoiceAuditReason(entry.reason)) return false;
+  if (entry.action !== "ChannelCreate" && entry.action !== "ChannelUpdate" && entry.action !== "ChannelDelete") {
+    return false;
+  }
+  if (!entry.targetId) return false;
+
+  const auditAt = new Date(entry.createdAt);
+  const windowStart = new Date(auditAt.getTime() - CORRELATION_WINDOW_MS);
+  const windowEnd = new Date(auditAt.getTime() + CORRELATION_WINDOW_MS);
+  const matches = await db
+    .select({ id: logEntries.id })
+    .from(logEntries)
+    .where(
+      and(
+        eq(logEntries.guildId, entry.guildId),
+        eq(logEntries.category, "channel"),
+        gte(logEntries.createdAt, windowStart),
+        lte(logEntries.createdAt, windowEnd),
+        sql`${logEntries.payload} ->> 'channelId' = ${entry.targetId}`,
+      ),
+    )
+    .limit(2);
+  if (matches.length !== 1) return false;
+
+  const deletedId = matches[0]!.id;
+  await db.delete(logEntries).where(eq(logEntries.id, deletedId));
+  // writeLogEntry側(同一プロセス、isCorrelatable待機中)がこの行の送信を待っている場合、
+  // 3秒の固定待機を待たず即座に「行が削除された」ことを検知させ、重複送信をスキップさせる(annotateRowと同じ仕組み)。
+  emitCorrelated(deletedId);
+  return true;
+}
+
 export async function correlateAuditLogEntry(
   deps: WriteLogEntryDeps,
   entry: AuditLogEntryInfo,
   retryDelayMs: number = RETRY_DELAY_MS,
 ): Promise<void> {
+  if (await suppressCorrelatedTempVoiceChannelLog(deps.db, entry)) return;
+
   await writeLogEntry(
     deps,
     {
