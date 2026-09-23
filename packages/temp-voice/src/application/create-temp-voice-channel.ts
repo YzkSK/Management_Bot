@@ -46,3 +46,24 @@ export async function insertTempVoiceChannel(db: Db, input: InsertTempVoiceChann
 export async function deleteTempVoiceChannel(db: Db, channelId: string): Promise<void> {
   await db.delete(tempVoiceChannels).where(eq(tempVoiceChannels.channelId, channelId));
 }
+
+export interface TempVoiceChannelRow {
+  channelId: string;
+  guildId: string;
+  controlChannelId: string;
+  ownerId: string;
+}
+
+/** 制御パネルのボタン/モーダル処理(#408)のオーナーチェック・controlChannelId解決に使う。無ければnull。 */
+export async function findTempVoiceChannel(db: Db, channelId: string): Promise<TempVoiceChannelRow | null> {
+  const [row] = await db
+    .select({
+      channelId: tempVoiceChannels.channelId,
+      guildId: tempVoiceChannels.guildId,
+      controlChannelId: tempVoiceChannels.controlChannelId,
+      ownerId: tempVoiceChannels.ownerId,
+    })
+    .from(tempVoiceChannels)
+    .where(eq(tempVoiceChannels.channelId, channelId));
+  return row ?? null;
+}

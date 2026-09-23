@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import {
   deleteTempVoiceChannel,
   findOwnedTempVoiceChannelId,
+  findTempVoiceChannel,
   getTempVoiceConfig,
   insertTempVoiceChannel,
 } from "./create-temp-voice-channel.js";
@@ -118,5 +119,23 @@ describe("insertTempVoiceChannel / deleteTempVoiceChannel", () => {
       threw = true;
     }
     expect(threw).toBe(true);
+  });
+});
+
+describe("findTempVoiceChannel", () => {
+  test("存在しないchannelIdはnullを返す", async () => {
+    expect(await findTempVoiceChannel(db, "no-such-channel")).toBeNull();
+  });
+
+  test("存在するchannelIdは行全体を返す(#408のオーナーチェック・controlChannelId解決用)", async () => {
+    const channelId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId: "user-1" });
+
+    expect(await findTempVoiceChannel(db, channelId)).toEqual({
+      channelId,
+      guildId,
+      controlChannelId: "control-1",
+      ownerId: "user-1",
+    });
   });
 });

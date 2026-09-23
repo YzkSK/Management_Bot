@@ -62,6 +62,21 @@ function fakeGuild(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+/**
+ * guild.channels.createの戻り値として使うVCのfake。制御チャンネル送信直前に呼ばれる
+ * readTempVoiceState(#408)がguild.roles.everyone.id/permissionOverwritesを参照するため必要。
+ */
+function fakeCreatedVoiceChannel(id: string, guild: unknown) {
+  return {
+    id,
+    guild,
+    userLimit: 5,
+    bitrate: 96000,
+    permissionOverwrites: { cache: { get: () => undefined } },
+    delete: mock(() => Promise.resolve()),
+  };
+}
+
 function fakeMember(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "user-1",
@@ -189,7 +204,8 @@ describe("handleVoiceCreate", () => {
   test("正常系: VC・制御チャンネルを作成し移動・DB保存・イベント発行する", async () => {
     const db = fakeDb({});
     const eventBus = { publish: mock(() => Promise.resolve()) };
-    const voiceChannel = { id: "new-vc", delete: mock(() => Promise.resolve()) };
+    const guild = fakeGuild({ channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create: mock() } });
+    const voiceChannel = fakeCreatedVoiceChannel("new-vc", guild);
     const controlChannel = {
       id: "new-control",
       delete: mock(() => Promise.resolve()),
@@ -198,9 +214,7 @@ describe("handleVoiceCreate", () => {
     const create = mock((options: { type: ChannelType }) =>
       Promise.resolve(options.type === ChannelType.GuildVoice ? voiceChannel : controlChannel),
     );
-    const guild = fakeGuild({
-      channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create },
-    });
+    guild.channels.create = create;
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
@@ -224,7 +238,8 @@ describe("handleVoiceCreate", () => {
   test("VC名は{username}を入室者の表示名に置換して生成する", async () => {
     const db = fakeDb({});
     const eventBus = { publish: mock(() => Promise.resolve()) };
-    const voiceChannel = { id: "new-vc", delete: mock(() => Promise.resolve()) };
+    const guild = fakeGuild({ channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create: mock() } });
+    const voiceChannel = fakeCreatedVoiceChannel("new-vc", guild);
     const controlChannel = {
       id: "new-control",
       delete: mock(() => Promise.resolve()),
@@ -233,9 +248,7 @@ describe("handleVoiceCreate", () => {
     const create = mock((options: { type: ChannelType }) =>
       Promise.resolve(options.type === ChannelType.GuildVoice ? voiceChannel : controlChannel),
     );
-    const guild = fakeGuild({
-      channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create },
-    });
+    guild.channels.create = create;
     const member = fakeMember({ displayName: "花子" });
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
@@ -266,18 +279,16 @@ describe("handleVoiceCreate", () => {
   test("DB INSERT失敗(想定外のエラー)時はDiscord側のVC・制御チャンネルを削除してロールバックし、例外を再throwする", async () => {
     const db = fakeDb({ insertError: new Error("connection lost") });
     const eventBus = { publish: mock(() => Promise.resolve()) };
-    const voiceChannel = { id: "new-vc", delete: mock(() => Promise.resolve()) };
+    const guild = fakeGuild({ channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create: mock() } });
+    const voiceChannel = fakeCreatedVoiceChannel("new-vc", guild);
     const controlChannel = {
       id: "new-control",
       delete: mock(() => Promise.resolve()),
       send: mock(() => Promise.resolve({ pin: mock(() => Promise.resolve()) })),
     };
-    const create = mock((options: { type: ChannelType }) =>
+    guild.channels.create = mock((options: { type: ChannelType }) =>
       Promise.resolve(options.type === ChannelType.GuildVoice ? voiceChannel : controlChannel),
     );
-    const guild = fakeGuild({
-      channels: { cache: { get: mock(() => undefined), filter: mock(() => ({ size: 0 })) }, create },
-    });
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
@@ -291,22 +302,22 @@ describe("handleVoiceCreate", () => {
   test("DB INSERT失敗(unique制約違反=race condition敗北)時はDiscord側を削除し、勝者VCへ移動して正常終了する(codexレビュー指摘)", async () => {
     const db = fakeDb({ insertError: UNIQUE_VIOLATION_ERROR, ownedChannelIdSequence: [null, "winner-vc"] });
     const eventBus = { publish: mock(() => Promise.resolve()) };
-    const voiceChannel = { id: "new-vc", delete: mock(() => Promise.resolve()) };
+    const winnerChannel = { isVoiceBased: () => true };
+    const guild = fakeGuild({
+      channels: {
+        cache: { get: mock((id: string) => (id === "winner-vc" ? winnerChannel : undefined)), filter: mock(() => ({ size: 0 })) },
+        create: mock(),
+      },
+    });
+    const voiceChannel = fakeCreatedVoiceChannel("new-vc", guild);
     const controlChannel = {
       id: "new-control",
       delete: mock(() => Promise.resolve()),
       send: mock(() => Promise.resolve({ pin: mock(() => Promise.resolve()) })),
     };
-    const winnerChannel = { isVoiceBased: () => true };
-    const create = mock((options: { type: ChannelType }) =>
+    guild.channels.create = mock((options: { type: ChannelType }) =>
       Promise.resolve(options.type === ChannelType.GuildVoice ? voiceChannel : controlChannel),
     );
-    const guild = fakeGuild({
-      channels: {
-        cache: { get: mock((id: string) => (id === "winner-vc" ? winnerChannel : undefined)), filter: mock(() => ({ size: 0 })) },
-        create,
-      },
-    });
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
