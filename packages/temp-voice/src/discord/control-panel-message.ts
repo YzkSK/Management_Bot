@@ -15,6 +15,9 @@ export const TEMP_VOICE_BUTTON_ACTIONS = [
   "bitrate",
   "toggleLock",
   "toggleHide",
+  "permitMember",
+  "denyMember",
+  "manageMembers",
 ] as const;
 export type TempVoiceButtonAction = (typeof TEMP_VOICE_BUTTON_ACTIONS)[number];
 
@@ -122,6 +125,25 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
               .setLabel("非表示にする")
               .setEmoji("👁️")
               .setStyle(ButtonStyle.Secondary),
+      ),
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildTempVoiceCustomId("permitMember", channelId))
+          .setLabel("個別許可")
+          .setEmoji("✅")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(buildTempVoiceCustomId("denyMember", channelId))
+          .setLabel("個別拒否")
+          .setEmoji("⛔")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(buildTempVoiceCustomId("manageMembers", channelId))
+          .setLabel("メンバー管理")
+          .setEmoji("📋")
+          .setStyle(ButtonStyle.Secondary),
       ),
     );
 

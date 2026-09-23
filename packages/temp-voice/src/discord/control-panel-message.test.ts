@@ -76,6 +76,9 @@ describe("buildControlPanelContainer", () => {
         "temp-voice:bitrate:channel-1",
         "temp-voice:toggleLock:channel-1",
         "temp-voice:toggleHide:channel-1",
+        "temp-voice:permitMember:channel-1",
+        "temp-voice:denyMember:channel-1",
+        "temp-voice:manageMembers:channel-1",
       ]),
     );
   });

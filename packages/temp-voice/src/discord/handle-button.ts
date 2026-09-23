@@ -1,9 +1,11 @@
 import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { TEMP_VOICE_UPDATE_REASON, shouldSuppressTempVoiceChannelLog, suppressTempVoiceChannelLog } from "@management-bot/shared";
-import { findTempVoiceChannel } from "../application/index.js";
+import { findTempVoiceChannel, listPermissionOverrides } from "../application/index.js";
 import { buildControlPanelContainer, parseTempVoiceCustomId, readTempVoiceState } from "./control-panel-message.js";
 import { buildTempVoiceModal } from "./control-panel-modal.js";
+import { buildSelectPermissionMessage } from "./select-permission-message.js";
+import { buildMemberListMessage } from "./member-list-message.js";
 import { MessageFlags, type ButtonInteraction, type VoiceBasedChannel } from "discord.js";
 
 export interface HandleButtonDeps {
@@ -139,6 +141,25 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
         allowed: before.isHidden,
         createdAt: new Date().toISOString(),
       });
+      return;
+    }
+    case "permitMember":
+      await interaction.reply(buildSelectPermissionMessage("permit", parsed.channelId));
+      return;
+    case "denyMember":
+      await interaction.reply(buildSelectPermissionMessage("deny", parsed.channelId));
+      return;
+    case "manageMembers": {
+      const overrides = await listPermissionOverrides(deps.db, parsed.channelId);
+      const targetNames = new Map<string, string>();
+      for (const override of overrides) {
+        const name =
+          override.targetType === "user"
+            ? interaction.guild?.members.cache.get(override.targetId)?.displayName
+            : interaction.guild?.roles.cache.get(override.targetId)?.name;
+        if (name) targetNames.set(override.targetId, name);
+      }
+      await interaction.reply(buildMemberListMessage(parsed.channelId, overrides, targetNames));
       return;
     }
   }
