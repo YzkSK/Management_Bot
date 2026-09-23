@@ -320,7 +320,11 @@ async function suppressCorrelatedTempVoiceChannelLog(db: Db, entry: AuditLogEntr
     .limit(2);
   if (matches.length !== 1) return false;
 
-  await db.delete(logEntries).where(eq(logEntries.id, matches[0]!.id));
+  const deletedId = matches[0]!.id;
+  await db.delete(logEntries).where(eq(logEntries.id, deletedId));
+  // writeLogEntry側(同一プロセス、isCorrelatable待機中)がこの行の送信を待っている場合、
+  // 3秒の固定待機を待たず即座に「行が削除された」ことを検知させ、重複送信をスキップさせる(annotateRowと同じ仕組み)。
+  emitCorrelated(deletedId);
   return true;
 }
 

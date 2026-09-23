@@ -48,15 +48,12 @@ const USER_ID_FIELDS = [
   "ownerId",
   "previousOwnerId",
   "newOwnerId",
-  "targetId",
 ] as const;
 
 /**
  * 各IDフィールドに対応するDiscord表示名スナップショットフィールド。スナップショットが存在すれば
  * Discord APIへの名前解決(resolveDisplayNames)を省略できる。targetUserId/moderatorIdは
  * moderationCase(#212時点で書き込み経路が未実装)のため対応するスナップショットがない。
- * targetId(tempVoice memberPermissionChanged)はuser/role両対応のためtargetNameを常にログ側で
- * 保持しており(#413)、user以外(role)をDiscord APIの表示名解決対象に含めないためスナップショット対応は行わない。
  */
 const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number], string>> = {
   executorId: "executorName",
@@ -66,6 +63,17 @@ const SNAPSHOT_FIELD_BY_ID_FIELD: Partial<Record<(typeof USER_ID_FIELDS)[number]
   previousOwnerId: "previousOwnerName",
   newOwnerId: "newOwnerName",
 };
+
+/**
+ * tempVoiceのtargetId(memberPermissionChanged)はuser/role両対応で、roleの場合はDiscordの
+ * ユーザー表示名解決対象に含めるべきではない(codexレビュー指摘)。targetType==="user"の
+ * 場合のみ収集する。スナップショット(targetName)がある場合はDiscord APIへの問い合わせを省略する。
+ */
+function collectTempVoiceUserTargetId(entry: LogEntry): string | undefined {
+  if (entry.category !== "tempVoice" || entry.action !== "memberPermissionChanged") return undefined;
+  if (entry.targetType !== "user") return undefined;
+  return entry.targetName ? undefined : entry.targetId;
+}
 
 type ListedLogEntry = { id: string; entry: LogEntry; collapsedEntries?: ListedLogEntry[] };
 
@@ -94,15 +102,19 @@ export function LogListPage() {
       logsQuery.data
         ? Array.from(
             new Set(
-              flattenLogEntries(logsQuery.data.entries).flatMap((visibleEntry) =>
-                USER_ID_FIELDS.flatMap((key) => {
+              flattenLogEntries(logsQuery.data.entries).flatMap((visibleEntry) => [
+                ...USER_ID_FIELDS.flatMap((key) => {
                   // スナップショットがあれば名前解決済みのため、Discord APIへの無駄な問い合わせを避ける。
                   const snapshotField = SNAPSHOT_FIELD_BY_ID_FIELD[key];
                   if (snapshotField && snapshotField in visibleEntry && visibleEntry[snapshotField as keyof typeof visibleEntry]) return [];
                   const value = visibleEntry[key as keyof typeof visibleEntry];
                   return typeof value === "string" ? [value] : [];
                 }),
-                ),
+                ...(() => {
+                  const targetId = collectTempVoiceUserTargetId(visibleEntry);
+                  return targetId ? [targetId] : [];
+                })(),
+              ]),
             ),
           ).sort() // tRPCクエリのキャッシュキーを安定させるため、収集順ではなく辞書順に揃える
         : [],
