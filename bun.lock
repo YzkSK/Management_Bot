@@ -281,6 +281,7 @@
         "discord.js": "^14.16.0",
         "drizzle-orm": "^0.45.2",
         "node-cron": "^4.6.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/bun": "^1.4.0",
