@@ -22,11 +22,13 @@ import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
   fetchGuildAccessStatus,
+  fetchGuildCategories,
   fetchGuildChannels,
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildRoles,
+  fetchGuildVoiceChannels,
   isGuildMember,
   verifyGuildRole,
 } from "./discord/bot-client.js";
@@ -61,6 +63,9 @@ const avatarUrlCache = createTtlCache<string | null>(AVATAR_URL_TTL_MS);
 const GUILD_TTL_MS = 30_000;
 const guildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const allGuildChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
+/** 一時VC設定画面のVC/カテゴリセレクター用(issue #415)。他のgetGuildXxxと同じ短命TTLでキャッシュする。 */
+const guildVoiceChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
+const guildCategoriesCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
 const guildAccessStatusCache = createTtlCache<GuildAccessStatus>(GUILD_TTL_MS);
@@ -122,6 +127,14 @@ function createGetGuildChannels(botToken: string): (guildId: string) => Promise<
 
 function createGetAllGuildChannels(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
   return (guildId) => allGuildChannelsCache(guildId, () => fetchAllGuildChannelNames(botToken, guildId));
+}
+
+function createGetGuildVoiceChannelOptions(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
+  return (guildId) => guildVoiceChannelsCache(guildId, () => fetchGuildVoiceChannels(botToken, guildId));
+}
+
+function createGetGuildCategoryOptions(botToken: string): (guildId: string) => Promise<readonly ChannelOption[]> {
+  return (guildId) => guildCategoriesCache(guildId, () => fetchGuildCategories(botToken, guildId));
 }
 
 /**
@@ -346,6 +359,8 @@ export function createContext(
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
       getGuildRoles: createGetGuildRoles(botToken),
+      getGuildVoiceChannelOptions: createGetGuildVoiceChannelOptions(botToken),
+      getGuildCategoryOptions: createGetGuildCategoryOptions(botToken),
       getGuildAccessStatus: createGetGuildAccessStatus(botToken),
       verifyGuildRole: createVerifyGuildRole(botToken),
       getGuildMembersPage: createGetGuildMembersPage(botToken),
