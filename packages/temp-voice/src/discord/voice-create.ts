@@ -47,9 +47,10 @@ function isOwnerUniqueViolation(error: unknown): boolean {
 /**
  * newStateが作成用VC(temp_voice_configs.createChannelId)への入室かどうかを判定する。
  * 作成用VC自体は一時VCとして扱わない(この上に人が集まっても新規一時VCは作らない)。
+ * createChannelIdがnull(#412の消失検知によりリセットされ未設定に戻った状態)なら常にfalse。
  */
-function isJoiningCreateChannel(newState: VoiceState, createChannelId: string): boolean {
-  return newState.channelId === createChannelId;
+function isJoiningCreateChannel(newState: VoiceState, createChannelId: string | null): boolean {
+  return createChannelId !== null && newState.channelId === createChannelId;
 }
 
 /**
@@ -80,6 +81,11 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
 
   const config = await getTempVoiceConfig(deps.db, guild.id);
   if (!config || !isJoiningCreateChannel(newState, config.createChannelId)) return;
+  // categoryIdはcreateChannelIdとセットで設定・リセットされる(#412のclearTempVoiceCreateChannelが
+  // 両方同時にnullへ戻す)ため、上のisJoiningCreateChannelがtrueを返した時点でnullではないはずだが、
+  // 型上はTypeScriptが別プロパティ間の相関を追えないため、念のため明示チェックする。
+  const categoryId = config.categoryId;
+  if (categoryId === null) return;
 
   const existingChannelId = await findOwnedTempVoiceChannelId(deps.db, guild.id, member.id);
   if (existingChannelId) {
@@ -87,10 +93,10 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     return;
   }
 
-  const category = guild.channels.cache.get(config.categoryId);
+  const category = guild.channels.cache.get(categoryId);
   const currentChannelCountInCategory =
     category?.type === ChannelType.GuildCategory
-      ? guild.channels.cache.filter((channel) => channel.parentId === config.categoryId).size
+      ? guild.channels.cache.filter((channel) => channel.parentId === categoryId).size
       : 0;
   if (!canCreateTempVoiceInCategory(currentChannelCountInCategory)) {
     await member
@@ -109,7 +115,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   const voiceChannel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildVoice,
-    parent: config.categoryId,
+    parent: categoryId,
     userLimit: config.defaultUserLimit,
     bitrate: config.defaultBitrate ?? undefined,
     reason: TEMP_VOICE_CREATE_REASON,
@@ -124,7 +130,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     controlChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
-      parent: config.categoryId,
+      parent: categoryId,
       reason: TEMP_VOICE_CONTROL_CREATE_REASON,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },

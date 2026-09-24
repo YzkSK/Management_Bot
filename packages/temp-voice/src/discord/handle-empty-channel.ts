@@ -1,7 +1,7 @@
 import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { TEMP_VOICE_DELETE_REASON, suppressTempVoiceChannelLog } from "@management-bot/shared";
-import type { VoiceState } from "discord.js";
+import type { Guild, VoiceState } from "discord.js";
 import { deleteTempVoiceChannel, findTempVoiceChannel } from "../application/index.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
 
@@ -84,7 +84,7 @@ export class EmptyChannelDeletionScheduler {
 export async function finalizeDeletion(
   deps: HandleEmptyChannelDeps,
   scheduler: EmptyChannelDeletionScheduler,
-  guild: VoiceState["guild"],
+  guild: Guild,
   channelId: string,
   generation: number,
 ): Promise<void> {

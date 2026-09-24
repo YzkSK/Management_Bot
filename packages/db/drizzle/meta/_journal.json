@@ -190,6 +190,13 @@
       "when": 1790166368197,
       "tag": "0026_low_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790251218029,
+      "tag": "0027_mighty_starbolt",
+      "breakpoints": true
     }
   ]
 }

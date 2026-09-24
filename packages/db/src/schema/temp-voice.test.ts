@@ -72,6 +72,20 @@ describe("temp-voice schema", () => {
     );
   });
 
+  // #412: 作成用VC・カテゴリの実体がDiscord上で削除されたことを検知した際、
+  // clearTempVoiceCreateChannelで両方nullに戻せる必要がある(Dashboardの「未設定」表示への復帰)。
+  test("temp_voice_configsのcreate_channel_id/category_idはnullを許容する", async () => {
+    const nullableGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: nullableGuildId, name: "Test Guild (nullable)" });
+
+    await db.insert(tempVoiceConfigs).values({ guildId: nullableGuildId, createChannelId: null, categoryId: null });
+    const [row] = await db.select().from(tempVoiceConfigs).where(eq(tempVoiceConfigs.guildId, nullableGuildId));
+    expect(row?.createChannelId).toBeNull();
+    expect(row?.categoryId).toBeNull();
+
+    await db.delete(guilds).where(eq(guilds.id, nullableGuildId));
+  });
+
   test("temp_voice_channelsはchannel_idを主キーに持ち、guild_id+owner_idで一意", async () => {
     const ownerId = `test-user-${randomUUID()}`;
     const channelId = `channel-${randomUUID()}`;
