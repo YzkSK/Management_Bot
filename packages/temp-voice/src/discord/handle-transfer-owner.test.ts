@@ -28,10 +28,7 @@ function fakeDb(
   ownerAfterRollback = row?.ownerId ?? "owner-1",
 ) {
   let selectCallCount = 0;
-  // withResourceLock(packages/db/src/advisory-lock.ts)が呼ぶdb.$client.reserve()のfake。
-  const reservedConnection = Object.assign(() => Promise.resolve(), { release: () => {} });
   return {
-    $client: { reserve: () => Promise.resolve(reservedConnection) },
     select: () => ({
       from: () => ({
         where: () => {
@@ -77,6 +74,15 @@ function fakeControlChannel(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+/**
+ * withResourceLock(packages/db/src/advisory-lock.ts)のfake実装。実際のPostgresロックは取らず、
+ * taskにdb自身をlockedDbとしてそのまま渡す。実際のロック機構(直列化・コネクションプール枯渇なし)の
+ * 検証はpackages/db/src/advisory-lock.db.test.tsで行う。
+ */
+function fakeWithResourceLock() {
+  return (db: never, _key: string, task: (lockedDb: never) => Promise<unknown>) => task(db);
+}
+
 function fakeInteraction(
   userId: string,
   voiceChannel: unknown,
@@ -100,7 +106,7 @@ function fakeInteraction(
 
 describe("handleTempVoiceTransferOwner", () => {
   test("temp-voice以外のcustomIdは無視する", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), fakeControlChannel(), ["member-1"], {
       customId: "other:action:1",
     });
@@ -111,7 +117,7 @@ describe("handleTempVoiceTransferOwner", () => {
   });
 
   test("オーナー以外が操作すると拒否メッセージを返す", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("someone-else", fakeVoiceChannel(), fakeControlChannel(), ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -120,7 +126,7 @@ describe("handleTempVoiceTransferOwner", () => {
   });
 
   test("選択先が既にVCを退出していればエラーメッセージを返す", async () => {
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish: mock() } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), fakeControlChannel(), ["left-already"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -131,7 +137,7 @@ describe("handleTempVoiceTransferOwner", () => {
   test("正常系: 制御チャンネル権限を付け替え、DB更新後にownerTransferred(trigger=manual)をpublishする", async () => {
     const publish = mock(() => Promise.resolve());
     const controlChannel = fakeControlChannel();
-    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -156,7 +162,7 @@ describe("handleTempVoiceTransferOwner", () => {
     const publish = mock(() => Promise.resolve());
     const controlChannel = fakeControlChannel();
     const db = fakeDb(OWNED_ROW, "lostRace");
-    const deps = { db, eventBus: { publish } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db, eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -180,6 +186,7 @@ describe("handleTempVoiceTransferOwner", () => {
     const deps = {
       db: fakeDb(OWNED_ROW, "committed", true),
       eventBus: { publish: mock() },
+      withResourceLock: fakeWithResourceLock(),
     } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
@@ -193,7 +200,7 @@ describe("handleTempVoiceTransferOwner", () => {
     const publish = mock(() => Promise.resolve());
     const controlChannel = fakeControlChannel();
     const db = fakeDb(OWNED_ROW, "uniqueViolation");
-    const deps = { db, eventBus: { publish } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db, eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -212,7 +219,7 @@ describe("handleTempVoiceTransferOwner", () => {
     const controlChannel = fakeControlChannel();
     // cronが先にmember-1を新オーナーとして確定させていたケース(このハンドラのCASは負ける)。
     const db = fakeDb(OWNED_ROW, "lostRace", false, "member-1");
-    const deps = { db, eventBus: { publish } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db, eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
@@ -235,7 +242,7 @@ describe("handleTempVoiceTransferOwner", () => {
     (db as unknown as { update: () => unknown }).update = () => ({
       set: () => ({ where: () => ({ returning: () => Promise.reject(new Error("connection lost")) }) }),
     });
-    const deps = { db, eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const deps = { db, eventBus: { publish: mock() } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
 
     await expect(handleTempVoiceTransferOwner(deps, interaction)).rejects.toThrow("connection lost");
@@ -250,7 +257,11 @@ describe("handleTempVoiceTransferOwner", () => {
   test("制御チャンネルが見つからない場合は例外を投げDBを更新しない(codexレビュー指摘: 権限付け替え失敗を握りつぶさない)", async () => {
     const db = fakeDb(OWNED_ROW);
     const updateSpy = mock(db.update);
-    const deps = { db: { ...db, update: updateSpy }, eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const deps = {
+      db: { ...db, update: updateSpy },
+      eventBus: { publish: mock() },
+      withResourceLock: fakeWithResourceLock(),
+    } as unknown as HandleTransferOwnerDeps;
     const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), undefined, ["member-1"]);
 
     await expect(handleTempVoiceTransferOwner(deps, interaction)).rejects.toThrow();

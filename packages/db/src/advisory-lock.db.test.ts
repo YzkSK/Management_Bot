@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { createDb } from "./client.js";
 import { withResourceLock } from "./advisory-lock.js";
 
@@ -73,4 +74,32 @@ describe("withResourceLock", () => {
     });
     expect(ranSecond).toBe(true);
   });
+
+  test("通常プールが枯渇していても、taskに渡されたlockedDb経由のクエリは完了する(#410、codexレビュー指摘: taskの中で元のdb(通常プール)にクエリを発行すると、多数のチャンネルが同時にロック待ちになった際、予約済みコネクションでプールの空き接続が無くなりデッドロックする)", async () => {
+    // 実装が誤ってtask内で通常プール(max:1)にクエリを発行してしまう回帰が起きた場合、
+    // このテストは(デフォルトタイムアウトまで)ハングするのでなく、明示的なタイムアウトで
+    // 失敗として検出できるようにする。
+    // max:1の小さいプールを使い、「複数チャンネルが同時にロックを取得する」状況を意図的に
+    // 再現する(通常プールにも1接続しかないため、withResourceLockの実装がtask内で通常プールへ
+    // クエリを発行してしまうと、2件目以降のtaskがプールの空きを待ち続けてデッドロックするはず)。
+    const { db: smallPoolDb, close: closeSmallPool } = createDb(databaseUrl, { max: 1 });
+    try {
+      const keys = [`test-lock-pool-a-${randomUUID()}`, `test-lock-pool-b-${randomUUID()}`, `test-lock-pool-c-${randomUUID()}`];
+
+      const results = await Promise.all(
+        keys.map((key) =>
+          withResourceLock(smallPoolDb, key, async (lockedDb) => {
+            // lockedDb経由でクエリを発行する。通常プール(smallPoolDb)を使っていれば
+            // max:1のため他のtaskとコネクションを取り合いデッドロックするはず。
+            const [row] = await lockedDb.execute<{ one: number }>(sql`SELECT 1 AS one`);
+            return row?.one;
+          }),
+        ),
+      );
+
+      expect(results).toEqual([1, 1, 1]);
+    } finally {
+      await closeSmallPool();
+    }
+  }, 10_000);
 });

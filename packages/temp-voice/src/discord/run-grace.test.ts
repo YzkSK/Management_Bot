@@ -36,12 +36,7 @@ function fakeDb(
     execute: () => Promise.resolve([{ acquired: lockAcquired }]),
     select: () => ({ from: () => ({ where: () => Promise.resolve(expired) }) }),
   };
-  // withResourceLock(packages/db/src/advisory-lock.ts)が呼ぶdb.$client.reserve()のfake。
-  // 予約したコネクション(タグ付きテンプレート関数)でpg_advisory_lock/unlockを実行する体で、
-  // テストでは実際のSQLは発行せず即座にresolveする。
-  const reservedConnection = Object.assign(() => Promise.resolve(), { release: () => {} });
   return {
-    $client: { reserve: () => Promise.resolve(reservedConnection) },
     transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
     // rollbackGrantedViewerIfNotOwner内のfindTempVoiceChannelが参照する(非トランザクション経由)。
     select: () => ({
@@ -71,6 +66,15 @@ function fakeControlChannel() {
   return { id: "ctrl-1", type: ChannelType.GuildText, permissionOverwrites: { edit: mock(() => Promise.resolve()) } };
 }
 
+/**
+ * withResourceLock(packages/db/src/advisory-lock.ts)のfake実装。実際のPostgresロックは取らず、
+ * taskにdb自身をlockedDbとしてそのまま渡す(このテストではdb単位の使い分けを検証しないため)。
+ * 実際のロック機構(直列化・コネクションプール枯渇なし)の検証はpackages/db/src/advisory-lock.db.test.tsで行う。
+ */
+function fakeWithResourceLock() {
+  return (db: never, _key: string, task: (lockedDb: never) => Promise<unknown>) => task(db);
+}
+
 function fakeClient(controlChannel: unknown) {
   return {
     channels: { cache: { get: (id: string) => (id === "ctrl-1" ? controlChannel : undefined) } },
@@ -87,6 +91,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore: new VoiceSessionStore(),
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -106,6 +111,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -136,6 +142,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -165,6 +172,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -202,6 +210,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -232,6 +241,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish: mock() } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     // processExpiredChannel内の1チャンネル分のエラーはrun-grace.ts側でログされるのみで
@@ -257,6 +267,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(controlChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
+      withResourceLock: fakeWithResourceLock(),
     };
 
     await createGraceRunner(deps, () => {}).run();
@@ -277,6 +288,7 @@ describe("createGraceRunner", () => {
       client: fakeClient(fakeControlChannel()) as never,
       eventBus: { publish: mock() } as never,
       sessionStore: new VoiceSessionStore(),
+      withResourceLock: fakeWithResourceLock(),
     };
     const onResult = mock(() => {});
     const runner = createGraceRunner(deps, onResult);
