@@ -2,7 +2,7 @@ import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { findOwnedTempVoiceChannelId, findTempVoiceChannel, transferTempVoiceOwner } from "../application/index.js";
 import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
-import { editControlChannelViewer } from "./control-channel-permission.js";
+import { editControlChannelViewer, rollbackGrantedViewerIfNotOwner } from "./control-channel-permission.js";
 import { parseTransferOwnerSelectCustomId } from "./transfer-owner-message.js";
 import { MessageFlags, type StringSelectMenuInteraction, type VoiceBasedChannel } from "discord.js";
 
@@ -62,12 +62,27 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
     throw error;
   }
 
-  const result = await transferTempVoiceOwner(deps.db, voiceChannel.id, row.ownerId, newOwnerId);
+  let result: Awaited<ReturnType<typeof transferTempVoiceOwner>>;
+  try {
+    result = await transferTempVoiceOwner(deps.db, voiceChannel.id, row.ownerId, newOwnerId);
+  } catch (error) {
+    // unique制約違反以外のDBエラー(接続断等)。付与済みの権限をDBの現オーナーで確認しつつロールバック
+    // する(codexレビュー指摘: 例外がそのまま伝播すると付与済み権限が孤立して残ってしまう)。
+    await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch(
+      (rollbackError: unknown) => {
+        console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after DB error`, rollbackError);
+      },
+    );
+    await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+    throw error;
+  }
   if (result !== "committed") {
     // "lostRace": 自動再割当cronが先にオーナーを変更済み(codexレビュー指摘: 手動移譲とcronの競合)。
     // "newOwnerAlreadyOwnsChannel": 事前チェックをすり抜けたrace conditionで移譲先が別VCの
-    // オーナーになっていた(codexレビュー指摘)。いずれも付与した閲覧権限を戻す。
-    await editControlChannelViewer(client, row.controlChannelId, newOwnerId, null).catch((error: unknown) => {
+    // オーナーになっていた(codexレビュー指摘)。いずれもDBの現オーナーを再確認してから付与した
+    // 閲覧権限を戻す(codexレビュー指摘: 無条件に剥奪すると、cron側が同じ候補者を新オーナーに
+    // 選んでいた場合に正当な権限を奪ってしまう)。
+    await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch((error: unknown) => {
       console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after ${result}`, error);
     });
     const content =

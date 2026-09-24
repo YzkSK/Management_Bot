@@ -12,8 +12,11 @@ const UNIQUE_VIOLATION_ERROR = Object.assign(new Error("duplicate key"), {
 
 /**
  * findTempVoiceChannel(1回目のselect)→findOwnedTempVoiceChannelId(2回目のselect、
- * 移譲先が既に別VCのオーナーでないかの事前チェック)の順で呼ばれる。
+ * 移譲先が既に別VCのオーナーでないかの事前チェック)→(CAS失敗時のみ)rollbackGrantedViewerIfNotOwner
+ * 内のfindTempVoiceChannel(3回目のselect、DBの現オーナー再確認)の順で呼ばれる。
  * newOwnerOwnsAnotherChannel=trueなら2回目のselectが行を返す(=既に別VCのオーナー)。
+ * ownerAfterRollback=候補者IDと同じ値を渡すと、3回目のselectが「候補者が既に現オーナー」を返す
+ * (勝者が同じ候補を選んでいたケースの再現)。デフォルトはOWNED_ROW.ownerId(=元のオーナーのまま)。
  * transferResultは"committed"|"lostRace"|"uniqueViolation"のいずれか
  * (transferTempVoiceOwner自体のCASロジックはapplication層のDBテストで別途検証済みのため、
  * ここではhandleTempVoiceTransferOwnerが各結果に対してどう振る舞うかだけを検証する)。
@@ -22,6 +25,7 @@ function fakeDb(
   row: typeof OWNED_ROW | null,
   transferResult: "committed" | "lostRace" | "uniqueViolation" = "committed",
   newOwnerOwnsAnotherChannel = false,
+  ownerAfterRollback = row?.ownerId ?? "owner-1",
 ) {
   let selectCallCount = 0;
   return {
@@ -30,7 +34,8 @@ function fakeDb(
         where: () => {
           selectCallCount += 1;
           if (selectCallCount === 1) return Promise.resolve(row ? [row] : []);
-          return Promise.resolve(newOwnerOwnsAnotherChannel ? [{ channelId: "other-vc" }] : []);
+          if (selectCallCount === 2) return Promise.resolve(newOwnerOwnsAnotherChannel ? [{ channelId: "other-vc" }] : []);
+          return Promise.resolve([{ channelId: "vc-1", guildId: "g1", controlChannelId: "ctrl-1", ownerId: ownerAfterRollback }]);
         },
       }),
     }),
@@ -197,6 +202,46 @@ describe("handleTempVoiceTransferOwner", () => {
     );
     expect(publish).not.toHaveBeenCalled();
     expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("既に別の一時VC") }));
+  });
+
+  test("CAS敗北時、DB再確認で候補者が既に現オーナーになっていれば権限を剥奪しない(codexレビュー指摘: 無条件剥奪だと勝者の正当な権限を奪ってしまう)", async () => {
+    const publish = mock(() => Promise.resolve());
+    const controlChannel = fakeControlChannel();
+    // cronが先にmember-1を新オーナーとして確定させていたケース(このハンドラのCASは負ける)。
+    const db = fakeDb(OWNED_ROW, "lostRace", false, "member-1");
+    const deps = { db, eventBus: { publish } } as unknown as HandleTransferOwnerDeps;
+    const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
+
+    await handleTempVoiceTransferOwner(deps, interaction);
+
+    expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "member-1",
+      { ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    expect(controlChannel.permissionOverwrites.edit).not.toHaveBeenCalledWith(
+      "member-1",
+      { ViewChannel: null },
+      expect.anything(),
+    );
+  });
+
+  test("権限付与後、unique制約違反以外のDBエラーが起きた場合も権限をロールバックしてから例外を伝播する(codexレビュー指摘)", async () => {
+    const controlChannel = fakeControlChannel();
+    const db = fakeDb(OWNED_ROW);
+    (db as unknown as { update: () => unknown }).update = () => ({
+      set: () => ({ where: () => ({ returning: () => Promise.reject(new Error("connection lost")) }) }),
+    });
+    const deps = { db, eventBus: { publish: mock() } } as unknown as HandleTransferOwnerDeps;
+    const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
+
+    await expect(handleTempVoiceTransferOwner(deps, interaction)).rejects.toThrow("connection lost");
+
+    expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "member-1",
+      { ViewChannel: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
   });
 
   test("制御チャンネルが見つからない場合は例外を投げDBを更新しない(codexレビュー指摘: 権限付け替え失敗を握りつぶさない)", async () => {

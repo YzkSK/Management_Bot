@@ -2,7 +2,7 @@ import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { sql } from "drizzle-orm";
 import { completeExpiredGracePeriod, findExpiredGracePeriodChannels, type ExpiredGracePeriodChannelRow } from "../application/index.js";
-import { editControlChannelViewer } from "./control-channel-permission.js";
+import { editControlChannelViewer, rollbackGrantedViewerIfNotOwner } from "./control-channel-permission.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
 import type { Client } from "discord.js";
 
@@ -53,19 +53,38 @@ async function processExpiredChannel(deps: GraceRunnerDeps, row: ExpiredGracePer
 
     await editControlChannelViewer(deps.client, row.controlChannelId, newOwnerId, true);
 
-    const result = await completeExpiredGracePeriod(deps.db, row.channelId, row.gracePeriodOwnerId, row.gracePeriodEndsAt, newOwnerId);
+    let result: Awaited<ReturnType<typeof completeExpiredGracePeriod>>;
+    try {
+      result = await completeExpiredGracePeriod(deps.db, row.channelId, row.gracePeriodOwnerId, row.gracePeriodEndsAt, newOwnerId);
+    } catch (error) {
+      // unique制約違反以外のDBエラー(接続断等)。付与済みの権限をDBの現オーナーで確認しつつ
+      // ロールバックする(codexレビュー指摘: 例外がそのまま伝播すると付与済み権限が孤立して残る)。
+      await rollbackGrantedViewerIfNotOwner(deps.db, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+        (rollbackError: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after DB error`, rollbackError);
+        },
+      );
+      throw error;
+    }
     if (result === "newOwnerAlreadyOwnsChannel") {
-      // 候補者が既に別の一時VCのオーナーだった。付与した権限を戻し、次点の候補で再試行する。
-      await editControlChannelViewer(deps.client, row.controlChannelId, newOwnerId, null).catch((error: unknown) => {
-        console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after unique violation`, error);
-      });
+      // 候補者が既に別の一時VCのオーナーだった。DBの現オーナーを再確認してから権限を戻し、
+      // 次点の候補で再試行する(codexレビュー指摘: 無条件に剥奪すると、勝者側が同じ候補者を
+      // 新オーナーに選んでいた場合に正当な権限を奪ってしまう)。
+      await rollbackGrantedViewerIfNotOwner(deps.db, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+        (error: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after unique violation`, error);
+        },
+      );
       continue;
     }
     if (result === "lostRace") {
-      // 手動移譲(または別プロセスのcron)が先にオーナーを変更済み。付与した閲覧権限を戻す。
-      await editControlChannelViewer(deps.client, row.controlChannelId, newOwnerId, null).catch((error: unknown) => {
-        console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after CAS miss`, error);
-      });
+      // 手動移譲(または別プロセスのcron)が先にオーナーを変更済み。DBの現オーナーを再確認してから
+      // 付与した閲覧権限を戻す(codexレビュー指摘: 同上)。
+      await rollbackGrantedViewerIfNotOwner(deps.db, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+        (error: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after CAS miss`, error);
+        },
+      );
       return;
     }
 

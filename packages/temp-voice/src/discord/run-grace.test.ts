@@ -16,15 +16,21 @@ const UNIQUE_VIOLATION_ERROR = Object.assign(new Error("duplicate key"), {
   constraint_name: "temp_voice_channels_guild_id_owner_id_key",
 });
 
-/** casResults: update呼び出しごとの.returning()結果を順に返す(候補を除外して複数回呼ばれるケースの検証用)。 */
+/**
+ * casResults: update呼び出しごとの.returning()結果を順に返す(候補を除外して複数回呼ばれるケースの検証用)。
+ * ownerAfterRollback: ロールバック時にrollbackGrantedViewerIfNotOwnerが呼ぶfindTempVoiceChannel
+ * (deps.db経由、トランザクション外)が返す現在のownerId。デフォルトは元のオーナーのまま
+ * (=候補者は現オーナーではない=権限剥奪が実行される、通常のロールバックケース)。
+ */
 function fakeDb(
   options: {
     expired?: (typeof EXPIRED_ROW)[];
     casResults?: ("committed" | "lostRace" | "uniqueViolation")[];
     lockAcquired?: boolean;
+    ownerAfterRollback?: string;
   } = {},
 ) {
-  const { expired = [EXPIRED_ROW], casResults = ["committed"], lockAcquired = true } = options;
+  const { expired = [EXPIRED_ROW], casResults = ["committed"], lockAcquired = true, ownerAfterRollback = "old-owner" } = options;
   let updateCallCount = 0;
   const tx = {
     execute: () => Promise.resolve([{ acquired: lockAcquired }]),
@@ -32,6 +38,15 @@ function fakeDb(
   };
   return {
     transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
+    // rollbackGrantedViewerIfNotOwner内のfindTempVoiceChannelが参照する(非トランザクション経由)。
+    select: () => ({
+      from: () => ({
+        where: () =>
+          Promise.resolve([
+            { channelId: expired[0]?.channelId ?? "vc-1", guildId: "g1", controlChannelId: "ctrl-1", ownerId: ownerAfterRollback },
+          ]),
+      }),
+    }),
     update: () => ({
       set: () => ({
         where: () => ({
@@ -167,6 +182,63 @@ describe("createGraceRunner", () => {
       expect.objectContaining({ reason: expect.any(String) }),
     );
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({ action: "ownerTransferred", newOwnerId: "candidate-2" }));
+  });
+
+  test("CAS敗北時、DB再確認で候補者が既に現オーナーになっていれば権限を剥奪しない(codexレビュー指摘: 無条件剥奪だと勝者の正当な権限を奪ってしまう)", async () => {
+    const controlChannel = fakeControlChannel();
+    const publish = mock(() => Promise.resolve());
+    const sessionStore = new VoiceSessionStore();
+    sessionStore.startTrackingChannel("vc-1");
+    sessionStore.recordJoin("vc-1", "new-owner", new Date("2026-01-01T00:00:00.000Z"));
+    const deps: GraceRunnerDeps = {
+      // CASには負けるが、DBを再読込すると実は候補者(new-owner)自身が既に現オーナーになっている
+      // (別プロセスが同じ候補を選んで先に確定させたケース)。
+      db: fakeDb({ casResults: ["lostRace"], ownerAfterRollback: "new-owner" }) as never,
+      client: fakeClient(controlChannel) as never,
+      eventBus: { publish } as never,
+      sessionStore,
+    };
+
+    await createGraceRunner(deps, () => {}).run();
+
+    expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "new-owner",
+      { ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    expect(controlChannel.permissionOverwrites.edit).not.toHaveBeenCalledWith(
+      "new-owner",
+      { ViewChannel: null },
+      expect.anything(),
+    );
+  });
+
+  test("unique制約違反以外のDBエラー発生時も付与済み権限をロールバックしてから例外を伝播する(codexレビュー指摘)", async () => {
+    const controlChannel = fakeControlChannel();
+    const sessionStore = new VoiceSessionStore();
+    sessionStore.startTrackingChannel("vc-1");
+    sessionStore.recordJoin("vc-1", "new-owner", new Date("2026-01-01T00:00:00.000Z"));
+    const db = fakeDb();
+    (db as unknown as { update: () => unknown }).update = () => ({
+      set: () => ({ where: () => ({ returning: () => Promise.reject(new Error("connection lost")) }) }),
+    });
+    const deps: GraceRunnerDeps = {
+      db: db as never,
+      client: fakeClient(controlChannel) as never,
+      eventBus: { publish: mock() } as never,
+      sessionStore,
+    };
+
+    // processExpiredChannel内の1チャンネル分のエラーはrun-grace.ts側でログされるのみで
+    // ジョブ全体は継続する(他のチャンネルの処理を止めないため)。ここではロールバックが
+    // 実行されたことのみを検証する。
+    await createGraceRunner(deps, () => {}).run();
+
+    expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "new-owner",
+      { ViewChannel: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
   });
 
   test("advisory lock取得失敗時は何もしない(他インスタンスが実行中)", async () => {

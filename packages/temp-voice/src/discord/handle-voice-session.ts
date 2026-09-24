@@ -1,5 +1,6 @@
 import type { DomainEventBus } from "@management-bot/core";
 import type { VoiceState } from "discord.js";
+import { createUserSerializer } from "./serialize-by-user.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
 
 export interface HandleVoiceSessionDeps {
@@ -12,21 +13,7 @@ export interface HandleVoiceSessionDeps {
 // 並行実行され、recordLeaveのpublish待ち中に後続の呼び出しが先に完了してしまう
 // (処理順の逆転によりセッションの開始・終了が入れ替わる)。userId単位のPromiseチェーンで直列化する。
 // ponytail: プロセス内メモリのみでbot再起動を跨がない(#412のリコンサイル処理で別途扱う想定)。
-const queueByUserId = new Map<string, Promise<void>>();
-
-function runSerialized(userId: string, task: () => Promise<void>): Promise<void> {
-  const previous = queueByUserId.get(userId) ?? Promise.resolve();
-  const next = previous.then(task, task);
-  const settled = next.catch(() => {});
-  queueByUserId.set(userId, settled);
-  // 自分がキューの最後尾のままなら(=このユーザーに後続の呼び出しが来ていなければ)、
-  // 完了時にエントリを削除する。voiceStateUpdateが起きる全ユーザー分がプロセス終了まで
-  // Mapに残り続けるのを防ぐ(codexレビュー指摘)。
-  settled.then(() => {
-    if (queueByUserId.get(userId) === settled) queueByUserId.delete(userId);
-  });
-  return next;
-}
+const runSerialized = createUserSerializer();
 
 /**
  * voiceStateUpdateのうち、追跡対象(一時VC)チャンネルへの入退室・移動を検知してセッションを更新する(#414)。
