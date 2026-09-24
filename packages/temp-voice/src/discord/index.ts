@@ -14,6 +14,8 @@ import { createGraceRunner } from "./run-grace.js";
 import { EmptyChannelDeletionScheduler, handleEmptyChannel } from "./handle-empty-channel.js";
 import { clearTempVoiceCreateChannel, getTempVoiceConfig } from "../application/index.js";
 import { runStartupReconcile } from "./reconcile.js";
+import { registerDashboardActionListener } from "./dashboard-action-listener.js";
+import { syncTempVoiceMemberCount } from "./sync-member-count.js";
 
 /** オーナー不在からVC自動再割当までの猶予期間(#410)。 */
 const OWNER_GRACE_PERIOD_MS = 10 * 60 * 1000;
@@ -29,6 +31,15 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   const emptyChannelScheduler = new EmptyChannelDeletionScheduler();
   const emptyChannelDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
 
+  // Dashboard操作(自動セットアップ・強制削除)のpg_notifyを起動時に購読する(#415)。
+  const dashboardActionListener = registerDashboardActionListener({
+    client: ctx.client,
+    db: ctx.db,
+    eventBus: ctx.eventBus,
+    databaseUrl: ctx.databaseUrl,
+  });
+  ctx.onShutdown(dashboardActionListener.close);
+
   ctx.client.on("voiceStateUpdate", (oldState, newState) => {
     handleVoiceCreate(voiceCreateDeps, newState).catch((error: unknown) => {
       console.error("temp-voice: failed to handle voiceStateUpdate (Join to Create)", error);
@@ -40,6 +51,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
       console.error("temp-voice: failed to handle voiceStateUpdate (owner grace period)", error);
     });
     handleEmptyChannel(emptyChannelDeps, emptyChannelScheduler, oldState, newState);
+    syncTempVoiceMemberCount({ db: ctx.db, sessionStore }, oldState, newState);
   });
 
   // 一時VC削除時(制御パネルからの明示削除・手動削除・#411の無人削除等、経路を問わず)に

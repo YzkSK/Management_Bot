@@ -17,4 +17,10 @@ export {
   listenForModerationConfigChanges,
   type ModerationConfigChangedNotification,
 } from "./moderation-config-notifications.js";
+export {
+  listenForTempVoiceAutoSetup,
+  listenForTempVoiceForceDelete,
+  type TempVoiceAutoSetupNotification,
+  type TempVoiceForceDeleteNotification,
+} from "./temp-voice-action-notifications.js";
 export * from "./schema/index.js";
