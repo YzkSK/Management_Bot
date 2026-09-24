@@ -18,6 +18,7 @@ export const TEMP_VOICE_BUTTON_ACTIONS = [
   "permitMember",
   "denyMember",
   "manageMembers",
+  "transferOwner",
 ] as const;
 export type TempVoiceButtonAction = (typeof TEMP_VOICE_BUTTON_ACTIONS)[number];
 
@@ -143,6 +144,15 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
           .setCustomId(buildTempVoiceCustomId("manageMembers", channelId))
           .setLabel("メンバー管理")
           .setEmoji("📋")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(buildTempVoiceCustomId("transferOwner", channelId))
+          .setLabel("オーナー移譲")
+          .setEmoji("👑")
           .setStyle(ButtonStyle.Secondary),
       ),
     );

@@ -103,14 +103,17 @@ export class VoiceSessionStore {
 
   /**
    * #410(自動再割当)向け: 現在VC内で最も長く滞在している(startedAtが最も古い)ユーザーIDを返す。
-   * 誰もいなければnull。
+   * 誰もいなければnull。excludeUserIdsで指定したユーザーは候補から除外する(codexレビュー指摘:
+   * 最有力候補が既に別の一時VCのオーナーでunique制約違反になった場合、run-grace.tsが次点の
+   * 候補を選び直せるようにするため)。
    */
-  findLongestPresentUserId(channelId: string): string | null {
+  findLongestPresentUserId(channelId: string, excludeUserIds: ReadonlySet<string> = new Set()): string | null {
     const sessions = this.sessionsByChannel.get(channelId);
     if (!sessions || sessions.size === 0) return null;
     let oldestUserId: string | null = null;
     let oldestStartedAt: Date | null = null;
     for (const [userId, startedAt] of sessions) {
+      if (excludeUserIds.has(userId)) continue;
       if (!oldestStartedAt || startedAt < oldestStartedAt) {
         oldestUserId = userId;
         oldestStartedAt = startedAt;

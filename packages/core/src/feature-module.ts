@@ -21,6 +21,13 @@ export interface FeatureModuleContext {
   /** 機能間連携用。他機能への直接importではなくdomain-events経由で疎結合にする(CLAUDE.md参照)。 */
   eventBus: DomainEventBus;
   /**
+   * registerDiscordHandlers内でcron等の定期実行を登録したい機能向け。
+   * 通常のcronアプリ(apps/moderation-decay等)と異なり、Discordクライアントの
+   * キャッシュ(VC内メンバー一覧等)やプロセス内メモリ状態に依存する処理はbot本体
+   * プロセス内で動かす必要があるため用意する(temp-voiceのオーナー自動再割当#410参照)。
+   */
+  env: Record<string, string | undefined>;
+  /**
    * registerDiscordHandlers内で開いた追加のリソース(databaseUrlでのLISTEN接続等)を
    * bot終了時(SIGTERM/SIGINT)に閉じるためのフック登録。呼ばなかったリソースは
    * プロセスが自然終了しない・接続がリークする原因になるため、db/eventBus以外の

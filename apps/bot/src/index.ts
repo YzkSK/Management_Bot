@@ -27,6 +27,7 @@ const botEnvSchema = envSchema.pick({
   REDIS_URL: true,
   DISCORD_TOKEN: true,
   DISCORD_CLIENT_ID: true,
+  TEMP_VOICE_GRACE_CRON: true,
 });
 
 const env = parseEnv(botEnvSchema);
@@ -41,10 +42,13 @@ const pendingOnboardings = new Set<Promise<void>>();
 const eventBuses = new Map(FEATURES.map((feature) => [feature.key, new DomainEventBus(env.REDIS_URL, feature.key)]));
 
 const shutdown = async () => {
+  // runShutdownCleanups(cron停止+実行中ジョブの完了待ち等)をclient.destroy()より先に行う
+  // (codexレビュー指摘: destroy()を先に呼ぶと、cron停止前に新しいtickが発火し、破棄済みの
+  // Discordクライアントでtemp-voiceのオーナー自動再割当(run-grace.ts)がAPI呼び出しに失敗しうる)。
+  await client.runShutdownCleanups();
   client.destroy();
   await Promise.allSettled(pendingOnboardings);
   await Promise.all([...eventBuses.values()].map((bus) => bus.close()));
-  await client.runShutdownCleanups();
   await close();
 };
 process.once("SIGTERM", () => void shutdown());
@@ -57,6 +61,7 @@ try {
     databaseUrl: env.DATABASE_URL,
     redisUrl: env.REDIS_URL,
     eventBusFor: (feature) => eventBuses.get(feature.key)!,
+    env,
   });
 
   const onboard = (guild: { id: string; name: string; ownerId: string }) =>

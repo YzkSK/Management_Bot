@@ -1,4 +1,5 @@
 export { createDb, type Db } from "./client.js";
+export { withResourceLock } from "./advisory-lock.js";
 export { syncFeatureMetadata } from "./seed-features.js";
 export { onboardGuild, type OnboardGuildInput } from "./onboard-guild.js";
 export {
