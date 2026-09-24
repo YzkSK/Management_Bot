@@ -98,4 +98,10 @@ export {
   isTempVoiceAuditReason,
   suppressTempVoiceChannelLog,
   shouldSuppressTempVoiceChannelLog,
+  suppressTempVoiceChannelCreateLog,
+  shouldSuppressTempVoiceChannelCreateLog,
+  suppressTempVoiceMoveLog,
+  shouldSuppressTempVoiceMoveLog,
+  type TempVoiceChannelCreateLogSuppression,
+  type TempVoiceMoveLogSuppression,
 } from "./log-suppression.js";

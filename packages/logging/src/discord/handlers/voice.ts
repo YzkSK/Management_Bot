@@ -1,6 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import { tempVoiceConfigs, type Db } from "@management-bot/db";
 import type { VoiceState } from "discord.js";
-import { VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
+import { shouldSuppressTempVoiceMoveLog, VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
+import { and, eq } from "drizzle-orm";
 import type { LogEntry } from "../../domain/index.js";
 import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
 import { createSendToChannel } from "../send-to-channel.js";
@@ -66,17 +68,41 @@ export function toVoiceStateUpdateEntry(oldState: VoiceState, newState: VoiceSta
   };
 }
 
+async function isTempVoiceCreateChannel(db: Db, guildId: string, channelId: string): Promise<boolean> {
+  const rows = await db
+    .select({ createChannelId: tempVoiceConfigs.createChannelId })
+    .from(tempVoiceConfigs)
+    .where(and(eq(tempVoiceConfigs.guildId, guildId), eq(tempVoiceConfigs.createChannelId, channelId)));
+  return rows.length > 0;
+}
+
 export function registerVoiceHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("voiceStateUpdate", (oldState, newState) => {
-    const moveEntry = toVoiceStateLogEntry(oldState, newState);
-    if (moveEntry) {
-      writeLogEntrySafely(deps, moveEntry);
-    }
-    const updateEntry = toVoiceStateUpdateEntry(oldState, newState);
-    if (updateEntry) {
-      writeLogEntrySafely(deps, updateEntry);
-    }
+    void (async () => {
+      const moveEntry = toVoiceStateLogEntry(oldState, newState);
+      if (moveEntry?.category === "voice") {
+        const isCreateChannelJoin =
+          moveEntry.action === "join" &&
+          newState.channelId !== null &&
+          (await isTempVoiceCreateChannel(ctx.db, newState.guild.id, newState.channelId));
+        const isRegisteredTempVoiceMove =
+          moveEntry.action === "move" &&
+          oldState.channelId !== null &&
+          newState.channelId !== null &&
+          shouldSuppressTempVoiceMoveLog({
+            guildId: newState.guild.id,
+            userId: newState.id,
+            previousChannelId: oldState.channelId,
+            channelId: newState.channelId,
+          });
+        if (!isCreateChannelJoin && !isRegisteredTempVoiceMove) writeLogEntrySafely(deps, moveEntry);
+      }
+      const updateEntry = toVoiceStateUpdateEntry(oldState, newState);
+      if (updateEntry) writeLogEntrySafely(deps, updateEntry);
+    })().catch((error: unknown) => {
+      console.error("logging: failed to handle voiceStateUpdate", error);
+    });
   });
 }

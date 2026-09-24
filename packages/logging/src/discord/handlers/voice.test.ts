@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { FeatureModuleContext } from "@management-bot/core";
+import { suppressTempVoiceMoveLog } from "@management-bot/shared";
 import { registerVoiceHandlers, toVoiceStateLogEntry, toVoiceStateUpdateEntry } from "./voice.js";
 
 function fakeVoiceState(
@@ -138,5 +139,41 @@ describe("registerVoiceHandlers", () => {
 
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toMatchObject({ category: "voice", payload: { action: "update" } });
+  });
+
+  test("skips a join to the configured temp voice create channel", async () => {
+    let listener: ((oldState: unknown, newState: unknown) => void) | undefined;
+    const on = mock((_event: string, handler: (oldState: unknown, newState: unknown) => void) => {
+      listener = handler;
+    });
+    const values = mock(() => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "id1" }]) }) }));
+    const db = {
+      insert: () => ({ values }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([{ createChannelId: "create-1" }]) }) }),
+    };
+    const ctx = { client: { on }, db } as unknown as FeatureModuleContext;
+
+    registerVoiceHandlers(ctx);
+    listener?.(fakeVoiceState(null), fakeVoiceState("create-1"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(values).not.toHaveBeenCalled();
+  });
+
+  test("skips only a registered temp voice bot move", async () => {
+    let listener: ((oldState: unknown, newState: unknown) => void) | undefined;
+    const on = mock((_event: string, handler: (oldState: unknown, newState: unknown) => void) => {
+      listener = handler;
+    });
+    const values = mock(() => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "id1" }]) }) }));
+    const db = { insert: () => ({ values }), select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) };
+    const ctx = { client: { on }, db } as unknown as FeatureModuleContext;
+
+    registerVoiceHandlers(ctx);
+    suppressTempVoiceMoveLog({ guildId: "g1", userId: "u1", previousChannelId: "create-1", channelId: "temp-1" });
+    listener?.(fakeVoiceState("create-1"), fakeVoiceState("temp-1"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(values).not.toHaveBeenCalled();
   });
 });
