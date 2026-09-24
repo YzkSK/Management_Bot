@@ -197,6 +197,13 @@
       "when": 1790251218029,
       "tag": "0027_mighty_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790255467056,
+      "tag": "0028_bouncy_hellion",
+      "breakpoints": true
     }
   ]
 }

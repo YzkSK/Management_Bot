@@ -50,6 +50,12 @@ export const tempVoiceChannels = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     gracePeriodOwnerId: text("grace_period_owner_id"),
     gracePeriodEndsAt: timestamp("grace_period_ends_at", { withTimezone: true }),
+    /**
+     * Dashboard一覧・強制削除確認ダイアログでの在室人数表示用(#415)。VoiceChannel.members.size
+     * はDiscord Gateway接続(botプロセス)のキャッシュでしかREST APIには存在しないため、
+     * bot側のvoiceStateUpdateごとにこの列へ同期する(多少のラグは許容、sync-member-count.ts参照)。
+     */
+    memberCount: integer("member_count").notNull().default(0),
   },
   (table) => [
     index("temp_voice_channels_guild_id_idx").on(table.guildId),
