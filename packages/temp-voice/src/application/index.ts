@@ -33,3 +33,5 @@ export {
   type TempVoicePermissionState,
   type TempVoicePermissionOverrideRow,
 } from "./permission-overrides.js";
+export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete } from "./notify-dashboard-actions.js";
+export { forceDeleteTempVoiceChannel, type ForceDeleteTempVoiceChannelDeps } from "./force-delete-channel.js";
