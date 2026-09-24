@@ -4,9 +4,15 @@ export {
   insertTempVoiceChannel,
   deleteTempVoiceChannel,
   findTempVoiceChannel,
+  transferTempVoiceOwner,
+  completeExpiredGracePeriod,
+  startGracePeriod,
+  clearGracePeriod,
+  findExpiredGracePeriodChannels,
   type TempVoiceConfig,
   type InsertTempVoiceChannelInput,
   type TempVoiceChannelRow,
+  type ExpiredGracePeriodChannelRow,
 } from "./create-temp-voice-channel.js";
 export {
   listPermissionOverrides,

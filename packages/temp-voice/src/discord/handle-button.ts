@@ -6,7 +6,8 @@ import { buildControlPanelContainer, parseTempVoiceCustomId, readTempVoiceState 
 import { buildTempVoiceModal } from "./control-panel-modal.js";
 import { buildSelectPermissionMessage } from "./select-permission-message.js";
 import { buildMemberListMessage } from "./member-list-message.js";
-import { MessageFlags, type ButtonInteraction, type VoiceBasedChannel } from "discord.js";
+import { buildTransferOwnerMessage } from "./transfer-owner-message.js";
+import { MessageFlags, type ButtonInteraction, type GuildMember, type VoiceBasedChannel } from "discord.js";
 
 export interface HandleButtonDeps {
   db: Db;
@@ -160,6 +161,13 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
         if (name) targetNames.set(override.targetId, name);
       }
       await interaction.reply(buildMemberListMessage(parsed.channelId, overrides, targetNames));
+      return;
+    }
+    case "transferOwner": {
+      const membersInChannel = [...voiceChannel.members.values()].filter(
+        (member: GuildMember) => member.id !== interaction.user.id,
+      );
+      await interaction.reply(buildTransferOwnerMessage(parsed.channelId, membersInChannel));
       return;
     }
   }

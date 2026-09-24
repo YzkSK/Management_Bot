@@ -19,6 +19,7 @@ describe("tempVoiceFeatureModule", () => {
       databaseUrl: "postgres://invalid-test-host/db",
       redisUrl: "redis://invalid-test-host",
       eventBus: {} as DomainEventBus,
+      env: {},
       onShutdown: () => {},
     };
 
@@ -41,6 +42,7 @@ describe("tempVoiceFeatureModule", () => {
       databaseUrl: "postgres://invalid-test-host/db",
       redisUrl: "redis://invalid-test-host",
       eventBus: { publish } as unknown as DomainEventBus,
+      env: {},
       onShutdown: () => {},
     };
 
@@ -125,6 +127,7 @@ describe("tempVoiceFeatureModule", () => {
       databaseUrl: "postgres://invalid-test-host/db",
       redisUrl: "redis://invalid-test-host",
       eventBus: { publish } as unknown as DomainEventBus,
+      env: {},
       onShutdown: () => {},
     };
 

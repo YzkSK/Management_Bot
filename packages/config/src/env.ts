@@ -39,6 +39,9 @@ export const envSchema = z.object({
 
   // モデレーションストライク減衰ジョブ
   MODERATION_DECAY_CRON: z.string().min(1).default("0 * * * *"),
+
+  // 一時VCオーナー自動再割当ジョブ
+  TEMP_VOICE_GRACE_CRON: z.string().min(1).default("* * * * *"),
 });
 
 export type Env = z.infer<typeof envSchema>;

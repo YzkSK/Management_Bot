@@ -1,4 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import cron from "node-cron";
 import { canRenameWithinRateLimit } from "../domain/index.js";
 import { handleVoiceCreate } from "./voice-create.js";
 import { handleVoiceSession } from "./handle-voice-session.js";
@@ -7,6 +8,13 @@ import { handleTempVoiceButton } from "./handle-button.js";
 import { handleTempVoiceModalSubmit } from "./handle-modal-submit.js";
 import { handleTempVoiceSelectMenu } from "./handle-select-menu.js";
 import { handleTempVoiceRemoveMember } from "./handle-remove-member.js";
+import { handleTempVoiceTransferOwner } from "./handle-transfer-owner.js";
+import { handleOwnerGrace } from "./handle-owner-grace.js";
+import { createGraceRunner } from "./run-grace.js";
+
+/** オーナー不在からVC自動再割当までの猶予期間(#410)。 */
+const OWNER_GRACE_PERIOD_MS = 10 * 60 * 1000;
+const GRACE_CRON_TIMEZONE = "Asia/Tokyo";
 
 export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // 一時VC内メンバーの入退室セッションをプロセス内メモリで管理する(#414)。
@@ -22,6 +30,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     handleVoiceSession({ eventBus: ctx.eventBus, sessionStore }, oldState, newState).catch((error: unknown) => {
       console.error("temp-voice: failed to handle voiceStateUpdate (session tracking)", error);
     });
+    handleOwnerGrace({ db: ctx.db, gracePeriodMs: OWNER_GRACE_PERIOD_MS }, oldState, newState).catch((error: unknown) => {
+      console.error("temp-voice: failed to handle voiceStateUpdate (owner grace period)", error);
+    });
   });
 
   // 一時VC削除時(制御パネルからの明示削除・手動削除・将来の#411無人削除等、経路を問わず)に
@@ -32,6 +43,20 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     sessionStore.endAllSessionsForChannel(ctx.eventBus, channel.guildId, channel.id, new Date()).catch((error: unknown) => {
       console.error(`temp-voice: failed to end sessions for deleted channel ${channel.id}`, error);
     });
+  });
+
+  // オーナー不在の猶予期限切れVCを自動再割当するcron(#410)。「VC内最古参メンバー」の判定に
+  // このプロセス内のsessionStore(#414)が必要なため、独立cronアプリではなくbot本体プロセス内で
+  // node-cron登録する(run-grace.tsのコメント参照)。
+  const graceCron = ctx.env.TEMP_VOICE_GRACE_CRON ?? "* * * * *";
+  if (!cron.validate(graceCron)) {
+    throw new Error(`Invalid TEMP_VOICE_GRACE_CRON: ${graceCron}`);
+  }
+  const graceRunner = createGraceRunner({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore });
+  const graceTask = cron.schedule(graceCron, () => void graceRunner.run(), { timezone: GRACE_CRON_TIMEZONE });
+  ctx.onShutdown(async () => {
+    graceTask.stop();
+    await graceRunner.waitForIdle();
   });
 
   // renameのレート制限(2回/10分/チャンネル)はプロセス内メモリで判定する(#408)。
@@ -56,7 +81,13 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
 
   ctx.client.on("interactionCreate", (interaction) => {
     // 他機能パッケージのボタン/モーダル/セレクトメニューと混在するため、customIdのprefixで早期に絞り込む。
-    if (!interaction.isButton() && !interaction.isModalSubmit() && !interaction.isUserSelectMenu() && !interaction.isRoleSelectMenu()) {
+    if (
+      !interaction.isButton() &&
+      !interaction.isModalSubmit() &&
+      !interaction.isUserSelectMenu() &&
+      !interaction.isRoleSelectMenu() &&
+      !interaction.isStringSelectMenu()
+    ) {
       return;
     }
     if (!interaction.customId.startsWith("temp-voice:")) return;
@@ -81,6 +112,12 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     if (interaction.isUserSelectMenu() || interaction.isRoleSelectMenu()) {
       handleTempVoiceSelectMenu({ db: ctx.db, eventBus: ctx.eventBus }, interaction).catch((error: unknown) => {
         console.error("temp-voice: failed to handle select menu interaction", error);
+      });
+      return;
+    }
+    if (interaction.isStringSelectMenu()) {
+      handleTempVoiceTransferOwner({ db: ctx.db, eventBus: ctx.eventBus }, interaction).catch((error: unknown) => {
+        console.error("temp-voice: failed to handle transfer-owner select menu interaction", error);
       });
       return;
     }

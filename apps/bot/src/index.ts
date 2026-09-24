@@ -27,6 +27,7 @@ const botEnvSchema = envSchema.pick({
   REDIS_URL: true,
   DISCORD_TOKEN: true,
   DISCORD_CLIENT_ID: true,
+  TEMP_VOICE_GRACE_CRON: true,
 });
 
 const env = parseEnv(botEnvSchema);
@@ -57,6 +58,7 @@ try {
     databaseUrl: env.DATABASE_URL,
     redisUrl: env.REDIS_URL,
     eventBusFor: (feature) => eventBuses.get(feature.key)!,
+    env,
   });
 
   const onboard = (guild: { id: string; name: string; ownerId: string }) =>

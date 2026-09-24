@@ -1,6 +1,8 @@
 import type { Db } from "@management-bot/db";
 import { tempVoiceChannels, tempVoiceConfigs } from "@management-bot/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, lt, type TablesRelationalConfig } from "drizzle-orm";
+import type { PgDatabase } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 
 export interface TempVoiceConfig {
   guildId: string;
@@ -66,4 +68,143 @@ export async function findTempVoiceChannel(db: Db, channelId: string): Promise<T
     .from(tempVoiceChannels)
     .where(eq(tempVoiceChannels.channelId, channelId));
   return row ?? null;
+}
+
+/** guildId+ownerIdのunique制約(#406)違反かどうかを判定する(voice-create.tsのisOwnerUniqueViolationと同じ判定)。 */
+function isOwnerUniqueViolation(error: unknown): boolean {
+  const matches = (value: unknown): boolean => {
+    if (typeof value !== "object" || value === null) return false;
+    const candidate = value as { code?: unknown; constraint_name?: unknown };
+    return candidate.code === "23505" && candidate.constraint_name === "temp_voice_channels_guild_id_owner_id_key";
+  };
+  return matches(error) || (error instanceof Error && matches(error.cause));
+}
+
+export type TransferTempVoiceOwnerResult = "committed" | "lostRace" | "newOwnerAlreadyOwnsChannel";
+
+/**
+ * オーナーを更新し、猶予情報(gracePeriodOwnerId/gracePeriodEndsAt)を同時にクリアする(#410)。
+ * 手動移譲(#410)から呼ぶcompare-and-swap版。`WHERE channelId AND ownerId = expectedOwnerId`で
+ * 更新することで、手動移譲と自動再割当cronが同一チャンネルに対して同時に走った場合の
+ * 二重移譲・イベント重複を防ぐ(codexレビュー指摘)。戻り値"lostRace"は、読み取り後に
+ * 既に他の処理でownerIdが変わっている(競合に負けた)ことを意味する。
+ * 戻り値"newOwnerAlreadyOwnsChannel"は、移譲先が別の一時VCのオーナーになっており
+ * guildId+ownerIdのunique制約(#406)に違反したことを意味する(codexレビュー指摘:
+ * この事前チェックが無いと、権限付与済みのまま例外が伝播しロールバックされない)。
+ * どちらの場合も呼び出し元は付与済みの制御チャンネル閲覧権限をロールバックしユーザーにエラー表示する。
+ * decayStrikes(@management-bot/moderation)と同じ理由で、PgDatabase(通常のDb)・
+ * PgTransaction(db.transaction内のtx)のどちらでも受け取れるようジェネリクスで受ける。
+ */
+export async function transferTempVoiceOwner<TFullSchema extends Record<string, unknown>, TSchema extends TablesRelationalConfig>(
+  db: PgDatabase<PostgresJsQueryResultHKT, TFullSchema, TSchema>,
+  channelId: string,
+  expectedOwnerId: string,
+  newOwnerId: string,
+): Promise<TransferTempVoiceOwnerResult> {
+  try {
+    const updated = await db
+      .update(tempVoiceChannels)
+      .set({ ownerId: newOwnerId, gracePeriodOwnerId: null, gracePeriodEndsAt: null })
+      .where(and(eq(tempVoiceChannels.channelId, channelId), eq(tempVoiceChannels.ownerId, expectedOwnerId)))
+      .returning({ channelId: tempVoiceChannels.channelId });
+    return updated.length > 0 ? "committed" : "lostRace";
+  } catch (error) {
+    if (isOwnerUniqueViolation(error)) return "newOwnerAlreadyOwnsChannel";
+    throw error;
+  }
+}
+
+/**
+ * 猶予期限切れによる自動再割当(#410)から呼ぶcompare-and-swap版。手動移譲の完了と競合した場合、
+ * `WHERE gracePeriodOwnerId = expectedGracePeriodOwnerId AND gracePeriodEndsAt = expectedGracePeriodEndsAt`
+ * が満たされず0行更新となり、cron側は何もしない(codexレビュー指摘: 手動移譲後に遅れて到達した
+ * cronが上書きするのを防ぐ)。期限値そのものも条件に含めるのは、オーナーが猶予中に一度再入室して
+ * 猶予解除→即座に再退出して新しい猶予が始まった場合、gracePeriodOwnerId(同一ユーザー)だけを
+ * 条件にすると新しい猶予の期限切れを待たずに誤って確定してしまうため(codexレビュー指摘)。
+ * unique制約違反時の扱いはtransferTempVoiceOwnerと同じ。
+ */
+export async function completeExpiredGracePeriod<TFullSchema extends Record<string, unknown>, TSchema extends TablesRelationalConfig>(
+  db: PgDatabase<PostgresJsQueryResultHKT, TFullSchema, TSchema>,
+  channelId: string,
+  expectedGracePeriodOwnerId: string,
+  expectedGracePeriodEndsAt: Date,
+  newOwnerId: string,
+): Promise<TransferTempVoiceOwnerResult> {
+  try {
+    const updated = await db
+      .update(tempVoiceChannels)
+      .set({ ownerId: newOwnerId, gracePeriodOwnerId: null, gracePeriodEndsAt: null })
+      .where(
+        and(
+          eq(tempVoiceChannels.channelId, channelId),
+          eq(tempVoiceChannels.gracePeriodOwnerId, expectedGracePeriodOwnerId),
+          eq(tempVoiceChannels.gracePeriodEndsAt, expectedGracePeriodEndsAt),
+        ),
+      )
+      .returning({ channelId: tempVoiceChannels.channelId });
+    return updated.length > 0 ? "committed" : "lostRace";
+  } catch (error) {
+    if (isOwnerUniqueViolation(error)) return "newOwnerAlreadyOwnsChannel";
+    throw error;
+  }
+}
+
+/**
+ * オーナー退出を検知した時点で呼ぶ。猶予期間(オーナー不在10分)を開始する(#410)。
+ * `WHERE ownerId = expectedOwnerId`で、退出検知の直前に手動移譲が完了していた場合
+ * (このユーザーは既にオーナーでない)は何もしない(codexレビュー指摘)。
+ */
+export async function startGracePeriod(
+  db: Db,
+  channelId: string,
+  expectedOwnerId: string,
+  gracePeriodEndsAt: Date,
+): Promise<void> {
+  await db
+    .update(tempVoiceChannels)
+    .set({ gracePeriodOwnerId: expectedOwnerId, gracePeriodEndsAt })
+    .where(and(eq(tempVoiceChannels.channelId, channelId), eq(tempVoiceChannels.ownerId, expectedOwnerId)));
+}
+
+/**
+ * オーナーが猶予期間内に同じVCへ再入室した際に呼ぶ。猶予情報をクリアしオーナーのまま継続する(#410)。
+ * `WHERE gracePeriodOwnerId = expectedOwnerId`で、既に猶予期限切れcronが処理済み(オーナー変更済み)
+ * なら何もしない(codexレビュー指摘: 再入室と自動再割当がほぼ同時に起きた場合の競合)。
+ */
+export async function clearGracePeriod(db: Db, channelId: string, expectedOwnerId: string): Promise<void> {
+  await db
+    .update(tempVoiceChannels)
+    .set({ gracePeriodOwnerId: null, gracePeriodEndsAt: null })
+    .where(and(eq(tempVoiceChannels.channelId, channelId), eq(tempVoiceChannels.gracePeriodOwnerId, expectedOwnerId)));
+}
+
+export interface ExpiredGracePeriodChannelRow {
+  channelId: string;
+  guildId: string;
+  controlChannelId: string;
+  gracePeriodOwnerId: string;
+  gracePeriodEndsAt: Date;
+}
+
+/**
+ * 猶予期限が切れたVCを検索する(#410、apps/bot内の自動再割当cronから呼ぶ)。
+ * updateTempVoiceOwnerと同じ理由でPgDatabase/PgTransactionどちらでも受け取れるようにする。
+ */
+export async function findExpiredGracePeriodChannels<TFullSchema extends Record<string, unknown>, TSchema extends TablesRelationalConfig>(
+  db: PgDatabase<PostgresJsQueryResultHKT, TFullSchema, TSchema>,
+  now: Date,
+): Promise<ExpiredGracePeriodChannelRow[]> {
+  const rows = await db
+    .select({
+      channelId: tempVoiceChannels.channelId,
+      guildId: tempVoiceChannels.guildId,
+      controlChannelId: tempVoiceChannels.controlChannelId,
+      gracePeriodOwnerId: tempVoiceChannels.gracePeriodOwnerId,
+      gracePeriodEndsAt: tempVoiceChannels.gracePeriodEndsAt,
+    })
+    .from(tempVoiceChannels)
+    .where(and(isNotNull(tempVoiceChannels.gracePeriodEndsAt), lt(tempVoiceChannels.gracePeriodEndsAt, now)));
+  return rows.filter(
+    (row): row is ExpiredGracePeriodChannelRow => row.gracePeriodOwnerId !== null && row.gracePeriodEndsAt !== null,
+  );
 }
