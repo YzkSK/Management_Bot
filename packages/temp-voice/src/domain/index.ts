@@ -7,3 +7,8 @@ export {
   validateBitrateKbps,
   type ValidationResult,
 } from "./validate-input.js";
+export {
+  buildVoiceSessionEndedEvent,
+  type VoiceSessionEndedInput,
+  type VoiceSessionEndedEventPayload,
+} from "./voice-session.js";

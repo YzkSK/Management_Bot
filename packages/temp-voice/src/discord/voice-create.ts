@@ -9,6 +9,7 @@ import {
 import { buildTempVoiceChannelName, canCreateTempVoiceInCategory } from "../domain/index.js";
 import { findOwnedTempVoiceChannelId, getTempVoiceConfig, insertTempVoiceChannel } from "../application/index.js";
 import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
+import type { VoiceSessionStore } from "./voice-session-store.js";
 import {
   ChannelType,
   MessageFlags,
@@ -23,6 +24,7 @@ import {
 export interface HandleVoiceCreateDeps {
   db: Db;
   eventBus: DomainEventBus;
+  sessionStore: VoiceSessionStore;
 }
 
 /** ロールバック用のチャンネル削除。失敗しても処理は継続するが、孤児チャンネルとして残るためログには残す(codexレビュー指摘)。 */
@@ -113,6 +115,9 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     reason: TEMP_VOICE_CREATE_REASON,
   });
   suppressTempVoiceChannelLog(voiceChannel.id);
+  // VC作成直後に追跡開始する(#414)。setChannel完了後まで遅らせると、その間に他ユーザーが
+  // 偶然このVCへ入室した場合の入室記録を取りこぼす(codexレビュー指摘)。
+  deps.sessionStore.startTrackingChannel(voiceChannel.id);
 
   let controlChannel;
   try {
@@ -128,6 +133,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
       ],
     });
   } catch (error) {
+    deps.sessionStore.discardChannel(voiceChannel.id);
     await deleteChannelForRollback(voiceChannel);
     throw error;
   }
@@ -136,9 +142,14 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   try {
     await member.voice.setChannel(voiceChannel as VoiceBasedChannel);
   } catch (error) {
+    deps.sessionStore.discardChannel(voiceChannel.id);
     await Promise.all([deleteChannelForRollback(voiceChannel), deleteChannelForRollback(controlChannel)]);
     throw error;
   }
+
+  // オーナーの入室をセッション開始として記録する(#414)。DB INSERT失敗によるロールバック時は
+  // discardChannelで追跡ごと解除する(以下のcatch節参照)。
+  deps.sessionStore.recordJoin(voiceChannel.id, member.id, new Date());
 
   await controlChannel
     .send({
@@ -159,6 +170,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     });
   } catch (error) {
     // insertTempVoiceChannel自体が失敗しているため、行はそもそも存在しない(DB側のロールバックは不要)。
+    deps.sessionStore.discardChannel(voiceChannel.id);
     await Promise.all([deleteChannelForRollback(voiceChannel), deleteChannelForRollback(controlChannel)]);
     if (!isOwnerUniqueViolation(error)) throw error;
     // race condition(#407)によりguildId+ownerIdのunique制約(#406)に競り負けた場合、
