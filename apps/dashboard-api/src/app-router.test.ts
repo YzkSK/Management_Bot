@@ -12,8 +12,8 @@ describe("appRouter", () => {
     expect(mountedKeys).toContain("moderation");
   });
 
-  test("temp-voiceはdomain実装が未着手のため公開しない(issue #222)", () => {
+  test("tempVoiceはrouter実装済みのため公開する(issue #415)", () => {
     const mountedKeys = Object.keys(appRouter._def.record);
-    expect(mountedKeys).not.toContain("tempVoice");
+    expect(mountedKeys).toContain("tempVoice");
   });
 });
