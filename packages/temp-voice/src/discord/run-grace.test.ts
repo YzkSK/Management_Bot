@@ -36,7 +36,12 @@ function fakeDb(
     execute: () => Promise.resolve([{ acquired: lockAcquired }]),
     select: () => ({ from: () => ({ where: () => Promise.resolve(expired) }) }),
   };
+  // withResourceLock(packages/db/src/advisory-lock.ts)が呼ぶdb.$client.reserve()のfake。
+  // 予約したコネクション(タグ付きテンプレート関数)でpg_advisory_lock/unlockを実行する体で、
+  // テストでは実際のSQLは発行せず即座にresolveする。
+  const reservedConnection = Object.assign(() => Promise.resolve(), { release: () => {} });
   return {
+    $client: { reserve: () => Promise.resolve(reservedConnection) },
     transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
     // rollbackGrantedViewerIfNotOwner内のfindTempVoiceChannelが参照する(非トランザクション経由)。
     select: () => ({

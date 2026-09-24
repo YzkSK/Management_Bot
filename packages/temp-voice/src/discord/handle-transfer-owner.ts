@@ -1,8 +1,9 @@
 import type { DomainEventBus } from "@management-bot/core";
-import type { Db } from "@management-bot/db";
+import { withResourceLock, type Db } from "@management-bot/db";
 import { findOwnedTempVoiceChannelId, findTempVoiceChannel, transferTempVoiceOwner } from "../application/index.js";
 import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
 import { editControlChannelViewer, rollbackGrantedViewerIfNotOwner } from "./control-channel-permission.js";
+import { OWNER_TRANSFER_LOCK_KEY_PREFIX } from "./run-grace.js";
 import { parseTransferOwnerSelectCustomId } from "./transfer-owner-message.js";
 import { MessageFlags, type StringSelectMenuInteraction, type VoiceBasedChannel } from "discord.js";
 
@@ -55,66 +56,74 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
   await interaction.deferUpdate();
 
   const client = interaction.client;
-  try {
-    await editControlChannelViewer(client, row.controlChannelId, newOwnerId, true);
-  } catch (error) {
-    await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
-    throw error;
-  }
 
-  let result: Awaited<ReturnType<typeof transferTempVoiceOwner>>;
-  try {
-    result = await transferTempVoiceOwner(deps.db, voiceChannel.id, row.ownerId, newOwnerId);
-  } catch (error) {
-    // unique制約違反以外のDBエラー(接続断等)。付与済みの権限をDBの現オーナーで確認しつつロールバック
-    // する(codexレビュー指摘: 例外がそのまま伝播すると付与済み権限が孤立して残ってしまう)。
-    await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch(
-      (rollbackError: unknown) => {
-        console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after DB error`, rollbackError);
-      },
-    );
-    await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
-    throw error;
-  }
-  if (result !== "committed") {
-    // "lostRace": 自動再割当cronが先にオーナーを変更済み(codexレビュー指摘: 手動移譲とcronの競合)。
-    // "newOwnerAlreadyOwnsChannel": 事前チェックをすり抜けたrace conditionで移譲先が別VCの
-    // オーナーになっていた(codexレビュー指摘)。いずれもDBの現オーナーを再確認してから付与した
-    // 閲覧権限を戻す(codexレビュー指摘: 無条件に剥奪すると、cron側が同じ候補者を新オーナーに
-    // 選んでいた場合に正当な権限を奪ってしまう)。
-    await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch((error: unknown) => {
-      console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after ${result}`, error);
+  // チャンネル単位のadvisory lockでrun-grace.ts(自動再割当cron)と排他する(codexレビュー指摘:
+  // rollbackGrantedViewerIfNotOwnerのDB再確認だけでは、確認からDiscord書き込みまでの間に
+  // 相手側の処理が割り込むTOCTOUが残っていた。ロックで「権限付与→DB確定/ロールバック」の
+  // 一連の処理を排他することでTOCTOUを解消する)。
+  await withResourceLock(deps.db, `${OWNER_TRANSFER_LOCK_KEY_PREFIX}${voiceChannel.id}`, async () => {
+    try {
+      await editControlChannelViewer(client, row.controlChannelId, newOwnerId, true);
+    } catch (error) {
+      await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+      throw error;
+    }
+
+    let result: Awaited<ReturnType<typeof transferTempVoiceOwner>>;
+    try {
+      result = await transferTempVoiceOwner(deps.db, voiceChannel.id, row.ownerId, newOwnerId);
+    } catch (error) {
+      // unique制約違反以外のDBエラー(接続断等)。付与済みの権限をDBの現オーナーで確認しつつロールバック
+      // する(codexレビュー指摘: 例外がそのまま伝播すると付与済み権限が孤立して残ってしまう)。
+      await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch(
+        (rollbackError: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after DB error`, rollbackError);
+        },
+      );
+      await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+      throw error;
+    }
+    if (result !== "committed") {
+      // "lostRace": 自動再割当cronが先にオーナーを変更済み(codexレビュー指摘: 手動移譲とcronの競合)。
+      // "newOwnerAlreadyOwnsChannel": 事前チェックをすり抜けたrace conditionで移譲先が別VCの
+      // オーナーになっていた(codexレビュー指摘)。いずれもDBの現オーナーを再確認してから付与した
+      // 閲覧権限を戻す。
+      await rollbackGrantedViewerIfNotOwner(deps.db, client, voiceChannel.id, row.controlChannelId, newOwnerId).catch(
+        (error: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after ${result}`, error);
+        },
+      );
+      const content =
+        result === "newOwnerAlreadyOwnsChannel"
+          ? "オーナー移譲に失敗しました。選択されたメンバーは既に別の一時VCのオーナーです。"
+          : "オーナー移譲に失敗しました。既に他の処理でオーナーが変更されている可能性があります。";
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await editControlChannelViewer(client, row.controlChannelId, row.ownerId, null).catch((error: unknown) => {
+      // DB更新は既に確定しているため、旧オーナーの権限剥奪失敗は握りつぶしログのみ(孤立した閲覧権限が残るだけで実害は小さい)。
+      console.error(`temp-voice: failed to revoke previous owner control channel permission for ${voiceChannel.id}`, error);
     });
-    const content =
-      result === "newOwnerAlreadyOwnsChannel"
-        ? "オーナー移譲に失敗しました。選択されたメンバーは既に別の一時VCのオーナーです。"
-        : "オーナー移譲に失敗しました。既に他の処理でオーナーが変更されている可能性があります。";
-    await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
-    return;
-  }
 
-  await editControlChannelViewer(client, row.controlChannelId, row.ownerId, null).catch((error: unknown) => {
-    // DB更新は既に確定しているため、旧オーナーの権限剥奪失敗は握りつぶしログのみ(孤立した閲覧権限が残るだけで実害は小さい)。
-    console.error(`temp-voice: failed to revoke previous owner control channel permission for ${voiceChannel.id}`, error);
-  });
+    await interaction.editReply({
+      flags: MessageFlags.IsComponentsV2,
+      components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
+    });
 
-  await interaction.editReply({
-    flags: MessageFlags.IsComponentsV2,
-    components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
-  });
-
-  await deps.eventBus.publish({
-    type: "temp-voice.event.recorded",
-    action: "ownerTransferred",
-    guildId: row.guildId,
-    channelId: voiceChannel.id,
-    executorId: interaction.user.id,
-    executorName: interaction.user.displayName,
-    previousOwnerId: row.ownerId,
-    previousOwnerName: interaction.user.displayName,
-    newOwnerId,
-    newOwnerName: newOwnerMember.displayName,
-    trigger: "manual",
-    createdAt: new Date().toISOString(),
+    await deps.eventBus.publish({
+      type: "temp-voice.event.recorded",
+      action: "ownerTransferred",
+      guildId: row.guildId,
+      channelId: voiceChannel.id,
+      executorId: interaction.user.id,
+      executorName: interaction.user.displayName,
+      previousOwnerId: row.ownerId,
+      previousOwnerName: interaction.user.displayName,
+      newOwnerId,
+      newOwnerName: newOwnerMember.displayName,
+      trigger: "manual",
+      createdAt: new Date().toISOString(),
+    });
   });
 }

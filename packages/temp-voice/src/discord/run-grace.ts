@@ -1,5 +1,5 @@
 import type { DomainEventBus } from "@management-bot/core";
-import type { Db } from "@management-bot/db";
+import { withResourceLock, type Db } from "@management-bot/db";
 import { sql } from "drizzle-orm";
 import { completeExpiredGracePeriod, findExpiredGracePeriodChannels, type ExpiredGracePeriodChannelRow } from "../application/index.js";
 import { editControlChannelViewer, rollbackGrantedViewerIfNotOwner } from "./control-channel-permission.js";
@@ -24,6 +24,9 @@ export interface GraceRunner {
   waitForIdle: () => Promise<void>;
 }
 
+/** チャンネル単位のオーナー移譲処理を排他するadvisory lockのキーprefix(#410、codexレビュー指摘)。 */
+export const OWNER_TRANSFER_LOCK_KEY_PREFIX = "temp-voice:owner-transfer:";
+
 /**
  * 猶予期限切れのVCを1件処理する(#410)。VC内に現在誰か残っていれば最も長く滞在している
  * メンバーへオーナーを再割当し、誰もいなければ何もしない(次回のcron実行に持ち越す)。
@@ -31,17 +34,16 @@ export interface GraceRunner {
  * 次点の候補で再試行する(codexレビュー指摘: newOwnerAlreadyOwnsChannelを無視すると
  * 誰も再割当されないまま猶予期限切れ状態が残ってしまう)。
  *
- * DBトランザクションの外でDiscord API呼び出しを行う(codexレビュー指摘: advisory lock保持中に
- * ネットワークI/Oを挟むとロック保持時間が伸び、部分失敗時にDiscord側だけ変更されDBがロール
- * バックされる不整合が起きる)。整合性はDB更新をcompleteExpiredGracePeriod(compare-and-swap、
- * WHERE gracePeriodOwnerId=期待値かつgracePeriodEndsAt=期待値)で守ることで確保する。
- * gracePeriodEndsAtも条件に含めるのは、オーナーが猶予中に再入室→即再退出して新しい猶予が
- * 始まった場合、gracePeriodOwnerId(同一ユーザー)だけでは新しい猶予を誤って確定してしまう
- * ため(codexレビュー指摘)。手動移譲(handle-transfer-owner.ts)と競合した場合、後から実行
- * される側のCASが0行更新となり、そちらは制御チャンネル権限だけロールバックして何もしない
- * (codexレビュー指摘: 手動移譲とcronの二重移譲防止)。
+ * withResourceLock(channelId単位のセッションスコープadvisory lock)で全体を包み、
+ * 手動移譲(handle-transfer-owner.ts、同じロックキーを使う)との間で「DBの現在owner確認→
+ * Discord API呼び出し→DB確定」の一連の処理をアトミックに見せる(codexレビュー指摘:
+ * rollbackGrantedViewerIfNotOwnerだけではDB再読込とDiscord書き込みの間にTOCTOUが残っていた)。
  */
 async function processExpiredChannel(deps: GraceRunnerDeps, row: ExpiredGracePeriodChannelRow): Promise<void> {
+  await withResourceLock(deps.db, `${OWNER_TRANSFER_LOCK_KEY_PREFIX}${row.channelId}`, () => processExpiredChannelLocked(deps, row));
+}
+
+async function processExpiredChannelLocked(deps: GraceRunnerDeps, row: ExpiredGracePeriodChannelRow): Promise<void> {
   const triedUserIds = new Set<string>();
 
   for (;;) {

@@ -28,7 +28,10 @@ function fakeDb(
   ownerAfterRollback = row?.ownerId ?? "owner-1",
 ) {
   let selectCallCount = 0;
+  // withResourceLock(packages/db/src/advisory-lock.ts)が呼ぶdb.$client.reserve()のfake。
+  const reservedConnection = Object.assign(() => Promise.resolve(), { release: () => {} });
   return {
+    $client: { reserve: () => Promise.resolve(reservedConnection) },
     select: () => ({
       from: () => ({
         where: () => {
