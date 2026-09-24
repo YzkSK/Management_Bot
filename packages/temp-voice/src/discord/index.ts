@@ -1,17 +1,36 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { canRenameWithinRateLimit } from "../domain/index.js";
 import { handleVoiceCreate } from "./voice-create.js";
+import { handleVoiceSession } from "./handle-voice-session.js";
+import { VoiceSessionStore } from "./voice-session-store.js";
 import { handleTempVoiceButton } from "./handle-button.js";
 import { handleTempVoiceModalSubmit } from "./handle-modal-submit.js";
 import { handleTempVoiceSelectMenu } from "./handle-select-menu.js";
 import { handleTempVoiceRemoveMember } from "./handle-remove-member.js";
 
 export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
-  const voiceCreateDeps = { db: ctx.db, eventBus: ctx.eventBus };
+  // 一時VC内メンバーの入退室セッションをプロセス内メモリで管理する(#414)。
+  // プロセス起動時に1回だけ生成し、voice-create.ts(作成時のオーナー入室)と
+  // handle-voice-session.ts(以降の入退室・移動)の両方で共有する。
+  const sessionStore = new VoiceSessionStore();
+  const voiceCreateDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
 
-  ctx.client.on("voiceStateUpdate", (_oldState, newState) => {
+  ctx.client.on("voiceStateUpdate", (oldState, newState) => {
     handleVoiceCreate(voiceCreateDeps, newState).catch((error: unknown) => {
       console.error("temp-voice: failed to handle voiceStateUpdate (Join to Create)", error);
+    });
+    handleVoiceSession({ eventBus: ctx.eventBus, sessionStore }, oldState, newState).catch((error: unknown) => {
+      console.error("temp-voice: failed to handle voiceStateUpdate (session tracking)", error);
+    });
+  });
+
+  // 一時VC削除時(制御パネルからの明示削除・手動削除・将来の#411無人削除等、経路を問わず)に
+  // 残存セッションを強制終了する(#414、codexレビュー指摘)。channelDeleteは制御チャンネル削除でも
+  // 発火するが、isTrackedで一時VC(音声チャンネル)のみに絞られるため無害。
+  ctx.client.on("channelDelete", (channel) => {
+    if (channel.isDMBased() || !sessionStore.isTracked(channel.id)) return;
+    sessionStore.endAllSessionsForChannel(ctx.eventBus, channel.guildId, channel.id, new Date()).catch((error: unknown) => {
+      console.error(`temp-voice: failed to end sessions for deleted channel ${channel.id}`, error);
     });
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { ChannelType } from "discord.js";
 import type { VoiceState } from "discord.js";
 import { handleVoiceCreate, type HandleVoiceCreateDeps } from "./voice-create.js";
+import { VoiceSessionStore } from "./voice-session-store.js";
 
 const CONFIG_ROW = {
   guildId: "g1",
@@ -93,7 +94,7 @@ describe("handleVoiceCreate", () => {
     const eventBus = { publish: mock(() => Promise.resolve()) };
     const newState = { guild: fakeGuild(), member: fakeMember(), channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(eventBus.publish).not.toHaveBeenCalled();
   });
@@ -104,7 +105,7 @@ describe("handleVoiceCreate", () => {
     const guild = fakeGuild();
     const newState = { guild, member: fakeMember(), channelId: "some-other-channel" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(guild.channels.create).not.toHaveBeenCalled();
   });
@@ -114,7 +115,7 @@ describe("handleVoiceCreate", () => {
     const eventBus = { publish: mock(() => Promise.resolve()) };
     const newState = { guild: fakeGuild(), member: null, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(eventBus.publish).not.toHaveBeenCalled();
   });
@@ -132,7 +133,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(member.voice.setChannel).toHaveBeenCalledWith(existingVoiceChannel);
     expect(guild.channels.create).not.toHaveBeenCalled();
@@ -154,7 +155,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(fetch).toHaveBeenCalledWith("existing-vc");
     expect(member.voice.setChannel).toHaveBeenCalledWith(existingVoiceChannel);
@@ -173,7 +174,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(member.voice.setChannel).not.toHaveBeenCalled();
     expect(guild.channels.create).not.toHaveBeenCalled();
@@ -194,7 +195,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(member.send).toHaveBeenCalledTimes(1);
     expect(guild.channels.create).not.toHaveBeenCalled();
@@ -218,7 +219,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(create).toHaveBeenCalledTimes(2);
     expect(member.voice.setChannel).toHaveBeenCalledWith(voiceChannel);
@@ -252,7 +253,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember({ displayName: "花子" });
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(create.mock.calls[0]?.[0]).toMatchObject({ name: "花子のVC" });
   });
@@ -270,7 +271,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await expect(handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState)).rejects.toThrow();
+    await expect(handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState)).rejects.toThrow();
 
     expect(voiceChannel.delete).toHaveBeenCalledTimes(1);
     expect(eventBus.publish).not.toHaveBeenCalled();
@@ -292,7 +293,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await expect(handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState)).rejects.toThrow();
+    await expect(handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState)).rejects.toThrow();
 
     expect(voiceChannel.delete).toHaveBeenCalledTimes(1);
     expect(controlChannel.delete).toHaveBeenCalledTimes(1);
@@ -321,7 +322,7 @@ describe("handleVoiceCreate", () => {
     const member = fakeMember();
     const newState = { guild, member, channelId: "create-ch" } as unknown as VoiceState;
 
-    await handleVoiceCreate({ db, eventBus } as unknown as HandleVoiceCreateDeps, newState);
+    await handleVoiceCreate({ db, eventBus, sessionStore: new VoiceSessionStore() } as unknown as HandleVoiceCreateDeps, newState);
 
     expect(voiceChannel.delete).toHaveBeenCalledTimes(1);
     expect(controlChannel.delete).toHaveBeenCalledTimes(1);
