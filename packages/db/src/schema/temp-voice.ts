@@ -18,8 +18,10 @@ export const tempVoiceConfigs = pgTable(
     guildId: text("guild_id")
       .primaryKey()
       .references(() => guilds.id, { onDelete: "cascade" }),
-    createChannelId: text("create_channel_id").notNull(),
-    categoryId: text("category_id").notNull(),
+    // 作成用VC・カテゴリの実体がDiscord上で削除された場合、両方NULLに戻す(#412の設定チャンネル
+    // 消失検知)。NULLは「未設定」と同じ扱いになり、Dashboardの「自動でセットアップ」ボタンが再表示される。
+    createChannelId: text("create_channel_id"),
+    categoryId: text("category_id"),
     nameTemplate: text("name_template").notNull().default("{username}のVC"),
     defaultUserLimit: integer("default_user_limit").notNull().default(0),
     defaultBitrate: integer("default_bitrate"),

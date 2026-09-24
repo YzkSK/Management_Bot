@@ -12,6 +12,8 @@ import { handleTempVoiceTransferOwner } from "./handle-transfer-owner.js";
 import { handleOwnerGrace } from "./handle-owner-grace.js";
 import { createGraceRunner } from "./run-grace.js";
 import { EmptyChannelDeletionScheduler, handleEmptyChannel } from "./handle-empty-channel.js";
+import { clearTempVoiceCreateChannel, getTempVoiceConfig } from "../application/index.js";
+import { runStartupReconcile } from "./reconcile.js";
 
 /** オーナー不在からVC自動再割当までの猶予期間(#410)。 */
 const OWNER_GRACE_PERIOD_MS = 10 * 60 * 1000;
@@ -46,7 +48,21 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // 併せて#411の削除猶予タイマーも解除する(他経路で既に削除済みのチャンネルに対し無駄な
   // 再確認・二重削除を試みないようにするため)。
   ctx.client.on("channelDelete", (channel) => {
-    if (channel.isDMBased() || !sessionStore.isTracked(channel.id)) return;
+    if (channel.isDMBased()) return;
+
+    // 作成用VC・カテゴリの削除をリアルタイム検知する(#412)。手動削除された場合に即座に反応し、
+    // temp_voice_configsをリセットする(Dashboardは「未設定」表示に戻り、再セットアップを促せる)。
+    getTempVoiceConfig(ctx.db, channel.guildId)
+      .then((config) => {
+        if (config?.createChannelId === channel.id || config?.categoryId === channel.id) {
+          return clearTempVoiceCreateChannel(ctx.db, channel.guildId);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(`temp-voice: failed to check create channel/category deletion for channel ${channel.id}`, error);
+      });
+
+    if (!sessionStore.isTracked(channel.id)) return;
     emptyChannelScheduler.cancel(channel.id);
     sessionStore.endAllSessionsForChannel(ctx.eventBus, channel.guildId, channel.id, new Date()).catch((error: unknown) => {
       console.error(`temp-voice: failed to end sessions for deleted channel ${channel.id}`, error);
@@ -60,6 +76,18 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   if (!cron.validate(graceCron)) {
     throw new Error(`Invalid TEMP_VOICE_GRACE_CRON: ${graceCron}`);
   }
+  // 起動時リコンサイル(#412)。bot再起動で失われるプロセス内状態(入退室セッション・空チャンネル
+  // 削除猶予タイマー)を補正し、片肺状態・設定チャンネル消失も検知する。起動時の1回のみ実行する。
+  const runReconcile = () => {
+    runStartupReconcile({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore, emptyChannelScheduler }).catch(
+      (error: unknown) => {
+        console.error("temp-voice: startup reconcile failed", error);
+      },
+    );
+  };
+  if (ctx.client.isReady()) runReconcile();
+  else ctx.client.once("ready", runReconcile);
+
   const graceRunner = createGraceRunner({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore });
   const graceTask = cron.schedule(graceCron, () => void graceRunner.run(), { timezone: GRACE_CRON_TIMEZONE });
   ctx.onShutdown(async () => {
