@@ -5,6 +5,7 @@ export {
   validateChannelName,
   validateUserLimit,
   validateBitrateKbps,
+  validateNameTemplate,
   type ValidationResult,
 } from "./validate-input.js";
 export {

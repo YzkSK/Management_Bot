@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { validateBitrateKbps, validateChannelName, validateUserLimit } from "./validate-input.js";
+import { validateBitrateKbps, validateChannelName, validateNameTemplate, validateUserLimit } from "./validate-input.js";
 
 describe("validateChannelName", () => {
   test("通常の文字列は許可する(前後空白はtrimする)", () => {
@@ -87,5 +87,20 @@ describe("validateBitrateKbps", () => {
 
   test("空白のみの入力は拒否する", () => {
     expect(validateBitrateKbps("   ", 128_000).ok).toBe(false);
+  });
+});
+
+describe("validateNameTemplate", () => {
+  test("空文字は拒否する(#415)", () => {
+    expect(validateNameTemplate("").ok).toBe(false);
+  });
+
+  test("{username}を含む正常な入力を受け付ける(#415)", () => {
+    expect(validateNameTemplate("{username}のVC")).toEqual({ ok: true, value: "{username}のVC" });
+  });
+
+  test("展開後100文字を超える場合は拒否する(#415)", () => {
+    const longFixedText = "あ".repeat(100);
+    expect(validateNameTemplate(longFixedText).ok).toBe(false);
   });
 });

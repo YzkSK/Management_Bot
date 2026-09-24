@@ -1,3 +1,5 @@
+import { buildTempVoiceChannelName } from "./channel-name.js";
+
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; message: string };
 
 /** 空白のみ・空文字はNaN扱いにする(Number("")===0による誤入力の受理を防ぐ、codexレビュー指摘)。 */
@@ -41,4 +43,19 @@ export function validateBitrateKbps(input: string, maximumBitrateBps: number): V
     return { ok: false, message: `このサーバーの音質上限は${Math.floor(maximumBitrateBps / 1000)}kbpsです。` };
   }
   return { ok: true, value: bps };
+}
+
+/**
+ * nameTemplate: 空文字禁止。{username}展開後の長さで100文字判定するため、
+ * 展開結果を仮のユーザー名("username")で試算する(実際の入室者名は可変長のため、
+ * ここでは固定文字列部分が長すぎないかの目安チェックに留める、#415)。
+ */
+export function validateNameTemplate(input: string): ValidationResult<string> {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return { ok: false, message: "名前テンプレートを入力してください。" };
+  const expanded = buildTempVoiceChannelName(trimmed, "username");
+  if (expanded.length >= 100) {
+    return { ok: false, message: "名前テンプレートが長すぎます。展開後100文字以内になるようにしてください。" };
+  }
+  return { ok: true, value: trimmed };
 }
