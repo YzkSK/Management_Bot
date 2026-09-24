@@ -11,6 +11,7 @@ import { handleTempVoiceRemoveMember } from "./handle-remove-member.js";
 import { handleTempVoiceTransferOwner } from "./handle-transfer-owner.js";
 import { handleOwnerGrace } from "./handle-owner-grace.js";
 import { createGraceRunner } from "./run-grace.js";
+import { EmptyChannelDeletionScheduler, handleEmptyChannel } from "./handle-empty-channel.js";
 
 /** オーナー不在からVC自動再割当までの猶予期間(#410)。 */
 const OWNER_GRACE_PERIOD_MS = 10 * 60 * 1000;
@@ -22,6 +23,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // handle-voice-session.ts(以降の入退室・移動)の両方で共有する。
   const sessionStore = new VoiceSessionStore();
   const voiceCreateDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
+  // 無人一時VCの削除猶予タイマーをプロセス内メモリで管理する(#411)。sessionStoreと同様プロセス起動時に1回だけ生成する。
+  const emptyChannelScheduler = new EmptyChannelDeletionScheduler();
+  const emptyChannelDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
 
   ctx.client.on("voiceStateUpdate", (oldState, newState) => {
     handleVoiceCreate(voiceCreateDeps, newState).catch((error: unknown) => {
@@ -33,13 +37,17 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     handleOwnerGrace({ db: ctx.db, gracePeriodMs: OWNER_GRACE_PERIOD_MS }, oldState, newState).catch((error: unknown) => {
       console.error("temp-voice: failed to handle voiceStateUpdate (owner grace period)", error);
     });
+    handleEmptyChannel(emptyChannelDeps, emptyChannelScheduler, oldState, newState);
   });
 
-  // 一時VC削除時(制御パネルからの明示削除・手動削除・将来の#411無人削除等、経路を問わず)に
+  // 一時VC削除時(制御パネルからの明示削除・手動削除・#411の無人削除等、経路を問わず)に
   // 残存セッションを強制終了する(#414、codexレビュー指摘)。channelDeleteは制御チャンネル削除でも
   // 発火するが、isTrackedで一時VC(音声チャンネル)のみに絞られるため無害。
+  // 併せて#411の削除猶予タイマーも解除する(他経路で既に削除済みのチャンネルに対し無駄な
+  // 再確認・二重削除を試みないようにするため)。
   ctx.client.on("channelDelete", (channel) => {
     if (channel.isDMBased() || !sessionStore.isTracked(channel.id)) return;
+    emptyChannelScheduler.cancel(channel.id);
     sessionStore.endAllSessionsForChannel(ctx.eventBus, channel.guildId, channel.id, new Date()).catch((error: unknown) => {
       console.error(`temp-voice: failed to end sessions for deleted channel ${channel.id}`, error);
     });
@@ -57,6 +65,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   ctx.onShutdown(async () => {
     graceTask.stop();
     await graceRunner.waitForIdle();
+    // 無人削除の猶予タイマー(#411)もshutdown時に解除する(codexレビュー指摘: cronのみ停止すると
+    // 最大graceMs(既定30秒)分、client.destroy()やDB切断後にタイマーが残りプロセスがぶら下がる)。
+    emptyChannelScheduler.cancelAll();
   });
 
   // renameのレート制限(2回/10分/チャンネル)はプロセス内メモリで判定する(#408)。
