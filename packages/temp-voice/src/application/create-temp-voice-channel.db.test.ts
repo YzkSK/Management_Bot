@@ -11,6 +11,7 @@ import {
   findTempVoiceChannel,
   getTempVoiceConfig,
   insertTempVoiceChannel,
+  listActiveTempVoiceChannels,
   setTempVoiceMemberCount,
   startGracePeriod,
   transferTempVoiceOwner,
@@ -339,5 +340,34 @@ describe("setTempVoiceMemberCount", () => {
 
     const [row] = await db.select().from(tempVoiceChannels).where(eq(tempVoiceChannels.channelId, channelId));
     expect(row?.memberCount).toBe(3);
+  });
+});
+
+describe("listActiveTempVoiceChannels", () => {
+  test("Dashboard一覧用にownerId/createdAt/memberCountを含む行を返す(#415)", async () => {
+    const channelId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId: "user-1" });
+    await setTempVoiceMemberCount(db, channelId, 2);
+
+    const rows = await listActiveTempVoiceChannels(db, guildId);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ channelId, guildId, ownerId: "user-1", memberCount: 2 });
+    expect(rows[0]?.createdAt).toBeInstanceOf(Date);
+  });
+
+  test("別ギルドのチャンネルは含まれない(#415)", async () => {
+    const otherGuildId = `test-guild-${randomUUID()}`;
+    await db.insert(guilds).values({ id: otherGuildId, name: "other" });
+    await insertTempVoiceChannel(db, {
+      channelId: `channel-${randomUUID()}`,
+      guildId: otherGuildId,
+      controlChannelId: "control-1",
+      ownerId: "user-1",
+    });
+
+    expect(await listActiveTempVoiceChannels(db, guildId)).toEqual([]);
+
+    await db.delete(guilds).where(eq(guilds.id, otherGuildId));
   });
 });

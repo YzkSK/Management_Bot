@@ -9,6 +9,7 @@ export {
   deleteTempVoiceChannel,
   findTempVoiceChannel,
   listTempVoiceChannelsByGuild,
+  listActiveTempVoiceChannels,
   transferTempVoiceOwner,
   completeExpiredGracePeriod,
   startGracePeriod,
@@ -20,6 +21,7 @@ export {
   type InsertTempVoiceChannelInput,
   type TempVoiceChannelRow,
   type TempVoiceChannelReconcileRow,
+  type ActiveTempVoiceChannelRow,
   type ExpiredGracePeriodChannelRow,
 } from "./create-temp-voice-channel.js";
 export {

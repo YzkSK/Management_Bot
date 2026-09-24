@@ -103,6 +103,32 @@ export async function setTempVoiceMemberCount(db: Db, channelId: string, memberC
   await db.update(tempVoiceChannels).set({ memberCount }).where(eq(tempVoiceChannels.channelId, channelId));
 }
 
+export interface ActiveTempVoiceChannelRow {
+  channelId: string;
+  guildId: string;
+  ownerId: string;
+  createdAt: Date;
+  memberCount: number;
+}
+
+/**
+ * Dashboard一覧タブ用にownerId/createdAt/memberCountを含む行を返す(#415)。
+ * listTempVoiceChannelsByGuild(#412リコンサイル専用、猶予情報を含む)とは用途が異なるため
+ * 別関数として分離する(既存の呼び出し元の型を変えないため)。
+ */
+export async function listActiveTempVoiceChannels(db: Db, guildId: string): Promise<ActiveTempVoiceChannelRow[]> {
+  return db
+    .select({
+      channelId: tempVoiceChannels.channelId,
+      guildId: tempVoiceChannels.guildId,
+      ownerId: tempVoiceChannels.ownerId,
+      createdAt: tempVoiceChannels.createdAt,
+      memberCount: tempVoiceChannels.memberCount,
+    })
+    .from(tempVoiceChannels)
+    .where(eq(tempVoiceChannels.guildId, guildId));
+}
+
 /** ユーザーが既にオーナーとして持っている一時VCのchannelIdを返す。無ければnull(1ユーザー1VCまでの事前チェック用)。 */
 export async function findOwnedTempVoiceChannelId(db: Db, guildId: string, ownerId: string): Promise<string | null> {
   const [match] = await db
