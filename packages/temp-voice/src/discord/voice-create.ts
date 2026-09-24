@@ -5,6 +5,8 @@ import {
   TEMP_VOICE_CREATE_REASON,
   TEMP_VOICE_DELETE_REASON,
   suppressTempVoiceChannelLog,
+  suppressTempVoiceChannelCreateLog,
+  suppressTempVoiceMoveLog,
 } from "@management-bot/shared";
 import { buildTempVoiceChannelName, canCreateTempVoiceInCategory } from "../domain/index.js";
 import { findOwnedTempVoiceChannelId, getTempVoiceConfig, insertTempVoiceChannel } from "../application/index.js";
@@ -89,6 +91,12 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
 
   const existingChannelId = await findOwnedTempVoiceChannelId(deps.db, guild.id, member.id);
   if (existingChannelId) {
+    suppressTempVoiceMoveLog({
+      guildId: guild.id,
+      userId: member.id,
+      previousChannelId: newState.channelId!,
+      channelId: existingChannelId,
+    });
     await moveMemberToOwnedChannel(guild, member, existingChannelId);
     return;
   }
@@ -112,6 +120,12 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
 
   const channelName = buildTempVoiceChannelName(config.nameTemplate, member.displayName);
 
+  suppressTempVoiceChannelCreateLog({
+    guildId: guild.id,
+    parentId: categoryId,
+    channelType: ChannelType.GuildVoice,
+    name: channelName,
+  });
   const voiceChannel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildVoice,
@@ -127,6 +141,12 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
 
   let controlChannel;
   try {
+    suppressTempVoiceChannelCreateLog({
+      guildId: guild.id,
+      parentId: categoryId,
+      channelType: ChannelType.GuildText,
+      name: channelName,
+    });
     controlChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
@@ -146,6 +166,12 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   suppressTempVoiceChannelLog(controlChannel.id);
 
   try {
+    suppressTempVoiceMoveLog({
+      guildId: guild.id,
+      userId: member.id,
+      previousChannelId: newState.channelId!,
+      channelId: voiceChannel.id,
+    });
     await member.voice.setChannel(voiceChannel as VoiceBasedChannel);
   } catch (error) {
     deps.sessionStore.discardChannel(voiceChannel.id);
@@ -184,7 +210,15 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     // 敗者側のVCを削除しただけではユーザーが取り残されるため、勝者VCへ移動を試みる
     // (codexレビュー指摘)。勝者VCがまだ無い/取得できない場合は#412のリコンサイル処理に委ねる。
     const winnerChannelId = await findOwnedTempVoiceChannelId(deps.db, guild.id, member.id);
-    if (winnerChannelId) await moveMemberToOwnedChannel(guild, member, winnerChannelId);
+    if (winnerChannelId) {
+      suppressTempVoiceMoveLog({
+        guildId: guild.id,
+        userId: member.id,
+        previousChannelId: newState.channelId!,
+        channelId: winnerChannelId,
+      });
+      await moveMemberToOwnedChannel(guild, member, winnerChannelId);
+    }
     return;
   }
 

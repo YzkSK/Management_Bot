@@ -1,5 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
-import { shouldSuppressTempVoiceChannelLog } from "@management-bot/shared";
+import { shouldSuppressTempVoiceChannelCreateLog, shouldSuppressTempVoiceChannelLog } from "@management-bot/shared";
 import type { DMChannel, NonThreadGuildBasedChannel } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
 import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
@@ -82,6 +82,17 @@ export function registerChannelHandlers(ctx: FeatureModuleContext, getChannelId:
   const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
 
   ctx.client.on("channelCreate", (channel) => {
+    if (
+      isGuildChannel(channel) &&
+      shouldSuppressTempVoiceChannelCreateLog({
+        guildId: channel.guild.id,
+        parentId: channel.parentId,
+        channelType: channel.type,
+        name: channel.name,
+      })
+    ) {
+      return;
+    }
     if (shouldSuppressTempVoiceChannelLog(channel.id)) return;
     writeLogEntrySafely(deps, toChannelCreateLogEntry(channel));
   });

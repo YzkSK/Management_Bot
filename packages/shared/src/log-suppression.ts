@@ -28,6 +28,8 @@ export function isTempVoiceAuditReason(reason: string | null | undefined): boole
  * reasonオプションの指定とあわせた2段構えの対策になる(reason判定をすり抜けた場合のフォールバック)。
  */
 const suppressedChannels = new Map<string, number>();
+const suppressedChannelCreates = new Map<string, number[]>();
+const suppressedVoiceMoves = new Map<string, number[]>();
 
 const DEFAULT_TTL_MS = 30_000;
 
@@ -41,4 +43,69 @@ export function shouldSuppressTempVoiceChannelLog(channelId: string): boolean {
   if (expiresAt === undefined) return false;
   suppressedChannels.delete(channelId);
   return expiresAt > Date.now();
+}
+
+export interface TempVoiceChannelCreateLogSuppression {
+  guildId: string;
+  parentId: string | null;
+  channelType: number;
+  name: string;
+}
+
+export interface TempVoiceMoveLogSuppression {
+  guildId: string;
+  userId: string;
+  previousChannelId: string;
+  channelId: string;
+}
+
+function channelCreateKey(input: TempVoiceChannelCreateLogSuppression): string {
+  return `${input.guildId}\u0000${input.parentId ?? ""}\u0000${input.channelType}\u0000${input.name}`;
+}
+
+function voiceMoveKey(input: TempVoiceMoveLogSuppression): string {
+  return `${input.guildId}\u0000${input.userId}\u0000${input.previousChannelId}\u0000${input.channelId}`;
+}
+
+function reserveSuppression(reservations: Map<string, number[]>, key: string, ttlMs: number): void {
+  const now = Date.now();
+  const active = (reservations.get(key) ?? []).filter((expiresAt) => expiresAt > now);
+  active.push(now + ttlMs);
+  reservations.set(key, active);
+}
+
+function consumeSuppression(reservations: Map<string, number[]>, key: string): boolean {
+  const now = Date.now();
+  const active = (reservations.get(key) ?? []).filter((expiresAt) => expiresAt > now);
+  if (active.length === 0) {
+    reservations.delete(key);
+    return false;
+  }
+  active.shift();
+  if (active.length === 0) reservations.delete(key);
+  else reservations.set(key, active);
+  return true;
+}
+
+/** 一時VC用にBotが作成するチャンネルを、IDが判明する前から1件だけ抑制する。 */
+export function suppressTempVoiceChannelCreateLog(
+  input: TempVoiceChannelCreateLogSuppression,
+  ttlMs: number = DEFAULT_TTL_MS,
+): void {
+  reserveSuppression(suppressedChannelCreates, channelCreateKey(input), ttlMs);
+}
+
+/** 登録済みの一時VCチャンネル作成と一致する場合だけ、通常のchannel.createログを抑制する。 */
+export function shouldSuppressTempVoiceChannelCreateLog(input: TempVoiceChannelCreateLogSuppression): boolean {
+  return consumeSuppression(suppressedChannelCreates, channelCreateKey(input));
+}
+
+/** 一時VC作成フローでBotが行うメンバー移動を、実行直前に1件だけ抑制する。 */
+export function suppressTempVoiceMoveLog(input: TempVoiceMoveLogSuppression, ttlMs: number = DEFAULT_TTL_MS): void {
+  reserveSuppression(suppressedVoiceMoves, voiceMoveKey(input), ttlMs);
+}
+
+/** 登録済みの一時VC用Bot移動と完全一致する場合だけ、通常のvoice.moveログを抑制する。 */
+export function shouldSuppressTempVoiceMoveLog(input: TempVoiceMoveLogSuppression): boolean {
+  return consumeSuppression(suppressedVoiceMoves, voiceMoveKey(input));
 }

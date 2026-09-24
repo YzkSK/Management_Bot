@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { ChannelType } from "discord.js";
+import { shouldSuppressTempVoiceChannelCreateLog, shouldSuppressTempVoiceMoveLog } from "@management-bot/shared";
 import type { VoiceState } from "discord.js";
 import { handleVoiceCreate, type HandleVoiceCreateDeps } from "./voice-create.js";
 import { VoiceSessionStore } from "./voice-session-store.js";
@@ -234,6 +235,15 @@ describe("handleVoiceCreate", () => {
         ownerName: "太郎",
       }),
     );
+    expect(
+      shouldSuppressTempVoiceChannelCreateLog({ guildId: "g1", parentId: "cat-1", channelType: ChannelType.GuildVoice, name: "太郎のVC" }),
+    ).toBe(true);
+    expect(
+      shouldSuppressTempVoiceChannelCreateLog({ guildId: "g1", parentId: "cat-1", channelType: ChannelType.GuildText, name: "太郎のVC" }),
+    ).toBe(true);
+    expect(
+      shouldSuppressTempVoiceMoveLog({ guildId: "g1", userId: "user-1", previousChannelId: "create-ch", channelId: "new-vc" }),
+    ).toBe(true);
   });
 
   test("VC名は{username}を入室者の表示名に置換して生成する", async () => {
