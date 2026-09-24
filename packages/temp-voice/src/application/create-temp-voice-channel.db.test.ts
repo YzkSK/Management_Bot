@@ -11,8 +11,10 @@ import {
   findTempVoiceChannel,
   getTempVoiceConfig,
   insertTempVoiceChannel,
+  setTempVoiceMemberCount,
   startGracePeriod,
   transferTempVoiceOwner,
+  upsertTempVoiceConfig,
 } from "./create-temp-voice-channel.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -303,5 +305,39 @@ describe("startGracePeriod / clearGracePeriod / findExpiredGracePeriodChannels",
     expect(expired.map((row) => row.channelId)).toEqual([expiredChannelId]);
     expect(expired[0]).toMatchObject({ channelId: expiredChannelId, guildId, controlChannelId: "control-1", gracePeriodOwnerId: "user-1" });
     expect(expired[0]?.gracePeriodEndsAt.toISOString()).toBe(expiredEndsAt.toISOString());
+  });
+});
+
+describe("upsertTempVoiceConfig", () => {
+  test("未設定ギルドに手動設定するとcreateChannelId/categoryIdが保存される(#415)", async () => {
+    await upsertTempVoiceConfig(db, guildId, { createChannelId: "vc-1", categoryId: "cat-1" });
+
+    const config = await getTempVoiceConfig(db, guildId);
+    expect(config?.createChannelId).toBe("vc-1");
+    expect(config?.categoryId).toBe("cat-1");
+    expect(config?.nameTemplate).toBe("{username}のVC"); // 列のデフォルト値のまま
+  });
+
+  test("共通設定のみ渡すとcreateChannelId/categoryIdは変更されない(#415)", async () => {
+    await upsertTempVoiceConfig(db, guildId, { createChannelId: "vc-1", categoryId: "cat-1" });
+
+    await upsertTempVoiceConfig(db, guildId, { nameTemplate: "custom-{username}", defaultUserLimit: 5 });
+
+    const config = await getTempVoiceConfig(db, guildId);
+    expect(config?.createChannelId).toBe("vc-1");
+    expect(config?.nameTemplate).toBe("custom-{username}");
+    expect(config?.defaultUserLimit).toBe(5);
+  });
+});
+
+describe("setTempVoiceMemberCount", () => {
+  test("在室人数を更新する(#415)", async () => {
+    const channelId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId: "user-1" });
+
+    await setTempVoiceMemberCount(db, channelId, 3);
+
+    const [row] = await db.select().from(tempVoiceChannels).where(eq(tempVoiceChannels.channelId, channelId));
+    expect(row?.memberCount).toBe(3);
   });
 });

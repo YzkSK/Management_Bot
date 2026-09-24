@@ -75,3 +75,16 @@ export async function isDenyProtectedRole(db: Db, guildId: string, roleId: strin
   const protectedRoleIds = await listDenyProtectedRoleIds(db, guildId);
   return protectedRoleIds.includes(roleId);
 }
+
+/**
+ * Dashboard拒否禁止ロールタブの保存で使う(#415)。DELETE→INSERTをトランザクションで
+ * 行い、全件置き換えの途中状態が他リクエストから見えないようにする。
+ */
+export async function replaceDenyProtectedRoles(db: Db, guildId: string, roleIds: readonly string[]): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(tempVoiceDenyProtectedRoles).where(eq(tempVoiceDenyProtectedRoles.guildId, guildId));
+    if (roleIds.length > 0) {
+      await tx.insert(tempVoiceDenyProtectedRoles).values(roleIds.map((roleId) => ({ guildId, roleId })));
+    }
+  });
+}

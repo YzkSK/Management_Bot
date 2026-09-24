@@ -7,6 +7,7 @@ import {
   isDenyProtectedRole,
   listDenyProtectedRoleIds,
   listPermissionOverrides,
+  replaceDenyProtectedRoles,
   upsertPermissionOverride,
 } from "./permission-overrides.js";
 
@@ -80,5 +81,23 @@ describe("listDenyProtectedRoleIds / isDenyProtectedRole", () => {
 
   test("@everyone(roleId===guildId)は保護ロール未登録でも常にtrue", async () => {
     expect(await isDenyProtectedRole(db, guildId, guildId)).toBe(true);
+  });
+});
+
+describe("replaceDenyProtectedRoles", () => {
+  test("全件置き換えで既存のロールが新しいリストに入れ替わる(#415)", async () => {
+    await replaceDenyProtectedRoles(db, guildId, ["role-a", "role-b"]);
+    expect(await listDenyProtectedRoleIds(db, guildId)).toEqual(["role-a", "role-b"]);
+
+    await replaceDenyProtectedRoles(db, guildId, ["role-c"]);
+    expect(await listDenyProtectedRoleIds(db, guildId)).toEqual(["role-c"]);
+  });
+
+  test("空配列を渡すと全件削除される(#415)", async () => {
+    await replaceDenyProtectedRoles(db, guildId, ["role-a"]);
+
+    await replaceDenyProtectedRoles(db, guildId, []);
+
+    expect(await listDenyProtectedRoleIds(db, guildId)).toEqual([]);
   });
 });

@@ -49,6 +49,60 @@ export async function clearTempVoiceCreateChannel(db: Db, guildId: string): Prom
     .where(eq(tempVoiceConfigs.guildId, guildId));
 }
 
+export interface UpsertTempVoiceConfigInput {
+  createChannelId?: string;
+  categoryId?: string;
+  nameTemplate?: string;
+  defaultUserLimit?: number;
+  defaultBitrate?: number | null;
+}
+
+/**
+ * Dashboard設定タブの手動設定・共通設定変更で使う(#415)。渡されたキーのみ更新し、
+ * 省略したキーは既存値または列のデフォルト値のまま変える。自動セットアップ(autoSetupConfig)
+ * は別経路(bot側のdashboard-action-listener.ts)でcreateChannelId/categoryIdのみをUPSERTするため
+ * この関数は使わない(nameTemplate等を誤って上書きしないようにするため)。
+ */
+export async function upsertTempVoiceConfig(
+  db: Db,
+  guildId: string,
+  input: UpsertTempVoiceConfigInput,
+): Promise<void> {
+  const insertValues: typeof tempVoiceConfigs.$inferInsert = { guildId };
+  const updateValues: Partial<typeof tempVoiceConfigs.$inferInsert> = {};
+  if (input.createChannelId !== undefined) {
+    insertValues.createChannelId = input.createChannelId;
+    updateValues.createChannelId = input.createChannelId;
+  }
+  if (input.categoryId !== undefined) {
+    insertValues.categoryId = input.categoryId;
+    updateValues.categoryId = input.categoryId;
+  }
+  if (input.nameTemplate !== undefined) {
+    insertValues.nameTemplate = input.nameTemplate;
+    updateValues.nameTemplate = input.nameTemplate;
+  }
+  if (input.defaultUserLimit !== undefined) {
+    insertValues.defaultUserLimit = input.defaultUserLimit;
+    updateValues.defaultUserLimit = input.defaultUserLimit;
+  }
+  if (input.defaultBitrate !== undefined) {
+    insertValues.defaultBitrate = input.defaultBitrate;
+    updateValues.defaultBitrate = input.defaultBitrate;
+  }
+  updateValues.updatedAt = new Date();
+
+  await db
+    .insert(tempVoiceConfigs)
+    .values(insertValues)
+    .onConflictDoUpdate({ target: tempVoiceConfigs.guildId, set: updateValues });
+}
+
+/** Dashboard一覧・強制削除確認ダイアログの在室人数表示用(#415)。bot側のvoiceStateUpdateごとに呼ぶ。 */
+export async function setTempVoiceMemberCount(db: Db, channelId: string, memberCount: number): Promise<void> {
+  await db.update(tempVoiceChannels).set({ memberCount }).where(eq(tempVoiceChannels.channelId, channelId));
+}
+
 /** ユーザーが既にオーナーとして持っている一時VCのchannelIdを返す。無ければnull(1ユーザー1VCまでの事前チェック用)。 */
 export async function findOwnedTempVoiceChannelId(db: Db, guildId: string, ownerId: string): Promise<string | null> {
   const [match] = await db
