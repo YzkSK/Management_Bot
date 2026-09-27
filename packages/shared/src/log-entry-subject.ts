@@ -10,6 +10,12 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
       if (isBulkDeleteLogEntry(entry)) return undefined;
+      // pin/unpinは「投稿者」ではなく「ピン留め操作をした人」が主語であるべきだが、
+      // authorIdは投稿者(ピン留めされたメッセージの著者)であり実行者ではない。
+      // executorId(監査ログ相関)は現状pinを相関対象にしていないため常に未設定で、
+      // ここでauthorIdを返すとformatLogMessageが誤って投稿者を実行者として表示してしまう
+      // (issue報告: 実際にピン留めした人ではなく投稿者名が「〜がピン留めしました」に出る)。
+      if (entry.action === "pin" || entry.action === "unpin") return undefined;
       return entry.authorId;
     case "reaction":
       return entry.userId;
@@ -62,6 +68,7 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
   switch (entry.category) {
     case "message":
       if (isBulkDeleteLogEntry(entry)) return undefined;
+      if (entry.action === "pin" || entry.action === "unpin") return undefined;
       return "authorId";
     case "reaction":
       return "userId";

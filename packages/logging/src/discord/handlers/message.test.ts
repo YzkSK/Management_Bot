@@ -194,6 +194,15 @@ describe("toMessagePinLogEntry", () => {
     expect(entry?.action).toBe("pin");
   });
 
+  test("Bot投稿(制御パネル等)のピン留めでもactorIsBot=falseにする(投稿者のbot判定をhideBotEventsフィルタに流用すると、Dashboardのデフォルト設定でpinログが一覧から消えてしまうため)", () => {
+    const entry = toMessagePinLogEntry(
+      fakeMessage({ author: { id: BOT_USER_ID, bot: true }, pinned: false }),
+      fakeMessage({ author: { id: BOT_USER_ID, bot: true }, pinned: true }),
+      "someone-else-bot-id",
+    );
+    expect(entry && "actorIsBot" in entry ? entry.actorIsBot : undefined).toBe(false);
+  });
+
   test("pinned: true→falseでunpinエントリを返す", () => {
     const entry = toMessagePinLogEntry(fakeMessage({ pinned: true }), fakeMessage({ pinned: false }), BOT_USER_ID);
     expect(entry?.action).toBe("unpin");
@@ -205,11 +214,30 @@ describe("toMessagePinLogEntry", () => {
     ).toBeUndefined();
   });
 
-  test("oldMessageがpartialならundefinedを返す(変化を判定できないため)", () => {
+  test("oldMessageがpartial(Bot起動前のメッセージ等)でもnewMessage.pinned=trueならpinエントリを返す(issue報告: 以前はここが一律undefinedになり、古いメッセージのピン留めがまるごと記録されないバグだった)", () => {
+    const entry = toMessagePinLogEntry(
+      fakeMessage({ pinned: false, partial: true }),
+      fakeMessage({ pinned: true }),
+      BOT_USER_ID,
+    );
+    expect(entry?.action).toBe("pin");
+  });
+
+  test("oldMessageがpartialでnewMessage.pinned=falseならundefinedを返す(元々unpinだったのか今unpinされたのか区別できないため)", () => {
     expect(
       toMessagePinLogEntry(
-        fakeMessage({ pinned: false, partial: true }),
-        fakeMessage({ pinned: true }),
+        fakeMessage({ pinned: true, partial: true }),
+        fakeMessage({ pinned: false }),
+        BOT_USER_ID,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("newMessageがpartialならundefinedを返す(pinned値自体が信用できないため)", () => {
+    expect(
+      toMessagePinLogEntry(
+        fakeMessage({ pinned: false }),
+        fakeMessage({ pinned: true, partial: true }),
         BOT_USER_ID,
       ),
     ).toBeUndefined();

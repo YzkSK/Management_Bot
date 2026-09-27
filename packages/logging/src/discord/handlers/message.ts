@@ -127,8 +127,16 @@ export function toMessageUpdateLogEntry(
 
 /**
  * discord.jsにピン留め専用のgatewayイベント(channelPinsUpdate)は対象メッセージを含まないため、
- * pinned真偽値の変化を持つmessageUpdateから合成する。oldMessage.pinnedがpartialで未取得
- * (undefined)の場合は変化を判定できないためスキップする。
+ * pinned真偽値の変化を持つmessageUpdateから合成する。
+ *
+ * oldMessage.partial(Bot起動前に投稿された等、メッセージキャッシュに無い場合)はoldMessage.pinnedが
+ * 未取得で変化を比較できない。以前は判定不能として一律スキップしていたが、これだと
+ * 「Bot起動前の古いメッセージをピン留めする」操作がまるごと記録されない実害があった
+ * (issue報告: 実際にピン留めしたのにダッシュボードのログ一覧に出てこない)。
+ * oldMessage.partial時はnewMessage.pinnedの値だけで判定する: true(=ピン留め状態)なら
+ * pinとして記録する。false(=非ピン留め状態)の場合は「元々pinされていなかった」のか
+ * 「今unpinされた」のか区別できないため、誤ったunpinログを作らないよう記録しない
+ * (記録漏れよりは安全側)。
  */
 export function toMessagePinLogEntry(
   oldMessage: AnyMessage,
@@ -137,10 +145,22 @@ export function toMessagePinLogEntry(
 ): LogEntry | undefined {
   const base = baseFields(newMessage, botUserId, false);
   if (!base) return undefined;
-  if (oldMessage.partial || oldMessage.pinned === newMessage.pinned) return undefined;
+  if (newMessage.partial) return undefined;
+  if (oldMessage.partial) {
+    if (!newMessage.pinned) return undefined;
+  } else if (oldMessage.pinned === newMessage.pinned) {
+    return undefined;
+  }
   return {
     category: "message",
     ...base,
+    // actorIsBotはbaseFieldsのmessage.author.bot(=ピン留め「された」メッセージの投稿者がBotか)を
+    // そのまま引き継ぐが、pinログが記録したいのは「誰が投稿したか」ではなく「誰がピン留め操作を
+    // したか」。実行者は現状取得できないが、Botが投稿したメッセージ(例: 制御パネル)を人間が
+    // ピン留めした場合にactorIsBot=trueとなり、Dashboardのデフォルト設定(hideBotEvents=true)で
+    // 一覧から誤って除外されてしまっていた(ピン留めがダッシュボードに出てこないバグ)。
+    // pin/unpinは常に「操作」として扱いfalse固定にする。
+    actorIsBot: false,
     messageId: newMessage.id,
     createdAt: new Date().toISOString(),
     action: newMessage.pinned ? "pin" : "unpin",

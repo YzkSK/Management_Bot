@@ -39,6 +39,73 @@ describe("formatLogMessage", () => {
     );
   });
 
+  test("メッセージのピン留め(実行者不明): 監査ログ相関が間に合わない場合、実行者は「不明なユーザー」にしつつ、誰の投稿かは投稿者名で示す", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で 不明なユーザー が mini のメッセージをピン留めしました");
+  });
+
+  test("メッセージのピン留め(実行者判明・他人の投稿): 監査ログ相関でexecutorIdが付けば実行者名と投稿者名を両方出す", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      executorId: "u2",
+      executorName: "Yuzuki",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini", u2: "Yuzuki" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で Yuzuki が mini のメッセージをピン留めしました");
+  });
+
+  test("メッセージのピン留め(自分の投稿を自分でピン留め)", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      executorId: "u1",
+      executorName: "mini",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で mini が自分のメッセージをピン留めしました");
+  });
+
   test("メッセージ削除(自分で削除): 実行者=投稿者", () => {
     const entry = {
       category: "message",

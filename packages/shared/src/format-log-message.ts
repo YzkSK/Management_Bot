@@ -114,10 +114,23 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
             ? `${channel} で ${authorName} が自分の${suffix}`
             : `${channel} で ${executorName} が ${authorName} の${suffix}`;
         }
-        case "pin":
-          return `${channel} で ${executorName} がメッセージをピン留めしました`;
-        case "unpin":
-          return `${channel} で ${executorName} がメッセージのピン留めを解除しました`;
+        // pin/unpinはdeleteと異なり「executorId未設定=本人による操作」という前提が成り立たない
+        // (削除はDiscord APIの仕様上、本人による削除では監査ログが残らないためexecutorId未設定を
+        // 「自分で」とみなせるが、pin/unpinは誰の操作でも必ず監査ログが残り、単に監査ログ相関が
+        // 間に合わなかっただけの可能性がある)。そのためexecutorId===authorIdの場合のみ「自分の」、
+        // それ以外(未設定含む)は実行者名(不明なら「不明なユーザー」)+投稿者名の両方を出す。
+        case "pin": {
+          const suffix = "メッセージをピン留めしました";
+          return entry.authorId === entry.executorId
+            ? `${channel} で ${authorName} が自分の${suffix}`
+            : `${channel} で ${executorName} が ${authorName} の${suffix}`;
+        }
+        case "unpin": {
+          const suffix = "メッセージのピン留めを解除しました";
+          return entry.authorId === entry.executorId
+            ? `${channel} で ${authorName} が自分の${suffix}`
+            : `${channel} で ${executorName} が ${authorName} の${suffix}`;
+        }
       }
       break;
     }

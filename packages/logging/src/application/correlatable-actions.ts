@@ -4,6 +4,7 @@ import type { LogEntry } from "../domain/index.js";
  * 監査ログ相関(correlate-audit-log-entry.ts)によって後からexecutorIdが追記され得る
  * (category, action)の一覧。CORRELATION_RULESおよび同ファイル内の特殊ケース
  * (MemberRoleUpdate→role/memberAdd,memberRemove、MessageDelete→message/delete、
+ * MessagePin/MessageUnpin→message/pin,unpin、
  * MemberDisconnect/MemberMove→voice/leave,move、MemberUpdate voiceState→voice/update)
  * と手動で同期させる。writeLogEntryが送信前に相関完了を待つべきかどうかの判定に使う。
  * 新しいCORRELATION_RULESエントリを追加した場合はここにも追記すること
@@ -22,7 +23,7 @@ const CORRELATABLE_ACTIONS: { [C in LogEntry["category"]]?: readonly string[] } 
   autoMod: ["ruleCreate", "ruleUpdate", "ruleDelete"],
   scheduledEvent: ["create", "update", "delete", "start", "complete", "cancel"],
   stage: ["start", "update", "end"],
-  message: ["delete"],
+  message: ["delete", "pin", "unpin"],
   voice: ["leave", "move", "update"],
 };
 

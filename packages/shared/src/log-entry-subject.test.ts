@@ -15,6 +15,23 @@ describe("getLogEntrySubjectId", () => {
     expect(getLogEntrySubjectId(entry)).toBe("a1");
   });
 
+  test("pin/unpinはauthorId(投稿者)を対象ユーザーにしない(投稿者≠ピン留め実行者のため、誤って投稿者名を実行者として表示させないようundefinedにする)", () => {
+    const pinEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "a1",
+      action: "pin",
+    } satisfies LogEntry;
+    expect(getLogEntrySubjectId(pinEntry)).toBeUndefined();
+    expect(getLogEntrySubjectField(pinEntry)).toBeUndefined();
+
+    const unpinEntry = { ...pinEntry, action: "unpin" } satisfies LogEntry;
+    expect(getLogEntrySubjectId(unpinEntry)).toBeUndefined();
+    expect(getLogEntrySubjectField(unpinEntry)).toBeUndefined();
+  });
+
   test("集約bulkDeleteには単一の対象ユーザーを設定しない", () => {
     const entry = {
       category: "message",

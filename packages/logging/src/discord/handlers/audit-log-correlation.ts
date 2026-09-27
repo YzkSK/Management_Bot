@@ -34,6 +34,21 @@ function extractMessageDeleteChannelId(entry: GuildAuditLogsEntry): string | und
 }
 
 /**
+ * MessagePin/MessageUnpinのtargetId(投稿者ID)だけでは対象チャンネル・メッセージを特定できないため、
+ * extra.channel.id/extra.messageIdから取得する。それ以外のactionではundefined。
+ * Discord APIのaudit log optional infoは仕様上欠損し得るため、いずれかが欠けている場合も
+ * エラーにせずundefinedを返す(extractMessageDeleteChannelIdと同じ考え方)。
+ */
+function extractMessagePin(entry: GuildAuditLogsEntry): { channelId: string; messageId: string } | undefined {
+  if (entry.action !== AuditLogEvent.MessagePin && entry.action !== AuditLogEvent.MessageUnpin) return undefined;
+  const extra = entry.extra as { channel?: { id?: unknown }; messageId?: unknown } | null | undefined;
+  const channelId = extra?.channel?.id;
+  const messageId = extra?.messageId;
+  if (typeof channelId !== "string" || typeof messageId !== "string") return undefined;
+  return { channelId, messageId };
+}
+
+/**
  * MemberUpdateのchangesのうち、サーバーミュート(mute)・サーバースピーカーミュート(deaf)の
  * 変更後の値を取得する。Discord APIのAuditLogChangeKeyはGuildMemberのフィールド名(mute/deaf)を
  * そのまま使うため、shared側のVOICE_STATE_FLAG_NAMES(serverMute/serverDeaf)とは名前が異なる
@@ -125,6 +140,7 @@ export function toAuditLogEntryInfo(
     reason: entry.reason,
     roleChanges: extractRoleChanges(entry),
     messageDeleteChannelId: extractMessageDeleteChannelId(entry),
+    messagePin: extractMessagePin(entry),
     voiceDisconnectOrMove: extractVoiceDisconnectOrMove(entry),
     memberUpdateVoiceStateChanges: extractMemberUpdateVoiceStateChanges(entry),
     memberNicknameChange: extractMemberNicknameChange(entry),

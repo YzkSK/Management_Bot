@@ -30,6 +30,12 @@ export interface AuditLogEntryInfo {
   /** MessageDelete限定。監査ログのextra.channel.idから取得する(targetId=投稿者IDのみでは対象チャンネルを特定できないため)。 */
   messageDeleteChannelId?: string;
   /**
+   * MessagePin/MessageUnpin限定。targetId(=投稿者ID、Discord API仕様上MessageDeleteと同じ扱い)
+   * だけでは対象チャンネル・メッセージを特定できないため、extra.channel.id/extra.messageIdから
+   * 取得する。messageIdまで一致条件に使えるため、MessageDeleteより高精度に相関できる。
+   */
+  messagePin?: { channelId: string; messageId: string };
+  /**
    * MemberDisconnect/MemberMove限定。Discord API仕様上target_idが常にnullで、
    * 影響を受けた人数(extra.count)しか分からず対象ユーザーを特定できない。
    * count===1の場合のみベストエフォートで相関する(誤相関の可能性は残るが、
@@ -75,7 +81,8 @@ interface CorrelationRule {
  * 実行者を取得できないカテゴリのみを対象にする。
  * poll/autoMod実行結果は対象(targetId)が投稿者ID等になり複数候補と衝突しやすいため対象外
  * (誤相関リスクの高いものは相関しない、過剰実装を避ける)。message categoryのうちsingle delete
- * (MessageDelete)のみ、channelId+authorId(targetId)の複合一致で誤相関リスクを抑えられるため
+ * (MessageDelete)とpin/unpin(MessagePin/MessageUnpin)は、channelId+authorId(targetId)
+ * (pin/unpinはさらにmessageIdも)の複合一致で誤相関リスクを抑えられるため
  * correlateAuditLogEntry内で別処理として対応する(bulkDeleteは1つの監査ログが複数メッセージに
  * 対応し相関精度が低いため対象外)。
  * role所属変更(MemberRoleUpdate)はroleId+userIdの複合一致が必要でこのテーブルの単一フィールド
@@ -412,6 +419,26 @@ export async function correlateAuditLogEntry(
           sql`${logEntries.payload} ->> 'action' = 'delete'`,
           sql`${logEntries.payload} ->> 'channelId' = ${entry.messageDeleteChannelId}`,
           sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
+        ]),
+      ],
+      retryDelayMs,
+    );
+    return;
+  }
+
+  if (entry.action === "MessagePin" || entry.action === "MessageUnpin") {
+    if (!entry.targetId || !entry.messagePin) return;
+    const logAction = entry.action === "MessagePin" ? "pin" : "unpin";
+    await correlateJobs(
+      deps.db,
+      entry.executorId,
+      entry.executorName,
+      [
+        makeJob("message", [
+          sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+          sql`${logEntries.payload} ->> 'channelId' = ${entry.messagePin.channelId}`,
+          sql`${logEntries.payload} ->> 'authorId' = ${entry.targetId}`,
+          sql`${logEntries.payload} ->> 'messageId' = ${entry.messagePin.messageId}`,
         ]),
       ],
       retryDelayMs,
