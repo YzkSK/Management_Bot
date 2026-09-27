@@ -55,8 +55,8 @@ function fakeDb(
 function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "vc-1",
-    guild: { roles: { everyone: { id: "everyone-id" } } },
-    permissionOverwrites: { cache: { get: () => undefined } },
+    guild: { roles: { everyone: { id: "everyone-id" } }, client: { user: { id: "bot-id" } } },
+    permissionOverwrites: { cache: { get: () => undefined }, edit: mock(() => Promise.resolve()) },
     userLimit: 5,
     bitrate: 64000,
     isVoiceBased: () => true,
@@ -137,8 +137,9 @@ describe("handleTempVoiceTransferOwner", () => {
   test("正常系: 制御チャンネル権限を付け替え、DB更新後にownerTransferred(trigger=manual)をpublishする", async () => {
     const publish = mock(() => Promise.resolve());
     const controlChannel = fakeControlChannel();
+    const voiceChannel = fakeVoiceChannel();
     const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
-    const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"]);
+    const interaction = fakeInteraction("owner-1", voiceChannel, controlChannel, ["member-1"]);
 
     await handleTempVoiceTransferOwner(deps, interaction);
 
@@ -150,6 +151,17 @@ describe("handleTempVoiceTransferOwner", () => {
     expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
       "owner-1",
       { ViewChannel: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    // VC本体側もオーナー個別許可を付け替える(#441: オーナー自身がロック/非表示の影響を受けないため)。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "member-1",
+      { Connect: true, ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "owner-1",
+      { Connect: null, ViewChannel: null },
       expect.objectContaining({ reason: expect.any(String) }),
     );
     expect(publish).toHaveBeenCalledWith(

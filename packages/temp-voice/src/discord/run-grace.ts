@@ -2,9 +2,14 @@ import type { DomainEventBus } from "@management-bot/core";
 import { withResourceLock as withResourceLockDefault, type Db } from "@management-bot/db";
 import { sql } from "drizzle-orm";
 import { completeExpiredGracePeriod, findExpiredGracePeriodChannels, type ExpiredGracePeriodChannelRow } from "../application/index.js";
-import { editControlChannelViewer, rollbackGrantedViewerIfNotOwner } from "./control-channel-permission.js";
+import {
+  editControlChannelViewer,
+  grantOwnerVoiceAccess,
+  revokeOwnerVoiceAccess,
+  rollbackGrantedViewerIfNotOwner,
+} from "./control-channel-permission.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
-import type { Client } from "discord.js";
+import { type Client, type VoiceBasedChannel } from "discord.js";
 
 // アプリ全体で1つに固定した任意の64bit定数。他機能のadvisory lockと衝突しないよう、
 // このジョブ専用のキーとして予約する(moderation-decayの869_412_502、logging-retentionの
@@ -61,6 +66,8 @@ async function processExpiredChannel(deps: GraceRunnerDeps, row: ExpiredGracePer
  */
 async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, row: ExpiredGracePeriodChannelRow): Promise<void> {
   const triedUserIds = new Set<string>();
+  const cached = deps.client.channels.cache.get(row.channelId);
+  const voiceChannel = cached?.isVoiceBased() ? (cached as VoiceBasedChannel) : undefined;
 
   for (;;) {
     // cronの対象者選定時点とDiscord API呼び出し時点の間にleaveする可能性があるため、
@@ -70,6 +77,20 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
     triedUserIds.add(newOwnerId);
 
     await editControlChannelViewer(deps.client, row.controlChannelId, newOwnerId, true);
+    // VC本体のオーナー個別許可も付け替える(#441)。cache未取得時はスキップし、次回の
+    // トグル操作(handle-button.ts)で追いつく想定(致命的ではないため処理は継続する)。
+    if (voiceChannel) {
+      try {
+        await grantOwnerVoiceAccess(voiceChannel, newOwnerId);
+      } catch (error) {
+        // VC本体側の権限付与に失敗した場合、直前に付与した制御チャンネル閲覧権限が孤立して
+        // 残らないようロールバックする(codexレビュー指摘)。
+        await editControlChannelViewer(deps.client, row.controlChannelId, newOwnerId, null).catch((rollbackError: unknown) => {
+          console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after voice grant error`, rollbackError);
+        });
+        throw error;
+      }
+    }
 
     let result: Awaited<ReturnType<typeof completeExpiredGracePeriod>>;
     try {
@@ -77,7 +98,7 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
     } catch (error) {
       // unique制約違反以外のDBエラー(接続断等)。付与済みの権限をDBの現オーナーで確認しつつ
       // ロールバックする(codexレビュー指摘: 例外がそのまま伝播すると付与済み権限が孤立して残る)。
-      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId, voiceChannel).catch(
         (rollbackError: unknown) => {
           console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after DB error`, rollbackError);
         },
@@ -88,7 +109,7 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
       // 候補者が既に別の一時VCのオーナーだった。DBの現オーナーを再確認してから権限を戻し、
       // 次点の候補で再試行する(codexレビュー指摘: 無条件に剥奪すると、勝者側が同じ候補者を
       // 新オーナーに選んでいた場合に正当な権限を奪ってしまう)。
-      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId, voiceChannel).catch(
         (error: unknown) => {
           console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after unique violation`, error);
         },
@@ -98,7 +119,7 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
     if (result === "lostRace") {
       // 手動移譲(または別プロセスのcron)が先にオーナーを変更済み。DBの現オーナーを再確認してから
       // 付与した閲覧権限を戻す(codexレビュー指摘: 同上)。
-      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId).catch(
+      await rollbackGrantedViewerIfNotOwner(lockedDb, deps.client, row.channelId, row.controlChannelId, newOwnerId, voiceChannel).catch(
         (error: unknown) => {
           console.error(`temp-voice: failed to roll back control channel permission for ${row.channelId} after CAS miss`, error);
         },
@@ -110,6 +131,11 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
       // DB更新は既に確定しているため、旧オーナーの権限剥奪失敗は握りつぶしログのみ(孤立した閲覧権限が残るだけで実害は小さい)。
       console.error(`temp-voice: failed to revoke previous owner control channel permission for ${row.channelId}`, error);
     });
+    if (voiceChannel) {
+      await revokeOwnerVoiceAccess(lockedDb, voiceChannel, row.gracePeriodOwnerId).catch((error: unknown) => {
+        console.error(`temp-voice: failed to revoke previous owner voice channel permission for ${row.channelId}`, error);
+      });
+    }
 
     const guild = deps.client.guilds.cache.get(row.guildId);
     await deps.eventBus.publish({

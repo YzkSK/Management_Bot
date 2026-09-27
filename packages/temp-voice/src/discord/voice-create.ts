@@ -11,6 +11,7 @@ import {
 import { buildTempVoiceChannelName, canCreateTempVoiceInCategory } from "../domain/index.js";
 import { findOwnedTempVoiceChannelId, getTempVoiceConfig, insertTempVoiceChannel } from "../application/index.js";
 import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
+import { grantOwnerVoiceAccess } from "./control-channel-permission.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
 import {
   ChannelType,
@@ -138,6 +139,15 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   // VC作成直後に追跡開始する(#414)。setChannel完了後まで遅らせると、その間に他ユーザーが
   // 偶然このVCへ入室した場合の入室記録を取りこぼす(codexレビュー指摘)。
   deps.sessionStore.startTrackingChannel(voiceChannel.id);
+  // オーナーへVC本体の個別許可を付与する(#441)。作成時点でこれが無いと、ロック/非表示を
+  // 有効にした際に@everyoneのdenyがオーナー自身にも適用されてしまう。
+  try {
+    await grantOwnerVoiceAccess(voiceChannel, member.id);
+  } catch (error) {
+    deps.sessionStore.discardChannel(voiceChannel.id);
+    await deleteChannelForRollback(voiceChannel);
+    throw error;
+  }
 
   let controlChannel;
   try {
@@ -153,9 +163,14 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
       parent: categoryId,
       reason: TEMP_VOICE_CONTROL_CREATE_REASON,
       permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        // 制御チャンネルは制御パネル(ボタン操作)専用であり、誰かが発言すると制御パネルの
+        // メッセージが下に流れてしまう。SendMessagesを全員(オーナー含む)denyし、Botのみ
+        // allowすることで発言自体を防ぎ、ピン留め(#413で発生していたログ二重記録・
+        // Dashboard非表示の問題)を不要にする(issue報告: 権限変更でオーナーも巻き込まれる件の
+        // 副次対応)。
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
         { id: member.id, allow: [PermissionFlagsBits.ViewChannel] },
-        { id: guild.members.me?.id ?? guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel] },
+        { id: guild.members.me?.id ?? guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
       ],
     });
   } catch (error) {
@@ -183,14 +198,15 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   // discardChannelで追跡ごと解除する(以下のcatch節参照)。
   deps.sessionStore.recordJoin(voiceChannel.id, member.id, new Date());
 
+  // 制御チャンネルはSendMessagesを全員denyしているため制御パネルが下に流れることはなく、
+  // ピン留めは不要(#441)。
   await controlChannel
     .send({
       flags: MessageFlags.IsComponentsV2,
       components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
     })
-    .then((message) => message.pin().catch(() => {}))
     .catch(() => {
-      // 制御メッセージ送信・ピン留めの失敗は致命的ではない(VC自体は使える)ため握りつぶす。
+      // 制御メッセージ送信の失敗は致命的ではない(VC自体は使える)ため握りつぶす。
     });
 
   try {

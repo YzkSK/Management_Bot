@@ -27,7 +27,7 @@ function fakeVoiceChannel(overrides: Partial<Record<string, unknown>> = {}) {
     name: "太郎のVC",
     userLimit: 5,
     bitrate: 96000,
-    guild: { roles: { everyone: { id: "everyone-id" } } },
+    guild: { roles: { everyone: { id: "everyone-id" } }, client: { user: { id: "bot-id" } } },
     permissionOverwrites: {
       cache: { get: (id: string) => overwriteStore.get(id) },
       // editの戻り値は更新後のチャンネル(discord.jsの実挙動)。呼び出し元がこれを使ってパネルを再描画する。
@@ -147,6 +147,12 @@ describe("handleTempVoiceButton", () => {
       { Connect: false },
       expect.objectContaining({ reason: expect.any(String) }),
     );
+    // オーナー自身はロックの影響を受けないよう個別許可される(#441)。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "owner-1",
+      { Connect: true, ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
     expect(interaction.editReply).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ action: "permissionChanged", permission: "connect", allowed: false }),
@@ -182,6 +188,18 @@ describe("handleTempVoiceButton", () => {
     expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
       "everyone-id",
       { ViewChannel: false },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    // オーナー自身は非表示の影響を受けないよう個別許可される(#441)。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "owner-1",
+      { Connect: true, ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    // Bot自身も非表示で見えなくなると「表示する」で戻せなくなるため個別許可される。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "bot-id",
+      { ViewChannel: true },
       expect.objectContaining({ reason: expect.any(String) }),
     );
     expect(publish).toHaveBeenCalledWith(

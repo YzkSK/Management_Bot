@@ -66,6 +66,15 @@ function fakeControlChannel() {
   return { id: "ctrl-1", type: ChannelType.GuildText, permissionOverwrites: { edit: mock(() => Promise.resolve()) } };
 }
 
+function fakeVoiceChannel() {
+  return {
+    id: "vc-1",
+    isVoiceBased: () => true,
+    guild: { client: { user: { id: "bot-id" } } },
+    permissionOverwrites: { edit: mock(() => Promise.resolve()) },
+  };
+}
+
 /**
  * withResourceLock(packages/db/src/advisory-lock.ts)のfake実装。実際のPostgresロックは取らず、
  * taskにdb自身をlockedDbとしてそのまま渡す(このテストではdb単位の使い分けを検証しないため)。
@@ -75,9 +84,17 @@ function fakeWithResourceLock() {
   return (db: never, _key: string, task: (lockedDb: never) => Promise<unknown>) => task(db);
 }
 
-function fakeClient(controlChannel: unknown) {
+function fakeClient(controlChannel: unknown, voiceChannel?: unknown) {
   return {
-    channels: { cache: { get: (id: string) => (id === "ctrl-1" ? controlChannel : undefined) } },
+    channels: {
+      cache: {
+        get: (id: string) => {
+          if (id === "ctrl-1") return controlChannel;
+          if (id === "vc-1") return voiceChannel;
+          return undefined;
+        },
+      },
+    },
     guilds: { cache: { get: () => undefined } },
   };
 }
@@ -102,13 +119,14 @@ describe("createGraceRunner", () => {
 
   test("正常系: 最も長く滞在しているメンバーへ再割当し、ownerTransferred(trigger=autoGraceExpired)をpublishする", async () => {
     const controlChannel = fakeControlChannel();
+    const voiceChannel = fakeVoiceChannel();
     const publish = mock(() => Promise.resolve());
     const sessionStore = new VoiceSessionStore();
     sessionStore.startTrackingChannel("vc-1");
     sessionStore.recordJoin("vc-1", "new-owner", new Date("2026-01-01T00:00:00.000Z"));
     const deps: GraceRunnerDeps = {
       db: fakeDb() as never,
-      client: fakeClient(controlChannel) as never,
+      client: fakeClient(controlChannel, voiceChannel) as never,
       eventBus: { publish } as never,
       sessionStore,
       withResourceLock: fakeWithResourceLock(),
@@ -124,6 +142,17 @@ describe("createGraceRunner", () => {
     expect(controlChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
       "old-owner",
       { ViewChannel: null },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    // VC本体側もオーナー個別許可を付け替える(#441: オーナー自身がロック/非表示の影響を受けないため)。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "new-owner",
+      { Connect: true, ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "old-owner",
+      { Connect: null, ViewChannel: null },
       expect.objectContaining({ reason: expect.any(String) }),
     );
     expect(publish).toHaveBeenCalledWith(

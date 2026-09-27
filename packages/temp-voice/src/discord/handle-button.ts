@@ -2,6 +2,7 @@ import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import { TEMP_VOICE_UPDATE_REASON, shouldSuppressTempVoiceChannelLog, suppressTempVoiceChannelLog } from "@management-bot/shared";
 import { findTempVoiceChannel, listPermissionOverrides } from "../application/index.js";
+import { grantOwnerVoiceAccess } from "./control-channel-permission.js";
 import { buildControlPanelContainer, parseTempVoiceCustomId, readTempVoiceState } from "./control-panel-message.js";
 import { buildTempVoiceModal } from "./control-panel-modal.js";
 import { buildSelectPermissionMessage } from "./select-permission-message.js";
@@ -21,23 +22,21 @@ async function replyOwnerOnly(interaction: ButtonInteraction): Promise<void> {
 }
 
 /**
- * @returns editの戻り値(更新後のチャンネル)。permissionOverwrites.editはREST応答で解決するが、
- * 呼び出し元のvoiceChannel.permissionOverwrites.cacheが同期的に更新される保証はないため
- * (codexレビュー指摘)、戻り値をそのままパネル再描画に使う。
+ * permissionOverwrites.editは同じchannelオブジェクトを返すだけで、cacheはgatewayのCHANNEL_UPDATE
+ * 受信まで古いまま。そのため呼び出し側はcacheを読み直さず、操作前の状態を反転してパネルを再描画する。
  */
 async function toggleEveryoneOverwrite(
   voiceChannel: VoiceBasedChannel,
   permission: "Connect" | "ViewChannel",
   currentlyDenied: boolean,
-): Promise<VoiceBasedChannel> {
+): Promise<void> {
   suppressTempVoiceChannelLog(voiceChannel.id);
   try {
-    const updated = await voiceChannel.permissionOverwrites.edit(
+    await voiceChannel.permissionOverwrites.edit(
       voiceChannel.guild.roles.everyone.id,
       { [permission]: currentlyDenied ? null : false },
       { reason: TEMP_VOICE_UPDATE_REASON },
     );
-    return updated as VoiceBasedChannel;
   } catch (error) {
     // API呼び出し自体が失敗した場合、抑制エントリが消費されないまま30秒残り、
     // 無関係な次のchannelUpdateを誤って抑制してしまう(codexレビュー指摘)。ここで消費して無効化する。
@@ -93,16 +92,20 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
       // Discord APIのmutation(REST)は3秒のインタラクション応答期限を超えうるため、
       // 先にdeferUpdate()で応答を確定させてから処理する(codexレビュー指摘)。
       await interaction.deferUpdate();
-      let updatedChannel: VoiceBasedChannel;
       try {
-        updatedChannel = await toggleEveryoneOverwrite(voiceChannel, "Connect", before.isLocked);
+        // オーナー自身がロックの影響を受けないよう、@everyoneへdenyを適用する前に個別許可を
+        // 確定させる(#441、codexレビュー指摘: 逆順だとgrant失敗時に@everyoneのdenyだけが
+        // 残り、直したかったオーナーロックアウトを再発させてしまう)。
+        // VC作成時に既に付与済みの想定だが、作成前の既存VC向けの保険として毎回実行する。
+        await grantOwnerVoiceAccess(voiceChannel, row.ownerId);
+        await toggleEveryoneOverwrite(voiceChannel, "Connect", before.isLocked);
       } catch (error) {
         await interaction.followUp({ content: "ロック状態の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
         throw error;
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
-        components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(updatedChannel))],
+        components: [buildControlPanelContainer(voiceChannel.id, { ...before, isLocked: !before.isLocked })],
       });
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",
@@ -120,16 +123,20 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
     case "toggleHide": {
       const before = readTempVoiceState(voiceChannel);
       await interaction.deferUpdate();
-      let updatedChannel: VoiceBasedChannel;
       try {
-        updatedChannel = await toggleEveryoneOverwrite(voiceChannel, "ViewChannel", before.isHidden);
+        // オーナー自身が非表示の影響を受けないよう、@everyoneへdenyを適用する前に個別許可を
+        // 確定させる(#441、codexレビュー指摘: 逆順だとgrant失敗時に@everyoneのdenyだけが
+        // 残り、直したかったオーナーロックアウトを再発させてしまう)。
+        // VC作成時に既に付与済みの想定だが、作成前の既存VC向けの保険として毎回実行する。
+        await grantOwnerVoiceAccess(voiceChannel, row.ownerId);
+        await toggleEveryoneOverwrite(voiceChannel, "ViewChannel", before.isHidden);
       } catch (error) {
         await interaction.followUp({ content: "表示状態の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
         throw error;
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
-        components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(updatedChannel))],
+        components: [buildControlPanelContainer(voiceChannel.id, { ...before, isHidden: !before.isHidden })],
       });
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",

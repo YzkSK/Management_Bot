@@ -98,7 +98,7 @@ describe("tempVoiceFeatureModule", () => {
       id: "vc-1",
       userLimit: 5,
       bitrate: 96000,
-      permissionOverwrites: { cache: { get: () => undefined } },
+      permissionOverwrites: { cache: { get: () => undefined }, edit: mock(() => Promise.resolve()) },
       delete: mock(() => Promise.resolve()),
     };
     const controlChannel = {

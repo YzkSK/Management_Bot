@@ -74,7 +74,7 @@ function fakeCreatedVoiceChannel(id: string, guild: unknown) {
     guild,
     userLimit: 5,
     bitrate: 96000,
-    permissionOverwrites: { cache: { get: () => undefined } },
+    permissionOverwrites: { cache: { get: () => undefined }, edit: mock(() => Promise.resolve()) },
     delete: mock(() => Promise.resolve()),
   };
 }
@@ -224,6 +224,24 @@ describe("handleVoiceCreate", () => {
 
     expect(create).toHaveBeenCalledTimes(2);
     expect(member.voice.setChannel).toHaveBeenCalledWith(voiceChannel);
+    // オーナーへVC本体の個別許可を作成時点で付与する(#441)。
+    expect(voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith(
+      "user-1",
+      { Connect: true, ViewChannel: true },
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    // 制御チャンネルはSendMessagesを全員(オーナー含む)denyし、Botのみallowする(#441:
+    // 誰も発言できなければ制御パネルが流れないため、ピン留めが不要になる)。
+    const controlChannelOverwrites = create.mock.calls.find(
+      (call) => call[0].type === ChannelType.GuildText,
+    )?.[0].permissionOverwrites;
+    const everyoneOverwrite = controlChannelOverwrites.find((o: { id: string }) => o.id === "everyone-role");
+    const botOverwrite = controlChannelOverwrites.find((o: { id: string }) => o.id === "bot-id");
+    expect(everyoneOverwrite.deny).toHaveLength(2);
+    expect(botOverwrite.allow).toHaveLength(2);
+    // ピン留めはもう行わない(#441)。
+    const sentMessage = await controlChannel.send.mock.results[0]?.value;
+    expect(sentMessage.pin).not.toHaveBeenCalled();
     expect(eventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "temp-voice.event.recorded",
