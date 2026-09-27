@@ -2,10 +2,9 @@ import { createRequire } from "node:module";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
-import { setAppEmojiResolver } from "@management-bot/logging";
 import { buildInviteUrl, mapWithConcurrency } from "@management-bot/shared";
 import { FEATURES } from "./features.js";
-import { loadAppEmojiResolver, syncAppEmojis } from "./sync-app-emojis.js";
+import { applyAppEmojis, syncAppEmojis } from "./sync-app-emojis.js";
 
 const getReleaseVersion = (): string => {
   try {
@@ -84,11 +83,10 @@ try {
     console.log(`Logged in as ${readyClient.user.tag}`);
     console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
     // 絵文字登録の失敗でBotを止めない(未登録の絵文字は利用側でフォールバックする前提)。
-    // 登録後に取得した絵文字をログ通知のアイコンに使う。失敗時はUnicode絵文字のまま(#455)。
+    // 登録後に取得した絵文字をログ通知のアイコン・一時VCパネルに使う。失敗時はUnicode絵文字のまま(#455)。
     syncAppEmojis(readyClient.application)
       .catch((error: unknown) => console.warn("Failed to sync app emojis", error))
-      .then(() => loadAppEmojiResolver(readyClient.application))
-      .then(setAppEmojiResolver)
+      .then(() => applyAppEmojis(readyClient.application))
       .catch((error: unknown) => console.warn("Failed to load app emojis", error));
     // guildCreateは新規参加時のみ発火するため、起動時点で既に参加済みのguildはここで同期する。
     // 多数のguildに参加している場合の接続プール圧迫を避けるため、並行数を制限する(issue #223)。

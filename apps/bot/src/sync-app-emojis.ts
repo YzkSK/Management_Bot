@@ -1,6 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setAppEmojiResolver } from "@management-bot/logging";
+import { HIDDEN_APP_EMOJI_NAME, setHiddenAppEmoji } from "@management-bot/temp-voice";
 import type { ClientApplication } from "discord.js";
 
 /** リポジトリ直下のassets/emojis。Dockerイメージにもリポジトリごとコピーされる。 */
@@ -32,8 +34,14 @@ export async function syncAppEmojis(application: ClientApplication): Promise<voi
   }
 }
 
-/** 登録済みのアプリケーション絵文字から、絵文字名 → `<:name:id>` を引くリゾルバを作る。 */
-export async function loadAppEmojiResolver(application: ClientApplication): Promise<(name: string) => string | undefined> {
-  const byName = new Map((await application.emojis.fetch()).map((e) => [e.name, e.toString()]));
-  return (name) => byName.get(name);
+/**
+ * 登録済みのアプリケーション絵文字を取得し、各機能の絵文字表示に注入する(#455)。
+ * 失敗・未登録なら各機能はUnicode絵文字のまま動く。
+ */
+export async function applyAppEmojis(application: ClientApplication): Promise<void> {
+  const emojis = await application.emojis.fetch();
+  const byName = new Map(emojis.map((e) => [e.name, e.toString()]));
+  setAppEmojiResolver((name) => byName.get(name));
+  const hidden = emojis.find((e) => e.name === HIDDEN_APP_EMOJI_NAME);
+  if (hidden) setHiddenAppEmoji({ id: hidden.id, name: HIDDEN_APP_EMOJI_NAME });
 }

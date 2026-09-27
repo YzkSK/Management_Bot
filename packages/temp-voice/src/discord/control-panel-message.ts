@@ -41,13 +41,15 @@ export function parseTempVoiceCustomId(customId: string): ParsedTempVoiceCustomI
 }
 
 /**
- * 「非表示にする」ボタンの絵文字。Developer Portalで登録したアプリケーション絵文字のIDを
- * `TEMP_VOICE_HIDDEN_EMOJI_ID`に設定するとそれを使い、未設定・不正値なら🙈にフォールバックする。
- * アプリ絵文字IDはアプリ(開発/本番)ごとに異なるため環境変数で受ける。
+ * 「非表示にする」ボタンの絵文字。Bot起動時にアプリケーション絵文字`eye_closed`が見つかれば
+ * 呼び出し側(apps/bot)から注入し、未登録・取得失敗なら🙈にフォールバックする。
  */
-const hiddenEmojiId = process.env.TEMP_VOICE_HIDDEN_EMOJI_ID;
-const HIDDEN_EMOJI =
-  hiddenEmojiId && /^\d{17,20}$/.test(hiddenEmojiId) ? { id: hiddenEmojiId, name: "eye_closed" } : "🙈";
+export const HIDDEN_APP_EMOJI_NAME = "eye_closed";
+let hiddenEmoji: { id: string; name: string } | string = "🙈";
+
+export function setHiddenAppEmoji(emoji: { id: string; name: string }): void {
+  hiddenEmoji = emoji;
+}
 
 export interface TempVoiceState {
   userLimit: number;
@@ -133,7 +135,7 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
           : new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleHide", channelId))
               .setLabel("非表示にする")
-              .setEmoji(HIDDEN_EMOJI)
+              .setEmoji(hiddenEmoji)
               .setStyle(ButtonStyle.Secondary),
       ),
     )
