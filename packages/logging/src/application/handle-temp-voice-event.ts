@@ -18,6 +18,7 @@ function toLogEntry(event: TempVoiceEventRecordedEvent): TempVoiceLogEntry {
     category: "tempVoice" as const,
     guildId: event.guildId,
     channelId: event.channelId,
+    channelName: event.channelName,
     createdAt: event.createdAt,
     executorId: event.executorId,
     executorName: event.executorName,

@@ -91,6 +91,7 @@ async function reconcileChannel(deps: ReconcileDeps, guild: Guild, row: TempVoic
       action: "deleted",
       guildId: row.guildId,
       channelId: row.channelId,
+      channelName: voiceLookup.state === "found" ? voiceLookup.channel.name : undefined,
       ownerId: row.ownerId,
       createdAt: now.toISOString(),
     });

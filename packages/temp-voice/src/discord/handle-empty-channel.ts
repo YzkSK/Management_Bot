@@ -124,6 +124,7 @@ export async function finalizeDeletion(
     action: "deleted",
     guildId: row.guildId,
     channelId: fresh.id,
+    channelName: fresh.name,
     ownerId: row.ownerId,
     createdAt: new Date().toISOString(),
   });

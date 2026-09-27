@@ -73,7 +73,12 @@ function userName(id: string, names: NameResolvers, snapshot?: string): string {
   return snapshot ?? names.users[id] ?? id;
 }
 
-function channelName(id: string, names: NameResolvers): string {
+/**
+ * snapshotはログ作成時点のチャンネル名。userNameと異なりmention=trueでもスナップショットを優先する
+ * (<#id>はチャンネル削除後にDiscordクライアント上で「不明」表示になるため)。
+ */
+function channelName(id: string, names: NameResolvers, snapshot?: string): string {
+  if (snapshot) return `#${snapshot}`;
   if (names.mention) return `<#${id}>`;
   const name = names.channels[id];
   return name ? `#${name}` : `#${id}`;
@@ -120,17 +125,17 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       const targetName = userName(entry.userId, names, entry.userName);
       switch (entry.action) {
         case "join":
-          return `${targetName} が ${channelName(entry.channelId, names)} に参加しました`;
+          return `${targetName} が ${channelName(entry.channelId, names, entry.channelName)} に参加しました`;
         case "leave": {
-          const channel = channelName(entry.channelId, names);
+          const channel = channelName(entry.channelId, names, entry.channelName);
           const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
           return hasExecutor
             ? `${executorName} が ${targetName} を ${channel} から切断させました`
             : `${targetName} が ${channel} から退出しました`;
         }
         case "move": {
-          const from = channelName(entry.previousChannelId, names);
-          const to = channelName(entry.channelId, names);
+          const from = channelName(entry.previousChannelId, names, entry.previousChannelName);
+          const to = channelName(entry.channelId, names, entry.channelName);
           const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
           return hasExecutor
             ? `${executorName} が ${targetName} を ${from} から ${to} に移動させました`
@@ -379,7 +384,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     case "guild":
       return "サーバー設定が更新されました";
     case "tempVoice": {
-      const channel = channelName(entry.channelId, names);
+      const channel = channelName(entry.channelId, names, entry.channelName);
       switch (entry.action) {
         case "created": {
           const ownerLabel = userName(entry.ownerId, names, entry.ownerName);

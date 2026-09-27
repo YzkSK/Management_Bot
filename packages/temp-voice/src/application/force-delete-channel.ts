@@ -46,6 +46,7 @@ export async function forceDeleteTempVoiceChannel(
     action: "deleted",
     guildId: row.guildId,
     channelId,
+    channelName: channel?.name,
     ownerId: row.ownerId,
     executorId,
     createdAt: new Date().toISOString(),

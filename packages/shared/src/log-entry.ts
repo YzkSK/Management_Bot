@@ -281,6 +281,8 @@ const voiceBase = {
   userName: nonEmptyString.optional(),
   /** join: 入室先、leave: 退室元、move: 移動先のチャンネルID。 */
   channelId: nonEmptyString,
+  /** channelIdのチャンネル名スナップショット。チャンネル削除後もログに名前を残すために使う。 */
+  channelName: nonEmptyString.optional(),
 };
 
 /** voice: action=updateのchangesキー。discord.jsのVoiceStateのフラグ名と一致させる。 */
@@ -293,7 +295,7 @@ const voiceStateFlag = z.object({ before: z.boolean(), after: z.boolean() });
 export const voiceLogEntrySchema = z.discriminatedUnion("action", [
   z.object({ ...voiceBase, action: z.literal("join") }),
   z.object({ ...voiceBase, action: z.literal("leave") }),
-  z.object({ ...voiceBase, action: z.literal("move"), previousChannelId: nonEmptyString }),
+  z.object({ ...voiceBase, action: z.literal("move"), previousChannelId: nonEmptyString, previousChannelName: nonEmptyString.optional() }),
   z.object({
     ...voiceBase,
     action: z.literal("update"),
@@ -309,6 +311,8 @@ const tempVoiceBase = {
   category: z.literal("tempVoice"),
   /** ログ相関キーを兼ねる(#406参照、専用UUIDは発行しない)。 */
   channelId: nonEmptyString,
+  /** チャンネル名スナップショット。チャンネル削除後もログに名前を残すために使う。 */
+  channelName: nonEmptyString.optional(),
 };
 
 /**

@@ -227,6 +227,7 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
     action: "created",
     guildId: guild.id,
     channelId: voiceChannel.id,
+    channelName: voiceChannel.name,
     controlChannelId: controlChannel.id,
     ownerId: member.id,
     ownerName: member.displayName,

@@ -1265,3 +1265,51 @@ describe("formatLogMessage", () => {
     expect(message).toBe("監査ログ相関: 更新");
   });
 });
+
+describe("formatLogMessage: チャンネル名スナップショット", () => {
+  const mentionNames = { users: {}, channels: {}, mention: true };
+
+  test("mention=trueでもchannelNameがあれば<#id>ではなく#名前を使う(削除後の「不明」表示を避ける)", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "tempVoice",
+      action: "deleted",
+      channelId: "c1",
+      channelName: "YoMiのVC",
+      ownerId: "u1",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe(
+      "一時VC #YoMiのVC(オーナー: <@u1>)が削除されました",
+    );
+  });
+
+  test("move: 移動元・移動先の両方にスナップショットを使う", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "voice",
+      action: "move",
+      userId: "u1",
+      channelId: "c2",
+      channelName: "ゲーム部屋",
+      previousChannelId: "c1",
+      previousChannelName: "雑談",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe(
+      "<@u1> が #雑談 から #ゲーム部屋 に移動しました",
+    );
+  });
+
+  test("スナップショットが無い既存ログは従来通り<#id>", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "voice",
+      action: "leave",
+      userId: "u1",
+      channelId: "c1",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe("<@u1> が <#c1> から退出しました");
+  });
+});

@@ -61,6 +61,8 @@ const tempVoiceEventBaseFields = {
   guildId: z.string(),
   /** ログ相関キーを兼ねる(#406参照、専用UUIDは発行しない)。 */
   channelId: z.string(),
+  /** イベント発生時点のチャンネル名スナップショット。削除後もログに名前を残すために使う。 */
+  channelName: z.string().min(1).optional(),
   createdAt: z.iso.datetime(),
   /** システム起因(自動削除・自動再割当)の場合は未設定。 */
   executorId: z.string().optional(),
