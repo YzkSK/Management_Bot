@@ -11,3 +11,22 @@ docs/superpowers/
 .claude/settings.local.json
 .vscode/
 **/.vite/
+# Added by code-review-graph
+.code-review-graph/
+# code-review-graph が他エディタ/エージェント向けに生成するファイル
+.claude/settings.json.bak
+.claude/skills/
+.codebuddy/
+.cursor/
+.cursorrules
+.gemini/
+.github/instructions/
+.kiro/
+.mcp.json
+.qoder/
+.windsurfrules
+AGENTS.md
+CODEBUDDY.md
+GEMINI.md
+QODER.md
+opencode.jsonc
