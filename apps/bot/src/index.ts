@@ -4,6 +4,7 @@ import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
 import { buildInviteUrl, mapWithConcurrency } from "@management-bot/shared";
 import { FEATURES } from "./features.js";
+import { syncAppEmojis } from "./sync-app-emojis.js";
 
 const getReleaseVersion = (): string => {
   try {
@@ -81,6 +82,8 @@ try {
   client.once("ready", (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
     console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
+    // 絵文字登録の失敗でBotを止めない(未登録の絵文字は利用側でフォールバックする前提)。
+    syncAppEmojis(readyClient.application).catch((error: unknown) => console.warn("Failed to sync app emojis", error));
     // guildCreateは新規参加時のみ発火するため、起動時点で既に参加済みのguildはここで同期する。
     // 多数のguildに参加している場合の接続プール圧迫を避けるため、並行数を制限する(issue #223)。
     track(

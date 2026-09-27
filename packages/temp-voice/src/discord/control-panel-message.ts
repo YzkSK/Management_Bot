@@ -40,6 +40,15 @@ export function parseTempVoiceCustomId(customId: string): ParsedTempVoiceCustomI
   return { action: action as TempVoiceButtonAction, channelId };
 }
 
+/**
+ * 「非表示にする」ボタンの絵文字。Developer Portalで登録したアプリケーション絵文字のIDを
+ * `TEMP_VOICE_HIDDEN_EMOJI_ID`に設定するとそれを使い、未設定・不正値なら🙈にフォールバックする。
+ * アプリ絵文字IDはアプリ(開発/本番)ごとに異なるため環境変数で受ける。
+ */
+const hiddenEmojiId = process.env.TEMP_VOICE_HIDDEN_EMOJI_ID;
+const HIDDEN_EMOJI =
+  hiddenEmojiId && /^\d{17,20}$/.test(hiddenEmojiId) ? { id: hiddenEmojiId, name: "eye_closed" } : "🙈";
+
 export interface TempVoiceState {
   userLimit: number;
   bitrate: number;
@@ -108,23 +117,23 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
           ? new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleLock", channelId))
               .setLabel("ロック解除")
-              .setEmoji("🔒")
+              .setEmoji("🔓")
               .setStyle(ButtonStyle.Success)
           : new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleLock", channelId))
               .setLabel("ロック")
-              .setEmoji("🔓")
+              .setEmoji("🔒")
               .setStyle(ButtonStyle.Secondary),
         state.isHidden
           ? new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleHide", channelId))
               .setLabel("表示する")
-              .setEmoji("👁️‍🗨️")
+              .setEmoji("👁️")
               .setStyle(ButtonStyle.Success)
           : new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleHide", channelId))
               .setLabel("非表示にする")
-              .setEmoji("👁️")
+              .setEmoji(HIDDEN_EMOJI)
               .setStyle(ButtonStyle.Secondary),
       ),
     )
