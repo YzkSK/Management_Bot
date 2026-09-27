@@ -3,6 +3,7 @@ import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  clearTempVoiceCreateChannel,
   findTempVoiceChannel,
   getTempVoiceConfig,
   listActiveTempVoiceChannels,
@@ -96,6 +97,15 @@ export const tempVoiceRouter = router({
       await notifyTempVoiceAutoSetup(ctx.db, input.guildId);
     }),
 
+  /**
+   * 手動設定を解除し、作成用VC/カテゴリを未設定に戻す(#412のclearTempVoiceCreateChannelを再利用)。
+   * 解除後はDashboard上で自動セットアップ画面が再表示される。名前テンプレート等の共通設定は保持する。
+   */
+  clearConfig: protectedProcedure
+    .input(guildIdInput)
+    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+    .mutation(({ ctx, input }) => clearTempVoiceCreateChannel(ctx.db, input.guildId)),
+
   getDenyProtectedRoles: protectedProcedure
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE))
@@ -118,7 +128,21 @@ export const tempVoiceRouter = router({
   listActiveChannels: protectedProcedure
     .input(guildIdInput)
     .use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE))
-    .query(({ ctx, input }) => listActiveTempVoiceChannels(ctx.db, input.guildId)),
+    .query(async ({ ctx, input }) => {
+      const rows = await listActiveTempVoiceChannels(ctx.db, input.guildId);
+      if (rows.length === 0) return [];
+      // 一覧でIDをそのまま見せないよう名前を付ける。解決できなければ未設定(画面側でIDにフォールバック)。
+      const [channels, ownerNames] = await Promise.all([
+        ctx.getAllGuildChannels(input.guildId),
+        ctx.getGuildMemberNames(input.guildId, [...new Set(rows.map((row) => row.ownerId))]),
+      ]);
+      const channelNames = new Map(channels.map((channel) => [channel.id, channel.name]));
+      return rows.map((row) => ({
+        ...row,
+        channelName: channelNames.get(row.channelId),
+        ownerName: ownerNames.get(row.ownerId),
+      }));
+    }),
 
   forceDelete: protectedProcedure
     .input(forceDeleteInput)

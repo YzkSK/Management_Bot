@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { trpc } from "../trpc.js";
@@ -32,10 +32,10 @@ interface TempVoiceConfigData {
 /** 未設定(createChannelId/categoryIdが両方null)ギルド向けの案内バナー。設定タブへのリンクを兼ねる。 */
 function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
   return (
-    <Alert>
-      <AlertDescription>
+    <Alert variant="info" className="py-2">
+      <AlertDescription className="flex flex-wrap items-baseline gap-1 text-sm">
         一時VCがまだ設定されていません。
-        <button type="button" className="ml-1 font-medium underline" onClick={onGoSettings}>
+        <button type="button" className="font-medium underline" onClick={onGoSettings}>
           設定タブ
         </button>
         から作成用チャンネルを設定してください。
@@ -82,8 +82,8 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
           <TableBody>
             {listQuery.data.map((channel) => (
               <TableRow key={channel.channelId}>
-                <TableCell>{channel.channelId}</TableCell>
-                <TableCell>{channel.ownerId}</TableCell>
+                <TableCell>{channel.channelName ?? channel.channelId}</TableCell>
+                <TableCell>{channel.ownerName ?? channel.ownerId}</TableCell>
                 <TableCell>{new Date(channel.createdAt).toLocaleString("ja-JP")}</TableCell>
                 <TableCell>{channel.memberCount}人</TableCell>
                 <TableCell className="text-right">
@@ -207,11 +207,15 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
 function ManualConfigForm({
   guildId,
   config,
+  isConfigured,
   onCancel,
+  onCleared,
 }: {
   guildId: string;
   config: { createChannelId: string | null; categoryId: string | null };
+  isConfigured: boolean;
   onCancel?: () => void;
+  onCleared?: () => void;
 }) {
   const queryClient = useQueryClient();
   const voiceOptionsQuery = useQuery(trpc.tempVoice.listVoiceChannelOptions.queryOptions({ guildId }));
@@ -222,6 +226,15 @@ function ManualConfigForm({
     ...trpc.tempVoice.setConfig.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey }),
+  });
+  const clearMutation = useMutation({
+    ...trpc.tempVoice.clearConfig.mutationOptions(),
+    onSuccess: () => {
+      setCreateChannelId("");
+      setCategoryId("");
+      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
+      onCleared?.();
+    },
   });
 
   if (voiceOptionsQuery.isPending || categoryOptionsQuery.isPending) return <div className="text-sm">読み込み中...</div>;
@@ -274,15 +287,45 @@ function ManualConfigForm({
       <p className="text-muted-foreground text-xs">
         セレクターに表示されるのはこのサーバーに実在するチャンネルのみです。IDを直接入力することはできません。
       </p>
-      <Button
-        type="button"
-        className="w-fit"
-        disabled={createChannelId === "" || categoryId === "" || mutation.isPending}
-        onClick={() => mutation.mutate({ guildId, createChannelId, categoryId })}
-      >
-        この設定を保存
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          className="w-fit"
+          disabled={createChannelId === "" || categoryId === "" || mutation.isPending || clearMutation.isPending}
+          onClick={() => mutation.mutate({ guildId, createChannelId, categoryId })}
+        >
+          この設定を保存
+        </Button>
+        {isConfigured && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline" disabled={mutation.isPending || clearMutation.isPending}>
+                設定を解除
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="top-1/2 left-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
+              <DialogHeader>
+                <DialogTitle>一時VCの設定を解除しますか?</DialogTitle>
+                <DialogDescription>
+                  作成用ボイスチャンネルとカテゴリの設定が未設定に戻り、自動セットアップ画面から再設定できるようになります。名前テンプレート等の共通設定は保持されます。
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">キャンセル</Button>
+                </DialogClose>
+                <DialogClose asChild>
+                  <Button variant="destructive" onClick={() => clearMutation.mutate({ guildId })}>
+                    解除する
+                  </Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
       {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました。</p>}
+      {clearMutation.isError && <p className="text-destructive text-xs">解除に失敗しました。</p>}
     </div>
   );
 }
@@ -375,10 +418,23 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
   const queryClient = useQueryClient();
   const [manualMode, setManualMode] = useState(false);
   const isConfigured = Boolean(config.createChannelId || config.categoryId);
+  // 自動セットアップはbot側がpg_notify経由で非同期にDB更新するため、ミューテーション成功時点では
+  // まだ未反映のことがある。isConfiguredになるまで数秒間ポーリングしてUIを追従させる(#441関連の手動リロード回避)。
+  const [isPollingAfterAutoSetup, setIsPollingAfterAutoSetup] = useState(false);
+  useQuery({
+    ...trpc.tempVoice.getConfig.queryOptions({ guildId }),
+    enabled: isPollingAfterAutoSetup,
+    refetchInterval: isPollingAfterAutoSetup ? 1500 : false,
+  });
+  useEffect(() => {
+    if (isPollingAfterAutoSetup && isConfigured) setIsPollingAfterAutoSetup(false);
+  }, [isPollingAfterAutoSetup, isConfigured]);
   const autoSetupMutation = useMutation({
     ...trpc.tempVoice.autoSetupConfig.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey }),
+    onSuccess: () => {
+      setIsPollingAfterAutoSetup(true);
+      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
+    },
   });
 
   const showAutoSetup = !isConfigured && !manualMode;
@@ -413,7 +469,9 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
         <ManualConfigForm
           guildId={guildId}
           config={{ createChannelId: config.createChannelId, categoryId: config.categoryId }}
+          isConfigured={isConfigured}
           onCancel={isConfigured ? undefined : () => setManualMode(false)}
+          onCleared={() => setManualMode(false)}
         />
       )}
 

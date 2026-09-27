@@ -40,6 +40,8 @@ function buildContext(
     getGuildVoiceChannelOptions?: () => Promise<ChannelOption[]>;
     getGuildCategoryOptions?: () => Promise<ChannelOption[]>;
     getGuildRoles?: () => Promise<RoleOption[]>;
+    getAllGuildChannels?: () => Promise<ChannelOption[]>;
+    getGuildMemberNames?: () => Promise<Map<string, string>>;
   } = {},
 ) {
   return {
@@ -48,9 +50,9 @@ function buildContext(
     discordClientId: "test-client-id",
     getGuildMembership: async () => ({ isOwner: false, roleIds: [] }),
     getGuildChannels: async () => [],
-    getAllGuildChannels: async () => [],
+    getAllGuildChannels: overrides.getAllGuildChannels ?? (async () => []),
     verifyGuildChannel: async () => false,
-    getGuildMemberNames: async () => new Map<string, string>(),
+    getGuildMemberNames: overrides.getGuildMemberNames ?? (async () => new Map<string, string>()),
     getBotPermissions: async () => 0n,
     getGuildRoles: overrides.getGuildRoles ?? (async () => [{ id: "role-1", name: "モデレーター" }]),
     getGuildVoiceChannelOptions: overrides.getGuildVoiceChannelOptions ?? (async () => [{ id: "vc-1", name: "ロビー" }]),
@@ -147,6 +149,34 @@ describe("tempVoiceRouter.autoSetupConfig", () => {
   });
 });
 
+describe("tempVoiceRouter.clearConfig", () => {
+  test("MANAGE_TEMP_VOICEを持たない場合はFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.clearConfig({ guildId }));
+    expect(error).toBeDefined();
+  });
+
+  test("createChannelId/categoryIdをnullに戻し、共通設定は保持する", async () => {
+    await grant(CAPABILITIES.MANAGE_TEMP_VOICE | CAPABILITIES.VIEW_TEMP_VOICE);
+    const caller = createCaller(buildContext());
+    await caller.setConfig({
+      guildId,
+      createChannelId: "vc-1",
+      categoryId: "cat-1",
+      nameTemplate: "custom-{username}",
+      defaultUserLimit: 5,
+    });
+
+    await caller.clearConfig({ guildId });
+
+    const config = await caller.getConfig({ guildId });
+    expect(config?.createChannelId).toBeNull();
+    expect(config?.categoryId).toBeNull();
+    expect(config?.nameTemplate).toBe("custom-{username}");
+    expect(config?.defaultUserLimit).toBe(5);
+  });
+});
+
 describe("tempVoiceRouter.getDenyProtectedRoles / setDenyProtectedRoles", () => {
   test("実在しないロールIDはBAD_REQUESTで拒否する", async () => {
     await grant(CAPABILITIES.MANAGE_TEMP_VOICE);
@@ -177,6 +207,22 @@ describe("tempVoiceRouter.listActiveChannels", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ channelId, guildId, ownerId: "owner-1", memberCount: 0 });
+  });
+
+  test("チャンネル名・オーナー名を付けて返す(解決できないものは未設定)", async () => {
+    await grant(CAPABILITIES.VIEW_TEMP_VOICE);
+    const channelId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId: "owner-1" });
+    const caller = createCaller(
+      buildContext({
+        getAllGuildChannels: async () => [{ id: channelId, name: "YoMiのVC" }],
+        getGuildMemberNames: async () => new Map([["owner-1", "YoMi"]]),
+      }),
+    );
+
+    const result = await caller.listActiveChannels({ guildId });
+
+    expect(result[0]).toMatchObject({ channelName: "YoMiのVC", ownerName: "YoMi" });
   });
 });
 
