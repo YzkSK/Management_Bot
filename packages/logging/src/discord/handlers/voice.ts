@@ -83,8 +83,9 @@ export function registerVoiceHandlers(ctx: FeatureModuleContext, getChannelId: G
     void (async () => {
       const moveEntry = toVoiceStateLogEntry(oldState, newState);
       if (moveEntry?.category === "voice") {
+        // 作成チャンネルへの入室(別VCからの移動を含む)は直後に個人VCへ移されるため記録しない。
         const isCreateChannelJoin =
-          moveEntry.action === "join" &&
+          (moveEntry.action === "join" || moveEntry.action === "move") &&
           newState.channelId !== null &&
           (await isTempVoiceCreateChannel(ctx.db, newState.guild.id, newState.channelId));
         const isRegisteredTempVoiceMove =

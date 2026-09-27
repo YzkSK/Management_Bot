@@ -160,6 +160,25 @@ describe("registerVoiceHandlers", () => {
     expect(values).not.toHaveBeenCalled();
   });
 
+  test("skips a move from another voice channel to the temp voice create channel", async () => {
+    let listener: ((oldState: unknown, newState: unknown) => void) | undefined;
+    const on = mock((_event: string, handler: (oldState: unknown, newState: unknown) => void) => {
+      listener = handler;
+    });
+    const values = mock(() => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([{ id: "id1" }]) }) }));
+    const db = {
+      insert: () => ({ values }),
+      select: () => ({ from: () => ({ where: () => Promise.resolve([{ createChannelId: "create-1" }]) }) }),
+    };
+    const ctx = { client: { on }, db } as unknown as FeatureModuleContext;
+
+    registerVoiceHandlers(ctx);
+    listener?.(fakeVoiceState("c1"), fakeVoiceState("create-1"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(values).not.toHaveBeenCalled();
+  });
+
   test("skips only a registered temp voice bot move", async () => {
     let listener: ((oldState: unknown, newState: unknown) => void) | undefined;
     const on = mock((_event: string, handler: (oldState: unknown, newState: unknown) => void) => {
