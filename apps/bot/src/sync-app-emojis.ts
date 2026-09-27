@@ -31,3 +31,9 @@ export async function syncAppEmojis(application: ClientApplication): Promise<voi
     console.log(`Registered app emoji ${name}`);
   }
 }
+
+/** 登録済みのアプリケーション絵文字から、絵文字名 → `<:name:id>` を引くリゾルバを作る。 */
+export async function loadAppEmojiResolver(application: ClientApplication): Promise<(name: string) => string | undefined> {
+  const byName = new Map((await application.emojis.fetch()).map((e) => [e.name, e.toString()]));
+  return (name) => byName.get(name);
+}

@@ -144,10 +144,62 @@ const MODERATION_CASE_RESOLVE_PRESENTATION: Record<"success" | "failed" | "skipp
   skipped: { accent: "neutral", title: "モデレーション対応はより重い処分に集約されました", icon: "➖" },
 };
 
-export function getPresentation(entry: LogEntry): { accent: AccentKind; title: string; icon: string } {
+/** 絵文字名 → `<:name:id>`。未登録ならundefined。Bot起動時に呼び出し側(apps/bot)から注入する(loggingはBotに依存しない)。 */
+let appEmojiResolver: (name: string) => string | undefined = () => undefined;
+
+export function setAppEmojiResolver(resolver: (name: string) => string | undefined): void {
+  appEmojiResolver = resolver;
+}
+
+const snake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
+/**
+ * ログ種別 → assets/emojis/ のアプリ絵文字名。基本は`{category}_{action}`のsnake_caseで、
+ * 命名が異なるもの・フィールドで出し分けるもののみ個別に定義する(網羅性はテストで検証)。
+ */
+export function appEmojiNameFor(entry: LogEntry): string {
+  switch (entry.category) {
+    case "auditLogCorrelation":
+      return "status_info";
+    case "autoMod":
+      return `automod_${snake(entry.action)}`;
+    case "moderationCase":
+      return entry.action === "resolve" ? `moderation_result_${entry.result}` : `moderation_case_${entry.actionType}`;
+    case "voice": {
+      if (entry.action !== "update") break;
+      // selfDeafの切り替えはselfMuteも連動して変化するため、selfMuteは数えない(format-log-messageと同じ扱い)。
+      const flags = Object.keys(entry.changes).filter((flag) => !(flag === "selfMute" && "selfDeaf" in entry.changes));
+      return flags.length === 1 ? `voice_${snake(flags[0]!)}` : "voice_update";
+    }
+    case "tempVoice":
+      switch (entry.action) {
+        case "permissionChanged":
+          return `tv_permission_${entry.permission}`;
+        case "userLimitChanged":
+          return "tv_user_limit";
+        case "bitrateChanged":
+          return "tv_bitrate";
+        case "ownerTransferred":
+          return entry.trigger === "manual" ? "tv_owner_manual" : "tv_owner_auto_grace";
+        case "memberPermissionChanged":
+          return `tv_member_${entry.targetType}_${entry.state}`;
+        default:
+          return `tv_${entry.action}`;
+      }
+  }
+  return `${snake(entry.category)}_${snake(entry.action)}`;
+}
+
+function getBasePresentation(entry: LogEntry): { accent: AccentKind; title: string; icon: string } {
   if (entry.category === "auditLogCorrelation") return FALLBACK;
   if (entry.category === "moderationCase" && entry.action === "resolve") {
     return MODERATION_CASE_RESOLVE_PRESENTATION[entry.result];
   }
   return PRESENTATION[entry.category]?.[entry.action] ?? FALLBACK;
+}
+
+/** iconはアプリ絵文字を優先し、未登録・取得失敗時はUnicode絵文字にフォールバックする(#455)。 */
+export function getPresentation(entry: LogEntry): { accent: AccentKind; title: string; icon: string } {
+  const base = getBasePresentation(entry);
+  return { ...base, icon: appEmojiResolver(appEmojiNameFor(entry)) ?? base.icon };
 }
