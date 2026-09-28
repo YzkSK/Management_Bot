@@ -43,7 +43,7 @@ function emojiUrlFor(entry: LogEntry): string | undefined {
 /** ログ種別アイコン。画像が無い種別はカテゴリ色のドットにフォールバックする。 */
 function LogIcon({ entry }: { entry: LogEntry }) {
   const url = emojiUrlFor(entry);
-  if (url) return <img src={url} alt="" className="size-5 shrink-0" />;
+  if (url) return <img src={url} alt="" className="size-6 shrink-0 rounded-md bg-neutral-800 p-0.5 dark:bg-transparent dark:p-0" />;
   return (
     <span
       className="size-2 shrink-0 rounded-full"
