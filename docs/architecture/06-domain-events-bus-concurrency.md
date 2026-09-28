@@ -4,6 +4,8 @@
 
 `packages/core/src/domain-events-bus.ts`(`DomainEventBus`)が、購読するイベントtypeが増えたときにどう遅くなるかを整理し、対応方針を決める(#423)。
 
+> 以下の「現状の仕組み」〜「既存機能への影響」は#423での検討時点(対応前)の内容。実際の対応は末尾の「実装結果(#465)」を参照。
+
 ## 現状の仕組み
 
 ```mermaid
@@ -75,3 +77,43 @@ XACKが遅れても、配送が抜けたり重複したりはしない(at-least-
 - logging: ハンドラ(`handleModerationEvent`・`handleTempVoiceEvent`)の変更は不要。遅れが最大約1秒からほぼ0になる。
 - moderation・temp-voice: publishのみなので影響なし。
 - テスト: `domain-events-bus.test.ts`の「複数typeを購読したとき、片方のBLOCK中でももう片方のイベントが1秒以内に届く」ケースを、実装時に追加する。
+
+## 実装結果(#465)
+
+実装時に方針を見直し、**案A + 案C ではなく、案B + 案C** を採用した。
+
+```mermaid
+flowchart LR
+  subgraph bus["DomainEventBus(機能ごとに1つ)"]
+    loopA["type Aの購読ループ"]
+    loopB["type Bの購読ループ"]
+    readerA[("reader A<br/>XREADGROUP BLOCK")]
+    readerB[("reader B<br/>XREADGROUP BLOCK")]
+    commander[("commander<br/>XGROUP / XACK / XAUTOCLAIM")]
+    publisher[("publisher<br/>XADD")]
+  end
+  loopA --> readerA
+  loopB --> readerB
+  loopA --> commander
+  loopB --> commander
+  readerA --> redis[(Redis)]
+  readerB --> redis
+  commander --> redis
+  publisher --> redis
+```
+
+### 案Aをやめた理由
+
+- 案Aは読み取りを1本のループにまとめるため、全typeのhandlerも1本のループで順番に実行することになる。
+- handlerはDB書き込みやDiscordへのメッセージ送信を行い、レート制限に当たると数秒かかることもある。1つのtypeのhandlerが遅いと、他のtypeの配送まで止まってしまう。
+- 従来はtypeごとにループが分かれていて、handlerの遅さが他typeへ波及しなかった。この性質を失いたくなかった。
+
+### 案Bの接続数
+
+- 1バスあたりの接続数は「publisher 1 + commander 1 + 購読type数」。
+- 現状はbot全体でも10本程度(4機能 × publisher/commander の2本 + loggingの購読2type)で、Redisの接続上限(既定10000)に対して十分小さい。
+
+### 確認したこと
+
+- 2typeを購読し、片方にイベントを流さずBLOCKさせたまま、もう片方へ5回publishして、配送の遅れが最大でも500ms未満であることをテストで確認した。
+- 変更前の実装(1本の接続を共有)では、同じテストが失敗することを確認した。

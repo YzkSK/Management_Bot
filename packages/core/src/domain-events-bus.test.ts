@@ -159,6 +159,32 @@ describe.skipIf(!(await isRedisAvailable()))("DomainEventBus", () => {
     await bus.close();
   });
 
+  test("複数typeを購読しても、イベントの来ないtypeのBLOCK待ちで他typeの配送が遅れない(#465)", async () => {
+    const bus = new DomainEventBus(REDIS_URL, randomUUID());
+    let resolveNext: ((receivedAt: number) => void) | undefined;
+    // moderation.action.recordedにはイベントを流さず、常にBLOCK(最大1秒)で待機させる。
+    await bus.subscribe("moderation.action.recorded", () => {});
+    await bus.subscribe("voice.session.ended", () => resolveNext?.(performance.now()));
+    await new Promise((r) => setTimeout(r, 100));
+
+    // 1本の接続を共有していた実装では、BLOCKの位相しだいで最大約1秒遅れる。
+    // 偶然速く届くケースを除くため、複数回測って最大値を確認する。
+    const latencies: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const received = new Promise<number>((resolve) => (resolveNext = resolve));
+      const sentAt = performance.now();
+      await bus.publish(sampleEvent({ userId: `u${i}` }));
+      latencies.push((await received) - sentAt);
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    expect(Math.max(...latencies)).toBeLessThan(500);
+    await bus.close();
+    const raw = new Redis(REDIS_URL);
+    await raw.del("domain-events:moderation.action.recorded");
+    await raw.quit();
+  });
+
   test("異なるconsumer groupは同一イベントをそれぞれ独立して受信する", async () => {
     const busA = new DomainEventBus(REDIS_URL, randomUUID());
     const busB = new DomainEventBus(REDIS_URL, randomUUID());

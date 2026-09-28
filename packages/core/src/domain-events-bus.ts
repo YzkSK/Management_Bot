@@ -59,15 +59,20 @@ function parseXAutoClaimResponse(raw: unknown): { cursor: string; entries: Strea
  * at-least-once配送を壊す(全consumer groupのACK状況を跨いだ安全なtrim方針が
  * 必要)。運用で問題化したら consumer group横断でACK済みの範囲のみ落とす設計を検討する。
  *
- * ponytail: type毎に同一subscriber接続上でXREADGROUP BLOCKを直列実行するため、
- * 1インスタンスが多数のtypeを購読するとBLOCK待機が後続typeの応答を遅らせる。
- * 購読type数が増えて問題化したらtype毎に専用接続を持つか、1回のXREADGROUPで
- * 複数streamをまとめて読む構成に変更する。
- * 検討結果と移行方針は docs/architecture/06-domain-events-bus-concurrency.md を参照(#423)。
+ * Redis接続は用途ごとに分ける(#465):
+ * - publisher: XADD専用。
+ * - commander: XGROUP CREATE・XACK・XAUTOCLAIM(すぐ返るコマンド)専用。
+ * - readers: 購読typeごとのXREADGROUP BLOCK専用。Redisは1接続のコマンドを順に処理するため、
+ *   BLOCK中の接続に送った他のコマンドはBLOCKが終わるまで待たされる。typeごとに接続を分けることで、
+ *   あるtypeのBLOCKが別typeの読み取りやXACKを遅らせないようにしている。
+ * 1回のXREADGROUPで全streamをまとめて読む方式は接続数を増やさずに済むが、1本のループで
+ * 全typeのhandlerを順に実行することになり、遅いhandlerが他typeの配送を止めるため採用していない。
+ * 検討の経緯は docs/architecture/06-domain-events-bus-concurrency.md を参照(#423)。
  */
 export class DomainEventBus {
   private readonly publisher: Redis;
-  private readonly subscriber: Redis;
+  private readonly commander: Redis;
+  private readonly readers = new Map<DomainEventType, Redis>();
   private readonly consumerName: string;
   private readonly handlers = new Map<DomainEventType, Set<EventHandler<DomainEventType>>>();
   private readonly consumerLoops = new Map<DomainEventType, Promise<void>>();
@@ -76,7 +81,7 @@ export class DomainEventBus {
   private closing = false;
 
   constructor(
-    redisUrl: string,
+    private readonly redisUrl: string,
     private readonly consumerGroup: string,
     private readonly onError: (error: unknown, context: { channel: string }) => void = (error, context) =>
       console.error(`DomainEventBus error on ${context.channel}:`, error),
@@ -87,8 +92,12 @@ export class DomainEventBus {
     // キューイングされ続けるのを防ぐ。接続断時、BLOCK中のXREADGROUPを含む
     // 未完了コマンドは再接続後に再送されるが、この回数だけ再接続に失敗すると
     // MaxRetriesPerRequestErrorで失敗する(runConsumerLoopのcatchで再試行される)。
-    this.publisher = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
-    this.subscriber = new Redis(redisUrl, { maxRetriesPerRequest: 3 });
+    this.publisher = this.createConnection();
+    this.commander = this.createConnection();
+  }
+
+  private createConnection(): Redis {
+    return new Redis(this.redisUrl, { maxRetriesPerRequest: 3 });
   }
 
   async publish<T extends DomainEventType>(event: Extract<DomainEvent, { type: T }>): Promise<void> {
@@ -109,23 +118,25 @@ export class DomainEventBus {
       const stream = STREAM_PREFIX + type;
       try {
         // "0": group作成以前に発行済みのイベントも取りこぼさず処理する。
-        await this.subscriber.xgroup("CREATE", stream, this.consumerGroup, "0", "MKSTREAM");
+        await this.commander.xgroup("CREATE", stream, this.consumerGroup, "0", "MKSTREAM");
       } catch (error) {
         if (!(error instanceof Error) || !error.message.includes("BUSYGROUP")) throw error;
       }
-      this.consumerLoops.set(type, this.runConsumerLoop(type));
+      const reader = this.createConnection();
+      this.readers.set(type, reader);
+      this.consumerLoops.set(type, this.runConsumerLoop(type, reader));
     }
   }
 
   async close(): Promise<void> {
     this.closing = true;
     // BLOCK中のXREADGROUPはquit()の正常終了を待つため即応答しない。disconnect()で即座に切る。
-    this.subscriber.disconnect();
+    for (const reader of this.readers.values()) reader.disconnect();
     await Promise.all(this.consumerLoops.values());
-    await this.publisher.quit();
+    await Promise.all([this.commander.quit(), this.publisher.quit()]);
   }
 
-  private async runConsumerLoop(type: DomainEventType): Promise<void> {
+  private async runConsumerLoop(type: DomainEventType, reader: Redis): Promise<void> {
     const stream = STREAM_PREFIX + type;
     while (!this.closing) {
       try {
@@ -134,7 +145,7 @@ export class DomainEventBus {
         // (drain完了前にintervalを更新すると、PELが多い時に回収が長時間止まる)。
         if (await this.reclaimDuePending(type, stream)) continue;
 
-        const raw = await this.subscriber.xreadgroup(
+        const raw = await reader.xreadgroup(
           "GROUP",
           this.consumerGroup,
           this.consumerName,
@@ -182,7 +193,7 @@ export class DomainEventBus {
   private async reclaimPending(type: DomainEventType, stream: string): Promise<StreamEntry[]> {
     let cursor = this.claimCursors.get(type) ?? "0-0";
     do {
-      const raw = await this.subscriber.xautoclaim(
+      const raw = await this.commander.xautoclaim(
         stream,
         this.consumerGroup,
         this.consumerName,
@@ -215,14 +226,14 @@ export class DomainEventBus {
       payload = raw === undefined ? undefined : JSON.parse(raw);
     } catch (error) {
       this.onError(error, { channel: stream });
-      await this.subscriber.xack(stream, this.consumerGroup, id);
+      await this.commander.xack(stream, this.consumerGroup, id);
       return;
     }
 
     const result = schema.safeParse(payload);
     if (!result.success) {
       this.onError(result.error, { channel: stream });
-      await this.subscriber.xack(stream, this.consumerGroup, id);
+      await this.commander.xack(stream, this.consumerGroup, id);
       return;
     }
 
@@ -238,6 +249,6 @@ export class DomainEventBus {
     // 別consumer)がXAUTOCLAIMで回収し再実行する。handler側は再実行を前提に冪等に実装すること。
     if (failures.length > 0) return;
 
-    await this.subscriber.xack(stream, this.consumerGroup, id);
+    await this.commander.xack(stream, this.consumerGroup, id);
   }
 }
