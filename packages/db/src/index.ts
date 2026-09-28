@@ -1,5 +1,11 @@
 export { createDb, type Db } from "./client.js";
 export { withResourceLock } from "./advisory-lock.js";
+export {
+  createAdvisoryLockRunner,
+  stopJobOnSignal,
+  type AdvisoryLockJobOptions,
+  type AdvisoryLockJobRunner,
+} from "./advisory-lock-runner.js";
 export { syncFeatureMetadata } from "./seed-features.js";
 export { onboardGuild, type OnboardGuildInput } from "./onboard-guild.js";
 export {
