@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { PermissionFlagsBits } from "discord.js";
 import {
+  HIDDEN_APP_EMOJI_NAME,
   buildControlPanelContainer,
   buildTempVoiceCustomId,
   parseTempVoiceCustomId,
@@ -94,5 +97,12 @@ describe("buildControlPanelContainer", () => {
     expect(text).toContain("10人");
     expect(text).toContain("128 kbps");
     expect(text).toContain("ロック中");
+  });
+});
+
+describe("HIDDEN_APP_EMOJI_NAME", () => {
+  test("assets/emojis/に同名の画像がある(起動時に自動登録される)", () => {
+    const path = fileURLToPath(new URL(`../../../../assets/emojis/${HIDDEN_APP_EMOJI_NAME}.png`, import.meta.url));
+    expect(existsSync(path)).toBe(true);
   });
 });
