@@ -1,5 +1,5 @@
 import { parseEnv, envSchema } from "@management-bot/config";
-import { createDb } from "@management-bot/db";
+import { createDb, stopJobOnSignal } from "@management-bot/db";
 import cron from "node-cron";
 import { createPurgeRunner } from "./run-purge.js";
 
@@ -21,15 +21,7 @@ const runner = createPurgeRunner(db);
 
 const task = cron.schedule(env.LOGGING_RETENTION_CRON, () => void runner.run(), { timezone: TIMEZONE });
 
-// cronのタイマーを止めてから実行中のジョブ(DELETE)完了を待ち、DBを閉じる。
-// タイマーを止めずにcloseだけ呼ぶとプロセスがtimer keep-aliveで終了しない。
-async function shutdown() {
-  task.stop();
-  await runner.waitForIdle();
-  await close();
-  process.exit(0);
-}
-process.once("SIGTERM", () => void shutdown());
-process.once("SIGINT", () => void shutdown());
+// cronのタイマーを止めてから実行中のジョブ完了を待ち、DBを閉じる(stopJobOnSignal参照)。
+stopJobOnSignal(task, runner, close);
 
 console.log(`Logging retention cron scheduled: ${env.LOGGING_RETENTION_CRON} (${TIMEZONE})`);
