@@ -31,34 +31,27 @@ export async function getLockdownSettings(db: Db, guildId: string): Promise<Lock
   return row ?? DEFAULT_LOCKDOWN_SETTINGS;
 }
 
-export async function setAutoLockdownOnRaid(db: Db, guildId: string, enabled: boolean): Promise<void> {
+/** 指定したカラムだけを書き込むupsert。行がなければ残りのカラムはDBのデフォルト値で作る。 */
+async function upsertLockdownFields(db: Db, guildId: string, patch: Partial<LockdownSettings>): Promise<void> {
   await db
     .insert(moderationLockdownSettings)
-    .values({ guildId, autoLockdownOnRaid: enabled })
+    .values({ guildId, ...patch })
     .onConflictDoUpdate({
       target: moderationLockdownSettings.guildId,
-      set: { autoLockdownOnRaid: enabled, updatedAt: new Date() },
+      set: { ...patch, updatedAt: new Date() },
     });
+}
+
+export async function setAutoLockdownOnRaid(db: Db, guildId: string, enabled: boolean): Promise<void> {
+  await upsertLockdownFields(db, guildId, { autoLockdownOnRaid: enabled });
 }
 
 export async function setLockdownRequested(db: Db, guildId: string, requestedLocked: boolean): Promise<void> {
-  await db
-    .insert(moderationLockdownSettings)
-    .values({ guildId, requestedLocked })
-    .onConflictDoUpdate({
-      target: moderationLockdownSettings.guildId,
-      set: { requestedLocked, updatedAt: new Date() },
-    });
+  await upsertLockdownFields(db, guildId, { requestedLocked });
 }
 
 export async function markLockdownApplied(db: Db, guildId: string, isLocked: boolean): Promise<void> {
-  await db
-    .insert(moderationLockdownSettings)
-    .values({ guildId, isLocked })
-    .onConflictDoUpdate({
-      target: moderationLockdownSettings.guildId,
-      set: { isLocked, updatedAt: new Date() },
-    });
+  await upsertLockdownFields(db, guildId, { isLocked });
 }
 
 /** Bot 再起動中に変更された、Discord 側へ未反映のロックダウン設定を返す。 */
