@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideEscalationAction } from "./escalation.js";
+import { decideEscalationAction, mostSevere } from "./escalation.js";
 
 describe("decideEscalationAction", () => {
   const steps = { 1: "warn", 3: "kick", 5: "timeout" };
@@ -30,5 +30,24 @@ describe("decideEscalationAction", () => {
   test("strikeCountが負数・非整数はRangeError", () => {
     expect(() => decideEscalationAction(-1, steps)).toThrow(RangeError);
     expect(() => decideEscalationAction(1.5, steps)).toThrow(RangeError);
+  });
+});
+
+describe("mostSevere", () => {
+  test("actionTypeが最も重いものを返す", () => {
+    const outcomes = [
+      { caseId: "a", actionType: "warn" as const },
+      { caseId: "b", actionType: "kick" as const },
+      { caseId: "c", actionType: "timeout" as const },
+    ];
+    expect(mostSevere(outcomes).caseId).toBe("b");
+  });
+
+  test("同じ重さの場合は先に出てきたものを返す", () => {
+    const outcomes = [
+      { caseId: "a", actionType: "timeout" as const },
+      { caseId: "b", actionType: "timeout" as const },
+    ];
+    expect(mostSevere(outcomes).caseId).toBe("a");
   });
 });

@@ -6,6 +6,8 @@ export {
   type EscalationOutcome,
   type IncomingMessage,
 } from "./detect-and-escalate.js";
+// discord層(handleMessageCreate/handleMessageUpdate)が実行対象の1件を選ぶために使う。
+export { mostSevere } from "../domain/index.js";
 export {
   isWhitelisted,
   listWhitelist,
