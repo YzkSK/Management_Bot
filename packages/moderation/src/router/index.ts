@@ -101,22 +101,21 @@ async function assertWhitelistTargetExists(
   }
 }
 
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
+// (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
+const moderationProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_MODERATION));
+
 export const moderationRouter = router({
-  listThresholds: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listThresholds: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => listThresholds(ctx.db, input.guildId)),
 
-  setThreshold: protectedProcedure
-    .input(setThresholdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  setThreshold: moderationProcedure(setThresholdInput)
     .mutation(({ ctx, input }) =>
       setThreshold(ctx.db, input.guildId, input.violationType, input.preset, input.enabled),
     ),
 
-  listWhitelist: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listWhitelist: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => listWhitelist(ctx.db, input.guildId)),
 
   /**
@@ -124,9 +123,7 @@ export const moderationRouter = router({
    * getGuildRolesは403(Bot権限・Privileged Intent不足)と404(Bot未参加)を区別せず空配列に
    * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるようにする。
    */
-  listRoleOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listRoleOptions: moderationProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const [roles, accessStatus] = await Promise.all([
         ctx.getGuildRoles(input.guildId),
@@ -136,22 +133,16 @@ export const moderationRouter = router({
     }),
 
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在メンバー)をこのprocedure経由で提供する。 */
-  listMemberOptions: protectedProcedure
-    .input(guildIdInput.extend({ after: z.string().min(1).optional() }))
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listMemberOptions: moderationProcedure(guildIdInput.extend({ after: z.string().min(1).optional() }))
     .query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
 
-  addToWhitelist: protectedProcedure
-    .input(whitelistTargetInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  addToWhitelist: moderationProcedure(whitelistTargetInput)
     .mutation(async ({ ctx, input }) => {
       await assertWhitelistTargetExists(ctx, input.guildId, input.targetType, input.targetId);
       await addToWhitelist(ctx.db, input);
     }),
 
-  removeFromWhitelist: protectedProcedure
-    .input(whitelistTargetInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  removeFromWhitelist: moderationProcedure(whitelistTargetInput)
     .mutation(({ ctx, input }) => removeFromWhitelist(ctx.db, input)),
 
   /**
@@ -159,9 +150,7 @@ export const moderationRouter = router({
    * ページ内のuserIdをまとめて解決する。解決できなかったIDはレスポンスに含めない
    * (呼び出し側でIDへフォールバック表示する)。
    */
-  listStrikes: protectedProcedure
-    .input(guildIdInput.extend({ after: z.string().min(1).optional() }))
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listStrikes: moderationProcedure(guildIdInput.extend({ after: z.string().min(1).optional() }))
     .query(async ({ ctx, input }) => {
       const page = await listStrikes(ctx.db, input.guildId, input.after);
       const uniqueUserIds = [...new Set(page.rows.map((r) => r.userId))];
@@ -172,44 +161,28 @@ export const moderationRouter = router({
       return { ...page, userNames: Object.fromEntries(userNames) };
     }),
 
-  resetStrike: protectedProcedure
-    .input(strikeTargetInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  resetStrike: moderationProcedure(strikeTargetInput)
     .mutation(({ ctx, input }) => resetStrike(ctx.db, input.guildId, input.userId, input.violationType)),
 
-  getEscalationPreset: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  getEscalationPreset: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => getEscalationPreset(ctx.db, input.guildId)),
 
-  setEscalationPreset: protectedProcedure
-    .input(setEscalationPresetInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  setEscalationPreset: moderationProcedure(setEscalationPresetInput)
     .mutation(({ ctx, input }) => setEscalationPreset(ctx.db, input.guildId, input.preset)),
 
-  getLockdownSettings: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  getLockdownSettings: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => getLockdownSettings(ctx.db, input.guildId)),
 
-  setAutoLockdownOnRaid: protectedProcedure
-    .input(setAutoLockdownOnRaidInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  setAutoLockdownOnRaid: moderationProcedure(setAutoLockdownOnRaidInput)
     .mutation(({ ctx, input }) => setAutoLockdownOnRaid(ctx.db, input.guildId, input.enabled)),
 
-  setLockdownRequested: protectedProcedure
-    .input(setLockdownRequestedInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  setLockdownRequested: moderationProcedure(setLockdownRequestedInput)
     .mutation(({ ctx, input }) => setLockdownRequested(ctx.db, input.guildId, input.requestedLocked)),
 
-  resetAllStrikes: protectedProcedure
-    .input(resetAllStrikesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  resetAllStrikes: moderationProcedure(resetAllStrikesInput)
     .mutation(({ ctx, input }) => resetAllStrikes(ctx.db, input.guildId, input.userId)),
 
-  listNgwords: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  listNgwords: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => listNgwords(ctx.db, input.guildId)),
 
   /**
@@ -217,9 +190,7 @@ export const moderationRouter = router({
    * application層はtRPCに依存させない設計のため(Codexレビュー指摘)、application層が投げる
    * UnsafeNgwordRegexErrorをここでTRPCError(BAD_REQUEST)にマップする。
    */
-  addNgword: protectedProcedure
-    .input(addNgwordInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  addNgword: moderationProcedure(addNgwordInput)
     .mutation(async ({ ctx, input }) => {
       try {
         return await addNgword(ctx.db, input.guildId, input.matchType, input.pattern);
@@ -231,18 +202,14 @@ export const moderationRouter = router({
       }
     }),
 
-  removeNgword: protectedProcedure
-    .input(removeNgwordInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  removeNgword: moderationProcedure(removeNgwordInput)
     .mutation(({ ctx, input }) => removeNgword(ctx.db, input.guildId, input.id)),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。
    * 不足時にDashboardから案内する再認可URL(必要権限のみを含む)を併せて返す(#174 codexレビュー対応)。
    */
-  getRequiredPermissionStatus: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_MODERATION))
+  getRequiredPermissionStatus: moderationProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const [permissions, accessStatus] = await Promise.all([
         ctx.getBotPermissions(input.guildId),

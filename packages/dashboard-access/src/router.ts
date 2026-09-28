@@ -70,6 +70,11 @@ async function assertGrantTargetExists(
   }
 }
 
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
+// (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
+const manageAccessProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_ACCESS));
+
 /**
  * capability grantのCRUDを提供するrouter(issue #198)。全procedureがMANAGE_ACCESSを要求する。
  * 付与・剥奪はどちらもcanGrantCapabilitiesで、操作対象のcapabilitiesが操作者自身の実効capabilities
@@ -77,9 +82,7 @@ async function assertGrantTargetExists(
  * 「自分が持たない権限を他者に付与/剥奪できてしまう」昇格を防止する。
  */
 export const capabilityGrantsRouter = router({
-  listCapabilityGrants: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  listCapabilityGrants: manageAccessProcedure(guildIdInput)
     .query(({ ctx, input }) => listCapabilityGrants(ctx.db, input.guildId)),
 
   /**
@@ -88,9 +91,7 @@ export const capabilityGrantsRouter = router({
    * (issue #198)。最終的な可否判定は各mutationのcanGrantCapabilitiesが行うため、
    * この値はUIのdisabled制御用のヒントに過ぎない。
    */
-  getMyCapabilities: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  getMyCapabilities: manageAccessProcedure(guildIdInput)
     .query(({ ctx }) => ({ capabilities: ctx.capabilities })),
 
   /**
@@ -99,9 +100,7 @@ export const capabilityGrantsRouter = router({
    * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるように
    * する(issue #214)。
    */
-  listRoleOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  listRoleOptions: manageAccessProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const [roles, accessStatus] = await Promise.all([
         ctx.getGuildRoles(input.guildId),
@@ -111,18 +110,14 @@ export const capabilityGrantsRouter = router({
     }),
 
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在メンバー)をこのprocedure経由で提供する。 */
-  listMemberOptions: protectedProcedure
-    .input(listMemberOptionsInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  listMemberOptions: manageAccessProcedure(listMemberOptionsInput)
     .query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
 
   /**
    * grant一覧でuser対象のtargetIdをそのまま見せず名前表示するため、まとめて解決する(issue #198)。
    * 解決できなかったIDはレスポンスに含めない(呼び出し側でIDへフォールバック表示する)。
    */
-  resolveTargetUserNames: protectedProcedure
-    .input(resolveTargetUserNamesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  resolveTargetUserNames: manageAccessProcedure(resolveTargetUserNamesInput)
     .query(async ({ ctx, input }) => {
       const uniqueUserIds = [...new Set(input.userIds)];
       const names =
@@ -132,9 +127,7 @@ export const capabilityGrantsRouter = router({
       return Object.fromEntries(names);
     }),
 
-  grantCapabilities: protectedProcedure
-    .input(grantCapabilitiesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  grantCapabilities: manageAccessProcedure(grantCapabilitiesInput)
     .mutation(async ({ ctx, input }) => {
       if (!isKnownCapabilityMask(input.capabilities)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities contains unknown bits" });
@@ -163,9 +156,7 @@ export const capabilityGrantsRouter = router({
       await grantCapabilities(ctx.db, input);
     }),
 
-  revokeCapabilityGrant: protectedProcedure
-    .input(revokeCapabilityGrantInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_ACCESS))
+  revokeCapabilityGrant: manageAccessProcedure(revokeCapabilityGrantInput)
     .mutation(async ({ ctx, input }) => {
       const existing = await getCapabilityGrant(ctx.db, input);
       if (!existing) {

@@ -33,19 +33,22 @@ const setDenyProtectedRolesInput = z.object({
 
 const forceDeleteInput = z.object({ guildId: discordIdSchema, channelId: discordIdSchema });
 
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
+// (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
+const tempVoiceViewProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE));
+const tempVoiceManageProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE));
+
 export const tempVoiceRouter = router({
-  getConfig: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE))
+  getConfig: tempVoiceViewProcedure(guildIdInput)
     .query(({ ctx, input }) => getTempVoiceConfig(ctx.db, input.guildId)),
 
   /**
    * createChannelId/categoryIdはギルドの実VC一覧・実カテゴリ一覧からそれぞれ検証する
    * (種別を問わない実在確認ではなく種別ごとに検証、Dashboard UIでのID直接入力禁止の徹底)。
    */
-  setConfig: protectedProcedure
-    .input(setConfigInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  setConfig: tempVoiceManageProcedure(setConfigInput)
     .mutation(async ({ ctx, input }) => {
       if (input.createChannelId !== undefined) {
         const voiceChannels = await ctx.getGuildVoiceChannelOptions(input.guildId);
@@ -86,9 +89,7 @@ export const tempVoiceRouter = router({
    * createChannelId/categoryIdが両方未設定のギルドでのみ受け付ける(二重実行防止、
    * UIの表示制御だけに頼らずprocedure自身もガードする、issue受け入れ条件)。
    */
-  autoSetupConfig: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  autoSetupConfig: tempVoiceManageProcedure(guildIdInput)
     .mutation(async ({ ctx, input }) => {
       const config = await getTempVoiceConfig(ctx.db, input.guildId);
       if (config?.createChannelId || config?.categoryId) {
@@ -101,19 +102,13 @@ export const tempVoiceRouter = router({
    * 手動設定を解除し、作成用VC/カテゴリを未設定に戻す(#412のclearTempVoiceCreateChannelを再利用)。
    * 解除後はDashboard上で自動セットアップ画面が再表示される。名前テンプレート等の共通設定は保持する。
    */
-  clearConfig: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  clearConfig: tempVoiceManageProcedure(guildIdInput)
     .mutation(({ ctx, input }) => clearTempVoiceCreateChannel(ctx.db, input.guildId)),
 
-  getDenyProtectedRoles: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE))
+  getDenyProtectedRoles: tempVoiceViewProcedure(guildIdInput)
     .query(({ ctx, input }) => listDenyProtectedRoleIds(ctx.db, input.guildId)),
 
-  setDenyProtectedRoles: protectedProcedure
-    .input(setDenyProtectedRolesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  setDenyProtectedRoles: tempVoiceManageProcedure(setDenyProtectedRolesInput)
     .mutation(async ({ ctx, input }) => {
       const roles = await ctx.getGuildRoles(input.guildId);
       const validRoleIds = new Set(roles.map((r) => r.id));
@@ -125,9 +120,7 @@ export const tempVoiceRouter = router({
       await replaceDenyProtectedRoles(ctx.db, input.guildId, input.roleIds);
     }),
 
-  listActiveChannels: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE))
+  listActiveChannels: tempVoiceViewProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const rows = await listActiveTempVoiceChannels(ctx.db, input.guildId);
       if (rows.length === 0) return [];
@@ -144,9 +137,7 @@ export const tempVoiceRouter = router({
       }));
     }),
 
-  forceDelete: protectedProcedure
-    .input(forceDeleteInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  forceDelete: tempVoiceManageProcedure(forceDeleteInput)
     .mutation(async ({ ctx, input }) => {
       const row = await findTempVoiceChannel(ctx.db, input.channelId);
       if (!row || row.guildId !== input.guildId) {
@@ -159,21 +150,15 @@ export const tempVoiceRouter = router({
    * Dashboard UIでのID直接入力を禁止するため、選択肢(実在VC)をこのprocedure経由で提供する
    * (moderationRouter.listRoleOptionsと同じ設計、issue #415)。
    */
-  listVoiceChannelOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  listVoiceChannelOptions: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => ctx.getGuildVoiceChannelOptions(input.guildId)),
 
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在カテゴリ)をこのprocedure経由で提供する。 */
-  listCategoryOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  listCategoryOptions: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => ctx.getGuildCategoryOptions(input.guildId)),
 
   /** 拒否禁止ロールタブのロール選択肢。MANAGE_MODERATION権限を要求するmoderationRouter.listRoleOptionsとは
    * 別に、MANAGE_TEMP_VOICE権限者が呼べるようここに用意する。 */
-  listRoleOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE))
+  listRoleOptions: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => ctx.getGuildRoles(input.guildId)),
 });

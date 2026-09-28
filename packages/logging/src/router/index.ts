@@ -75,10 +75,15 @@ const resolveDisplayNamesInput = z.object({
   channelIds: z.array(discordIdSchema).max(100).default([]),
 });
 
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
+// (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
+const loggingManageProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS));
+const loggingViewProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.VIEW_LOGS));
+
 export const loggingRouter = router({
-  listLogEntries: protectedProcedure
-    .input(listLogEntriesInput)
-    .use(requireCapability(CAPABILITIES.VIEW_LOGS))
+  listLogEntries: loggingViewProcedure(listLogEntriesInput)
     .query(async ({ ctx, input }) => {
       const displaySettings = await getDisplaySettings(ctx.db, input.guildId);
       const excludeCategories =
@@ -107,21 +112,15 @@ export const loggingRouter = router({
       };
     }),
 
-  listRetentionSettings: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  listRetentionSettings: loggingManageProcedure(guildIdInput)
     .query(({ ctx, input }) => listRetentionSettings(ctx.db, input.guildId)),
 
-  setRetentionSetting: protectedProcedure
-    .input(setRetentionSettingInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  setRetentionSetting: loggingManageProcedure(setRetentionSettingInput)
     .mutation(({ ctx, input }) =>
       setRetentionSetting(ctx.db, input.guildId, input.category, input.retentionDays),
     ),
 
-  listChannelSettings: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  listChannelSettings: loggingManageProcedure(guildIdInput)
     .query(({ ctx, input }) => listChannelSettings(ctx.db, input.guildId)),
 
   /**
@@ -130,9 +129,7 @@ export const loggingRouter = router({
    * 倒すため、accessStatusを併せて返しUIが「Botに権限がないため取得できません」を表示できるようにする
    * (issue #214)。
    */
-  listChannelOptions: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  listChannelOptions: loggingManageProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const [channels, accessStatus] = await Promise.all([
         ctx.getGuildChannels(input.guildId),
@@ -141,9 +138,7 @@ export const loggingRouter = router({
       return { channels, accessStatus };
     }),
 
-  setChannelSetting: protectedProcedure
-    .input(setChannelSettingInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  setChannelSetting: loggingManageProcedure(setChannelSettingInput)
     .mutation(async ({ ctx, input }) => {
       if (input.channelId !== null) {
         const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
@@ -154,14 +149,10 @@ export const loggingRouter = router({
       await setChannelSetting(ctx.db, input.guildId, input.category, input.channelId);
     }),
 
-  setRetentionSettingForAllCategories: protectedProcedure
-    .input(setRetentionSettingForAllCategoriesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  setRetentionSettingForAllCategories: loggingManageProcedure(setRetentionSettingForAllCategoriesInput)
     .mutation(({ ctx, input }) => setRetentionSettingForAllCategories(ctx.db, input.guildId, input.retentionDays)),
 
-  setChannelSettingForAllCategories: protectedProcedure
-    .input(setChannelSettingForAllCategoriesInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  setChannelSettingForAllCategories: loggingManageProcedure(setChannelSettingForAllCategoriesInput)
     .mutation(async ({ ctx, input }) => {
       if (input.channelId !== null) {
         const exists = await ctx.verifyGuildChannel(input.guildId, input.channelId);
@@ -172,14 +163,10 @@ export const loggingRouter = router({
       await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
     }),
 
-  getDisplaySettings: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  getDisplaySettings: loggingManageProcedure(guildIdInput)
     .query(({ ctx, input }) => getDisplaySettings(ctx.db, input.guildId)),
 
-  setDisplaySetting: protectedProcedure
-    .input(setDisplaySettingInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  setDisplaySetting: loggingManageProcedure(setDisplaySettingInput)
     .mutation(({ ctx, input }) => {
       const { guildId, ...patch } = input;
       return setDisplaySetting(ctx.db, guildId, patch);
@@ -189,9 +176,7 @@ export const loggingRouter = router({
    * ログ一覧でユーザーID/チャンネルIDをそのまま見せず名前表示するため、まとめて解決する。
    * 解決できなかったIDはレスポンスに含めない(呼び出し側でIDへフォールバック表示する)。
    */
-  resolveDisplayNames: protectedProcedure
-    .input(resolveDisplayNamesInput)
-    .use(requireCapability(CAPABILITIES.VIEW_LOGS))
+  resolveDisplayNames: loggingViewProcedure(resolveDisplayNamesInput)
     .query(async ({ ctx, input }) => {
       const uniqueUserIds = [...new Set(input.userIds)];
       const [userNames, channels] = await Promise.all([
@@ -216,9 +201,7 @@ export const loggingRouter = router({
    * イベントに依存するが、Botに「監査ログを見る」権限(ViewAuditLog)がないと配信されない(issue #80)。
    * 権限保有状況と、不足時にDashboardから案内する再認可URL(必要権限のみを含む)を返す。
    */
-  getAuditLogPermissionStatus: protectedProcedure
-    .input(guildIdInput)
-    .use(requireCapability(CAPABILITIES.MANAGE_LOGGING_SETTINGS))
+  getAuditLogPermissionStatus: loggingManageProcedure(guildIdInput)
     .query(async ({ ctx, input }) => {
       const [permissions, accessStatus] = await Promise.all([
         ctx.getBotPermissions(input.guildId),
