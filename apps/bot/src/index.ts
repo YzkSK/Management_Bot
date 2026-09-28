@@ -3,6 +3,7 @@ import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
 import { buildInviteUrl, mapWithConcurrency } from "@management-bot/shared";
+import { Redis } from "ioredis";
 import { FEATURES } from "./features.js";
 import { applyAppEmojis, syncAppEmojis } from "./sync-app-emojis.js";
 
@@ -84,8 +85,10 @@ try {
     console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
     // 絵文字登録の失敗でBotを止めない(未登録の絵文字は利用側でフォールバックする前提)。
     // 登録後に取得した絵文字をログ通知のアイコン・一時VCパネルに使う。失敗時はUnicode絵文字のまま(#455)。
-    syncAppEmojis(readyClient.application)
+    const emojiHashStore = new Redis(env.REDIS_URL);
+    syncAppEmojis(readyClient.application, emojiHashStore)
       .catch((error: unknown) => console.warn("Failed to sync app emojis", error))
+      .finally(() => emojiHashStore.quit())
       .then(() => applyAppEmojis(readyClient.application))
       .catch((error: unknown) => console.warn("Failed to load app emojis", error));
     // guildCreateは新規参加時のみ発火するため、起動時点で既に参加済みのguildはここで同期する。
