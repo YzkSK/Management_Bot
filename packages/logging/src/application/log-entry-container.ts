@@ -25,6 +25,8 @@ export const LOG_CARD_APP_EMOJIS = {
   bulkDelete: { name: "message_bulk_delete", fallback: "🧹" },
   moderationHistory: { name: "member_moderation_history", fallback: "⚠️" },
   rejoin: { name: "member_rejoin", fallback: "🔁" },
+  newAccount: { name: "member_new_account_warning", fallback: "🔰" },
+  bot: { name: "bot", fallback: "🤖" },
   beforeAfter: { name: "before_after", fallback: "→" },
   attachment: { name: "attachment", fallback: "📎" },
   executor: { name: "executor", fallback: "👤" },
@@ -110,11 +112,24 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
   return formatField(label, `−${before} ${cardEmoji("beforeAfter")} +${after}`);
 }
 
-/** 警告バッジ(再入室・モデレーション履歴)の本文行。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
+/** アカウント作成からこの日数以内の参加を「新しいアカウント」として警告する。 */
+const NEW_ACCOUNT_WARNING_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 参加時点(entry.createdAt)でアカウント作成からNEW_ACCOUNT_WARNING_DAYS日以内か。作成日時が無ければfalse。 */
+function isNewAccount(createdAt: string, accountCreatedAt: string | undefined): boolean {
+  if (accountCreatedAt === undefined) return false;
+  return new Date(createdAt).getTime() - new Date(accountCreatedAt).getTime() <= NEW_ACCOUNT_WARNING_DAYS * DAY_MS;
+}
+
+/** 警告バッジ(モデレーション履歴・新しいアカウント・再入室)の本文行。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
 function buildWarningLines(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const lines: string[] = [];
   if (entry.hasModerationHistory) lines.push(`${cardEmoji("moderationHistory")} **過去にモデレーション対応(キック/BAN)の履歴があります**`);
+  if (isNewAccount(entry.createdAt, entry.accountCreatedAt)) {
+    lines.push(`${cardEmoji("newAccount")} **アカウント作成から${NEW_ACCOUNT_WARNING_DAYS}日以内です**`);
+  }
   if (entry.isRejoin) lines.push(`${cardEmoji("rejoin")} **再入室です**`);
   return lines;
 }
@@ -128,9 +143,10 @@ function buildWarningLines(entry: LogEntry): string[] {
 function buildMemberJoinFields(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const fields: string[] = [];
+  if (entry.actorIsBot) fields.push(`${cardEmoji("bot")} **Botアカウントです**`);
   if (entry.accountCreatedAt) {
     const createdAt = new Date(entry.accountCreatedAt);
-    const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
+    const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / DAY_MS);
     fields.push(formatField("アカウント作成日", `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)`));
   }
   fields.push(formatField("ユーザーID", entry.userId));
@@ -141,7 +157,7 @@ function buildMemberJoinFields(entry: LogEntry): string[] {
  * LogEntryをComponents V2のContainer群に整形する。channel.send側でMessageFlags.IsComponentsV2を
  * 付与すること(このBuilder単体ではフラグは持たない)。
  *
- * member/joinで警告(再入室・モデレーション履歴)がある場合、赤アクセントの別Containerとして
+ * member/joinで警告(モデレーション履歴・新しいアカウント・再入室)がある場合、赤アクセントの別Containerとして
  * メインカードの下に追加する(codexレビュー指摘: 引用ブロックのみでは警告の緊急性が伝わりにくい)。
  * Discordは1メッセージに複数のtop-level components(Container)を並べられる。
  */

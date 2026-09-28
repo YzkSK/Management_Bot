@@ -460,3 +460,35 @@ describe("ログカードのアプリ絵文字", () => {
     expect(JSON.stringify(bulk[0]!.toJSON())).toContain(`### ${emoji("bulkDelete")} メッセージが一括削除されました`);
   });
 });
+
+describe("member/joinの新しいアカウント警告・Bot表示", () => {
+  const join = (overrides: Partial<Extract<LogEntry, { category: "member" }>>): LogEntry => ({
+    category: "member",
+    guildId: "g1",
+    createdAt: "2026-08-31T00:00:00.000Z",
+    userId: "u1",
+    action: "join",
+    ...overrides,
+  });
+
+  test("参加時点でアカウント作成から7日以内なら警告Containerに表示する", () => {
+    const containers = buildLogEntryContainers(join({ accountCreatedAt: "2026-08-24T00:00:00.000Z" }));
+    expect(containers).toHaveLength(2);
+    expect(textOf(containers)).toContain("🔰 **アカウント作成から7日以内です**");
+  });
+
+  test("7日を超えていれば警告しない", () => {
+    const containers = buildLogEntryContainers(join({ accountCreatedAt: "2026-08-23T23:59:59.000Z" }));
+    expect(containers).toHaveLength(1);
+    expect(textOf(containers)).not.toContain("7日以内");
+  });
+
+  test("作成日時が無ければ警告しない", () => {
+    expect(buildLogEntryContainers(join({}))).toHaveLength(1);
+  });
+
+  test("Botの参加ならBotアカウント行を表示し、人間なら表示しない", () => {
+    expect(textOf(buildLogEntryContainers(join({ actorIsBot: true })))).toContain("🤖 **Botアカウントです**");
+    expect(textOf(buildLogEntryContainers(join({ actorIsBot: false })))).not.toContain("Botアカウント");
+  });
+});
