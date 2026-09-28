@@ -140,6 +140,22 @@
         "typescript": "^6.0.3",
       },
     },
+    "apps/session-cleanup": {
+      "name": "@management-bot/session-cleanup",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/config": "workspace:*",
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/db": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "node-cron": "^4.6.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/activity": {
       "name": "@management-bot/activity",
       "version": "0.0.0",
@@ -477,6 +493,8 @@
     "@management-bot/moderation": ["@management-bot/moderation@workspace:packages/moderation"],
 
     "@management-bot/moderation-decay": ["@management-bot/moderation-decay@workspace:apps/moderation-decay"],
+
+    "@management-bot/session-cleanup": ["@management-bot/session-cleanup@workspace:apps/session-cleanup"],
 
     "@management-bot/shared": ["@management-bot/shared@workspace:packages/shared"],
 

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sessions, type Db } from "@management-bot/db";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql, type TablesRelationalConfig } from "drizzle-orm";
+import type { PgDatabase } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { decryptToken, encryptToken } from "./token-crypto.js";
 
 export interface ValidatedSession {
@@ -68,4 +70,34 @@ export async function createSession(db: Db, input: CreateSessionInput): Promise<
     expiresAt: input.expiresAt,
   });
   return sessionId;
+}
+
+type PurgeRow = Record<string, unknown> & { deleted_count: number };
+
+/**
+ * `expiresAt`が`now`以前のセッション行を削除し、削除件数を返す。期限切れセッションは
+ * validateSession/getSessionAccessTokenのどちらからも参照されないため残す意味がなく、
+ * 暗号化済みトークンを不要に保持し続けないためにも削除する。
+ *
+ * purgeExpiredLogs(@management-bot/logging)と同じ理由で、PgDatabase(通常のDb)・
+ * PgTransaction(db.transaction内のtx)のどちらでも受け取れるようジェネリクスで受ける
+ * (apps/session-cleanupでadvisory lock取得後にtx経由で呼び出すため)。
+ * 削除行はCTE内で件数に集計し、行本体をアプリ側へ転送しない。
+ */
+export async function purgeExpiredSessions<
+  TFullSchema extends Record<string, unknown>,
+  TSchema extends TablesRelationalConfig,
+>(
+  db: PgDatabase<PostgresJsQueryResultHKT, TFullSchema, TSchema>,
+  now: Date = new Date(),
+): Promise<number> {
+  const [row] = await db.execute<PurgeRow>(sql`
+    WITH deleted AS (
+      DELETE FROM ${sessions}
+      WHERE ${sessions.expiresAt} <= ${now.toISOString()}::timestamptz
+      RETURNING 1
+    )
+    SELECT count(*)::int AS deleted_count FROM deleted
+  `);
+  return row?.deleted_count ?? 0;
 }

@@ -3,6 +3,7 @@ export {
   createSession,
   deleteSession,
   getSessionAccessToken,
+  purgeExpiredSessions,
   type ValidatedSession,
   type CreateSessionInput,
 } from "./session.js";
