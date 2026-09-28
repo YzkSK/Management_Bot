@@ -60,7 +60,10 @@ export interface TempVoiceMoveLogSuppression {
 }
 
 function channelCreateKey(input: TempVoiceChannelCreateLogSuppression): string {
-  return `${input.guildId}\u0000${input.parentId ?? ""}\u0000${input.channelType}\u0000${input.name}`;
+  // テキストチャンネル名はDiscord側で小文字化・空白→"-"に正規化されるため、比較前に揃える。
+  // ボイスチャンネル名は正規化されないため、無関係な作成を巻き込まないようテキスト(type 0)に限る。
+  const name = input.channelType === 0 ? input.name.toLowerCase().replace(/\s+/g, "-") : input.name;
+  return `${input.guildId}\u0000${input.parentId ?? ""}\u0000${input.channelType}\u0000${name}`;
 }
 
 function voiceMoveKey(input: TempVoiceMoveLogSuppression): string {
