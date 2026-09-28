@@ -1,18 +1,7 @@
 import type { Message } from "discord.js";
-import { ACTION_SEVERITY } from "@management-bot/shared";
-import {
-  SYSTEM_MODERATOR_ID,
-  detectAndEscalateOnEdit,
-  type DetectAndEscalateDeps,
-  type EscalationOutcome,
-} from "../application/index.js";
+import { detectAndEscalateOnEdit, mostSevere, type DetectAndEscalateDeps } from "../application/index.js";
 import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
-
-function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
-  return outcomes.reduce((most, outcome) =>
-    ACTION_SEVERITY[outcome.actionType] > ACTION_SEVERITY[most.actionType] ? outcome : most,
-  );
-}
+import { publishEscalationResolutions } from "./publish-escalation-resolutions.js";
 
 /**
  * messageUpdateイベントを受けて、編集後の内容でngword/invite_link/link_spamのみ再検知する
@@ -61,35 +50,11 @@ export async function handleMessageUpdate(deps: DetectAndEscalateDeps, message: 
 
   const target = mostSevere(outcomes);
   const execResult = await executeEscalationAction(message, target);
-  await deps.eventBus.publish({
-    type: "moderation.action.recorded",
+  await publishEscalationResolutions(deps, {
     guildId: message.guild.id,
-    caseId: target.caseId,
     targetUserId: message.author.id,
-    moderatorId: SYSTEM_MODERATOR_ID,
-    action: "resolve",
-    actionType: target.actionType,
-    timeoutMinutes: target.timeoutMinutes,
-    incident: target.incident,
-    result: execResult.result,
-    failureCode: execResult.failureCode,
-    createdAt: new Date().toISOString(),
+    target,
+    execResult,
+    outcomes,
   });
-
-  for (const outcome of outcomes) {
-    if (outcome.caseId === target.caseId) continue;
-    await deps.eventBus.publish({
-      type: "moderation.action.recorded",
-      guildId: message.guild.id,
-      caseId: outcome.caseId,
-      targetUserId: message.author.id,
-      moderatorId: SYSTEM_MODERATOR_ID,
-      action: "resolve",
-      actionType: outcome.actionType,
-      timeoutMinutes: outcome.timeoutMinutes,
-      incident: outcome.incident,
-      result: "skipped",
-      createdAt: new Date().toISOString(),
-    });
-  }
 }

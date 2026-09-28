@@ -1,23 +1,17 @@
 import type { Message } from "discord.js";
 import { recordModerationMessageDeletionLinks } from "@management-bot/db";
-import { ACTION_SEVERITY } from "@management-bot/shared";
 import {
   detectAndEscalate,
-  SYSTEM_MODERATOR_ID,
+  mostSevere,
   type DetectAndEscalateDeps,
   type EscalationOutcome,
 } from "../application/index.js";
 import { BurstSettlementCoordinator } from "./burst-settlement.js";
 import { deleteBufferedMessages, executeEscalationAction } from "./execute-action.js";
+import { publishEscalationResolutions } from "./publish-escalation-resolutions.js";
 
 export interface HandleMessageCreateDeps extends DetectAndEscalateDeps {
   burstSettlementCoordinator: BurstSettlementCoordinator;
-}
-
-function mostSevere(outcomes: readonly EscalationOutcome[]): EscalationOutcome {
-  return outcomes.reduce((most, outcome) =>
-    ACTION_SEVERITY[outcome.actionType] > ACTION_SEVERITY[most.actionType] ? outcome : most,
-  );
 }
 
 /**
@@ -142,37 +136,11 @@ export async function handleMessageCreate(deps: HandleMessageCreateDeps, message
     ...target,
     bufferedMessageIds,
   });
-  await deps.eventBus.publish({
-    type: "moderation.action.recorded",
+  await publishEscalationResolutions(deps, {
     guildId: message.guild.id,
-    caseId: target.caseId,
     targetUserId: message.author.id,
-    moderatorId: SYSTEM_MODERATOR_ID,
-    action: "resolve",
-    actionType: target.actionType,
-    timeoutMinutes: target.timeoutMinutes,
-    incident: target.incident,
-    result: execResult.result,
-    failureCode: execResult.failureCode,
-    createdAt: new Date().toISOString(),
+    target,
+    execResult,
+    outcomes,
   });
-
-  // targetに集約されず実行されなかった側のcreateイベント(既にpublish済み)にも、
-  // 未解決のまま残さないようresult="skipped"のresolveをpublishする(#350、codexレビュー指摘)。
-  for (const outcome of outcomes) {
-    if (outcome.caseId === target.caseId) continue;
-    await deps.eventBus.publish({
-      type: "moderation.action.recorded",
-      guildId: message.guild.id,
-      caseId: outcome.caseId,
-      targetUserId: message.author.id,
-      moderatorId: SYSTEM_MODERATOR_ID,
-      action: "resolve",
-      actionType: outcome.actionType,
-      timeoutMinutes: outcome.timeoutMinutes,
-      incident: outcome.incident,
-      result: "skipped",
-      createdAt: new Date().toISOString(),
-    });
-  }
 }
