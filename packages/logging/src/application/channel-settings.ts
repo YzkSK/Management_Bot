@@ -1,7 +1,8 @@
 import type { Db } from "@management-bot/db";
 import { logChannelSettings } from "@management-bot/db";
-import { LOG_CATEGORIES, type LogCategory } from "@management-bot/shared";
+import type { LogCategory } from "@management-bot/shared";
 import { and, eq } from "drizzle-orm";
+import { mapAllLogCategories, valuesForAllLogCategories } from "./per-category-settings.js";
 
 export interface ChannelSetting {
   category: LogCategory;
@@ -16,12 +17,7 @@ export async function listChannelSettings(db: Db, guildId: string): Promise<Chan
     .from(logChannelSettings)
     .where(eq(logChannelSettings.guildId, guildId));
 
-  const byCategory = new Map(rows.map((row) => [row.category, row.channelId]));
-
-  return LOG_CATEGORIES.map((category) => ({
-    category,
-    channelId: byCategory.get(category) ?? null,
-  }));
+  return mapAllLogCategories(rows, (category, row) => ({ category, channelId: row?.channelId ?? null }));
 }
 
 /** channelId=nullは出力先未設定に戻す(該当カテゴリの送信を停止する)。 */
@@ -60,7 +56,7 @@ export async function setChannelSettingForAllCategories(
 
   await db
     .insert(logChannelSettings)
-    .values(LOG_CATEGORIES.map((category) => ({ guildId, category, channelId })))
+    .values(valuesForAllLogCategories(guildId, { channelId }))
     .onConflictDoUpdate({
       target: [logChannelSettings.guildId, logChannelSettings.category],
       set: { channelId },

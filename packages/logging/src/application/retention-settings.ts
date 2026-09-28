@@ -1,7 +1,8 @@
 import type { Db } from "@management-bot/db";
 import { logRetentionSettings } from "@management-bot/db";
-import { LOG_CATEGORIES, type LogCategory } from "@management-bot/shared";
+import type { LogCategory } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
+import { mapAllLogCategories, valuesForAllLogCategories } from "./per-category-settings.js";
 
 export interface RetentionSetting {
   category: LogCategory;
@@ -16,12 +17,7 @@ export async function listRetentionSettings(db: Db, guildId: string): Promise<Re
     .from(logRetentionSettings)
     .where(eq(logRetentionSettings.guildId, guildId));
 
-  const byCategory = new Map(rows.map((row) => [row.category, row.retentionDays]));
-
-  return LOG_CATEGORIES.map((category) => ({
-    category,
-    retentionDays: byCategory.get(category) ?? 0,
-  }));
+  return mapAllLogCategories(rows, (category, row) => ({ category, retentionDays: row?.retentionDays ?? 0 }));
 }
 
 export async function setRetentionSetting(
@@ -54,7 +50,7 @@ export async function setRetentionSettingForAllCategories(
 ): Promise<void> {
   await db
     .insert(logRetentionSettings)
-    .values(LOG_CATEGORIES.map((category) => ({ guildId, category, retentionDays })))
+    .values(valuesForAllLogCategories(guildId, { retentionDays }))
     .onConflictDoUpdate({
       target: [logRetentionSettings.guildId, logRetentionSettings.category],
       set: { retentionDays },
