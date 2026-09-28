@@ -68,6 +68,17 @@ describe("suppressTempVoiceChannelCreateLog / shouldSuppressTempVoiceChannelCrea
     expect(shouldSuppressTempVoiceChannelCreateLog(createInput)).toBe(false);
   });
 
+  test("Discordがテキストチャンネル名を正規化(小文字化・空白→-)しても抑制する", () => {
+    suppressTempVoiceChannelCreateLog({ ...createInput, channelType: 0, name: "mini の VC" });
+    expect(shouldSuppressTempVoiceChannelCreateLog({ ...createInput, channelType: 0, name: "mini-の-vc" })).toBe(true);
+  });
+
+  test("ボイスチャンネルは名前を正規化せず、表記違いの別チャンネルを抑制しない", () => {
+    suppressTempVoiceChannelCreateLog({ ...createInput, name: "My Room" });
+    expect(shouldSuppressTempVoiceChannelCreateLog({ ...createInput, name: "my-room" })).toBe(false);
+    expect(shouldSuppressTempVoiceChannelCreateLog({ ...createInput, name: "My Room" })).toBe(true);
+  });
+
   test("属性が異なる作成は抑制しない", () => {
     suppressTempVoiceChannelCreateLog(createInput);
     expect(shouldSuppressTempVoiceChannelCreateLog({ ...createInput, channelType: 0 })).toBe(false);
