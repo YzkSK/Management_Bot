@@ -1,3 +1,4 @@
+import { appEmojiText } from "@management-bot/shared";
 import type { LogEntry } from "../domain/index.js";
 
 export type AccentKind = "positive" | "negative" | "warning" | "neutral";
@@ -144,13 +145,6 @@ const MODERATION_CASE_RESOLVE_PRESENTATION: Record<"success" | "failed" | "skipp
   skipped: { accent: "neutral", title: "モデレーション対応はより重い処分に集約されました", icon: "➖" },
 };
 
-/** 絵文字名 → `<:name:id>`。未登録ならundefined。Bot起動時に呼び出し側(apps/bot)から注入する(loggingはBotに依存しない)。 */
-let appEmojiResolver: (name: string) => string | undefined = () => undefined;
-
-export function setAppEmojiResolver(resolver: (name: string) => string | undefined): void {
-  appEmojiResolver = resolver;
-}
-
 const snake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 
 /**
@@ -201,5 +195,5 @@ function getBasePresentation(entry: LogEntry): { accent: AccentKind; title: stri
 /** iconはアプリ絵文字を優先し、未登録・取得失敗時はUnicode絵文字にフォールバックする(#455)。 */
 export function getPresentation(entry: LogEntry): { accent: AccentKind; title: string; icon: string } {
   const base = getBasePresentation(entry);
-  return { ...base, icon: appEmojiResolver(appEmojiNameFor(entry)) ?? base.icon };
+  return { ...base, icon: appEmojiText(appEmojiNameFor(entry), base.icon) };
 }

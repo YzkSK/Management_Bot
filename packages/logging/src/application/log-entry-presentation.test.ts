@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LOG_ENTRY_SCHEMAS, MODERATION_ACTION_TYPES, VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
-import { ACCENT_COLORS, appEmojiNameFor, getPresentation, setAppEmojiResolver } from "./log-entry-presentation.js";
+import { LOG_ENTRY_SCHEMAS, MODERATION_ACTION_TYPES, VOICE_STATE_FLAG_NAMES, setAppEmojis } from "@management-bot/shared";
+import { ACCENT_COLORS, appEmojiNameFor, getPresentation } from "./log-entry-presentation.js";
 
 /**
  * 各カテゴリのzodスキーマからaction候補を取り出す。z.enum(shape.action.def.entries)と
@@ -97,14 +97,14 @@ describe("appEmojiNameFor", () => {
     expect(appEmojiNameFor({ category: "voice", action: "update", changes: { selfMute: flag, streaming: flag } } as never)).toBe("voice_update");
   });
 
-  test("リゾルバで解決できればアプリ絵文字、できなければUnicode絵文字", () => {
+  test("アプリ絵文字が登録済みならそれを、未登録ならUnicode絵文字を使う", () => {
     const entry = { category: "message", action: "pin" } as never;
     try {
-      setAppEmojiResolver((name) => (name === "message_pin" ? "<:message_pin:1>" : undefined));
+      setAppEmojis([{ id: "1", name: "message_pin", animated: false }]);
       expect(getPresentation(entry).icon).toBe("<:message_pin:1>");
       expect(getPresentation({ category: "message", action: "unpin" } as never).icon).toBe("📌");
     } finally {
-      setAppEmojiResolver(() => undefined);
+      setAppEmojis([]);
     }
   });
 });

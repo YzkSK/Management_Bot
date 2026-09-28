@@ -105,3 +105,4 @@ export {
   type TempVoiceChannelCreateLogSuppression,
   type TempVoiceMoveLogSuppression,
 } from "./log-suppression.js";
+export { setAppEmojis, findAppEmoji, appEmojiText, type AppEmoji } from "./app-emoji.js";

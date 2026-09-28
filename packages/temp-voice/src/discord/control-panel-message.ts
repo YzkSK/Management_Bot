@@ -1,3 +1,4 @@
+import { findAppEmoji } from "@management-bot/shared";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -41,15 +42,10 @@ export function parseTempVoiceCustomId(customId: string): ParsedTempVoiceCustomI
 }
 
 /**
- * 「非表示にする」ボタンの絵文字。Bot起動時にアプリケーション絵文字`closed_eye`(assets/emojis/closed_eye.png)が見つかれば
- * 呼び出し側(apps/bot)から注入し、未登録・取得失敗なら🙈にフォールバックする。
+ * 「非表示にする」ボタンのアプリ絵文字名(assets/emojis/closed_eye.png)。
+ * 未登録・取得失敗なら🙈にフォールバックする。
  */
 export const HIDDEN_APP_EMOJI_NAME = "closed_eye";
-let hiddenEmoji: { id: string; name: string } | string = "🙈";
-
-export function setHiddenAppEmoji(emoji: { id: string; name: string }): void {
-  hiddenEmoji = emoji;
-}
 
 export interface TempVoiceState {
   userLimit: number;
@@ -135,7 +131,7 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
           : new ButtonBuilder()
               .setCustomId(buildTempVoiceCustomId("toggleHide", channelId))
               .setLabel("非表示にする")
-              .setEmoji(hiddenEmoji)
+              .setEmoji(findAppEmoji(HIDDEN_APP_EMOJI_NAME) ?? "🙈")
               .setStyle(ButtonStyle.Secondary),
       ),
     )
