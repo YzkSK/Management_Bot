@@ -1,5 +1,8 @@
 import type { WSContext } from "hono/ws";
 
+// 接続数の上限・バックプレッシャー制御は現状の規模では不要と判断している。
+// 導入の判断基準と方針は docs/architecture/07-websocket-connection-limits.md を参照(#424)。
+
 const clientsByGuild = new Map<string, Set<WSContext>>();
 
 export function registerLogClient(guildId: string, ws: WSContext): void {
