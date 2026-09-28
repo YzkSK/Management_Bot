@@ -1,4 +1,4 @@
-import { findAppEmoji } from "@management-bot/shared";
+import { appEmojiText, findAppEmoji } from "@management-bot/shared";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -86,7 +86,7 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
         [
           `人数制限: ${state.userLimit === 0 ? "無制限" : `${state.userLimit}人`}`,
           `音質: ${Math.round(state.bitrate / 1000)} kbps`,
-          `状態: ${state.isLocked ? "🔒 ロック中" : "🔓 未ロック"} / ${state.isHidden ? "非表示中" : "表示中"}`,
+          `状態: ${state.isLocked ? "🔒 ロック中" : "🔓 未ロック"} / ${state.isHidden ? `${appEmojiText(HIDDEN_APP_EMOJI_NAME, "🙈")} 非表示中` : "👁️ 表示中"}`,
         ].join("\n"),
       ),
     )
