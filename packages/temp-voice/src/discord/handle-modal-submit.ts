@@ -5,6 +5,7 @@ import { validateBitrateKbps, validateChannelName, validateUserLimit } from "../
 import { findTempVoiceChannel } from "../application/index.js";
 import { buildControlPanelContainer, parseTempVoiceCustomId, readTempVoiceState } from "./control-panel-message.js";
 import { MessageFlags, type ModalSubmitInteraction, type VoiceBasedChannel } from "discord.js";
+import { statusText } from "./status-text.js";
 
 export interface HandleModalSubmitDeps {
   db: Db;
@@ -18,7 +19,7 @@ export interface HandleModalSubmitDeps {
 }
 
 async function replyOwnerOnly(interaction: ModalSubmitInteraction): Promise<void> {
-  await interaction.reply({ content: "このVCのオーナーのみ操作できます。", flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: statusText("warning", "このVCのオーナーのみ操作できます。"), flags: MessageFlags.Ephemeral });
 }
 
 /**
@@ -60,7 +61,7 @@ export async function handleTempVoiceModalSubmit(
 
   const voiceChannel = interaction.guild?.channels.cache.get(parsed.channelId);
   if (!voiceChannel?.isVoiceBased()) {
-    await interaction.reply({ content: "このVCは既に削除されています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCは既に削除されています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -70,12 +71,12 @@ export async function handleTempVoiceModalSubmit(
     case "rename": {
       const validated = validateChannelName(inputValue);
       if (!validated.ok) {
-        await interaction.reply({ content: validated.message, flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: statusText("warning", validated.message), flags: MessageFlags.Ephemeral });
         return;
       }
       if (!deps.tryReserveRenameSlot(parsed.channelId)) {
         await interaction.reply({
-          content: "名前の変更回数が上限に達しました。しばらく待ってから再度お試しください。",
+          content: statusText("warning", "名前の変更回数が上限に達しました。しばらく待ってから再度お試しください。"),
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -90,7 +91,7 @@ export async function handleTempVoiceModalSubmit(
       try {
         updatedVoiceChannel = await voiceChannel.setName(validated.value, TEMP_VOICE_UPDATE_REASON);
       } catch (error) {
-        await interaction.followUp({ content: "名前の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: statusText("failed", "名前の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
         throw error;
       }
 
@@ -107,7 +108,7 @@ export async function handleTempVoiceModalSubmit(
       }
       if (controlChannelRenameFailed) {
         await interaction.followUp({
-          content: "VCの名前は変更されましたが、制御チャンネルの名前変更には失敗しました。しばらくしてから再度名前を変更してください。",
+          content: statusText("warning", "VCの名前は変更されましたが、制御チャンネルの名前変更には失敗しました。しばらくしてから再度名前を変更してください。"),
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -129,7 +130,7 @@ export async function handleTempVoiceModalSubmit(
     case "userLimit": {
       const validated = validateUserLimit(inputValue);
       if (!validated.ok) {
-        await interaction.reply({ content: validated.message, flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: statusText("warning", validated.message), flags: MessageFlags.Ephemeral });
         return;
       }
       await interaction.deferUpdate();
@@ -139,7 +140,7 @@ export async function handleTempVoiceModalSubmit(
       try {
         updatedVoiceChannel = await voiceChannel.setUserLimit(validated.value, TEMP_VOICE_UPDATE_REASON);
       } catch (error) {
-        await interaction.followUp({ content: "人数制限の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: statusText("failed", "人数制限の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
         throw error;
       }
 
@@ -161,7 +162,7 @@ export async function handleTempVoiceModalSubmit(
       const maximumBitrateBps = interaction.guild?.maximumBitrate ?? 96_000;
       const validated = validateBitrateKbps(inputValue, maximumBitrateBps);
       if (!validated.ok) {
-        await interaction.reply({ content: validated.message, flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: statusText("warning", validated.message), flags: MessageFlags.Ephemeral });
         return;
       }
       await interaction.deferUpdate();
@@ -171,7 +172,7 @@ export async function handleTempVoiceModalSubmit(
       try {
         updatedVoiceChannel = await voiceChannel.setBitrate(validated.value, TEMP_VOICE_UPDATE_REASON);
       } catch (error) {
-        await interaction.followUp({ content: "音質の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: statusText("failed", "音質の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
         throw error;
       }
 

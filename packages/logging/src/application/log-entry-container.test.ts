@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { setAppEmojis } from "@management-bot/shared";
 import type { LogEntry } from "../domain/index.js";
-import { buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
+import { LOG_CARD_APP_EMOJIS, buildBulkDeleteSummaryContainers, buildLogEntryContainers } from "./log-entry-container.js";
 import { ACCENT_COLORS } from "./log-entry-presentation.js";
 
 interface TextDisplayJSON {
@@ -379,5 +382,113 @@ describe("buildBulkDeleteSummaryContainers", () => {
         expect.objectContaining({ content: expect.stringContaining("<t:1789519800:f>") }),
       ]),
     });
+  });
+});
+
+describe("ログカードのアプリ絵文字", () => {
+  afterEach(() => setAppEmojis([]));
+
+  const pinEntry: LogEntry = {
+    category: "message",
+    guildId: "g1",
+    createdAt: "2026-08-31T00:00:00.000Z",
+    channelId: "c1",
+    authorId: "u1",
+    messageId: "m1",
+    action: "pin",
+    executorId: "u9",
+  };
+
+  test("使用する絵文字名はすべてassets/emojis/に画像がある", () => {
+    for (const { name } of Object.values(LOG_CARD_APP_EMOJIS)) {
+      const path = fileURLToPath(new URL(`../../../../assets/emojis/${name}.png`, import.meta.url));
+      expect(existsSync(path), name).toBe(true);
+    }
+  });
+
+  test("実行者が判明していれば実行者行をメンションで表示し、未判明なら表示しない", () => {
+    expect(textOf(buildLogEntryContainers(pinEntry))).toContain("**👤 実行者**: <@u9>");
+    expect(textOf(buildLogEntryContainers({ ...pinEntry, executorId: undefined }))).not.toContain("実行者**");
+  });
+
+  test("アプリ絵文字が登録済みなら各行でそれを使う", () => {
+    setAppEmojis(
+      Object.values(LOG_CARD_APP_EMOJIS).map(({ name }, i) => ({ id: String(i + 1), name, animated: false })),
+    );
+    const emoji = (key: keyof typeof LOG_CARD_APP_EMOJIS) => {
+      const index = Object.keys(LOG_CARD_APP_EMOJIS).indexOf(key);
+      return `<:${LOG_CARD_APP_EMOJIS[key].name}:${index + 1}>`;
+    };
+
+    expect(textOf(buildLogEntryContainers(pinEntry))).toContain(`**${emoji("executor")} 実行者**: <@u9>`);
+
+    const deleted: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "delete",
+      attachments: [{ url: "https://cdn.example.com/a.png", filename: "a.png" }],
+    };
+    expect(textOf(buildLogEntryContainers(deleted))).toContain(`-# ${emoji("attachment")} 添付ファイル`);
+
+    const roleUpdate: LogEntry = {
+      category: "role",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      roleId: "r1",
+      action: "update",
+      changes: { color: { before: 16711680, after: 65280 } },
+    };
+    expect(textOf(buildLogEntryContainers(roleUpdate))).toContain(`**色**: −16711680 ${emoji("beforeAfter")} +65280`);
+
+    const join: LogEntry = {
+      category: "member",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      userId: "u1",
+      action: "join",
+      isRejoin: true,
+      hasModerationHistory: true,
+    };
+    const joinText = textOf(buildLogEntryContainers(join));
+    expect(joinText).toContain(`${emoji("moderationHistory")} **過去にモデレーション対応(キック/BAN)の履歴があります**`);
+    expect(joinText).toContain(`${emoji("rejoin")} **再入室です**`);
+
+    const bulk = buildBulkDeleteSummaryContainers({ count: 3, channelId: "c1", createdAt: "2026-08-31T00:00:00.000Z" });
+    expect(JSON.stringify(bulk[0]!.toJSON())).toContain(`### ${emoji("bulkDelete")} メッセージが一括削除されました`);
+  });
+});
+
+describe("member/joinの新しいアカウント警告・Bot表示", () => {
+  const join = (overrides: Partial<Extract<LogEntry, { category: "member" }>>): LogEntry => ({
+    category: "member",
+    guildId: "g1",
+    createdAt: "2026-08-31T00:00:00.000Z",
+    userId: "u1",
+    action: "join",
+    ...overrides,
+  });
+
+  test("参加時点でアカウント作成から7日以内なら警告Containerに表示する", () => {
+    const containers = buildLogEntryContainers(join({ accountCreatedAt: "2026-08-24T00:00:00.000Z" }));
+    expect(containers).toHaveLength(2);
+    expect(textOf(containers)).toContain("🔰 **アカウント作成から7日以内です**");
+  });
+
+  test("7日を超えていれば警告しない", () => {
+    const containers = buildLogEntryContainers(join({ accountCreatedAt: "2026-08-23T23:59:59.000Z" }));
+    expect(containers).toHaveLength(1);
+    expect(textOf(containers)).not.toContain("7日以内");
+  });
+
+  test("作成日時が無ければ警告しない", () => {
+    expect(buildLogEntryContainers(join({}))).toHaveLength(1);
+  });
+
+  test("Botの参加ならBotアカウント行を表示し、人間なら表示しない", () => {
+    expect(textOf(buildLogEntryContainers(join({ actorIsBot: true })))).toContain("🤖 **Botアカウントです**");
+    expect(textOf(buildLogEntryContainers(join({ actorIsBot: false })))).not.toContain("Botアカウント");
   });
 });

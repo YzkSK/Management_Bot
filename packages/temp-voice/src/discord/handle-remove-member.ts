@@ -4,6 +4,7 @@ import { TEMP_VOICE_UPDATE_REASON, shouldSuppressTempVoiceChannelLog, suppressTe
 import { deletePermissionOverride, findTempVoiceChannel } from "../application/index.js";
 import { buildRemoveMemberSuccessMessage, parseRemoveMemberCustomId } from "./member-list-message.js";
 import { MessageFlags, type ButtonInteraction, type VoiceBasedChannel } from "discord.js";
+import { statusText } from "./status-text.js";
 
 export interface HandleRemoveMemberDeps {
   db: Db;
@@ -11,7 +12,7 @@ export interface HandleRemoveMemberDeps {
 }
 
 async function replyOwnerOnly(interaction: ButtonInteraction): Promise<void> {
-  await interaction.reply({ content: "このVCのオーナーのみ操作できます。", flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: statusText("warning", "このVCのオーナーのみ操作できます。"), flags: MessageFlags.Ephemeral });
 }
 
 /**
@@ -37,7 +38,7 @@ export async function handleTempVoiceRemoveMember(
 
   const voiceChannel = interaction.guild?.channels.cache.get(parsed.channelId);
   if (!voiceChannel?.isVoiceBased()) {
-    await interaction.reply({ content: "このVCは既に削除されています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCは既に削除されています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -54,7 +55,7 @@ export async function handleTempVoiceRemoveMember(
     // API呼び出し自体が失敗した場合、抑制エントリが消費されないまま30秒残り、
     // 無関係な次のchannelUpdateを誤って抑制してしまう(codexレビュー指摘)。ここで消費して無効化する。
     shouldSuppressTempVoiceChannelLog(voiceChannel.id);
-    await interaction.followUp({ content: "解除に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+    await interaction.followUp({ content: statusText("failed", "解除に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
     throw error;
   }
 

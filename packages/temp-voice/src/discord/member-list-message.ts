@@ -1,5 +1,6 @@
 import { ButtonStyle, ContainerBuilder, MessageFlags, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import type { TempVoicePermissionOverrideRow, TempVoicePermissionTargetType } from "../application/index.js";
+import { statusText } from "./status-text.js";
 
 const REMOVE_MEMBER_ACTION = "removeMember";
 
@@ -71,7 +72,7 @@ export function buildMemberListMessage(
  */
 export function buildRemoveMemberSuccessMessage(): { flags: number; components: ContainerBuilder[] } {
   const container = new ContainerBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("解除しました。"),
+    new TextDisplayBuilder().setContent(statusText("success", "解除しました。")),
   );
   return { flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2, components: [container] };
 }

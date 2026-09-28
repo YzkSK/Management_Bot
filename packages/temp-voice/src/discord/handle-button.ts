@@ -9,6 +9,7 @@ import { buildSelectPermissionMessage } from "./select-permission-message.js";
 import { buildMemberListMessage } from "./member-list-message.js";
 import { buildTransferOwnerMessage } from "./transfer-owner-message.js";
 import { MessageFlags, type ButtonInteraction, type GuildMember, type VoiceBasedChannel } from "discord.js";
+import { statusText } from "./status-text.js";
 
 export interface HandleButtonDeps {
   db: Db;
@@ -18,7 +19,7 @@ export interface HandleButtonDeps {
 }
 
 async function replyOwnerOnly(interaction: ButtonInteraction): Promise<void> {
-  await interaction.reply({ content: "このVCのオーナーのみ操作できます。", flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: statusText("warning", "このVCのオーナーのみ操作できます。"), flags: MessageFlags.Ephemeral });
 }
 
 /**
@@ -63,7 +64,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
 
   const voiceChannel = interaction.guild?.channels.cache.get(parsed.channelId);
   if (!voiceChannel?.isVoiceBased()) {
-    await interaction.reply({ content: "このVCは既に削除されています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCは既に削除されています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -71,7 +72,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
     case "rename": {
       if (!deps.canRename(parsed.channelId)) {
         await interaction.reply({
-          content: "名前の変更回数が上限に達しました。しばらく待ってから再度お試しください。",
+          content: statusText("warning", "名前の変更回数が上限に達しました。しばらく待ってから再度お試しください。"),
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -100,7 +101,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
         await grantOwnerVoiceAccess(voiceChannel, row.ownerId);
         await toggleEveryoneOverwrite(voiceChannel, "Connect", before.isLocked);
       } catch (error) {
-        await interaction.followUp({ content: "ロック状態の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: statusText("failed", "ロック状態の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
         throw error;
       }
       await interaction.editReply({
@@ -131,7 +132,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
         await grantOwnerVoiceAccess(voiceChannel, row.ownerId);
         await toggleEveryoneOverwrite(voiceChannel, "ViewChannel", before.isHidden);
       } catch (error) {
-        await interaction.followUp({ content: "表示状態の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ content: statusText("failed", "表示状態の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
         throw error;
       }
       await interaction.editReply({

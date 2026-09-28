@@ -1,8 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setAppEmojiResolver } from "@management-bot/logging";
-import { HIDDEN_APP_EMOJI_NAME, setHiddenAppEmoji } from "@management-bot/temp-voice";
+import { setAppEmojis } from "@management-bot/shared";
 import type { ClientApplication } from "discord.js";
 
 /** リポジトリ直下のassets/emojis。Dockerイメージにもリポジトリごとコピーされる。 */
@@ -40,8 +39,7 @@ export async function syncAppEmojis(application: ClientApplication): Promise<voi
  */
 export async function applyAppEmojis(application: ClientApplication): Promise<void> {
   const emojis = await application.emojis.fetch();
-  const byName = new Map(emojis.map((e) => [e.name, e.toString()]));
-  setAppEmojiResolver((name) => byName.get(name));
-  const hidden = emojis.find((e) => e.name === HIDDEN_APP_EMOJI_NAME);
-  if (hidden) setHiddenAppEmoji({ id: hidden.id, name: HIDDEN_APP_EMOJI_NAME });
+  setAppEmojis(
+    [...emojis.values()].flatMap((e) => (e.name === null ? [] : [{ id: e.id, name: e.name, animated: e.animated ?? false }])),
+  );
 }

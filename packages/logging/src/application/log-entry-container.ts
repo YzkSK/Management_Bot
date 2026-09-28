@@ -1,5 +1,6 @@
 import {
   CHANGE_FIELD_LABELS,
+  appEmojiText,
   diffPermissions,
   formatChangeValue,
   formatLogMessage,
@@ -15,6 +16,26 @@ import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
  * dashboard-web(表示名の平文)と違いnames.users/channelsを埋める必要がない。
  */
 const MENTION_NAMES = { users: {}, channels: {}, mention: true };
+
+/**
+ * ログカードの見出し・フィールドで使うアプリ絵文字(assets/emojis/)と、未登録・取得失敗時のフォールバック。
+ * 画像が存在することはテストで検証する。
+ */
+export const LOG_CARD_APP_EMOJIS = {
+  bulkDelete: { name: "message_bulk_delete", fallback: "🧹" },
+  moderationHistory: { name: "member_moderation_history", fallback: "⚠️" },
+  rejoin: { name: "member_rejoin", fallback: "🔁" },
+  newAccount: { name: "member_new_account_warning", fallback: "🔰" },
+  bot: { name: "bot", fallback: "🤖" },
+  beforeAfter: { name: "before_after", fallback: "→" },
+  attachment: { name: "attachment", fallback: "📎" },
+  executor: { name: "executor", fallback: "👤" },
+} as const satisfies Record<string, { name: string; fallback: string }>;
+
+function cardEmoji(key: keyof typeof LOG_CARD_APP_EMOJIS): string {
+  const { name, fallback } = LOG_CARD_APP_EMOJIS[key];
+  return appEmojiText(name, fallback);
+}
 
 /**
  * DiscordのTextDisplayコンポーネントは1つ4,000文字が上限(Discord API仕様)。超過分をそのまま
@@ -63,7 +84,7 @@ export function buildBulkDeleteSummaryContainers({
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
       fitTextDisplay(
-        `### 🧹 メッセージが一括削除されました\n${count}件のメッセージが<#${channelId}>で一括削除されました`,
+        `### ${cardEmoji("bulkDelete")} メッセージが一括削除されました\n${count}件のメッセージが<#${channelId}>で一括削除されました`,
       ),
     ),
   );
@@ -88,15 +109,28 @@ function formatChangesLine(field: string, change: { before: unknown; after: unkn
   }
   const before = formatChangeValue(field, change.before as string | number | boolean | null, {});
   const after = formatChangeValue(field, change.after as string | number | boolean | null, {});
-  return formatField(label, `−${before} → +${after}`);
+  return formatField(label, `−${before} ${cardEmoji("beforeAfter")} +${after}`);
 }
 
-/** 警告バッジ(再入室・モデレーション履歴)の本文行。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
+/** アカウント作成からこの日数以内の参加を「新しいアカウント」として警告する。 */
+const NEW_ACCOUNT_WARNING_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 参加時点(entry.createdAt)でアカウント作成からNEW_ACCOUNT_WARNING_DAYS日以内か。作成日時が無ければfalse。 */
+function isNewAccount(createdAt: string, accountCreatedAt: string | undefined): boolean {
+  if (accountCreatedAt === undefined) return false;
+  return new Date(createdAt).getTime() - new Date(accountCreatedAt).getTime() <= NEW_ACCOUNT_WARNING_DAYS * DAY_MS;
+}
+
+/** 警告バッジ(モデレーション履歴・新しいアカウント・再入室)の本文行。member/join以外のentryではフラグが常にundefinedなので何も返らない。 */
 function buildWarningLines(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const lines: string[] = [];
-  if (entry.hasModerationHistory) lines.push("⚠️ **過去にモデレーション対応(キック/BAN)の履歴があります**");
-  if (entry.isRejoin) lines.push("🔁 **再入室です**");
+  if (entry.hasModerationHistory) lines.push(`${cardEmoji("moderationHistory")} **過去にモデレーション対応(キック/BAN)の履歴があります**`);
+  if (isNewAccount(entry.createdAt, entry.accountCreatedAt)) {
+    lines.push(`${cardEmoji("newAccount")} **アカウント作成から${NEW_ACCOUNT_WARNING_DAYS}日以内です**`);
+  }
+  if (entry.isRejoin) lines.push(`${cardEmoji("rejoin")} **再入室です**`);
   return lines;
 }
 
@@ -109,9 +143,10 @@ function buildWarningLines(entry: LogEntry): string[] {
 function buildMemberJoinFields(entry: LogEntry): string[] {
   if (entry.category !== "member" || entry.action !== "join") return [];
   const fields: string[] = [];
+  if (entry.actorIsBot) fields.push(`${cardEmoji("bot")} **Botアカウントです**`);
   if (entry.accountCreatedAt) {
     const createdAt = new Date(entry.accountCreatedAt);
-    const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
+    const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / DAY_MS);
     fields.push(formatField("アカウント作成日", `<t:${Math.floor(createdAt.getTime() / 1000)}:D>(${daysAgo}日前)`));
   }
   fields.push(formatField("ユーザーID", entry.userId));
@@ -122,7 +157,7 @@ function buildMemberJoinFields(entry: LogEntry): string[] {
  * LogEntryをComponents V2のContainer群に整形する。channel.send側でMessageFlags.IsComponentsV2を
  * 付与すること(このBuilder単体ではフラグは持たない)。
  *
- * member/joinで警告(再入室・モデレーション履歴)がある場合、赤アクセントの別Containerとして
+ * member/joinで警告(モデレーション履歴・新しいアカウント・再入室)がある場合、赤アクセントの別Containerとして
  * メインカードの下に追加する(codexレビュー指摘: 引用ブロックのみでは警告の緊急性が伝わりにくい)。
  * Discordは1メッセージに複数のtop-level components(Container)を並べられる。
  */
@@ -172,9 +207,11 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   }
   if (summary.attachments !== null && summary.attachments.length > 0) {
     bodyLines.push(
-      formatMultilineField("添付ファイル", summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")),
+      formatMultilineField(`${cardEmoji("attachment")} 添付ファイル`, summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")),
     );
   }
+  // 監査ログ相関で実行者が判明している場合のみ。メンション記法なのでDiscord側で表示名に解決される。
+  if (entry.executorId !== undefined) bodyLines.push(formatField(`${cardEmoji("executor")} 実行者`, `<@${entry.executorId}>`));
   // イベント発生日時は本文・フィールドの一番下に表示する(見た目のフィードバック反映)。
   bodyLines.push(`-# ${formatTimestamp(entry.createdAt)}`);
 
