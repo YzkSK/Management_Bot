@@ -4,9 +4,8 @@ import type { VoiceState } from "discord.js";
 import { shouldSuppressTempVoiceMoveLog, VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 /**
  * チャンネル移動(join/leave/move)を検知する。同一チャンネル内の変更は別途toVoiceStateUpdateEntryで扱う。
@@ -112,7 +111,7 @@ async function keepTempVoiceChannelNamesOnly(db: Db, entry: VoiceLogEntry): Prom
 }
 
 export function registerVoiceHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("voiceStateUpdate", (oldState, newState) => {
     void (async () => {

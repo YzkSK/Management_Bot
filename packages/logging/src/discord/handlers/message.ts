@@ -3,8 +3,7 @@ import { findModerationCaseIdForDeletedMessages } from "@management-bot/db";
 import type { Message, OmitPartialGroupDMChannel, PartialMessage, ReadonlyCollection, Snowflake } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
 import { type GetChannelId, type WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
 type MessageAttachments = { url: string; filename: string; contentType?: string }[] | undefined;
@@ -240,7 +239,7 @@ async function writeMessageBulkDeleteLogEntry(
 }
 
 export function registerMessageHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("messageCreate", (message) => {
     const entry = toMessageCreateLogEntry(message, ctx.client.user?.id);

@@ -1,8 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import { AuditLogEvent, type GuildAuditLogsEntry } from "discord.js";
-import type { AuditLogEntryInfo, GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
+import type { AuditLogEntryInfo, GetChannelId } from "../../application/index.js";
 import { correlateAuditLogEntry } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
+import { createWriteLogEntryDeps } from "../write-log-entry-safely.js";
 
 /**
  * MemberRoleUpdateのchangesは`$add`/`$remove`キーでロール配列(id/name)を持つ。
@@ -153,7 +153,7 @@ export function toAuditLogEntryInfo(
  * writeLogEntrySafelyではなくここで個別にエラーを握りつぶす(discord.jsのリスナーに再配送はない)。
  */
 export function registerAuditLogCorrelationHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("guildAuditLogEntryCreate", (entry, guild) => {
     const executorGuildDisplayName = entry.executorId

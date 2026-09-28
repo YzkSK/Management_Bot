@@ -1,9 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { AutoModerationActionExecution, AutoModerationRule } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 /**
  * userId(creatorId)はルールの作成者であり、ruleUpdate/ruleDelete時点の実行者ではない
@@ -61,7 +60,7 @@ export function toAutoModActionExecutedLogEntry(execution: AutoModerationActionE
 }
 
 export function registerAutoModHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("autoModerationRuleCreate", (rule) => writeLogEntrySafely(deps, toAutoModRuleCreateLogEntry(rule)));
   ctx.client.on("autoModerationRuleUpdate", (_oldRule, newRule) =>

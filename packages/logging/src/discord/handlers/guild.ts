@@ -1,9 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { Guild } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type TrackedGuildValue = string | number | boolean | null;
 
@@ -44,7 +43,7 @@ export function toGuildUpdateLogEntry(oldGuild: Guild, newGuild: Guild): LogEntr
 }
 
 export function registerGuildHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("guildUpdate", (oldGuild, newGuild) => {
     const entry = toGuildUpdateLogEntry(oldGuild, newGuild);

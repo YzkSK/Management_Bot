@@ -1,9 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { StageInstance } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 /** discord.jsにステージ開始/終了専用イベントはないため、create=start、delete=endとして扱う。 */
 export function toStageStartLogEntry(stageInstance: StageInstance): LogEntry {
@@ -40,7 +39,7 @@ export function toStageEndLogEntry(stageInstance: StageInstance): LogEntry {
 }
 
 export function registerStageHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("stageInstanceCreate", (stageInstance) => writeLogEntrySafely(deps, toStageStartLogEntry(stageInstance)));
   ctx.client.on("stageInstanceUpdate", (oldStageInstance, newStageInstance) =>
