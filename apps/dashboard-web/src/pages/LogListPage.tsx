@@ -26,14 +26,15 @@ const PAGE_SIZE = 50;
 
 /**
  * Discordログと同じアプリ絵文字画像(assets/emojis)。Viteがビルド時にURLへ解決する。
- * import.meta.globはVite専用のため、bun test実行時は空にしてドット表示へフォールバックさせる。
+ * import.meta.globはVite専用で呼び出し式のみ変換されるため、bun test実行時は例外を握りつぶして空にしてドット表示へフォールバックさせる。
  */
-const EMOJI_URLS: Record<string, string> =
-  typeof import.meta.glob !== "function" ? {} : import.meta.glob<string>("../../../../assets/emojis/*.png", {
-  eager: true,
-  import: "default",
-  query: "?url",
-});
+const EMOJI_URLS: Record<string, string> = (() => {
+  try {
+    return import.meta.glob<string>("../../../../assets/emojis/*.png", { eager: true, import: "default", query: "?url" });
+  } catch {
+    return {};
+  }
+})();
 
 function emojiUrlFor(entry: LogEntry): string | undefined {
   return EMOJI_URLS[`../../../../assets/emojis/${appEmojiNameFor(entry)}.png`];
