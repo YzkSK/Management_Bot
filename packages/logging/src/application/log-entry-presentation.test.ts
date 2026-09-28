@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { LOG_ENTRY_SCHEMAS, MODERATION_ACTION_TYPES, VOICE_STATE_FLAG_NAMES, setAppEmojis } from "@management-bot/shared";
-import { ACCENT_COLORS, appEmojiNameFor, getPresentation } from "./log-entry-presentation.js";
+import { appEmojiNameFor } from "@management-bot/shared";
+import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
 
 /**
  * 各カテゴリのzodスキーマからaction候補を取り出す。z.enum(shape.action.def.entries)と

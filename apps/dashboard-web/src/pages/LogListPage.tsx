@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory, LogEntry } from "@management-bot/shared";
 import {
+  appEmojiNameFor,
   CHANGE_FIELD_LABELS,
   CHANNEL_REFERENCE_CHANGE_FIELDS,
   diffPermissions,
@@ -23,6 +24,43 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
+
+/**
+ * Discordログと同じアプリ絵文字画像(assets/emojis)と、そのライトモード向け黒版(assets/emojis-light、
+ * scripts/make-light-emojis.ps1で生成)。Viteがビルド時にURLへ解決する。import.meta.globはVite専用で
+ * 呼び出し式のみ変換されるため、bun test実行時は例外を握りつぶして空にしドット表示へフォールバックさせる。
+ */
+const EMOJI_URLS: Record<string, string> = (() => {
+  try {
+    return import.meta.glob<string>("../../../../assets/{emojis,emojis-light}/*.png", { eager: true, import: "default", query: "?url" });
+  } catch {
+    return {};
+  }
+})();
+
+function emojiUrlFor(entry: LogEntry, dir: "emojis" | "emojis-light"): string | undefined {
+  return EMOJI_URLS[`../../../../assets/${dir}/${appEmojiNameFor(entry)}.png`];
+}
+
+/** ログ種別アイコン。画像が無い種別はカテゴリ色のドットにフォールバックする。 */
+function LogIcon({ entry }: { entry: LogEntry }) {
+  const url = emojiUrlFor(entry, "emojis");
+  if (url) {
+    return (
+      <>
+        <img src={emojiUrlFor(entry, "emojis-light") ?? url} alt="" className="size-5 shrink-0 dark:hidden" />
+        <img src={url} alt="" className="hidden size-5 shrink-0 dark:block" />
+      </>
+    );
+  }
+  return (
+    <span
+      className="size-2 shrink-0 rounded-full"
+      style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
+      aria-hidden="true"
+    />
+  );
+}
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
   return hasRawAccess && Object.keys(details).length > 0;
@@ -270,11 +308,7 @@ export function LogListPage() {
                       aria-controls={detailId}
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
-                      <span
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
-                        aria-hidden="true"
-                      />
+                      <LogIcon entry={entry} />
                       <span className="flex-1 text-sm">{message}</span>
                       <time dateTime={summary.createdAt} className="text-muted-foreground shrink-0 text-xs">
                         {formatCreatedAt(summary.createdAt)}
