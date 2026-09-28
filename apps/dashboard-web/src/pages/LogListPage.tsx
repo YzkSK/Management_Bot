@@ -23,27 +23,36 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const PAGE_SIZE = 50;
+const ALL_CATEGORIES = "__all__";
 
 /**
- * Discordログと同じアプリ絵文字画像(assets/emojis)。Viteがビルド時にURLへ解決する。
- * import.meta.globはVite専用で呼び出し式のみ変換されるため、bun test実行時は例外を握りつぶして空にしてドット表示へフォールバックさせる。
+ * Discordログと同じアプリ絵文字画像(assets/emojis)と、そのライトモード向け黒版(assets/emojis-light、
+ * scripts/make-light-emojis.ps1で生成)。Viteがビルド時にURLへ解決する。import.meta.globはVite専用で
+ * 呼び出し式のみ変換されるため、bun test実行時は例外を握りつぶして空にしドット表示へフォールバックさせる。
  */
 const EMOJI_URLS: Record<string, string> = (() => {
   try {
-    return import.meta.glob<string>("../../../../assets/emojis/*.png", { eager: true, import: "default", query: "?url" });
+    return import.meta.glob<string>("../../../../assets/{emojis,emojis-light}/*.png", { eager: true, import: "default", query: "?url" });
   } catch {
     return {};
   }
 })();
 
-function emojiUrlFor(entry: LogEntry): string | undefined {
-  return EMOJI_URLS[`../../../../assets/emojis/${appEmojiNameFor(entry)}.png`];
+function emojiUrlFor(entry: LogEntry, dir: "emojis" | "emojis-light"): string | undefined {
+  return EMOJI_URLS[`../../../../assets/${dir}/${appEmojiNameFor(entry)}.png`];
 }
 
 /** ログ種別アイコン。画像が無い種別はカテゴリ色のドットにフォールバックする。 */
 function LogIcon({ entry }: { entry: LogEntry }) {
-  const url = emojiUrlFor(entry);
-  if (url) return <img src={url} alt="" className="size-6 shrink-0 rounded-md bg-neutral-800 p-0.5 dark:bg-transparent dark:p-0" />;
+  const url = emojiUrlFor(entry, "emojis");
+  if (url) {
+    return (
+      <>
+        <img src={emojiUrlFor(entry, "emojis-light") ?? url} alt="" className="size-5 shrink-0 dark:hidden" />
+        <img src={url} alt="" className="hidden size-5 shrink-0 dark:block" />
+      </>
+    );
+  }
   return (
     <span
       className="size-2 shrink-0 rounded-full"
@@ -52,7 +61,6 @@ function LogIcon({ entry }: { entry: LogEntry }) {
     />
   );
 }
-const ALL_CATEGORIES = "__all__";
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
   return hasRawAccess && Object.keys(details).length > 0;
