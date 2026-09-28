@@ -19,4 +19,5 @@ export const CATEGORY_LABELS: Record<LogCategory, string> = {
   auditLogCorrelation: "監査ログ相関",
   moderationCase: "モデレーション",
   voice: "ボイスチャンネル",
+  tempVoice: "一時VC",
 };

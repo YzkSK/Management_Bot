@@ -8,6 +8,7 @@ import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function App() {
@@ -60,6 +61,7 @@ export function App() {
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
           <Route path="moderation" element={<ModerationPage />} />
+          <Route path="temp-voice" element={<TempVoicePage />} />
           <Route path="access" element={<AccessPage />} />
         </Route>
       </Routes>

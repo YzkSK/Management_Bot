@@ -118,6 +118,18 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  session-cleanup:
+    build:
+      context: .
+      dockerfile: apps/session-cleanup/Dockerfile
+    restart: unless-stopped
+    env_file: .env.dev
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   dashboard-web:
     build:
       context: .

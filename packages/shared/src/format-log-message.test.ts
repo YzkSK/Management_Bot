@@ -39,6 +39,73 @@ describe("formatLogMessage", () => {
     );
   });
 
+  test("メッセージのピン留め(実行者不明): 監査ログ相関が間に合わない場合、実行者は「不明なユーザー」にしつつ、誰の投稿かは投稿者名で示す", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で 不明なユーザー が mini のメッセージをピン留めしました");
+  });
+
+  test("メッセージのピン留め(実行者判明・他人の投稿): 監査ログ相関でexecutorIdが付けば実行者名と投稿者名を両方出す", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      executorId: "u2",
+      executorName: "Yuzuki",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini", u2: "Yuzuki" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で Yuzuki が mini のメッセージをピン留めしました");
+  });
+
+  test("メッセージのピン留め(自分の投稿を自分でピン留め)", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-25T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "mini",
+      executorId: "u1",
+      executorName: "mini",
+      action: "pin",
+      messageId: "m1",
+    } satisfies LogEntry;
+    const summary = summarizeLogEntry(entry);
+
+    const message = formatLogMessage(entry, summary, {
+      users: { u1: "mini" },
+      channels: { c1: "一般" },
+    });
+
+    expect(message).toBe("#一般 で mini が自分のメッセージをピン留めしました");
+  });
+
   test("メッセージ削除(自分で削除): 実行者=投稿者", () => {
     const entry = {
       category: "message",
@@ -1263,5 +1330,53 @@ describe("formatLogMessage", () => {
     const message = formatLogMessage(entry, summary, noNames);
 
     expect(message).toBe("監査ログ相関: 更新");
+  });
+});
+
+describe("formatLogMessage: チャンネル名スナップショット", () => {
+  const mentionNames = { users: {}, channels: {}, mention: true };
+
+  test("mention=trueでもchannelNameがあれば<#id>ではなく#名前を使う(削除後の「不明」表示を避ける)", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "tempVoice",
+      action: "deleted",
+      channelId: "c1",
+      channelName: "YoMiのVC",
+      ownerId: "u1",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe(
+      "一時VC #YoMiのVC(オーナー: <@u1>)が削除されました",
+    );
+  });
+
+  test("move: 移動元・移動先の両方にスナップショットを使う", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "voice",
+      action: "move",
+      userId: "u1",
+      channelId: "c2",
+      channelName: "ゲーム部屋",
+      previousChannelId: "c1",
+      previousChannelName: "雑談",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe(
+      "<@u1> が #雑談 から #ゲーム部屋 に移動しました",
+    );
+  });
+
+  test("スナップショットが無い既存ログは従来通り<#id>", () => {
+    const entry: LogEntry = {
+      guildId: "g1",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      category: "voice",
+      action: "leave",
+      userId: "u1",
+      channelId: "c1",
+    };
+    expect(formatLogMessage(entry, summarizeLogEntry(entry), mentionNames)).toBe("<@u1> が <#c1> から退出しました");
   });
 });

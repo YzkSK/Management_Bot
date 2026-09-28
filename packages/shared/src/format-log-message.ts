@@ -73,7 +73,12 @@ function userName(id: string, names: NameResolvers, snapshot?: string): string {
   return snapshot ?? names.users[id] ?? id;
 }
 
-function channelName(id: string, names: NameResolvers): string {
+/**
+ * snapshotはログ作成時点のチャンネル名。userNameと異なりmention=trueでもスナップショットを優先する
+ * (<#id>はチャンネル削除後にDiscordクライアント上で「不明」表示になるため)。
+ */
+function channelName(id: string, names: NameResolvers, snapshot?: string): string {
+  if (snapshot) return `#${snapshot}`;
   if (names.mention) return `<#${id}>`;
   const name = names.channels[id];
   return name ? `#${name}` : `#${id}`;
@@ -109,10 +114,23 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
             ? `${channel} で ${authorName} が自分の${suffix}`
             : `${channel} で ${executorName} が ${authorName} の${suffix}`;
         }
-        case "pin":
-          return `${channel} で ${executorName} がメッセージをピン留めしました`;
-        case "unpin":
-          return `${channel} で ${executorName} がメッセージのピン留めを解除しました`;
+        // pin/unpinはdeleteと異なり「executorId未設定=本人による操作」という前提が成り立たない
+        // (削除はDiscord APIの仕様上、本人による削除では監査ログが残らないためexecutorId未設定を
+        // 「自分で」とみなせるが、pin/unpinは誰の操作でも必ず監査ログが残り、単に監査ログ相関が
+        // 間に合わなかっただけの可能性がある)。そのためexecutorId===authorIdの場合のみ「自分の」、
+        // それ以外(未設定含む)は実行者名(不明なら「不明なユーザー」)+投稿者名の両方を出す。
+        case "pin": {
+          const suffix = "メッセージをピン留めしました";
+          return entry.authorId === entry.executorId
+            ? `${channel} で ${authorName} が自分の${suffix}`
+            : `${channel} で ${executorName} が ${authorName} の${suffix}`;
+        }
+        case "unpin": {
+          const suffix = "メッセージのピン留めを解除しました";
+          return entry.authorId === entry.executorId
+            ? `${channel} で ${authorName} が自分の${suffix}`
+            : `${channel} で ${executorName} が ${authorName} の${suffix}`;
+        }
       }
       break;
     }
@@ -120,17 +138,17 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
       const targetName = userName(entry.userId, names, entry.userName);
       switch (entry.action) {
         case "join":
-          return `${targetName} が ${channelName(entry.channelId, names)} に参加しました`;
+          return `${targetName} が ${channelName(entry.channelId, names, entry.channelName)} に参加しました`;
         case "leave": {
-          const channel = channelName(entry.channelId, names);
+          const channel = channelName(entry.channelId, names, entry.channelName);
           const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
           return hasExecutor
             ? `${executorName} が ${targetName} を ${channel} から切断させました`
             : `${targetName} が ${channel} から退出しました`;
         }
         case "move": {
-          const from = channelName(entry.previousChannelId, names);
-          const to = channelName(entry.channelId, names);
+          const from = channelName(entry.previousChannelId, names, entry.previousChannelName);
+          const to = channelName(entry.channelId, names, entry.channelName);
           const hasExecutor = entry.executorId && entry.executorId !== entry.userId;
           return hasExecutor
             ? `${executorName} が ${targetName} を ${from} から ${to} に移動させました`
@@ -378,6 +396,51 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     }
     case "guild":
       return "サーバー設定が更新されました";
+    case "tempVoice": {
+      const channel = channelName(entry.channelId, names, entry.channelName);
+      switch (entry.action) {
+        case "created": {
+          const ownerLabel = userName(entry.ownerId, names, entry.ownerName);
+          return `${ownerLabel} が一時VC ${channel} を作成しました`;
+        }
+        case "deleted": {
+          const ownerLabel = userName(entry.ownerId, names, entry.ownerName);
+          return `一時VC ${channel}(オーナー: ${ownerLabel})が削除されました`;
+        }
+        case "renamed":
+          return `${executorName} が一時VCの名前を「${entry.before}」から「${entry.after}」に変更しました`;
+        case "permissionChanged": {
+          const permissionLabel = entry.permission === "connect" ? "接続" : "閲覧";
+          return entry.allowed
+            ? `${executorName} が一時VCの${permissionLabel}を許可しました`
+            : `${executorName} が一時VCの${permissionLabel}を制限しました`;
+        }
+        case "userLimitChanged":
+          return `${executorName} が一時VCの人数制限を ${entry.before} から ${entry.after} に変更しました`;
+        case "bitrateChanged":
+          return `${executorName} が一時VCの音質を ${entry.before} から ${entry.after} に変更しました`;
+        case "ownerTransferred": {
+          const previousOwnerLabel = userName(entry.previousOwnerId, names, entry.previousOwnerName);
+          const newOwnerLabel = userName(entry.newOwnerId, names, entry.newOwnerName);
+          return entry.trigger === "manual"
+            ? `${previousOwnerLabel} が ${newOwnerLabel} に一時VCのオーナーを移譲しました`
+            : `${previousOwnerLabel} の不在により ${newOwnerLabel} に一時VCのオーナーが自動移譲されました`;
+        }
+        case "memberPermissionChanged": {
+          const targetLabel =
+            entry.targetType === "user" ? userName(entry.targetId, names, entry.targetName) : (entry.targetName ?? entry.targetId);
+          switch (entry.state) {
+            case "allow":
+              return `${executorName} が ${targetLabel} の一時VCへのアクセスを許可しました`;
+            case "deny":
+              return `${executorName} が ${targetLabel} の一時VCへのアクセスを拒否しました`;
+            case "cleared":
+              return `${executorName} が ${targetLabel} の一時VC個別設定を解除しました`;
+          }
+        }
+      }
+      break;
+    }
     case "moderationCase": {
       const targetName = userName(entry.targetUserId, names);
       const moderatorName = userName(entry.moderatorId, names);

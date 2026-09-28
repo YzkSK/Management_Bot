@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, sessions, type Db } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { deleteSession, getSessionAccessToken, validateSession } from "./session.ts";
+import { deleteSession, getSessionAccessToken, purgeExpiredSessions, validateSession } from "./session.ts";
 import { encryptToken } from "./token-crypto.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -97,5 +97,46 @@ describe("getSessionAccessToken", () => {
     const result = await getSessionAccessToken(db, sessionId, sessionSecret);
 
     expect(result).toBeNull();
+  });
+});
+
+describe("purgeExpiredSessions", () => {
+  async function exists(id: string): Promise<boolean> {
+    const rows = await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, id));
+    return rows.length > 0;
+  }
+
+  test("期限切れのセッション行を削除し、有効なセッションは残す", async () => {
+    const validId = `session-valid-${randomUUID()}`;
+    await insertSession(db, { expiresAt: new Date(Date.now() - 1000) });
+    await db.insert(sessions).values({
+      id: validId,
+      discordUserId: "user-2",
+      discordUsername: "user2",
+      encryptedAccessToken: "a",
+      encryptedRefreshToken: "r",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    try {
+      // 他テストと並行実行されると削除件数の合計は変動しうるため、件数は下限だけ確認する。
+      const deleted = await purgeExpiredSessions(db);
+
+      expect(deleted).toBeGreaterThanOrEqual(1);
+      expect(await exists(sessionId)).toBe(false);
+      expect(await exists(validId)).toBe(true);
+    } finally {
+      await db.delete(sessions).where(eq(sessions.id, validId));
+    }
+  });
+
+  test("expiresAtがnowちょうどの行も削除対象(境界含む)", async () => {
+    // 他テストの有効なセッションを巻き込まないよう、過去の時刻を基準にする。
+    const now = new Date(Date.now() - 60 * 60_000);
+    await insertSession(db, { expiresAt: now });
+
+    await purgeExpiredSessions(db, now);
+
+    expect(await exists(sessionId)).toBe(false);
   });
 });

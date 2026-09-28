@@ -165,6 +165,10 @@ export async function writeLogEntry(
   if (channelId === null) return;
 
   const entryToSend = isCorrelatable(entry) ? await waitForCorrelation(db, id, entry, correlationDelayMs) : entry;
+  // 一時VC重複抑制のフォールバック(suppressCorrelatedTempVoiceChannelLog、#413)がこの待機中に
+  // 対応するchannel行を削除した場合、entryToSendはnullになり送信自体をスキップする
+  // (即時抑制をすり抜けた場合でも、削除された行の通知だけは重複送信させないため)。
+  if (entryToSend === null) return;
 
   await sendToChannel(channelId, {
     components: buildLogEntryContainers(entryToSend),
@@ -176,14 +180,16 @@ export async function writeLogEntry(
  * 監査ログ相関(correlateAuditLogEntry)がexecutorIdを付記するのを待つ。emitCorrelatedで
  * 確定を検知できればその時点で即座にDBから最新payloadを取得し、timeoutMs以内に確定しなければ
  * 諦めて元のentryのまま返す(executorId欠落は許容し、送信自体を無期限に止めない)。
+ * emitCorrelated検知後にDBから行が見つからない場合は、一時VC重複抑制のフォールバック
+ * (suppressCorrelatedTempVoiceChannelLog、correlateAuditLogEntry内で該当行を削除する、#413)が
+ * 先に行を消したものとみなし、nullを返して送信自体をスキップさせる。
  */
-async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, timeoutMs: number): Promise<LogEntry> {
+async function waitForCorrelation(db: Db, id: string, fallback: LogEntry, timeoutMs: number): Promise<LogEntry | null> {
   const correlated = await waitForCorrelated(id, timeoutMs);
   if (!correlated) return fallback;
   const [row] = await db.select({ payload: logEntries.payload }).from(logEntries).where(eq(logEntries.id, id));
-  if (!row) return fallback;
-  const parsed = parseLogEntry(row.payload);
-  return parsed;
+  if (!row) return null;
+  return parseLogEntry(row.payload);
 }
 
 /**

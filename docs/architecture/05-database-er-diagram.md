@@ -85,6 +85,38 @@ erDiagram
     boolean hide_bot_events
   }
 
+  temp_voice_configs {
+    text guild_id PK, FK
+    text create_channel_id "Discord external ID"
+    text category_id "Discord external ID"
+    text name_template
+    int default_user_limit "0-99"
+    int default_bitrate "nullable"
+    timestamptz updated_at
+  }
+
+  temp_voice_channels {
+    text channel_id PK "Discord external ID, ログ相関キーを兼ねる"
+    text guild_id FK
+    text control_channel_id "Discord external ID"
+    text owner_id "Discord external ID"
+    timestamptz created_at
+    text grace_period_owner_id "nullable"
+    timestamptz grace_period_ends_at "nullable, NOT NULLなら猶予中"
+  }
+
+  temp_voice_permission_overrides {
+    text channel_id PK, FK
+    text target_type PK "user | role"
+    text target_id PK "Discord external ID"
+    text state "allow | deny"
+  }
+
+  temp_voice_deny_protected_roles {
+    text guild_id PK, FK
+    text role_id PK "Discord external ID"
+  }
+
   guilds ||--o| guild_configs : has
   guilds ||--o{ dashboard_access_grants : has
   guilds ||--o{ capability_grants : grants
@@ -94,6 +126,10 @@ erDiagram
   guilds ||--o{ log_retention_settings : retains
   guilds ||--o{ log_channel_settings : routes
   guilds ||--o| log_display_settings : displays
+  guilds ||--o| temp_voice_configs : configures
+  guilds ||--o{ temp_voice_channels : owns
+  temp_voice_channels ||--o{ temp_voice_permission_overrides : overrides
+  guilds ||--o{ temp_voice_deny_protected_roles : protects
 ```
 
 ## テーブルの役割
@@ -111,6 +147,10 @@ erDiagram
 | ログ | `log_retention_settings` | カテゴリ別の保持日数。`guild_id + category`が複合主キー。 |
 | ログ | `log_channel_settings` | カテゴリ別のDiscord通知チャンネル。`guild_id + category`が複合主キー。 |
 | ログ | `log_display_settings` | ログ一覧の表示フィルタ。ギルドごとに最大1行。 |
+| 一時VC | `temp_voice_configs` | Join to Create方式の作成用VC・カテゴリ・命名テンプレート・デフォルト設定。ギルドごとに最大1行。 |
+| 一時VC | `temp_voice_channels` | 現在アクティブな一時VCとオーナー・制御チャンネル・オーナー不在猶予状態。`guild_id + owner_id`が一意(1ユーザー1VCまで)。 |
+| 一時VC | `temp_voice_permission_overrides` | 一時VCごとの個別メンバー/ロール許可・拒否リスト。`channel_id + target_type + target_id`が複合主キー。 |
+| 一時VC | `temp_voice_deny_protected_roles` | サーバー管理者が指定する拒否禁止ロール。`guild_id + role_id`が複合主キー。 |
 
 ## 外部IDと参照整合性
 

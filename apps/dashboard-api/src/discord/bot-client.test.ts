@@ -4,11 +4,13 @@ import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
   fetchGuildAccessStatus,
+  fetchGuildCategories,
   fetchGuildChannels,
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildRoles,
+  fetchGuildVoiceChannels,
   isGuildMember,
   verifyGuildRole,
 } from "./bot-client.ts";
@@ -257,6 +259,56 @@ describe("fetchAllGuildChannelNames", () => {
     const result = await fetchAllGuildChannelNames("test-bot-token", "g1");
 
     expect(result).toEqual([{ id: "c1", name: "general" }]);
+  });
+});
+
+describe("fetchGuildVoiceChannels", () => {
+  test("type 2のチャンネルのみ返す(#415)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [
+          { id: "c1", name: "general", type: 0, permission_overwrites: [] },
+          { id: "c2", name: "ロビー", type: 2, permission_overwrites: [] },
+          { id: "c3", name: "一時VC", type: 4, permission_overwrites: [] },
+        ],
+      },
+    });
+
+    const result = await fetchGuildVoiceChannels("test-bot-token", "g1");
+
+    expect(result).toEqual([{ id: "c2", name: "ロビー" }]);
+  });
+
+  test("guild不明(404)は空配列を返す(#415)", async () => {
+    mockFetch({ "/guilds/g1/channels": { status: 404 } });
+
+    expect(await fetchGuildVoiceChannels("test-bot-token", "g1")).toEqual([]);
+  });
+});
+
+describe("fetchGuildCategories", () => {
+  test("type 4のチャンネルのみ返す(#415)", async () => {
+    mockFetch({
+      "/guilds/g1/channels": {
+        status: 200,
+        body: [
+          { id: "c1", name: "general", type: 0, permission_overwrites: [] },
+          { id: "c2", name: "ロビー", type: 2, permission_overwrites: [] },
+          { id: "c3", name: "一時VC", type: 4, permission_overwrites: [] },
+        ],
+      },
+    });
+
+    const result = await fetchGuildCategories("test-bot-token", "g1");
+
+    expect(result).toEqual([{ id: "c3", name: "一時VC" }]);
+  });
+
+  test("guild不明(404)は空配列を返す(#415)", async () => {
+    mockFetch({ "/guilds/g1/channels": { status: 404 } });
+
+    expect(await fetchGuildCategories("test-bot-token", "g1")).toEqual([]);
   });
 });
 

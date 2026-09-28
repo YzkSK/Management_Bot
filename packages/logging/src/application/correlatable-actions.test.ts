@@ -23,6 +23,11 @@ describe("isCorrelatable", () => {
     expect(isCorrelatable({ category: "message", action: "delete" } as unknown as LogEntry)).toBe(true);
   });
 
+  test("MessagePin/MessageUnpin相当(message/pin,unpin)はtrue", () => {
+    expect(isCorrelatable({ category: "message", action: "pin" } as unknown as LogEntry)).toBe(true);
+    expect(isCorrelatable({ category: "message", action: "unpin" } as unknown as LogEntry)).toBe(true);
+  });
+
   test("MemberDisconnect/MemberMove/MemberUpdate voiceState相当(voice/leave,move,update)はtrue", () => {
     expect(isCorrelatable({ category: "voice", action: "leave" } as unknown as LogEntry)).toBe(true);
     expect(isCorrelatable({ category: "voice", action: "move" } as unknown as LogEntry)).toBe(true);

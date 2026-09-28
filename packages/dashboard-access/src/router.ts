@@ -2,6 +2,7 @@ import { CAPABILITIES, canGrantCapabilities, discordIdSchema, isKnownCapabilityM
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  capabilityGrantTargetTypeSchema,
   getCapabilityGrant,
   grantCapabilities,
   listCapabilityGrants,
@@ -13,11 +14,9 @@ import { protectedProcedure, requireCapability, router } from "./trpc.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
-const targetTypeSchema = z.enum(["user", "role"]);
-
 const grantCapabilitiesInput = z.object({
   guildId: discordIdSchema,
-  targetType: targetTypeSchema,
+  targetType: capabilityGrantTargetTypeSchema,
   targetId: discordIdSchema,
   /** 0(無権限)でのgrantは意味を持たないため拒否する。剥奪はrevokeCapabilityGrantを使う。 */
   capabilities: z.number().int().positive(),
@@ -25,7 +24,7 @@ const grantCapabilitiesInput = z.object({
 
 const revokeCapabilityGrantInput = z.object({
   guildId: discordIdSchema,
-  targetType: targetTypeSchema,
+  targetType: capabilityGrantTargetTypeSchema,
   targetId: discordIdSchema,
 });
 

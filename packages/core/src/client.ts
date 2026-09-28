@@ -73,6 +73,7 @@ export class BotClient extends SapphireClient {
       databaseUrl: string;
       redisUrl: string;
       eventBusFor: (feature: FeatureModule) => DomainEventBus;
+      env?: Record<string, string | undefined>;
     },
   ): Promise<void> {
     const seen = new Set<string>();
@@ -91,6 +92,7 @@ export class BotClient extends SapphireClient {
           databaseUrl: deps.databaseUrl,
           redisUrl: deps.redisUrl,
           eventBus: deps.eventBusFor(feature),
+          env: deps.env ?? process.env,
           onShutdown: (cleanup) => this.shutdownCleanups.push(cleanup),
         });
       } catch (error) {

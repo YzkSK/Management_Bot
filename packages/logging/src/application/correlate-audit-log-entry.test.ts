@@ -412,6 +412,99 @@ describe("correlateAuditLogEntry", () => {
     expect(updates).toHaveLength(0);
   });
 
+  test("MessagePinはchannelId+authorId(targetId)+messageIdで一致するmessage pin行に相関する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const selectWhereArgs: unknown[] = [];
+    const db = {
+      ...fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] }),
+      select: () => ({
+        from: () => ({
+          where: (whereArg: unknown) => {
+            selectWhereArgs.push(whereArg);
+            return {
+              then: (resolve: (rows: unknown[]) => void) => resolve([]),
+              orderBy: () => ({ limit: () => Promise.resolve([{ id: "log-1" }]) }),
+            };
+          },
+        }),
+      }),
+    } as unknown as Db;
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      {
+        ...baseEntry,
+        action: "MessagePin",
+        targetId: "author-1",
+        messagePin: { channelId: "channel-1", messageId: "msg-1" },
+      },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(1);
+    const correlationWhereCall = selectWhereArgs.find(
+      (whereArg) => pgDialect.sqlToQuery(whereArg as Parameters<typeof pgDialect.sqlToQuery>[0]).params.includes("channel-1"),
+    );
+    expect(correlationWhereCall).toBeDefined();
+    const { params } = pgDialect.sqlToQuery(correlationWhereCall as Parameters<typeof pgDialect.sqlToQuery>[0]);
+    expect(params).toContain("channel-1");
+    expect(params).toContain("author-1");
+    expect(params).toContain("msg-1");
+    expect(params).toContain("pin");
+  });
+
+  test("MessageUnpinはaction='unpin'で相関する", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const selectWhereArgs: unknown[] = [];
+    const db = {
+      ...fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] }),
+      select: () => ({
+        from: () => ({
+          where: (whereArg: unknown) => {
+            selectWhereArgs.push(whereArg);
+            return {
+              then: (resolve: (rows: unknown[]) => void) => resolve([]),
+              orderBy: () => ({ limit: () => Promise.resolve([{ id: "log-1" }]) }),
+            };
+          },
+        }),
+      }),
+    } as unknown as Db;
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      {
+        ...baseEntry,
+        action: "MessageUnpin",
+        targetId: "author-1",
+        messagePin: { channelId: "channel-1", messageId: "msg-1" },
+      },
+      NO_RETRY_DELAY,
+    );
+
+    const correlationWhereCall = selectWhereArgs.find(
+      (whereArg) => pgDialect.sqlToQuery(whereArg as Parameters<typeof pgDialect.sqlToQuery>[0]).params.includes("channel-1"),
+    );
+    const { params } = pgDialect.sqlToQuery(correlationWhereCall as Parameters<typeof pgDialect.sqlToQuery>[0]);
+    expect(params).toContain("unpin");
+  });
+
+  test("MessagePinはmessagePinがなければ相関しない", async () => {
+    const inserts: RecordedInsert[] = [];
+    const updates: RecordedUpdate[] = [];
+    const db = fakeDb({ inserts, updates, selectResult: [{ id: "log-1" }] });
+
+    await correlateAuditLogEntry(
+      { db, sendToChannel: mock(() => Promise.resolve()) },
+      { ...baseEntry, action: "MessagePin", targetId: "author-1", messagePin: undefined },
+      NO_RETRY_DELAY,
+    );
+
+    expect(updates).toHaveLength(0);
+  });
+
   test("MemberRoleUpdateでroleChangesが無ければ何もしない", async () => {
     const inserts: RecordedInsert[] = [];
     const updates: RecordedUpdate[] = [];

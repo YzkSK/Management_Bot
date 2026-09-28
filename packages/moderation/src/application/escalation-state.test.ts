@@ -206,6 +206,24 @@ describe("decayStrikes", () => {
 
     expect(await getRow(userId)).toBeUndefined();
   });
+
+  test("同じ実行内で2から1に減った行は削除されない(1回の実行で減るのは1だけ)", async () => {
+    const userId = `u-${randomUUID()}`;
+    await seed(userId, 2, 100); // 閾値48hを大きく超過
+
+    await decayStrikes(db, 24);
+
+    expect((await getRow(userId))?.strikeCount).toBe(1);
+  });
+
+  test("strikeCountが多い行は、baseHoursを超えていてもstrikeCount×baseHoursに達するまで減らない", async () => {
+    const userId = `u-${randomUUID()}`;
+    await seed(userId, 3, 71); // 候補の絞り込み条件(24h経過)は満たすが、閾値72hに未達
+
+    await decayStrikes(db, 24);
+
+    expect((await getRow(userId))?.strikeCount).toBe(3);
+  });
 });
 
 describe("listStrikes", () => {

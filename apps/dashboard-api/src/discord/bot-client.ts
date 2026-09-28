@@ -171,6 +171,29 @@ export async function fetchGuildChannels(botToken: string, guildId: string): Pro
     .map((channel) => ({ id: channel.id, name: channel.name }));
 }
 
+/** GuildVoice(discord.jsのChannelType.GuildVoice=2)。 */
+const VOICE_CHANNEL_TYPE = 2;
+/** GuildCategory(discord.jsのChannelType.GuildCategory=4)。 */
+const CATEGORY_CHANNEL_TYPE = 4;
+
+/**
+ * guild直下のボイスチャンネルのid/nameを返す。Dashboard一時VC設定画面の作成用チャンネル
+ * セレクターに使う(issue #415)。送信可否は問わない(fetchGuildChannelsと異なりVCには
+ * テキスト送信可否の概念がないため)。guildが見つからない/Bot未参加(403/404)の場合は空配列を返す。
+ */
+export async function fetchGuildVoiceChannels(botToken: string, guildId: string): Promise<readonly ChannelOption[]> {
+  const channels = await discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema));
+  if (channels === "not_found") return [];
+  return channels.filter((c) => c.type === VOICE_CHANNEL_TYPE).map((c) => ({ id: c.id, name: c.name }));
+}
+
+/** guild直下のカテゴリのid/nameを返す(issue #415)。guildが見つからない/Bot未参加の場合は空配列を返す。 */
+export async function fetchGuildCategories(botToken: string, guildId: string): Promise<readonly ChannelOption[]> {
+  const channels = await discordGet(botToken, `/guilds/${guildId}/channels`, z.array(guildChannelSchema));
+  if (channels === "not_found") return [];
+  return channels.filter((c) => c.type === CATEGORY_CHANNEL_TYPE).map((c) => ({ id: c.id, name: c.name }));
+}
+
 /**
  * guild直下の全チャンネル(種別・送信可否を問わない)とアクティブなスレッドのid/nameを返す。表示名解決専用
  * (issue #144: fetchGuildChannelsはテキスト送信可能チャンネルのみに絞るため、ボイスチャンネル等の

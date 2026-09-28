@@ -243,6 +243,42 @@ describe("toAuditLogEntryInfo", () => {
         .messageDeleteChannelId,
     ).toBeUndefined();
   });
+
+  test("MessagePinはextra.channel.id/extra.messageIdをmessagePinとして抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MessagePin, extra: { channel: { id: "c1" }, messageId: "m1" } }),
+      "g1",
+    );
+    expect(info.messagePin).toEqual({ channelId: "c1", messageId: "m1" });
+  });
+
+  test("MessageUnpinも同様にmessagePinを抽出する", () => {
+    const info = toAuditLogEntryInfo(
+      fakeAuditLogEntry({ action: AuditLogEvent.MessageUnpin, extra: { channel: { id: "c1" }, messageId: "m1" } }),
+      "g1",
+    );
+    expect(info.messagePin).toEqual({ channelId: "c1", messageId: "m1" });
+  });
+
+  test("MessagePin/MessageUnpin以外はmessagePinがundefinedになる", () => {
+    const info = toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.ChannelDelete }), "g1");
+    expect(info.messagePin).toBeUndefined();
+  });
+
+  test("MessagePinでextraがnull/channel・messageId欠損でも例外を投げずundefinedを返す(監査ログのoptional infoは仕様上欠損し得るため)", () => {
+    expect(
+      toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MessagePin, extra: null }), "g1").messagePin,
+    ).toBeUndefined();
+    expect(
+      toAuditLogEntryInfo(fakeAuditLogEntry({ action: AuditLogEvent.MessagePin, extra: {} }), "g1").messagePin,
+    ).toBeUndefined();
+    expect(
+      toAuditLogEntryInfo(
+        fakeAuditLogEntry({ action: AuditLogEvent.MessagePin, extra: { channel: { id: "c1" } } }),
+        "g1",
+      ).messagePin,
+    ).toBeUndefined();
+  });
 });
 
 describe("registerAuditLogCorrelationHandlers", () => {

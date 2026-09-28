@@ -14,6 +14,7 @@ import { DialogContent, DialogTitle } from "@/components/ui/dialog";
 const FEATURE_PATHS: Record<string, (guildId: string) => string> = {
   logging: (guildId) => `/guilds/${guildId}/logs`,
   moderation: (guildId) => `/guilds/${guildId}/moderation`,
+  "temp-voice": (guildId) => `/guilds/${guildId}/temp-voice`,
 };
 
 interface SidebarProps {

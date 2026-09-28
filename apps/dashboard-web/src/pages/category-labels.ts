@@ -26,4 +26,5 @@ export const CATEGORY_ACCENT: Record<LogCategory, string> = {
   auditLogCorrelation: "oklch(0.556 0 0)",
   moderationCase: "oklch(0.577 0.19 27)",
   voice: "oklch(0.55 0.16 305)",
+  tempVoice: "oklch(0.55 0.16 305)",
 };

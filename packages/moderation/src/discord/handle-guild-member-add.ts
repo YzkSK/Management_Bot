@@ -115,38 +115,55 @@ export async function handleGuildMemberAddEvent(deps: GuildMemberAddDeps, member
   });
 
   const raidHit = result.raidHit;
-  if (raidHit && lockdownSettings.autoLockdownOnRaid) {
+  // ロックダウンは要求だけ先にDBへ記録し、Discordへの反映(全チャンネルの権限変更、
+  // チャンク間待機あり)はraid kickの後に行う。荒らしの追い出しを権限変更の完了待ちで
+  // 遅らせないため(#463)。要求を先に記録しておくことで、kick中にBotが落ちても
+  // 再起動時の未反映ロックダウン同期(listLockdownsNeedingSynchronization)で適用される。
+  const shouldLockdown = raidHit !== null && lockdownSettings.autoLockdownOnRaid;
+  if (shouldLockdown) {
     await setLockdownRequested(deps.db, member.guild.id, true);
-    await synchronizeLockdown(deps.db, member.guild);
   }
-  const selfIsRaidTarget = raidHit !== null && raidHit.targetUserIds.includes(member.id);
+  try {
+    await kickRaidTargets(deps, member, raidHit);
+  } finally {
+    // kick側で例外が出ても、ロックダウンの反映は従来どおり行う(以前はkickより先に反映していた)。
+    if (shouldLockdown) await synchronizeLockdown(deps.db, member.guild);
+  }
+}
+
+/** レイド対象全員をkickし、結果をresolveイベントとして記録する。 */
+async function kickRaidTargets(
+  deps: GuildMemberAddDeps,
+  member: GuildMember,
+  raidHit: RaidHitResult | null,
+): Promise<void> {
+  if (!raidHit) return;
+  const selfIsRaidTarget = raidHit.targetUserIds.includes(member.id);
 
   if (selfIsRaidTarget) {
     await executeAndRecordRaidKick(deps, member, raidHit);
   }
 
-  if (raidHit) {
-    const otherTargetIds = selfIsRaidTarget
-      ? raidHit.targetUserIds.filter((id) => id !== member.id)
-      : raidHit.targetUserIds;
-    for (const targetUserId of otherTargetIds) {
-      try {
-        const target = await member.guild.members.fetch(targetUserId);
-        await executeAndRecordRaidKick(deps, target, raidHit);
-      } catch (error) {
-        console.error(`moderation: failed to fetch raid target ${targetUserId} for case ${raidHit.caseId}`, error);
-        await publishResolve(
-          deps,
-          {
-            guildId: member.guild.id,
-            caseId: raidHit.caseId,
-            targetUserId,
-            actionType: "kick",
-            incident: raidHit.incident,
-          },
-          { result: "failed", failureCode: "member_not_found" },
-        );
-      }
+  const otherTargetIds = selfIsRaidTarget
+    ? raidHit.targetUserIds.filter((id) => id !== member.id)
+    : raidHit.targetUserIds;
+  for (const targetUserId of otherTargetIds) {
+    try {
+      const target = await member.guild.members.fetch(targetUserId);
+      await executeAndRecordRaidKick(deps, target, raidHit);
+    } catch (error) {
+      console.error(`moderation: failed to fetch raid target ${targetUserId} for case ${raidHit.caseId}`, error);
+      await publishResolve(
+        deps,
+        {
+          guildId: member.guild.id,
+          caseId: raidHit.caseId,
+          targetUserId,
+          actionType: "kick",
+          incident: raidHit.incident,
+        },
+        { result: "failed", failureCode: "member_not_found" },
+      );
     }
   }
 }

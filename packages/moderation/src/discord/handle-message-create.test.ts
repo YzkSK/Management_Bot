@@ -84,23 +84,31 @@ function fakeSettlementScheduler(): {
 } {
   let nextId = 0;
   const callbacks = new Map<number, () => void>();
+  // タイマー登録までにDB・Redisを使う検知処理が走るため、回数や時間で打ち切って待つと
+  // 処理の速さしだいで失敗する(#473)。setTimeout/clearTimeoutのたびに待っている側へ知らせる。
+  let waiters: (() => void)[] = [];
+  function notifyWaiters(): void {
+    if (callbacks.size !== 1) return;
+    const resolved = waiters;
+    waiters = [];
+    for (const resolve of resolved) resolve();
+  }
   return {
     scheduler: {
       setTimeout(callback): ReturnType<typeof setTimeout> {
         const id = nextId++;
         callbacks.set(id, callback);
+        notifyWaiters();
         return id as ReturnType<typeof setTimeout>;
       },
       clearTimeout(timer): void {
         callbacks.delete(timer as number);
+        notifyWaiters();
       },
     },
-    async waitForTimer(): Promise<void> {
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        if (callbacks.size === 1) return;
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-      throw new Error("settlement timer was not registered");
+    waitForTimer(): Promise<void> {
+      if (callbacks.size === 1) return Promise.resolve();
+      return new Promise((resolve) => waiters.push(resolve));
     },
     runOnlyTimer(): void {
       expect([...callbacks]).toHaveLength(1);

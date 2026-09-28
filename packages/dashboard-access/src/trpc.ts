@@ -114,6 +114,17 @@ export interface DashboardAccessContext {
    */
   getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
   /**
+   * guildId直下のボイスチャンネル(type 2)のid/nameを返す。Dashboard一時VC設定画面の
+   * 作成用チャンネルセレクターに使う(issue #415)。表示専用なのでdashboard-api側で
+   * 短命TTLキャッシュしてよい(getGuildChannelsと同じ考え方)。
+   */
+  getGuildVoiceChannelOptions: (guildId: string) => Promise<readonly ChannelOption[]>;
+  /**
+   * guildId直下のカテゴリ(type 4)のid/nameを返す。Dashboard一時VC設定画面のカテゴリ
+   * セレクターに使う(issue #415)。表示専用なのでdashboard-api側で短命TTLキャッシュしてよい。
+   */
+  getGuildCategoryOptions: (guildId: string) => Promise<readonly ChannelOption[]>;
+  /**
    * getGuildChannels/getGuildRoles/getBotPermissionsは403(Bot権限・Privileged Intent不足)と
    * 404(guild未参加)を区別せず空配列/0nに倒すため、UIから「Botに権限がないため取得できません」を
    * 表示するにはこの状態を別途取得する必要がある(issue #214)。表示専用なので他のgetGuildXxxと

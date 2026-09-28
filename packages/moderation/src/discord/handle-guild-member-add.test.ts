@@ -1,4 +1,4 @@
-﻿import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+﻿import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
   createDb,
@@ -207,6 +207,116 @@ describe.skipIf(!(await isRedisAvailable()))("handleGuildMemberAddEvent", () => 
 
     for (const member of members) {
       await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
+    }
+
+    expect(edit).toHaveBeenCalledWith(guildId, { SendMessages: false });
+    expect(await getLockdownSettings(db, guildId)).toMatchObject({ requestedLocked: true, isLocked: true });
+  });
+
+  test("自動ロックが有効でも、レイド対象のkickをチャンネル権限の変更より先に実行する(#463)", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    await setAutoLockdownOnRaid(db, guildId, true);
+    const eventBus = fakeEventBus();
+    const now = new Date();
+    const oldAccountCreatedAt = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const members = Array.from({ length: 6 }, () =>
+      fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+    );
+    const trigger = members[members.length - 1];
+    if (!trigger) throw new Error("raid trigger member is required");
+    const calls: string[] = [];
+    trigger.kick.mockImplementation(() => {
+      calls.push("kick");
+      return Promise.resolve();
+    });
+    // 他の対象はguild.members.fetch()経由で取得されるため、取得時にkickの記録を差し込む。
+    trigger.fetch.mockImplementation(async (userId: string) => ({
+      id: userId,
+      guild: { id: guildId },
+      kick: mock(() => {
+        calls.push("kick");
+        return Promise.resolve();
+      }),
+      user: { send: mock(() => Promise.resolve()) },
+    }));
+    Object.assign(trigger.guild, {
+      channels: {
+        cache: new Map([
+          [
+            "channel-1",
+            {
+              id: "channel-1",
+              isTextBased: () => true,
+              isThread: () => false,
+              permissionOverwrites: {
+                cache: new Map(),
+                edit: mock(() => {
+                  calls.push("lockdown");
+                  return Promise.resolve();
+                }),
+              },
+            },
+          ],
+        ]),
+      },
+    });
+
+    for (const member of members) {
+      await handleGuildMemberAddEvent(deps(eventBus), member as unknown as GuildMember);
+    }
+
+    expect(calls).toEqual(["kick", "kick", "kick", "kick", "kick", "kick", "lockdown"]);
+    expect(await getLockdownSettings(db, guildId)).toMatchObject({ requestedLocked: true, isLocked: true });
+  });
+
+  test("自動ロックが有効なら、kickの途中で例外が出てもロックダウンは適用する(#463)", async () => {
+    await db.insert(moderationThresholds).values({ guildId, violationType: "raid", preset: "strong", enabled: true });
+    await setAutoLockdownOnRaid(db, guildId, true);
+    const now = new Date();
+    const oldAccountCreatedAt = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const members = Array.from({ length: 6 }, () =>
+      fakeMember({ guildId, userId: `u-${randomUUID()}`, accountCreatedAt: oldAccountCreatedAt, joinedAt: now }),
+    );
+    const trigger = members[members.length - 1];
+    if (!trigger) throw new Error("raid trigger member is required");
+    // 対象の取得に失敗し、その失敗の記録(publish)も失敗する状況を作る。
+    trigger.fetch.mockImplementation(() => Promise.reject(new Error("unknown member")));
+    const edit = mock(() => Promise.resolve());
+    Object.assign(trigger.guild, {
+      channels: {
+        cache: new Map([
+          [
+            "channel-1",
+            {
+              id: "channel-1",
+              isTextBased: () => true,
+              isThread: () => false,
+              permissionOverwrites: { cache: new Map(), edit },
+            },
+          ],
+        ]),
+      },
+    });
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      for (const member of members.slice(0, -1)) {
+        await handleGuildMemberAddEvent(deps(fakeEventBus()), member as unknown as GuildMember);
+      }
+      const failingEventBus = {
+        published: [],
+        publish: async (event: ModerationActionRecordedEvent) => {
+          if (event.action === "resolve") throw new Error("redis down");
+        },
+      };
+      await expect(
+        handleGuildMemberAddEvent(
+          { db, redis, eventBus: failingEventBus, configCache },
+          trigger as unknown as GuildMember,
+        ),
+      ).rejects.toThrow("redis down");
+    } finally {
+      consoleError.mockRestore();
     }
 
     expect(edit).toHaveBeenCalledWith(guildId, { SendMessages: false });

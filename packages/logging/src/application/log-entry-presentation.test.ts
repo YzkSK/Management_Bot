@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { LOG_ENTRY_SCHEMAS } from "@management-bot/shared";
-import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { LOG_ENTRY_SCHEMAS, MODERATION_ACTION_TYPES, VOICE_STATE_FLAG_NAMES } from "@management-bot/shared";
+import { ACCENT_COLORS, appEmojiNameFor, getPresentation, setAppEmojiResolver } from "./log-entry-presentation.js";
 
 /**
  * 各カテゴリのzodスキーマからaction候補を取り出す。z.enum(shape.action.def.entries)と
@@ -30,7 +32,9 @@ describe("getPresentation", () => {
         const entry =
           category === "moderationCase" && action === "resolve"
             ? { category, action, result: "success" }
-            : { category, action };
+            : category === "voice" && action === "update"
+              ? { category, action, changes: { streaming: { before: false, after: true } } }
+              : { category, action };
         const presentation = getPresentation(entry as never);
         expect(presentation.title, `${category}/${action}`).not.toBe("ログイベント");
         expect(presentation.icon, `${category}/${action}`).not.toBe("ℹ️");
@@ -48,5 +52,59 @@ describe("getPresentation", () => {
 
   test("ACCENT_COLORSは4分類すべてを持つ", () => {
     expect(Object.keys(ACCENT_COLORS).sort()).toEqual(["negative", "neutral", "positive", "warning"]);
+  });
+});
+
+describe("appEmojiNameFor", () => {
+  const emojiDir = fileURLToPath(new URL("../../../../assets/emojis", import.meta.url));
+
+  /** 全カテゴリ×action、およびフィールドで絵文字を出し分けるバリアントを列挙する。 */
+  function allEntries(): object[] {
+    // フィールドで出し分けるactionはcategory+actionだけでは名前が決まらないため、下で個別に列挙する。
+    const fieldDependent = new Set(["moderationCase/create", "moderationCase/resolve", "voice/update", "tempVoice/permissionChanged", "tempVoice/ownerTransferred", "tempVoice/memberPermissionChanged"]);
+    const entries: object[] = [{ category: "auditLogCorrelation", action: "correlate" }];
+    for (const category of Object.keys(LOG_ENTRY_SCHEMAS) as (keyof typeof LOG_ENTRY_SCHEMAS)[]) {
+      if (category === "auditLogCorrelation") continue;
+      for (const action of actionsOf(category)) {
+        if (!fieldDependent.has(`${category}/${action}`)) entries.push({ category, action });
+      }
+    }
+    for (const actionType of MODERATION_ACTION_TYPES) entries.push({ category: "moderationCase", action: "create", actionType });
+    for (const result of ["success", "failed", "skipped"]) entries.push({ category: "moderationCase", action: "resolve", result });
+    for (const flag of VOICE_STATE_FLAG_NAMES) {
+      entries.push({ category: "voice", action: "update", changes: { [flag]: { before: false, after: true } } });
+    }
+    for (const permission of ["connect", "view"]) entries.push({ category: "tempVoice", action: "permissionChanged", permission });
+    for (const trigger of ["manual", "autoGraceExpired"]) entries.push({ category: "tempVoice", action: "ownerTransferred", trigger });
+    for (const targetType of ["user", "role"]) {
+      for (const state of ["allow", "deny", "cleared"]) {
+        entries.push({ category: "tempVoice", action: "memberPermissionChanged", targetType, state });
+      }
+    }
+    return entries;
+  }
+
+  test("全ログ種別の絵文字名がassets/emojis/に存在する", () => {
+    for (const entry of allEntries()) {
+      const name = appEmojiNameFor(entry as never);
+      expect(existsSync(`${emojiDir}/${name}.png`), `${JSON.stringify(entry)} -> ${name}`).toBe(true);
+    }
+  });
+
+  test("selfDeafとselfMuteが同時に変化した場合はvoice_self_deaf、複数フラグならvoice_update", () => {
+    const flag = { before: false, after: true };
+    expect(appEmojiNameFor({ category: "voice", action: "update", changes: { selfMute: flag, selfDeaf: flag } } as never)).toBe("voice_self_deaf");
+    expect(appEmojiNameFor({ category: "voice", action: "update", changes: { selfMute: flag, streaming: flag } } as never)).toBe("voice_update");
+  });
+
+  test("リゾルバで解決できればアプリ絵文字、できなければUnicode絵文字", () => {
+    const entry = { category: "message", action: "pin" } as never;
+    try {
+      setAppEmojiResolver((name) => (name === "message_pin" ? "<:message_pin:1>" : undefined));
+      expect(getPresentation(entry).icon).toBe("<:message_pin:1>");
+      expect(getPresentation({ category: "message", action: "unpin" } as never).icon).toBe("📌");
+    } finally {
+      setAppEmojiResolver(() => undefined);
+    }
   });
 });

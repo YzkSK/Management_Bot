@@ -2,8 +2,12 @@ import type { Db } from "@management-bot/db";
 import { capabilityGrants } from "@management-bot/db";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
-export type CapabilityGrantTargetType = "user" | "role";
+/** capability_grants.target_typeの値(DBのCHECK制約`target_type_check`と一致させる)。tRPC入力の検証にも使う。 */
+export const capabilityGrantTargetTypeSchema = z.enum(["user", "role"]);
+
+export type CapabilityGrantTargetType = z.infer<typeof capabilityGrantTargetTypeSchema>;
 
 export interface CapabilityGrant {
   id: string;
@@ -24,7 +28,12 @@ export async function listCapabilityGrants(db: Db, guildId: string): Promise<Cap
     .from(capabilityGrants)
     .where(eq(capabilityGrants.guildId, guildId));
 
-  return rows.map((row) => ({ ...row, targetType: row.targetType as CapabilityGrantTargetType }));
+  return rows.map(toCapabilityGrant);
+}
+
+/** DBの`text`カラムから読んだtargetTypeをzodで検証してCapabilityGrantへ変換する(`as`による検証の代替をしない)。 */
+function toCapabilityGrant(row: Omit<CapabilityGrant, "targetType"> & { targetType: string }): CapabilityGrant {
+  return { ...row, targetType: capabilityGrantTargetTypeSchema.parse(row.targetType) };
 }
 
 export interface GetCapabilityGrantInput {
@@ -56,7 +65,7 @@ export async function getCapabilityGrant(
     )
     .limit(1);
 
-  return row ? { ...row, targetType: row.targetType as CapabilityGrantTargetType } : null;
+  return row ? toCapabilityGrant(row) : null;
 }
 
 export interface GrantCapabilitiesInput {
