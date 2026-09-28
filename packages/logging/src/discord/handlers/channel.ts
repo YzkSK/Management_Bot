@@ -2,9 +2,8 @@ import type { FeatureModuleContext } from "@management-bot/core";
 import { shouldSuppressTempVoiceChannelCreateLog, shouldSuppressTempVoiceChannelLog } from "@management-bot/shared";
 import type { DMChannel, NonThreadGuildBasedChannel } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 function isGuildChannel(channel: DMChannel | NonThreadGuildBasedChannel): channel is NonThreadGuildBasedChannel {
   return "guild" in channel;
@@ -79,7 +78,7 @@ export function toChannelDeleteLogEntry(channel: DMChannel | NonThreadGuildBased
  * フォールバックとする2段構えの重複記録防止のうち、ここでは第一段のみを扱う。
  */
 export function registerChannelHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("channelCreate", (channel) => {
     if (

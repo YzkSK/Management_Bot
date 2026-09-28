@@ -1,10 +1,18 @@
+import type { FeatureModuleContext } from "@management-bot/core";
 import type { LogEntry } from "../domain/index.js";
 import {
   writeLogEntriesBulk,
   writeLogEntry,
   type ChannelMessagePayload,
+  type GetChannelId,
   type WriteLogEntryDeps,
 } from "../application/index.js";
+import { createSendToChannel } from "./send-to-channel.js";
+
+/** discord層の各handlerが共通で使うWriteLogEntryDepsを組み立てる。 */
+export function createWriteLogEntryDeps(ctx: FeatureModuleContext, getChannelId: GetChannelId): WriteLogEntryDeps {
+  return { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+}
 
 /**
  * discord.jsのイベントリスナーは同期コールバックで再配送の仕組みもないため、

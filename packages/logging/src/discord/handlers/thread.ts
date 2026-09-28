@@ -1,9 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { AnyThreadChannel, PartialThreadMember, ReadonlyCollection, Snowflake, ThreadMember } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 /**
  * parentIdがnullな(親チャンネル不明な)スレッドはchannelId必須のschemaを満たせないためスキップする。
@@ -83,7 +82,7 @@ export async function fetchThreadStarterContent(thread: AnyThreadChannel): Promi
 }
 
 export function registerThreadHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("threadCreate", async (thread) => {
     const content = await fetchThreadStarterContent(thread);

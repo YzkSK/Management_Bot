@@ -1,9 +1,8 @@
 import type { FeatureModuleContext } from "@management-bot/core";
 import type { MessageReaction, PartialMessageReaction, PartialUser, User } from "discord.js";
 import type { LogEntry } from "../../domain/index.js";
-import type { GetChannelId, WriteLogEntryDeps } from "../../application/index.js";
-import { createSendToChannel } from "../send-to-channel.js";
-import { writeLogEntrySafely } from "../write-log-entry-safely.js";
+import type { GetChannelId } from "../../application/index.js";
+import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type ReactionAction = Extract<LogEntry, { category: "reaction" }>["action"];
 
@@ -52,7 +51,7 @@ export function toReactionRemoveLogEntry(
 }
 
 export function registerReactionHandlers(ctx: FeatureModuleContext, getChannelId: GetChannelId): void {
-  const deps: WriteLogEntryDeps = { db: ctx.db, sendToChannel: createSendToChannel(ctx), getChannelId };
+  const deps = createWriteLogEntryDeps(ctx, getChannelId);
 
   ctx.client.on("messageReactionAdd", (reaction, user) => {
     const entry = toReactionAddLogEntry(reaction, user);
