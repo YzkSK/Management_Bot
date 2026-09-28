@@ -41,10 +41,10 @@ export function parseTempVoiceCustomId(customId: string): ParsedTempVoiceCustomI
 }
 
 /**
- * 「非表示にする」ボタンの絵文字。Bot起動時にアプリケーション絵文字`ClosedEye`(assets/emojis/ClosedEye.png)が見つかれば
+ * 「非表示にする」ボタンの絵文字。Bot起動時にアプリケーション絵文字`closed_eye`(assets/emojis/closed_eye.png)が見つかれば
  * 呼び出し側(apps/bot)から注入し、未登録・取得失敗なら🙈にフォールバックする。
  */
-export const HIDDEN_APP_EMOJI_NAME = "ClosedEye";
+export const HIDDEN_APP_EMOJI_NAME = "closed_eye";
 let hiddenEmoji: { id: string; name: string } | string = "🙈";
 
 export function setHiddenAppEmoji(emoji: { id: string; name: string }): void {
