@@ -1,0 +1,1 @@
+CREATE INDEX "moderation_escalation_state_last_violation_at_idx" ON "moderation_escalation_state" USING btree ("last_violation_at");

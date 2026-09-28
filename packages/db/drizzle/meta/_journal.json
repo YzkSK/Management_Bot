@@ -204,6 +204,13 @@
       "when": 1790255467056,
       "tag": "0028_bouncy_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790585333237,
+      "tag": "0029_round_wendigo",
+      "breakpoints": true
     }
   ]
 }

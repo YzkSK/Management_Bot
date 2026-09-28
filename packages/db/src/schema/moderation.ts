@@ -60,6 +60,9 @@ export const moderationEscalationState = pgTable(
       enumCheck(table.violationType, MODERATION_ESCALATION_VIOLATION_TYPES),
     ),
     check("moderation_escalation_state_strike_count_check", sql`${table.strikeCount} >= 0`),
+    // decayStrikes(apps/moderation-decay)が期限切れ候補を`last_violation_at <= now() - baseHours`で
+    // 先に絞り込むためのインデックス(#421)。
+    index("moderation_escalation_state_last_violation_at_idx").on(table.lastViolationAt),
   ],
 );
 

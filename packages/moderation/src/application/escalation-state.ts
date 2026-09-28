@@ -1,4 +1,4 @@
-import { and, eq, gt, or, sql, type TablesRelationalConfig } from "drizzle-orm";
+import { and, eq, gt, lte, or, sql, type TablesRelationalConfig } from "drizzle-orm";
 import type { Db } from "@management-bot/db";
 import { moderationEscalationState } from "@management-bot/db";
 import { MODERATION_ESCALATION_VIOLATION_TYPES, type ModerationEscalationViolationType } from "@management-bot/shared";
@@ -165,12 +165,24 @@ export async function resetAllStrikes(db: Db, guildId: string, userId: string): 
  * purgeExpiredLogs(@management-bot/logging)と同じ理由で、PgDatabase(通常のDb)・
  * PgTransaction(db.transaction内のtx)のどちらでも受け取れるようジェネリクスで受ける
  * (apps/moderation-decayでadvisory lock取得後にtx経由で呼び出すため)。
+ *
+ * `now() >= lastViolationAt + strikeCount×baseHours`はインデックスを使えない(非sargable)ため、
+ * strikeCount>=1なら必ず成り立つ必要条件`lastViolationAt <= now() - baseHours`を併記し、
+ * last_violation_atのインデックスで候補を先に絞り込む(#421)。
+ * また1→0になる行は更新せずに直接削除し、strikeCount=0の行を探す全表スキャンを不要にしている
+ * (DELETEを先に実行するため、UPDATEで1になった行を同じ実行内で消すことはない)。
  */
 export async function decayStrikes<
   TFullSchema extends Record<string, unknown>,
   TSchema extends TablesRelationalConfig,
 >(db: PgDatabase<PostgresJsQueryResultHKT, TFullSchema, TSchema>, baseHours: number): Promise<void> {
   const threshold = sql`${moderationEscalationState.lastViolationAt} + (${moderationEscalationState.strikeCount} * ${baseHours} * interval '1 hour')`;
+  const isExpired = and(
+    sql`${moderationEscalationState.lastViolationAt} <= now() - (${baseHours} * interval '1 hour')`,
+    sql`now() >= ${threshold}`,
+  );
+
+  await db.delete(moderationEscalationState).where(and(isExpired, lte(moderationEscalationState.strikeCount, 1)));
 
   await db
     .update(moderationEscalationState)
@@ -178,7 +190,5 @@ export async function decayStrikes<
       strikeCount: sql`${moderationEscalationState.strikeCount} - 1`,
       lastViolationAt: sql`now()`,
     })
-    .where(sql`now() >= ${threshold}`);
-
-  await db.delete(moderationEscalationState).where(eq(moderationEscalationState.strikeCount, 0));
+    .where(and(isExpired, gt(moderationEscalationState.strikeCount, 1)));
 }
