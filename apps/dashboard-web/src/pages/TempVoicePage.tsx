@@ -46,7 +46,10 @@ function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
 
 function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfigured: boolean }) {
   const queryClient = useQueryClient();
-  const listQuery = useQuery(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }));
+  const listQuery = useQuery({
+    ...trpc.tempVoice.listActiveChannels.queryOptions({ guildId }),
+    refetchInterval: 10_000,
+  });
   const forceDeleteMutation = useMutation({
     ...trpc.tempVoice.forceDelete.mutationOptions(),
     onSuccess: () =>
