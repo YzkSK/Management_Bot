@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory, LogEntry } from "@management-bot/shared";
 import {
+  appEmojiNameFor,
   CHANGE_FIELD_LABELS,
   CHANNEL_REFERENCE_CHANGE_FIELDS,
   diffPermissions,
@@ -22,6 +23,34 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const PAGE_SIZE = 50;
+
+/**
+ * Discordログと同じアプリ絵文字画像(assets/emojis)。Viteがビルド時にURLへ解決する。
+ * import.meta.globはVite専用のため、bun test実行時は空にしてドット表示へフォールバックさせる。
+ */
+const EMOJI_URLS: Record<string, string> =
+  typeof import.meta.glob !== "function" ? {} : import.meta.glob<string>("../../../../assets/emojis/*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+});
+
+function emojiUrlFor(entry: LogEntry): string | undefined {
+  return EMOJI_URLS[`../../../../assets/emojis/${appEmojiNameFor(entry)}.png`];
+}
+
+/** ログ種別アイコン。画像が無い種別はカテゴリ色のドットにフォールバックする。 */
+function LogIcon({ entry }: { entry: LogEntry }) {
+  const url = emojiUrlFor(entry);
+  if (url) return <img src={url} alt="" className="size-5 shrink-0" />;
+  return (
+    <span
+      className="size-2 shrink-0 rounded-full"
+      style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
+      aria-hidden="true"
+    />
+  );
+}
 const ALL_CATEGORIES = "__all__";
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
@@ -270,11 +299,7 @@ export function LogListPage() {
                       aria-controls={detailId}
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
-                      <span
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
-                        aria-hidden="true"
-                      />
+                      <LogIcon entry={entry} />
                       <span className="flex-1 text-sm">{message}</span>
                       <time dateTime={summary.createdAt} className="text-muted-foreground shrink-0 text-xs">
                         {formatCreatedAt(summary.createdAt)}
