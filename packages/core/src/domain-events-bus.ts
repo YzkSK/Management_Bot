@@ -63,6 +63,7 @@ function parseXAutoClaimResponse(raw: unknown): { cursor: string; entries: Strea
  * 1インスタンスが多数のtypeを購読するとBLOCK待機が後続typeの応答を遅らせる。
  * 購読type数が増えて問題化したらtype毎に専用接続を持つか、1回のXREADGROUPで
  * 複数streamをまとめて読む構成に変更する。
+ * 検討結果と移行方針は docs/architecture/06-domain-events-bus-concurrency.md を参照(#423)。
  */
 export class DomainEventBus {
   private readonly publisher: Redis;
