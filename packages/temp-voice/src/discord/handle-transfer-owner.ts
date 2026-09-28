@@ -11,6 +11,7 @@ import {
 import { OWNER_TRANSFER_LOCK_KEY_PREFIX } from "./run-grace.js";
 import { parseTransferOwnerSelectCustomId } from "./transfer-owner-message.js";
 import { MessageFlags, type StringSelectMenuInteraction, type VoiceBasedChannel } from "discord.js";
+import { statusText } from "./status-text.js";
 
 export interface HandleTransferOwnerDeps {
   db: Db;
@@ -33,13 +34,13 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
 
   const row = await findTempVoiceChannel(deps.db, parsed.channelId);
   if (!row || row.ownerId !== interaction.user.id) {
-    await interaction.reply({ content: "このVCのオーナーのみ操作できます。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCのオーナーのみ操作できます。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
   const voiceChannel = interaction.guild?.channels.cache.get(parsed.channelId);
   if (!voiceChannel?.isVoiceBased()) {
-    await interaction.reply({ content: "このVCは既に削除されています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCは既に削除されています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -48,7 +49,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
 
   const newOwnerMember = voiceChannel.members.get(newOwnerId);
   if (!newOwnerMember) {
-    await interaction.reply({ content: "選択されたメンバーは既にVCから退出しています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "選択されたメンバーは既にVCから退出しています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -56,7 +57,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
   // 例外になる。権限付与前に弾くことで無駄なロールバックを避ける(codexレビュー指摘:
   // 完全な対策はtransferTempVoiceOwnerの制約違反ハンドリング側、これは事前チェックによる高速失敗)。
   if (await findOwnedTempVoiceChannelId(deps.db, row.guildId, newOwnerId)) {
-    await interaction.reply({ content: "選択されたメンバーは既に別の一時VCのオーナーです。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "選択されたメンバーは既に別の一時VCのオーナーです。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -87,7 +88,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
         throw error;
       }
     } catch (error) {
-      await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+      await interaction.followUp({ content: statusText("failed", "オーナー移譲に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
       throw error;
     }
 
@@ -102,7 +103,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
           console.error(`temp-voice: failed to roll back control channel permission for ${voiceChannel.id} after DB error`, rollbackError);
         },
       );
-      await interaction.followUp({ content: "オーナー移譲に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+      await interaction.followUp({ content: statusText("failed", "オーナー移譲に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
       throw error;
     }
     if (result !== "committed") {
@@ -119,7 +120,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
         result === "newOwnerAlreadyOwnsChannel"
           ? "オーナー移譲に失敗しました。選択されたメンバーは既に別の一時VCのオーナーです。"
           : "オーナー移譲に失敗しました。既に他の処理でオーナーが変更されている可能性があります。";
-      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+      await interaction.followUp({ content: statusText("failed", content), flags: MessageFlags.Ephemeral });
       return;
     }
 

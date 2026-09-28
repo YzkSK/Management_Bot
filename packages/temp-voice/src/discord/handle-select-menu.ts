@@ -16,6 +16,7 @@ import {
   type UserSelectMenuInteraction,
   type VoiceBasedChannel,
 } from "discord.js";
+import { statusText } from "./status-text.js";
 
 export interface HandleSelectMenuDeps {
   db: Db;
@@ -23,7 +24,7 @@ export interface HandleSelectMenuDeps {
 }
 
 async function replyOwnerOnly(interaction: RoleSelectMenuInteraction | UserSelectMenuInteraction): Promise<void> {
-  await interaction.reply({ content: "このVCのオーナーのみ操作できます。", flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: statusText("warning", "このVCのオーナーのみ操作できます。"), flags: MessageFlags.Ephemeral });
 }
 
 /** ロール拒否時、対象ロールを持つVC内メンバー全員を切断する(issueの指示)。 */
@@ -59,7 +60,7 @@ export async function handleTempVoiceSelectMenu(
 
   const voiceChannel = interaction.guild?.channels.cache.get(parsed.channelId);
   if (!voiceChannel?.isVoiceBased()) {
-    await interaction.reply({ content: "このVCは既に削除されています。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: statusText("warning", "このVCは既に削除されています。"), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -72,7 +73,7 @@ export async function handleTempVoiceSelectMenu(
   if (state === "deny" && targetType === "role") {
     if (await isDenyProtectedRole(deps.db, row.guildId, targetId)) {
       await interaction.reply({
-        content: "このロールは拒否指定できません(サーバー管理者が保護しています)。",
+        content: statusText("warning", "このロールは拒否指定できません(サーバー管理者が保護しています)。"),
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -93,7 +94,7 @@ export async function handleTempVoiceSelectMenu(
     // API呼び出し自体が失敗した場合、抑制エントリが消費されないまま30秒残り、
     // 無関係な次のchannelUpdateを誤って抑制してしまう(codexレビュー指摘)。ここで消費して無効化する。
     shouldSuppressTempVoiceChannelLog(voiceChannel.id);
-    await interaction.followUp({ content: "権限の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+    await interaction.followUp({ content: statusText("failed", "権限の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
     throw error;
   }
 
@@ -109,7 +110,7 @@ export async function handleTempVoiceSelectMenu(
         shouldSuppressTempVoiceChannelLog(voiceChannel.id);
         console.error(`temp-voice: failed to roll back overwrite for ${targetId} after DB error`, rollbackError);
       });
-    await interaction.followUp({ content: "権限の変更に失敗しました。時間を置いて再度お試しください。", flags: MessageFlags.Ephemeral });
+    await interaction.followUp({ content: statusText("failed", "権限の変更に失敗しました。時間を置いて再度お試しください。"), flags: MessageFlags.Ephemeral });
     throw error;
   }
 
