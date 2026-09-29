@@ -2,11 +2,12 @@ import type { FeatureModuleContext } from "@management-bot/core";
 import type { Client, Guild, VoiceState } from "discord.js";
 import { Redis } from "ioredis";
 import { addHourlyActivity, type HourlyDelta, publishActivityChanged, setActiveVoiceCountingSince } from "../application/index.js";
-import { type ActivityChangeKind, hourStart, isCounting } from "../domain/index.js";
+import { type ActivityChangeKind, isCounting } from "../domain/index.js";
 import { registerActivityCommand } from "./activity-command.js";
 import { activeVoiceQueueKey, extendAllActiveVoiceTtl, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
 import { InFlightWrites } from "./in-flight.js";
 import { KeyedQueue } from "./keyed-queue.js";
+import { MessageCounter } from "./message-counter.js";
 import { VoiceTracker } from "./voice-tracker.js";
 
 // 画面は進行中の区間をcountingSinceから加算するため、この間隔は反映速度に関係しない(クラッシュ時の取りこぼし上限)。
@@ -45,6 +46,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
       }),
     );
   const voice = new VoiceTracker(write);
+  // 発言は即時にflushするが、書き込み失敗分はメモリに持ち越して次のflush(次の発言・定期処理)で再試行する。
+  const messages = new MessageCounter(write);
+  const flushMessages = () => void messages.flush().catch(logError("failed to flush message counts"));
   const countingSinceOf = (guildId: string, userId: string) => voice.countingSince(guildId, userId);
   const activeVoiceQueue = new KeyedQueue();
   // アクティブVCのRedis更新は必ず同一メンバーのキューを通す(退室者の書き戻し防止)。
@@ -66,8 +70,8 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
 
   ctx.client.on("messageCreate", (message) => {
     if (message.author.bot || !message.inGuild()) return;
-    const delta = { guildId: message.guildId, userId: message.author.id, hour: hourStart(message.createdAt), messageCount: 1, voiceSeconds: 0 };
-    void write([delta]).catch(logError("failed to record message"));
+    messages.record(message.guildId, message.author.id, message.createdAt);
+    flushMessages();
   });
 
   // 起動時点で在室中のメンバーは起動時刻から計上する(それ以前の滞在は分からないため)。
@@ -91,6 +95,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // 在室中のVC区間の途中経過を書き込み、書けた分だけアクティブVCのcountingSinceを進める(画面側で二重計上しない)。
   // ponytail: 書き込み失敗時はcountingSinceが古いまま残り、画面は次のcheckpointまで最大60秒多く見える。
   const timer = setInterval(() => {
+    flushMessages();
     void voice
       .checkpoint(new Date())
       .then((advanced) => {
@@ -113,7 +118,10 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     clearInterval(timer);
     clearInterval(ttlTimer);
     const now = new Date();
-    await voice.closeAll(now).catch(logError("failed to write activity on shutdown"));
+    const results = await Promise.allSettled([voice.closeAll(now), messages.flush()]);
+    for (const result of results) {
+      if (result.status === "rejected") logError("failed to write activity on shutdown")(result.reason);
+    }
     // イベントハンドラやタイマーから開始済みの書き込みも、DBが閉じられる前に完了を待つ。
     await inFlight.drain();
     redis.disconnect();
