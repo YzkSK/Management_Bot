@@ -3,7 +3,7 @@ import type { inferOutput } from "@trpc/tanstack-react-query";
 import { HeadphoneOff, type LucideIcon, MicOff, Monitor, Video, Volume2 } from "lucide-react";
 import { trpc } from "../trpc.js";
 import { cn } from "@/lib/utils";
-import { ACTIVITY_REFRESH_MS, formatDuration } from "./activity-range.js";
+import { formatDuration } from "./activity-range.js";
 
 type ActiveVoiceChannel = inferOutput<typeof trpc.activity.activeVoice>[number];
 
@@ -73,7 +73,6 @@ export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVo
 export function ActiveVoiceTab({ guildId, now }: { guildId: string; now: Date }) {
   const query = useQuery({
     ...trpc.activity.activeVoice.queryOptions({ guildId }),
-    refetchInterval: ACTIVITY_REFRESH_MS,
     placeholderData: keepPreviousData,
   });
   if (query.isPending) return <p className="text-sm">読み込み中...</p>;

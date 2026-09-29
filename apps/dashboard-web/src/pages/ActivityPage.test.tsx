@@ -95,6 +95,25 @@ describe("MemberDetailView", () => {
     expect(html).toContain("1h 0m");
     expect(html).toContain("1時間前");
   });
+
+  test("進行中のVC秒を合計に加算する", () => {
+    const html = renderToStaticMarkup(
+      <MemberDetailView
+        now={now}
+        liveSeconds={1800}
+        detail={{
+          totals: { messageCount: 0, voiceSeconds: 3600 },
+          rank: { messages: null, voice: null },
+          byHourOfDay: { messageCount: Array.from({ length: 24 }, () => 0), voiceSeconds: Array.from({ length: 24 }, () => 0) },
+          daily: [],
+          lastMessageAt: null,
+          lastVoiceAt: null,
+        }}
+        range={toRange("30d", now)}
+      />,
+    );
+    expect(html).toContain("1h 30m");
+  });
 });
 
 describe("ActiveVoiceView", () => {
@@ -109,6 +128,7 @@ describe("ActiveVoiceView", () => {
     streaming: true,
     video: false,
     counting: true,
+    countingSince: null,
   };
   test("概要・チャンネルカード・継続時間・状態アイコンを表示する", () => {
     const html = renderToStaticMarkup(

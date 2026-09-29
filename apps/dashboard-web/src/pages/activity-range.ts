@@ -1,6 +1,3 @@
-/** 集計範囲の終端(現在時刻)を進めて再取得する間隔。botの書き込み間隔(10秒)に合わせる。 */
-export const ACTIVITY_REFRESH_MS = 10_000;
-
 export type ActivityPeriod = "24h" | "7d" | "30d" | "90d";
 
 export const ACTIVITY_PERIODS: readonly { value: ActivityPeriod; label: string }[] = [
