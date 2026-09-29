@@ -1,1 +1,1 @@
-export {};
+export * from "./record-activity.js";
