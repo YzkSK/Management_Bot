@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -28,6 +28,8 @@ type RankingSort = "voice" | "messages";
 const MESSAGE_COLOR = "#2563eb";
 const VOICE_COLOR = "#f59e0b";
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
+/** 集計範囲の終端(現在時刻)を進めて再取得する間隔。botの書き込み間隔(10秒)に合わせる。 */
+export const ACTIVITY_REFRESH_MS = 10_000;
 
 function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (value: ActivityPeriod) => void }) {
   return (
@@ -97,7 +99,10 @@ function RankingTable({ guildId, range, now }: { guildId: string; range: Activit
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [guildId, range.from, sort]);
 
-  const query = useQuery(trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort, page }));
+  const query = useQuery({
+    ...trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort, page }),
+    placeholderData: keepPreviousData,
+  });
 
   return (
     <div className="overflow-hidden rounded-lg border">
@@ -166,7 +171,7 @@ function RankingTable({ guildId, range, now }: { guildId: string; range: Activit
 }
 
 function ServerStatsTab({ guildId, range, now }: { guildId: string; range: ActivityRange; now: Date }) {
-  const query = useQuery(trpc.activity.serverSummary.queryOptions({ guildId, ...range }));
+  const query = useQuery({ ...trpc.activity.serverSummary.queryOptions({ guildId, ...range }), placeholderData: keepPreviousData });
 
   return (
     <div className="flex flex-col gap-4">
@@ -259,6 +264,7 @@ function MemberTab({ guildId, range, now }: { guildId: string; range: ActivityRa
   const detailQuery = useQuery({
     ...trpc.activity.memberDetail.queryOptions({ guildId, userId, from: range.from, to: range.to }),
     enabled: userId !== "",
+    placeholderData: keepPreviousData,
   });
 
   return (
@@ -311,6 +317,13 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
   const [period, setPeriod] = useState<ActivityPeriod>("7d");
   const [now, setNow] = useState(() => fixedNow ?? new Date());
   const range = useMemo(() => toRange(period, now), [period, now]);
+
+  // 範囲の終端を現在時刻へ進め続けることで、開いたままでも新しい活動が反映される(クエリキーが変わり再取得される)。
+  useEffect(() => {
+    if (fixedNow) return;
+    const timer = setInterval(() => setNow(new Date()), ACTIVITY_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [fixedNow]);
 
   const changePeriod = (next: ActivityPeriod) => {
     setPeriod(next);

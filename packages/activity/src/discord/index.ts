@@ -7,7 +7,8 @@ import { InFlightWrites } from "./in-flight.js";
 import { MessageCounter } from "./message-counter.js";
 import { VoiceTracker } from "./voice-tracker.js";
 
-const FLUSH_INTERVAL_MS = 60_000;
+// Dashboardへの反映遅延を抑えるため短めにする(1回の書き込みは数行のUPSERTで軽い)。
+const FLUSH_INTERVAL_MS = 10_000;
 
 function countingOf(state: VoiceState, guild: Guild): boolean {
   return isCounting(
