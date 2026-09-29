@@ -94,9 +94,10 @@ describe("MemberDetailView", () => {
     expect(html).toContain("サーバー内 1位");
     expect(html).toContain("1h 0m");
     expect(html).toContain("1時間前");
+    expect(html).not.toContain("VC中");
   });
 
-  test("進行中のVC秒を合計に加算する", () => {
+  test("進行中のVC秒を合計に加算し、最終VC参加はVC中と表示する", () => {
     const html = renderToStaticMarkup(
       <MemberDetailView
         now={now}
@@ -113,6 +114,7 @@ describe("MemberDetailView", () => {
       />,
     );
     expect(html).toContain("1h 30m");
+    expect(html).toContain("VC中");
   });
 });
 

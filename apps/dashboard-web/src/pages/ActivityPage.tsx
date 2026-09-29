@@ -253,14 +253,16 @@ export function MemberDetailView({
   detail,
   range,
   now,
-  liveSeconds = 0,
+  liveSeconds,
 }: {
   detail: MemberDetail;
   range: ActivityRange;
   now: Date;
-  /** 進行中のVC区間の秒数(DBの確定値に足す)。 */
+  /** 進行中のVC区間の秒数(DBの確定値に足す)。VC計上中でなければundefined。 */
   liveSeconds?: number;
 }) {
+  const inVoice = liveSeconds !== undefined;
+  liveSeconds ??= 0;
   const rankText = (rank: number | null) => (rank === null ? undefined : `サーバー内 ${rank}位`);
   const liveHour = currentJstHour(now);
   const byHour = detail.byHourOfDay.messageCount.map((messageCount, hour) => ({
@@ -275,7 +277,7 @@ export function MemberDetailView({
         <StatCard label="発言数" value={NUMBER_FORMAT.format(detail.totals.messageCount)} sub={rankText(detail.rank.messages)} />
         <StatCard label="VC時間" value={formatDuration(detail.totals.voiceSeconds + liveSeconds)} sub={rankText(detail.rank.voice)} />
         <StatCard label="最終発言" value={formatRelative(detail.lastMessageAt, now)} />
-        <StatCard label="最終VC参加" value={formatRelative(detail.lastVoiceAt, now)} />
+        <StatCard label="最終VC参加" value={inVoice ? "VC中" : formatRelative(detail.lastVoiceAt, now)} />
       </div>
       <div className="flex flex-col gap-2 rounded-lg border p-4">
         <h3 className="text-sm font-semibold">時間帯別の活動</h3>
@@ -333,7 +335,7 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
       ) : detailQuery.isError ? (
         <p className="text-destructive text-sm">メンバーのアクティビティの取得に失敗しました。</p>
       ) : (
-        <MemberDetailView detail={detailQuery.data} range={range} now={now} liveSeconds={live.get(userId) ?? 0} />
+        <MemberDetailView detail={detailQuery.data} range={range} now={now} liveSeconds={live.get(userId)} />
       )}
     </div>
   );
