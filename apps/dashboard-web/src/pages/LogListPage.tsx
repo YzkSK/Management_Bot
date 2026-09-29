@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory, LogEntry } from "@management-bot/shared";
 import {
@@ -118,6 +118,29 @@ type ListedLogEntry = { id: string; entry: LogEntry; collapsedEntries?: ListedLo
 
 function flattenLogEntries(entries: readonly ListedLogEntry[]): LogEntry[] {
   return entries.flatMap(({ entry, collapsedEntries }) => [entry, ...flattenLogEntries(collapsedEntries ?? [])]);
+}
+
+// 名前解決中のIDを見出し文字列内で目印付けするための私用領域文字(ログ本文に現れない前提)
+const PENDING_START = "";
+const PENDING_END = "";
+
+/** 名前解決中は、未解決IDの表示名を目印付きの文字列にしておき、描画時にスケルトンへ置き換える。 */
+function pendingNames(ids: readonly string[]): Record<string, string> {
+  return Object.fromEntries(ids.map((id) => [id, `${PENDING_START}${id}${PENDING_END}`]));
+}
+
+/** 目印付きの部分だけをスケルトンにする。失敗・未解決時は目印が無いのでIDがそのまま表示される。 */
+function withNameSkeletons(message: string): ReactNode {
+  if (!message.includes(PENDING_START)) return message;
+  return message
+    .split(new RegExp(`(${PENDING_START}[^${PENDING_END}]*${PENDING_END})`))
+    .map((part, i) =>
+      part.startsWith(PENDING_START) ? (
+        <Skeleton key={i} className="inline-block h-4 w-20 align-middle" aria-label="名前を読み込み中" />
+      ) : (
+        part
+      ),
+    );
 }
 
 export function LogListPage() {
@@ -293,7 +316,9 @@ export function LogListPage() {
             <div className="flex flex-col gap-2">
               {logsQuery.data.entries.map(({ id, entry, collapsedEntries }) => {
                 const summary = summarizeLogEntry(entry);
-                const names = { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
+                const names = namesQuery.isLoading
+                  ? { users: pendingNames(subjectIds), channels: pendingNames(channelIds) }
+                  : { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
                 const message = formatLogMessage(entry, summary, names);
                 const isExpanded = expandedIds.has(id);
                 const detailId = `log-detail-${id}`;
@@ -310,12 +335,7 @@ export function LogListPage() {
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
                       <LogIcon entry={entry} />
-                      {namesQuery.isLoading ? (
-                        // 名前解決中はIDを含む文面を見せず、失敗・未解決のときだけIDで表示する
-                        <Skeleton className="h-4 flex-1" aria-label="読み込み中" />
-                      ) : (
-                        <span className="flex-1 text-sm">{message}</span>
-                      )}
+                      <span className="flex-1 text-sm">{withNameSkeletons(message)}</span>
                       <time dateTime={summary.createdAt} className="text-muted-foreground shrink-0 text-xs">
                         {formatCreatedAt(summary.createdAt)}
                       </time>

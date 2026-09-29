@@ -105,7 +105,7 @@ describe("LogListPage", () => {
     expect(html).not.toContain("こんにちは");
   });
 
-  test("名前解決中は見出しをスケルトンにしてIDを見せない", () => {
+  test("名前解決中は見出しの名前部分だけをスケルトンにしてIDを見せない", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
       trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
@@ -129,8 +129,10 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain('data-slot="skeleton"');
-    expect(html).not.toContain("がメッセージを投稿しました");
+    expect(html.match(/aria-label="名前を読み込み中"/g)).toHaveLength(2); // チャンネルと投稿者
+    expect(html).toContain("がメッセージを投稿しました");
+    expect(html).not.toContain("a1");
+    expect(html).not.toContain("");
   });
 
   test("executorNameスナップショットがあるログのexecutorIdはresolveDisplayNamesの対象から除外する", () => {
