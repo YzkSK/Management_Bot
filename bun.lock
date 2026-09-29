@@ -12,6 +12,21 @@
         "typescript": "^6.0.3",
       },
     },
+    "apps/activity-rollup": {
+      "name": "@management-bot/activity-rollup",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/activity": "workspace:*",
+        "@management-bot/config": "workspace:*",
+        "@management-bot/db": "workspace:*",
+        "node-cron": "^4.6.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.0",
+        "@types/node": "^26.4.0",
+        "typescript": "^6.0.3",
+      },
+    },
     "apps/backup": {
       "name": "@management-bot/backup",
       "version": "0.0.0",
@@ -473,6 +488,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@management-bot/activity": ["@management-bot/activity@workspace:packages/activity"],
+
+    "@management-bot/activity-rollup": ["@management-bot/activity-rollup@workspace:apps/activity-rollup"],
 
     "@management-bot/backup": ["@management-bot/backup@workspace:apps/backup"],
 
