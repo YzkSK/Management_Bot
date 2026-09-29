@@ -46,4 +46,12 @@ describe("VoiceTracker", () => {
       ["b", 600],
     ]);
   });
+
+  test("checkpointは開いている区間をその時点まで書き込み、計上を続ける(在室が長い場合も途中経過を反映する)", async () => {
+    const { tracker, written } = setup();
+    await tracker.update("g", "u", true, t("2026-09-29T10:00:00Z"));
+    await tracker.checkpoint(t("2026-09-29T10:10:00Z"));
+    await tracker.update("g", "u", false, t("2026-09-29T10:15:00Z"));
+    expect(written.map((d) => d.voiceSeconds)).toEqual([600, 300]);
+  });
 });

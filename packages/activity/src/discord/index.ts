@@ -3,6 +3,7 @@ import type { Client, Guild, VoiceState } from "discord.js";
 import { addHourlyActivity, type HourlyDelta } from "../application/index.js";
 import { isCounting } from "../domain/index.js";
 import { registerActivityCommand } from "./activity-command.js";
+import { InFlightWrites } from "./in-flight.js";
 import { MessageCounter } from "./message-counter.js";
 import { VoiceTracker } from "./voice-tracker.js";
 
@@ -26,7 +27,8 @@ function logError(message: string): (error: unknown) => void {
 }
 
 export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
-  const write = (deltas: HourlyDelta[]) => addHourlyActivity(ctx.db, deltas);
+  const inFlight = new InFlightWrites();
+  const write = (deltas: HourlyDelta[]) => inFlight.track(addHourlyActivity(ctx.db, deltas));
   const voice = new VoiceTracker(write);
   const messages = new MessageCounter(write);
 
@@ -55,8 +57,10 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   if (ctx.client.isReady()) startTrackingPresent(ctx.client);
   else ctx.client.once("ready", startTrackingPresent);
 
+  // 発言数のflushと併せて、在室中のVC区間も途中経過を書き込む(退室まで反映されないのを防ぐ)。
   const timer = setInterval(() => {
     void messages.flush().catch(logError("failed to flush message counts"));
+    void voice.checkpoint(new Date()).catch(logError("failed to checkpoint voice activity"));
   }, FLUSH_INTERVAL_MS);
 
   registerActivityCommand(ctx);
@@ -68,5 +72,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     for (const result of results) {
       if (result.status === "rejected") logError("failed to write activity on shutdown")(result.reason);
     }
+    // イベントハンドラやタイマーから開始済みの書き込みも、DBが閉じられる前に完了を待つ。
+    await inFlight.drain();
   });
 }

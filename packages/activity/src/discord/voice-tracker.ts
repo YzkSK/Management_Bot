@@ -23,6 +23,17 @@ export class VoiceTracker {
     await this.write(toDeltas(open.guildId, open.userId, open.since, at));
   }
 
+  /** 開いている区間をatまでで書き込み、atから計上を続ける(在室中の途中経過をDashboardへ反映するため)。 */
+  async checkpoint(at: Date): Promise<void> {
+    const deltas: HourlyDelta[] = [];
+    for (const open of this.openSince.values()) {
+      if (open.since >= at) continue;
+      deltas.push(...toDeltas(open.guildId, open.userId, open.since, at));
+      open.since = at;
+    }
+    if (deltas.length > 0) await this.write(deltas);
+  }
+
   async closeAll(at: Date): Promise<void> {
     const entries = [...this.openSince.values()];
     this.openSince.clear();
