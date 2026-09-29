@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loading } from "@/components/ui/skeleton";
 
 type TempVoiceTab = "list" | "roles" | "settings";
 
@@ -56,7 +57,7 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
       queryClient.invalidateQueries({ queryKey: trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey }),
   });
 
-  if (listQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (listQuery.isPending) return <Loading />;
   if (listQuery.isError || !listQuery.data) {
     return <div className="text-destructive text-sm">一時VC一覧の取得に失敗しました。</div>;
   }
@@ -145,7 +146,7 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
       queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getDenyProtectedRoles.queryOptions({ guildId }).queryKey }),
   });
 
-  if (rolesQuery.isPending || roleOptionsQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (rolesQuery.isPending || roleOptionsQuery.isPending) return <Loading />;
   if (rolesQuery.isError || !rolesQuery.data || roleOptionsQuery.isError || !roleOptionsQuery.data) {
     return <div className="text-destructive text-sm">拒否禁止ロールの取得に失敗しました。</div>;
   }
@@ -240,7 +241,7 @@ function ManualConfigForm({
     },
   });
 
-  if (voiceOptionsQuery.isPending || categoryOptionsQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (voiceOptionsQuery.isPending || categoryOptionsQuery.isPending) return <Loading />;
   if (voiceOptionsQuery.isError || !voiceOptionsQuery.data || categoryOptionsQuery.isError || !categoryOptionsQuery.data) {
     return <div className="text-destructive text-sm">チャンネル一覧の取得に失敗しました。</div>;
   }
@@ -500,7 +501,7 @@ export function TempVoicePage() {
     );
   }
 
-  if (configQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (configQuery.isPending) return <Loading />;
   // configQuery.dataは未設定ギルドでnullを返す(エラーではない)ため、isErrorのみで判定する。
   if (configQuery.isError) {
     return <div className="text-destructive text-sm">設定の取得に失敗しました。</div>;

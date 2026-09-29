@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loading } from "@/components/ui/skeleton";
 
 type TargetType = "user" | "role";
 
@@ -141,7 +142,7 @@ function EscalationPresetSelector({ guildId }: { guildId: string }) {
       }),
   });
 
-  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isPending) return <Loading />;
 
   return (
     <div className="flex items-center gap-2 rounded-lg border p-4">
@@ -199,7 +200,7 @@ function LockdownPanel({ guildId }: { guildId: string }) {
       }),
   });
 
-  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isPending) return <Loading />;
   if (query.isError || !query.data) {
     return <div className="text-destructive text-sm">ロックダウン設定の取得に失敗しました。</div>;
   }
@@ -535,7 +536,7 @@ function NgwordTab({ guildId }: { guildId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <NgwordForm guildId={guildId} />
-      {query.isPending && <div className="text-sm">読み込み中...</div>}
+      {query.isPending && <Loading />}
       {query.isError && (
         <Alert variant="destructive">
           <AlertDescription>NGワード一覧の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
@@ -785,7 +786,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
     useStrikePages(guildId);
 
   if (isPending) {
-    return <div className="text-sm">読み込み中...</div>;
+    return <Loading />;
   }
 
   if (isError) {
@@ -867,7 +868,7 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
     });
   };
 
-  if (query.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (query.isPending) return <Loading />;
   if (query.isError || !query.data) {
     return (
       <Alert variant="destructive">
@@ -987,7 +988,7 @@ export function ModerationPage() {
   }
 
   if (thresholdsQuery.isPending) {
-    return <div className="text-sm">読み込み中...</div>;
+    return <Loading />;
   }
 
   if (thresholdsQuery.isError || !thresholdsQuery.data) {
@@ -1073,7 +1074,7 @@ export function ModerationPage() {
 
         <TabsContent value="whitelist">
           <WhitelistForm guildId={guildId} />
-          {whitelistQuery.isPending && <div className="text-sm">読み込み中...</div>}
+          {whitelistQuery.isPending && <Loading />}
           {whitelistQuery.isError && (
             <Alert variant="destructive">
               <AlertDescription>ホワイトリストの取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>

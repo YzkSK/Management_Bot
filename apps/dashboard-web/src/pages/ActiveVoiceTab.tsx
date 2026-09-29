@@ -4,6 +4,7 @@ import { HeadphoneOff, type LucideIcon, MicOff, Monitor, Video, Volume2 } from "
 import { trpc } from "../trpc.js";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "./activity-range.js";
+import { Loading } from "@/components/ui/skeleton";
 
 type ActiveVoiceChannel = inferOutput<typeof trpc.activity.activeVoice>[number];
 
@@ -75,7 +76,7 @@ export function ActiveVoiceTab({ guildId, now }: { guildId: string; now: Date })
     ...trpc.activity.activeVoice.queryOptions({ guildId }),
     placeholderData: keepPreviousData,
   });
-  if (query.isPending) return <p className="text-sm">読み込み中...</p>;
+  if (query.isPending) return <Loading rows={3} />;
   if (query.isError) return <p className="text-destructive text-sm">アクティブVCの取得に失敗しました。</p>;
   return <ActiveVoiceView channels={query.data} now={now} />;
 }

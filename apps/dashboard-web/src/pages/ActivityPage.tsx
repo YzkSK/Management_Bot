@@ -32,6 +32,7 @@ import {
   formatRelative,
   toRange,
 } from "./activity-range.js";
+import { Loading, Skeleton } from "@/components/ui/skeleton";
 
 type MemberDetail = inferOutput<typeof trpc.activity.memberDetail>;
 type RankingSort = "voice" | "messages";
@@ -133,7 +134,7 @@ function RankingTable({ guildId, range, now, live }: { guildId: string; range: A
         </Select>
       </div>
       {query.isPending ? (
-        <p className="p-4 text-sm">読み込み中...</p>
+        <Loading className="p-4" rows={10} />
       ) : query.isError ? (
         <p className="text-destructive p-4 text-sm">ランキングの取得に失敗しました。</p>
       ) : query.data.rows.length === 0 ? (
@@ -192,7 +193,14 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
   return (
     <div className="flex flex-col gap-4">
       {query.isPending ? (
-        <p className="text-sm">読み込み中...</p>
+        <Loading className="gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[84px]" />
+            ))}
+          </div>
+          <Skeleton className="h-[280px]" />
+        </Loading>
       ) : query.isError ? (
         <p className="text-destructive text-sm">サーバー統計の取得に失敗しました。</p>
       ) : (
@@ -331,7 +339,15 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
       {userId === "" ? (
         <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">メンバーを選択してください。</p>
       ) : detailQuery.isPending ? (
-        <p className="text-sm">読み込み中...</p>
+        <Loading className="gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[84px]" />
+            ))}
+          </div>
+          <Skeleton className="h-[240px]" />
+          <Skeleton className="h-[240px]" />
+        </Loading>
       ) : detailQuery.isError ? (
         <p className="text-destructive text-sm">メンバーのアクティビティの取得に失敗しました。</p>
       ) : (

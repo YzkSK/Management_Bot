@@ -5,12 +5,13 @@ import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/ui/skeleton";
 
 export function GuildListPage() {
   const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
 
   if (guildsQuery.isPending) {
-    return <div className="text-sm">読み込み中...</div>;
+    return <Loading rows={4} />;
   }
 
   if (guildsQuery.isError) {

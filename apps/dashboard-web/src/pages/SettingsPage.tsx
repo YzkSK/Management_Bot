@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Loading } from "@/components/ui/skeleton";
 
 const NO_CHANNEL = "__none__";
 /** 一括設定チャンネルSelectの初期状態(カテゴリごとに設定がバラバラで、まだ明示選択されていない)。 */
@@ -291,7 +292,7 @@ export function SettingsPage() {
         </Button>
       </div>
 
-      {isPending && <div className="text-sm">読み込み中...</div>}
+      {isPending && <Loading rows={5} />}
       {isForbidden && (
         <Alert variant="destructive">
           <AlertDescription>この操作を行う権限がありません。</AlertDescription>

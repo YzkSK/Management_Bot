@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Loading } from "@/components/ui/skeleton";
 
 type TargetType = "user" | "role";
 
@@ -426,7 +427,7 @@ export function AccessPage() {
   }
 
   if (isPending) {
-    return <div className="text-sm">読み込み中...</div>;
+    return <Loading rows={6} />;
   }
 
   if (isError || !grantsQuery.data || !myCapabilitiesQuery.data) {

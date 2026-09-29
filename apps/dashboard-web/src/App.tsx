@@ -11,12 +11,13 @@ import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loading } from "@/components/ui/skeleton";
 
 export function App() {
   const me = useQuery(trpc.me.queryOptions());
 
   if (me.isPending) {
-    return <div className="p-4 text-sm">読み込み中...</div>;
+    return <Loading className="p-4" rows={4} />;
   }
 
   if (isUnauthorizedError(me.error)) {

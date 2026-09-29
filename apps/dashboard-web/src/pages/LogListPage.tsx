@@ -21,6 +21,7 @@ import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loading } from "@/components/ui/skeleton";
 
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
@@ -272,7 +273,7 @@ export function LogListPage() {
         </SelectContent>
       </Select>
 
-      {logsQuery.isPending && <div className="text-sm">読み込み中...</div>}
+      {logsQuery.isPending && <Loading rows={8} />}
       {isForbidden && (
         <Alert variant="destructive">
           <AlertDescription>この操作を行う権限がありません。</AlertDescription>
