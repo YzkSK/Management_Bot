@@ -104,10 +104,12 @@ packages/
 
 ### 機能間連携: ドメインイベントバス
 
-「一時VCの滞在時間をアクティビティ集計に反映する」等の連携は、機能パッケージ同士の直接importではなく、`packages/shared/src/domain-events.ts`(zodで型付け)+ Redis Streamsの薄いヘルパー(`packages/core`)経由で疎結合にする。例: temp-voiceが`voice.session.ended`をXADDし、activityがconsumer group経由でXREADGROUPして集計に加算、処理成功後にXACKする。将来第5機能が同じイベントを使いたくなっても既存パッケージは無改修で済む。
+機能間の連携は、機能パッケージ同士の直接importではなく、`packages/shared/src/domain-events.ts`(zodで型付け)+ Redis Streamsの薄いヘルパー(`packages/core`)経由で疎結合にする。例: moderationが`moderation.action.recorded`をXADDし、loggingがconsumer group経由でXREADGROUPして記録、処理成功後にXACKする。将来別の機能が同じイベントを使いたくなっても既存パッケージは無改修で済む。
+
+なお、VC滞在時間のアクティビティ集計はイベント経由にせず、activityが`voiceStateUpdate`を直接購読して一時VCを含む全VCを計上する(#493)。temp-voiceはVC作成時にオーナーを移動してからDB登録・`created`イベント発行を行うため、イベントで一時VCを判別すると二重計上のレースが起きるうえ、ミュート区間の除外も一か所で扱えるため。
 
 - **配送保証**: Pub/Sub(揮発性・購読中のみ配送)ではなくStreams(永続化・XACKまでは再配送可能)を使う。configureされたRedisの永続化設定(AOF/RDB)を前提とし、handler失敗時はXACKせず、次回ポーリングで再配送させる(at-least-once)。
-- **冪等性**: `voice_activity_daily`等のロールアップ先テーブルへの加算は、同一イベントの重複配送でも結果が変わらないよう、イベントペイロードに含む一意なイベントID(例: `callSessionId`)をもとに冪等キー付きUPSERT(例: 加算対象行に処理済みイベントIDを記録し二重加算を防ぐ、または対象期間の値を都度再計算する)で実装する。
+- **冪等性**: イベントを受けて集計テーブル等へ加算する場合は、同一イベントの重複配送でも結果が変わらないよう、イベントペイロードに含む一意なイベントIDをもとに冪等キー付きUPSERT(例: 処理済みイベントIDを記録し二重加算を防ぐ、または対象期間の値を都度再計算する)で実装する。
 - **consumer group運用**: consumerは機能(例: `activity`)単位で1つのconsumer group名を持つ。同一機能を複数インスタンスで動かす場合はgroup内の複数consumerとして参加させ、各イベントはgroup内のどれか1つのconsumerにのみ配送される(グループ内での重複処理を避けつつ、機能全体としては全イベントを1回ずつ処理する設計)。ログ配信用WebSocket(全クライアントへのfan-out)とは要件が異なるため区別する。
 - **障害復旧**: consumer停止中に溜まったイベントは再起動後のXREADGROUPで取得される。長期停止でストリームが肥大化しないよう、XTRIM等での保持期間設定をPhase 5で検討する。
 
@@ -127,7 +129,7 @@ v3の`capabilities.ts`(`ALL_CAPABILITIES`自動算出、`BASELINE_EVERYONE_CAPAB
 - **共通テーブル(機能追加で原則不変)**: `guilds`, `guild_configs`(言語等グローバル設定のみ), `dashboard_access_grants`, `sessions`(DBセッション用、新規), `features`(機能マスター、新規), `guild_feature_toggles`(機能ON/OFF、新規)
 - **機能ON/OFFの設計判断(CHECK制約を省略しない方式に修正)**: `featureKey`にCHECK制約を直接書く代わりに、`features(key text primary key, defaultEnabled boolean)`という小さなマスターテーブルを設け、`guild_feature_toggles.featureKey`をこのテーブルへの外部キー(`references features(key)`)にする。`features`テーブルの中身は`packages/shared/src/feature-registry.ts`の`FEATURE_METADATA`をソースオブトゥルースとし、**アプリ起動時に自動UPSERTする処理**で同期する(手動INSERTもマイグレーションも不要)。これによりDBレベルの参照整合性(存在しない`featureKey`を弾く)を保ちながら、新機能追加時に`guild_feature_toggles`側のCHECK制約書き換え(ALTER TABLE)が一切発生しない。CLAUDE.mdの「enum禁止・text+CHECK」原則には、外部キーによる正規化という標準的な形で応えている。
 - **機能固有の設定・実データ**は各機能が`packages/db/src/schema/<feature>.ts`に専用テーブルを持つ。ログ統合方針により、moderationの検知イベントは専用テーブルを持たず`packages/logging`の`writeLogEvent()`経由で`logs`テーブルに書く。具体的なテーブル案:
-  - **activity**: `voice_activity_daily`(guildId, userId, date, secondsInVoice)、`message_activity_daily`(guildId, userId, date, messageCount, reactionCount)、`presence_activity_daily`(guildId, userId, date, onlineSeconds)、`activity_score_daily`(guildId, userId, date, score)。いずれも`(guildId, userId, date)`のunique indexで日次ロールアップし、Dashboardは生イベントでなくこのロールアップを読む。
+  - **activity**: `activity_hourly`(guildId, userId, hour(UTCの時間先頭), messageCount, voiceSeconds)と`activity_daily`(guildId, userId, day(JSTの日付), messageCount, voiceSeconds)。botは発言数・VC秒数を時間単位で加算UPSERTし、90日超の時間行は`apps/activity-rollup`が日次へ移して削除する。Dashboardは生イベントでなくこの集計を読む(#493)。
   - **logging**: `logs`(v3の`logs`テーブル構造をほぼ踏襲: eventName, guildId, actorId, channelId, messageId, eventTimestamp, receivedAt, payload jsonb, archivedAt)、`logging_settings`(guildId, retentionDays, postToChannelId)。
   - **temp_voice**: `temp_voice_configs`(guildId, createChannelId, categoryId)、`temp_voice_channels`(guildId, channelId unique, controlChannelId, ownerId, createdAt, callSessionId)、`temp_voice_ownership_grace`(channelId, previousOwnerId, gracePeriodEndsAt)、`temp_voice_permission_overrides`(channelId, targetId, targetType CHECK(user,role), state CHECK(allow,deny))。
   - **moderation**: `moderation_thresholds`(guildId, violationType CHECK(flood,invite_link,raid,ngword,mention_spam), enabled, config jsonb)、`moderation_escalation_state`(guildId, userId, violationType, strikeCount, lastViolationAt)、`moderation_whitelist`(guildId, targetType CHECK(user,role), targetId)。`config`は種別ごとにshapeが異なるためjsonb+zod discriminated unionで検証する(種別追加時のみ`violationType`のCHECK許容値変更が必要、頻度は低いため許容)。
@@ -170,7 +172,7 @@ v3の`capabilities.ts`(`ALL_CAPABILITIES`自動算出、`BASELINE_EVERYONE_CAPAB
 各機能とも `domain(判定/集計ロジック、単体テスト)→db(schema追加)→application(ユースケース)→discord(ハンドラ、FeatureModule完成)→router(tRPC CRUD)→logging連携→Dashboard UI` の順でIssueを細分化。機能パッケージ同士は非依存のため、担当・レビュー・Issue番号帯を完全に分離して並行進行できる。
 
 ### Phase 5: 統合・ハードニング
-一時VC↔activityのイベントバス結線、moderation↔logging結線の結合テスト、Redis Stream/WebSocket負荷確認、Oracle Cloud A1実機デプロイ検証。
+moderation↔logging結線の結合テスト、Redis Stream/WebSocket負荷確認、Oracle Cloud A1実機デプロイ検証。
 
 ---
 
