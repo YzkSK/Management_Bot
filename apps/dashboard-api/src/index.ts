@@ -8,7 +8,8 @@ import { appRouter } from "./app-router.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
-import { createLogWsRoutes } from "./ws/routes.js";
+import { subscribeActivityChanges } from "./ws/activity-broadcaster.js";
+import { createWsRoutes } from "./ws/routes.js";
 
 const dashboardEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -23,7 +24,7 @@ const dashboardEnvSchema = envSchema.pick({
 
 const env = parseEnv(dashboardEnvSchema);
 const { db } = createDb(env.DATABASE_URL);
-// lazyConnect: アクティブVCが開かれるまで接続しない。
+// lazyConnect: 最初の利用(アクティブVC取得・変更通知の購読)まで接続しない。
 const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -53,7 +54,7 @@ app.use(
   }),
 );
 
-const { app: wsApp, websocket } = createLogWsRoutes(
+const { app: wsApp, websocket } = createWsRoutes(
   db,
   env.SESSION_SECRET,
   env.DISCORD_TOKEN,
@@ -66,6 +67,10 @@ const logNotifications = listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, 
 );
 logNotifications.ready.catch((error: unknown) => {
   console.error("Failed to start listening for log entry inserts (dashboard live updates disabled)", error);
+});
+
+subscribeActivityChanges(redis).catch((error: unknown) => {
+  console.error("Failed to subscribe activity changes (activity live updates disabled)", error);
 });
 
 export default { fetch: app.fetch, websocket };
