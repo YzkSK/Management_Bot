@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
-import { upsertActiveVoice } from "../application/index.js";
+import { getActiveVoiceEntry, upsertActiveVoice } from "../application/index.js";
 import { activeVoiceKey } from "../domain/index.js";
 import { type ActiveVoiceStateLike, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
 import { KeyedQueue } from "./keyed-queue.js";
@@ -67,7 +67,7 @@ describe.skipIf(!(await isRedisAvailable()))("rebuildActiveVoice", () => {
     });
     await redis.hset(key, "gone", "{}");
     const now = new Date("2026-09-29T12:00:00.000Z");
-    await rebuildActiveVoice(redis, [guild([state("stay", "c1"), state("new", "c2"), state("bot", "c1", true)])], new KeyedQueue(), now);
+    await rebuildActiveVoice(redis, [guild([state("stay", "c1"), state("new", "c2"), state("bot", "c1", true)])], new KeyedQueue(), now, () => undefined);
     const hash = await redis.hgetall(key);
     expect(Object.keys(hash).sort()).toEqual(["new", "stay"]);
     expect(hash.stay).toContain("2026-09-29T09:00:00.000Z");
@@ -77,11 +77,18 @@ describe.skipIf(!(await isRedisAvailable()))("rebuildActiveVoice", () => {
   test("作り直し中に届いた退室は、古いスナップショットで上書きされない", async () => {
     const queue = new KeyedQueue();
     const live = guild([state("u1", "c1")]);
-    const rebuilding = rebuildActiveVoice(redis, [live], queue, new Date());
+    const rebuilding = rebuildActiveVoice(redis, [live], queue, new Date(), () => undefined);
     // 作り直しがRedisを読んでいる間に退室イベントが届く
     live.voiceStates.cache.set("u1", state("u1", null));
-    const leaving = queue.run(`${guildId}:u1`, () => syncActiveVoice(redis, state("u1", null), new Date()));
+    const leaving = queue.run(`${guildId}:u1`, () => syncActiveVoice(redis, state("u1", null), new Date(), () => undefined));
     await Promise.all([rebuilding, leaving]);
     expect(await redis.hexists(key, "u1")).toBe(0);
+  });
+  test("syncActiveVoiceはキュー実行時点のcountingSinceを書く", async () => {
+    const since = new Date("2026-09-29T10:00:00Z");
+    await syncActiveVoice(redis, state("u1", "c1"), new Date(), () => since);
+    expect((await getActiveVoiceEntry(redis, guildId, "u1"))?.countingSince).toBe(since.toISOString());
+    await syncActiveVoice(redis, state("u2", "c1"), new Date(), () => undefined);
+    expect((await getActiveVoiceEntry(redis, guildId, "u2"))?.countingSince).toBeNull();
   });
 });

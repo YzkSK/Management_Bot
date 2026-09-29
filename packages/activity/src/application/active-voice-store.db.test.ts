@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
-import { type ActiveVoiceEntry, activeVoiceKey } from "../domain/index.js";
+import { type ActiveVoiceEntry, activeVoiceKey, activityChangedChannel, parseActivityChanged } from "../domain/index.js";
+import { publishActivityChanged } from "./activity-changed.js";
 import {
   ACTIVE_VOICE_TTL_SECONDS,
   extendActiveVoiceTtl,
   getActiveVoiceEntry,
   readActiveVoice,
+  setActiveVoiceCountingSince,
   removeActiveVoice,
   listActiveVoiceUserIds,
   upsertActiveVoice,
@@ -40,6 +42,7 @@ function entry(overrides: Partial<ActiveVoiceEntry> = {}): ActiveVoiceEntry {
     serverDeaf: false,
     streaming: false,
     video: false,
+    countingSince: null,
     ...overrides,
   };
 }
@@ -102,5 +105,22 @@ describe.skipIf(!(await isRedisAvailable()))("active-voice-store", () => {
     expect(await readActiveVoice(readHash, guildId)).toEqual([]);
     await redis.hset(activeVoiceKey(guildId), "bad", "{");
     expect(await readActiveVoice(readHash, guildId)).toEqual([]);
+  });
+  test("setActiveVoiceCountingSinceはエントリがある時だけ更新する(退室者を書き戻さない)", async () => {
+    expect(await setActiveVoiceCountingSince(redis, guildId, "gone", "2026-09-29T10:00:00.000Z")).toBe(false);
+    expect(await redis.hexists(activeVoiceKey(guildId), "gone")).toBe(0);
+    await upsertActiveVoice(redis, guildId, "u1", entry());
+    expect(await setActiveVoiceCountingSince(redis, guildId, "u1", "2026-09-29T10:00:00.000Z")).toBe(true);
+    expect((await getActiveVoiceEntry(redis, guildId, "u1"))?.countingSince).toBe("2026-09-29T10:00:00.000Z");
+  });
+
+  test("publishActivityChangedは購読者へpayloadを届ける", async () => {
+    const sub = redis.duplicate();
+    const received = new Promise<[string, string]>((resolve) => sub.on("message", (ch: string, msg: string) => resolve([ch, msg])));
+    await sub.subscribe(activityChangedChannel(guildId));
+    await publishActivityChanged(redis, guildId, "stats");
+    const [channel, message] = await received;
+    expect(parseActivityChanged(channel, message)).toEqual({ guildId, kind: "stats" });
+    sub.disconnect();
   });
 });

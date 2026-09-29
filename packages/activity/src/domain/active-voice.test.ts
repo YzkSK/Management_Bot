@@ -76,7 +76,8 @@ describe("groupActiveVoice", () => {
 
 describe("countingSince", () => {
   test("countingSinceの無い旧エントリはnullとして読む", () => {
-    const { countingSince: _omit, ...legacy } = entry();
+    const legacy: Partial<ActiveVoiceEntry> = entry();
+    delete legacy.countingSince;
     expect(parseActiveVoiceEntry(JSON.stringify(legacy))?.countingSince).toBeNull();
   });
 

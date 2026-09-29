@@ -17,7 +17,7 @@ const base = {
 
 describe("toActiveVoiceEntry", () => {
   test("在室中のVoiceStateを表示用エントリへ変換する", () => {
-    expect(toActiveVoiceEntry(base, "2026-09-29T10:00:00.000Z")).toEqual({
+    expect(toActiveVoiceEntry(base, "2026-09-29T10:00:00.000Z", "2026-09-29T10:05:00.000Z")).toEqual({
       channelId: "c1",
       channelName: "雑談VC",
       afk: false,
@@ -30,13 +30,14 @@ describe("toActiveVoiceEntry", () => {
       serverDeaf: false,
       streaming: false,
       video: true,
+      countingSince: "2026-09-29T10:05:00.000Z",
     });
   });
   test("AFKチャンネルならafk=true", () => {
-    expect(toActiveVoiceEntry({ ...base, channelId: "afk" }, "2026-09-29T10:00:00.000Z")?.afk).toBe(true);
+    expect(toActiveVoiceEntry({ ...base, channelId: "afk" }, "2026-09-29T10:00:00.000Z", null)?.afk).toBe(true);
   });
   test("退室(チャンネルなし)・メンバー不明はundefined", () => {
-    expect(toActiveVoiceEntry({ ...base, channelId: null, channel: null }, "x")).toBeUndefined();
-    expect(toActiveVoiceEntry({ ...base, member: null }, "x")).toBeUndefined();
+    expect(toActiveVoiceEntry({ ...base, channelId: null, channel: null }, "x", null)).toBeUndefined();
+    expect(toActiveVoiceEntry({ ...base, member: null }, "x", null)).toBeUndefined();
   });
 });

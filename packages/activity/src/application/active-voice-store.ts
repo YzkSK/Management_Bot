@@ -23,6 +23,19 @@ export async function removeActiveVoice(redis: Redis, guildId: string, userId: s
   await redis.hdel(activeVoiceKey(guildId), userId);
 }
 
+/** checkpointでcountingSinceを進める。退室済み(エントリ無し)なら書き戻さない。同一メンバーのキュー上で呼ぶこと。 */
+export async function setActiveVoiceCountingSince(
+  redis: Redis,
+  guildId: string,
+  userId: string,
+  countingSince: string | null,
+): Promise<boolean> {
+  const entry = await getActiveVoiceEntry(redis, guildId, userId);
+  if (!entry) return false;
+  await upsertActiveVoice(redis, guildId, userId, { ...entry, countingSince });
+  return true;
+}
+
 /** 起動時の作り直しで、いなくなったメンバーを見つけるために使う。 */
 export function listActiveVoiceUserIds(redis: Redis, guildId: string): Promise<string[]> {
   return redis.hkeys(activeVoiceKey(guildId));

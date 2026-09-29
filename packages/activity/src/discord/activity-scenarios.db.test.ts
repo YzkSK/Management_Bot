@@ -4,7 +4,6 @@ import { activityHourly, createDb, guilds } from "@management-bot/db";
 import { asc, eq } from "drizzle-orm";
 import { addHourlyActivity } from "../application/index.js";
 import { isCounting, type VoiceStateSnapshot } from "../domain/index.js";
-import { MessageCounter } from "./message-counter.js";
 import { VoiceTracker } from "./voice-tracker.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -51,15 +50,14 @@ describe("アクティビティ記録シナリオ", () => {
     ]);
   });
 
-  test("停止時に在室中のVC区間と未flushの発言数が同じ時間行へ書き込まれる", async () => {
-    const write = (d: Parameters<typeof addHourlyActivity>[1]) => addHourlyActivity(db, d);
-    const tracker = new VoiceTracker(write);
-    const counter = new MessageCounter(write);
-    await tracker.update(guildId, "v", true, t("2026-09-29T12:00:00Z"));
-    counter.record(guildId, "v", t("2026-09-29T12:05:00Z"));
-    counter.record(guildId, "v", t("2026-09-29T12:06:00Z"));
-    await Promise.all([tracker.closeAll(t("2026-09-29T12:30:00Z")), counter.flush()]);
+  test("入室→checkpoint→退室で二重計上しない(画面の加算は now − countingSince)", async () => {
+    const tracker = new VoiceTracker((d) => addHourlyActivity(db, d));
+    await tracker.update(guildId, "w", true, t("2026-09-29T13:00:00Z"));
+    expect(await tracker.checkpoint(t("2026-09-29T13:01:00Z"))).toEqual([{ guildId, userId: "w" }]);
+    expect(tracker.countingSince(guildId, "w")).toEqual(t("2026-09-29T13:01:00Z"));
+    expect(await rowsOf("w")).toEqual([["2026-09-29T13:00:00.000Z", 0, 60]]);
+    await tracker.update(guildId, "w", false, t("2026-09-29T13:01:30Z"));
 
-    expect(await rowsOf("v")).toEqual([["2026-09-29T12:00:00.000Z", 2, 1800]]);
+    expect(await rowsOf("w")).toEqual([["2026-09-29T13:00:00.000Z", 0, 90]]);
   });
 });

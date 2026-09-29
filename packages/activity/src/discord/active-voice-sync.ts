@@ -39,7 +39,14 @@ export function activeVoiceQueueKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
 }
 
-export function toActiveVoiceEntry(state: ActiveVoiceStateLike, joinedAt: string): ActiveVoiceEntry | undefined {
+/** VoiceTrackerの「集計中になった時刻」を引く(区間が無ければundefined)。 */
+export type CountingSinceOf = (guildId: string, userId: string) => Date | undefined;
+
+export function toActiveVoiceEntry(
+  state: ActiveVoiceStateLike,
+  joinedAt: string,
+  countingSince: string | null,
+): ActiveVoiceEntry | undefined {
   if (state.channelId === null || state.channel === null || state.member === null) return undefined;
   return {
     channelId: state.channelId,
@@ -54,15 +61,22 @@ export function toActiveVoiceEntry(state: ActiveVoiceStateLike, joinedAt: string
     serverDeaf: state.serverDeaf ?? false,
     streaming: state.streaming ?? false,
     video: state.selfVideo ?? false,
-    countingSince: null,
+    countingSince,
   };
 }
 
-export async function syncActiveVoice(redis: Redis, state: ActiveVoiceStateLike, now: Date): Promise<void> {
+/** countingSinceはキュー上で実行される時点のVoiceTrackerの値を読む(VoiceTrackerはイベント受信時に同期的に更新済み)。 */
+export async function syncActiveVoice(
+  redis: Redis,
+  state: ActiveVoiceStateLike,
+  now: Date,
+  countingSinceOf: CountingSinceOf,
+): Promise<void> {
   const guildId = state.guild.id;
   if (state.channelId === null) return removeActiveVoice(redis, guildId, state.id);
   const prev = await getActiveVoiceEntry(redis, guildId, state.id);
-  const entry = toActiveVoiceEntry(state, nextJoinedAt(prev, state.channelId, now));
+  const since = countingSinceOf(guildId, state.id);
+  const entry = toActiveVoiceEntry(state, nextJoinedAt(prev, state.channelId, now), since ? since.toISOString() : null);
   if (entry) await upsertActiveVoice(redis, guildId, state.id, entry);
 }
 
@@ -76,6 +90,7 @@ export async function rebuildActiveVoice(
   guilds: Iterable<ActiveVoiceGuildLike>,
   queue: KeyedQueue,
   now: Date,
+  countingSinceOf: CountingSinceOf,
 ): Promise<void> {
   await Promise.all(
     [...guilds].map(async (guild) => {
@@ -86,7 +101,7 @@ export async function rebuildActiveVoice(
       for (const state of guild.voiceStates.cache.values()) {
         if (state.member?.user.bot || state.channelId === null) continue;
         present.add(state.id);
-        tasks.push(queue.run(activeVoiceQueueKey(guild.id, state.id), () => syncActiveVoice(redis, state, now)));
+        tasks.push(queue.run(activeVoiceQueueKey(guild.id, state.id), () => syncActiveVoice(redis, state, now, countingSinceOf)));
       }
       for (const userId of stored) {
         if (present.has(userId)) continue;

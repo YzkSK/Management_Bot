@@ -23,15 +23,25 @@ export class VoiceTracker {
     await this.write(toDeltas(open.guildId, open.userId, open.since, at));
   }
 
-  /** 開いている区間をatまでで書き込み、atから計上を続ける(在室中の途中経過をDashboardへ反映するため)。 */
-  async checkpoint(at: Date): Promise<void> {
+  countingSince(guildId: string, userId: string): Date | undefined {
+    return this.openSince.get(`${guildId}:${userId}`)?.since;
+  }
+
+  /**
+   * 開いている区間をatまでで書き込み、atから計上を続ける(クラッシュ時の取りこぼし対策)。
+   * 前進させた区間のキーを返す(アクティブVCのcountingSince更新用)。前進は書き込みより前に同期的に行う。
+   */
+  async checkpoint(at: Date): Promise<{ guildId: string; userId: string }[]> {
     const deltas: HourlyDelta[] = [];
+    const advanced: { guildId: string; userId: string }[] = [];
     for (const open of this.openSince.values()) {
       if (open.since >= at) continue;
       deltas.push(...toDeltas(open.guildId, open.userId, open.since, at));
       open.since = at;
+      advanced.push({ guildId: open.guildId, userId: open.userId });
     }
     if (deltas.length > 0) await this.write(deltas);
+    return advanced;
   }
 
   async closeAll(at: Date): Promise<void> {

@@ -55,3 +55,18 @@ describe("VoiceTracker", () => {
     expect(written.map((d) => d.voiceSeconds)).toEqual([600, 300]);
   });
 });
+
+describe("VoiceTracker.countingSince", () => {
+  test("開いている区間の開始時刻を返し、checkpointで前進し、閉じたら消える", async () => {
+    const tracker = new VoiceTracker(async () => undefined);
+    const t0 = new Date("2026-09-29T10:00:00Z");
+    const t1 = new Date("2026-09-29T10:01:00Z");
+    await tracker.update("g", "u", true, t0);
+    expect(tracker.countingSince("g", "u")).toEqual(t0);
+    expect(await tracker.checkpoint(t1)).toEqual([{ guildId: "g", userId: "u" }]);
+    expect(tracker.countingSince("g", "u")).toEqual(t1);
+    await tracker.update("g", "u", false, t1);
+    expect(tracker.countingSince("g", "u")).toBeUndefined();
+  });
+});
+
