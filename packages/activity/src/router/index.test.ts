@@ -40,7 +40,10 @@ beforeEach(async () => {
 
 const createCaller = createCallerFactory(activityRouter);
 
-function buildContext(getGuildMemberNames: () => Promise<Map<string, string>> = async () => new Map()) {
+function buildContext(
+  getGuildMemberNames: () => Promise<Map<string, string>> = async () => new Map(),
+  readRedisHash: (key: string) => Promise<Record<string, string>> = async () => ({}),
+) {
   return {
     db,
     sessionId: "session-activity",
@@ -57,6 +60,7 @@ function buildContext(getGuildMemberNames: () => Promise<Map<string, string>> = 
     getGuildAccessStatus: async () => "ok" as const,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [{ id: "a", name: "Alice" }], nextAfter: undefined }),
+    readRedisHash,
     isGuildMember: async () => true,
     listMyGuilds: async () => [],
   };
@@ -116,5 +120,43 @@ describe("activityRouter", () => {
     expect(detail.totals).toEqual({ messageCount: 3, voiceSeconds: 600 });
     const options = await caller.listMemberOptions({ guildId });
     expect(options.members).toEqual([{ id: "a", name: "Alice" }]);
+  });
+});
+
+describe("activeVoice", () => {
+  test("VIEW_ACTIVITYがあればRedisの在室状況をチャンネル別に返す", async () => {
+    await grant(CAPABILITIES.VIEW_ACTIVITY);
+    const keys: string[] = [];
+    const caller = createCaller(
+      buildContext(undefined, async (key) => {
+        keys.push(key);
+        return {
+          u1: JSON.stringify({
+            channelId: "c1",
+            channelName: "雑談VC",
+            afk: false,
+            name: "Alice",
+            avatarUrl: null,
+            joinedAt: "2026-09-29T10:00:00.000Z",
+            selfMute: false,
+            selfDeaf: false,
+            serverMute: true,
+            serverDeaf: false,
+            streaming: false,
+            video: false,
+          }),
+        };
+      }),
+    );
+    const channels = await caller.activeVoice({ guildId });
+    expect(keys).toEqual([`activity:voice:${guildId}`]);
+    expect(channels[0]?.members[0]).toMatchObject({ userId: "u1", serverMute: true, counting: false });
+  });
+
+  test("VIEW_ACTIVITYが無ければFORBIDDEN", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.activeVoice({ guildId }));
+    expect(error).toBeInstanceOf(TRPCError);
+    expect(error instanceof TRPCError && error.code).toBe("FORBIDDEN");
   });
 });

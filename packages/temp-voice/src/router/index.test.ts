@@ -60,6 +60,7 @@ function buildContext(
     getGuildAccessStatus: async () => "ok" as const,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
+    readRedisHash: async () => ({}),
     isGuildMember: async () => true,
     listMyGuilds: async () => [],
   };

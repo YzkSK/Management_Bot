@@ -159,6 +159,11 @@ export interface DashboardAccessContext {
    * 重複問い合わせを避けたいdashboard-api側は、短命TTLキャッシュ付きの実装をここに注入できる
    * (issue #198 パフォーマンス改善。getGuildMembershipキャッシュと同じ考え方)。
    */
+  /**
+   * アクティブVC表示用。botが同期しているRedis Hashを読む(dashboard-apiはGatewayキャッシュを持たないため)。
+   * dashboard-accessをRedisクライアントに依存させないよう、読み取り関数として注入する。
+   */
+  readRedisHash: (key: string) => Promise<Record<string, string>>;
   resolveEffectiveCapabilities?: (input: ResolveEffectiveCapabilitiesInput) => Promise<number>;
 }
 

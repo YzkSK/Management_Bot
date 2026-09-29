@@ -2,7 +2,7 @@ import { protectedProcedure, requireCapability, router } from "@management-bot/d
 import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { getMemberDetail, getMemberRanking, getServerSummary } from "../application/index.js";
+import { getMemberDetail, getMemberRanking, getServerSummary, readActiveVoice } from "../application/index.js";
 
 const PAGE_SIZE = 20;
 /** 集計クエリの負荷を抑えるため、1回に指定できる期間の上限を設ける。 */
@@ -55,4 +55,9 @@ export const activityRouter = router({
   listMemberOptions: activityViewProcedure(
     z.object({ guildId: discordIdSchema, after: z.string().min(1).optional() }),
   ).query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
+
+  /** 現在VCにいるメンバー(Discordの現在状態。DBには記録しない)。 */
+  activeVoice: activityViewProcedure(z.object({ guildId: discordIdSchema })).query(({ ctx, input }) =>
+    readActiveVoice(ctx.readRedisHash, input.guildId),
+  ),
 });

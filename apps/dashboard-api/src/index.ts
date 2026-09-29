@@ -2,6 +2,7 @@ import { trpcServer } from "@hono/trpc-server";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
+import { Redis } from "ioredis";
 import { cors } from "hono/cors";
 import { appRouter } from "./app-router.js";
 import { createContext } from "./context.js";
@@ -17,10 +18,13 @@ const dashboardEnvSchema = envSchema.pick({
   DASHBOARD_WEB_URL: true,
   SESSION_SECRET: true,
   DISCORD_TOKEN: true,
+  REDIS_URL: true,
 });
 
 const env = parseEnv(dashboardEnvSchema);
 const { db } = createDb(env.DATABASE_URL);
+// lazyConnect: アクティブVCが開かれるまで接続しない。
+const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
 const isProduction = process.env.NODE_ENV === "production";
 
 const app = new Hono();
@@ -45,7 +49,7 @@ app.use(
   "/trpc/*",
   trpcServer({
     router: appRouter,
-    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID),
+    createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID, redis),
   }),
 );
 

@@ -18,6 +18,7 @@ import { createTtlCache } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
+import type { Redis } from "ioredis";
 import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
@@ -344,6 +345,7 @@ export function createContext(
   sessionSecret: string,
   botToken: string,
   discordClientId: string,
+  redis: Redis,
 ): (opts: unknown, c: HonoContext) => Record<string, unknown> {
   return (_opts, c) => {
     const sessionId = getCookie(c, SESSION_COOKIE);
@@ -367,6 +369,7 @@ export function createContext(
       isGuildMember: createIsGuildMember(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
       getMyAvatarUrl: createGetMyAvatarUrl(db, sessionId, sessionSecret),
+      readRedisHash: (key) => redis.hgetall(key),
     };
     return ctx as unknown as Record<string, unknown>;
   };

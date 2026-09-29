@@ -56,6 +56,7 @@ function buildContext(overrides: { getGuildMembership: GuildMembershipResolver }
     getGuildAccessStatus: async () => "ok" as const,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
+    readRedisHash: async () => ({}),
     isGuildMember: async () => true,
     listMyGuilds: async () => [
       { id: guildId1, name: "guild-1", isManaged: false },

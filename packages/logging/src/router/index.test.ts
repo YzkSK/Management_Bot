@@ -131,6 +131,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -164,6 +165,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -229,6 +231,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -254,6 +257,7 @@ describe("loggingRouter.listLogEntries", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -298,6 +302,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -317,6 +322,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -347,6 +353,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -370,6 +377,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -392,6 +400,7 @@ describe("loggingRouter.listRetentionSettings / setRetentionSetting", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -416,6 +425,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -435,6 +445,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -454,6 +465,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -484,6 +496,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -506,6 +519,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf("forbidden"),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -528,6 +542,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -556,6 +571,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -580,6 +596,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -610,6 +627,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -633,6 +651,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -656,6 +675,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -679,6 +699,7 @@ describe("loggingRouter.listChannelSettings / setChannelSetting / listChannelOpt
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -712,6 +733,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -740,6 +762,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -768,6 +791,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -825,6 +849,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -849,6 +874,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -888,6 +914,7 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -921,6 +948,7 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -949,6 +977,7 @@ describe("loggingRouter.resolveDisplayNames", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -977,6 +1006,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -1005,6 +1035,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -1033,6 +1064,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -1059,6 +1091,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf(),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
@@ -1085,6 +1118,7 @@ describe("loggingRouter.getAuditLogPermissionStatus", () => {
       getGuildRoles: rolesOf(),
       getGuildAccessStatus: accessStatusOf("forbidden"),
       getGuildMembersPage: membersPageOf(),
+      readRedisHash: async () => ({}),
       discordClientId: "test-client-id",
     });
 
