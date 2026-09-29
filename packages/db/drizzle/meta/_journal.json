@@ -218,6 +218,13 @@
       "when": 1790670419163,
       "tag": "0030_great_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790700050186,
+      "tag": "0031_awesome_robin_chapel",
+      "breakpoints": true
     }
   ]
 }

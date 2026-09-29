@@ -18,7 +18,7 @@ describe("VoiceTracker", () => {
     await tracker.update("g", "u", false, t("2026-09-29T11:10:00Z"));
     expect(written).toEqual([
       { guildId: "g", userId: "u", hour: t("2026-09-29T10:00:00Z"), messageCount: 0, voiceSeconds: 600 },
-      { guildId: "g", userId: "u", hour: t("2026-09-29T11:00:00Z"), messageCount: 0, voiceSeconds: 600 },
+      { guildId: "g", userId: "u", hour: t("2026-09-29T11:00:00Z"), messageCount: 0, voiceSeconds: 600, lastVoiceAt: t("2026-09-29T11:10:00Z") },
     ]);
   });
 

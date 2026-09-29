@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { activityDaily, activityHourly, createDb, guilds } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { getMemberDetail, getMemberRanking, getServerSummary } from "./queries.js";
+import { addHourlyActivity } from "./record-activity.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -95,5 +96,15 @@ describe("getMemberDetail", () => {
     const nobody = await getMemberDetail(db, { guildId, userId: "z", from: WEEK_FROM, to: NOW });
     expect(nobody.rank).toEqual({ messages: null, voice: null });
     expect(nobody.lastMessageAt).toBeNull();
+  });
+
+  test("秒精度の最終時刻があればそれを優先する(別書き込みでも大きい方を残す)", async () => {
+    const hour = t("2026-09-29T02:00:00Z");
+    const delta = { guildId, userId: "c", hour, messageCount: 1, voiceSeconds: 0 };
+    await addHourlyActivity(db, [{ ...delta, lastMessageAt: t("2026-09-29T02:34:56Z") }]);
+    await addHourlyActivity(db, [{ ...delta, lastMessageAt: t("2026-09-29T02:10:00Z") }]);
+    const r = await getMemberDetail(db, { guildId, userId: "c", from: WEEK_FROM, to: NOW });
+    expect(r.lastMessageAt).toBe("2026-09-29T02:34:56.000Z");
+    expect(r.lastVoiceAt).toBeNull();
   });
 });

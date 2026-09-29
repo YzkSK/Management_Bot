@@ -53,11 +53,13 @@ export class VoiceTracker {
 }
 
 function toDeltas(guildId: string, userId: string, start: Date, end: Date): HourlyDelta[] {
-  return splitIntoHours(start, end).map(({ hour, seconds }) => ({
+  const parts = splitIntoHours(start, end);
+  return parts.map(({ hour, seconds }, i) => ({
     guildId,
     userId,
     hour,
     messageCount: 0,
     voiceSeconds: seconds,
+    ...(i === parts.length - 1 ? { lastVoiceAt: end } : {}),
   }));
 }

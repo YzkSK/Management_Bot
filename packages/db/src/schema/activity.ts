@@ -16,6 +16,9 @@ export const activityHourly = pgTable(
     hour: timestamp("hour", { withTimezone: true }).notNull(),
     messageCount: integer("message_count").notNull().default(0),
     voiceSeconds: integer("voice_seconds").notNull().default(0),
+    /** その時間内の最終発言/最終VC計上時刻(秒精度の「最終活動」表示用)。導入前の行はNULL。 */
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    lastVoiceAt: timestamp("last_voice_at", { withTimezone: true }),
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.userId, table.hour] }),

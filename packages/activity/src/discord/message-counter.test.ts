@@ -15,8 +15,8 @@ describe("MessageCounter", () => {
     counter.record("g", "u", t("2026-09-29T11:00:00Z"));
     await counter.flush();
     expect(written).toEqual([
-      { guildId: "g", userId: "u", hour: t("2026-09-29T10:00:00Z"), messageCount: 2, voiceSeconds: 0 },
-      { guildId: "g", userId: "u", hour: t("2026-09-29T11:00:00Z"), messageCount: 1, voiceSeconds: 0 },
+      { guildId: "g", userId: "u", hour: t("2026-09-29T10:00:00Z"), messageCount: 2, voiceSeconds: 0, lastMessageAt: t("2026-09-29T10:59:00Z") },
+      { guildId: "g", userId: "u", hour: t("2026-09-29T11:00:00Z"), messageCount: 1, voiceSeconds: 0, lastMessageAt: t("2026-09-29T11:00:00Z") },
     ]);
   });
 
@@ -33,7 +33,7 @@ describe("MessageCounter", () => {
     fail = false;
     await counter.flush();
     expect(written).toEqual([
-      { guildId: "g", userId: "u", hour: t("2026-09-29T10:00:00Z"), messageCount: 2, voiceSeconds: 0 },
+      { guildId: "g", userId: "u", hour: t("2026-09-29T10:00:00Z"), messageCount: 2, voiceSeconds: 0, lastMessageAt: t("2026-09-29T10:05:00Z") },
     ]);
   });
 

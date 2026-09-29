@@ -1,4 +1,4 @@
-import type { HourlyDelta } from "../application/index.js";
+import { type HourlyDelta, laterOf } from "../application/index.js";
 import { hourStart } from "../domain/index.js";
 
 /** 発言数を(guild,user,hour)ごとにメモリで数え、flushでまとめて書く。書き込み失敗時は次回へ持ち越す。 */
@@ -11,7 +11,14 @@ export class MessageCounter {
     const hour = hourStart(at);
     const key = `${guildId}:${userId}:${hour.getTime()}`;
     const prev = this.pending.get(key);
-    this.pending.set(key, { guildId, userId, hour, messageCount: (prev?.messageCount ?? 0) + 1, voiceSeconds: 0 });
+    this.pending.set(key, {
+      guildId,
+      userId,
+      hour,
+      messageCount: (prev?.messageCount ?? 0) + 1,
+      voiceSeconds: 0,
+      lastMessageAt: laterOf(prev?.lastMessageAt, at),
+    });
   }
 
   async flush(): Promise<void> {
@@ -23,7 +30,16 @@ export class MessageCounter {
     } catch (error) {
       for (const [key, delta] of batch) {
         const now = this.pending.get(key);
-        this.pending.set(key, now ? { ...now, messageCount: now.messageCount + delta.messageCount } : delta);
+        this.pending.set(
+          key,
+          now
+            ? {
+                ...now,
+                messageCount: now.messageCount + delta.messageCount,
+                lastMessageAt: laterOf(now.lastMessageAt, delta.lastMessageAt),
+              }
+            : delta,
+        );
       }
       throw error;
     }

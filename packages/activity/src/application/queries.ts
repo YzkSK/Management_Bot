@@ -145,9 +145,12 @@ export interface MemberDetail {
   lastVoiceAt: string | null;
 }
 
+/** 秒精度の最終時刻を優先し、導入前の行は時間先頭、ロールアップ済みは日付にフォールバックする。 */
 function lastActivityAt(guildId: string, userId: string, column: "message_count" | "voice_seconds"): SQL {
   const col = sql.raw(column);
+  const lastCol = sql.raw(column === "message_count" ? "last_message_at" : "last_voice_at");
   return sql`COALESCE(
+    (SELECT MAX(${lastCol}) FROM activity_hourly WHERE guild_id = ${guildId} AND user_id = ${userId}),
     (SELECT MAX(hour) FROM activity_hourly WHERE guild_id = ${guildId} AND user_id = ${userId} AND ${col} > 0),
     (SELECT MAX(day)::timestamp AT TIME ZONE 'Asia/Tokyo' FROM activity_daily WHERE guild_id = ${guildId} AND user_id = ${userId} AND ${col} > 0)
   )`;
