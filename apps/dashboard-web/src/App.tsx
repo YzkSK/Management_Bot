@@ -4,6 +4,7 @@ import { isUnauthorizedError } from "./is-unauthorized-error.js";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { AccessPage } from "./pages/AccessPage.js";
+import { ActivityPage } from "./pages/ActivityPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
@@ -58,6 +59,7 @@ export function App() {
             <Layout discordUsername={me.data.discordUsername} avatarUrl={me.data.avatarUrl} onLogout={handleLogout} />
           }
         >
+          <Route path="activity" element={<ActivityPage />} />
           <Route path="logs" element={<LogListPage />} />
           <Route path="logs/settings" element={<SettingsPage />} />
           <Route path="moderation" element={<ModerationPage />} />

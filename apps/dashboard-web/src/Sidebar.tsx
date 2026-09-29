@@ -12,6 +12,7 @@ import { DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 /** ページ実装済みの機能のみここに登録する(未実装の機能はリンクにしない)。 */
 const FEATURE_PATHS: Record<string, (guildId: string) => string> = {
+  activity: (guildId) => `/guilds/${guildId}/activity`,
   logging: (guildId) => `/guilds/${guildId}/logs`,
   moderation: (guildId) => `/guilds/${guildId}/moderation`,
   "temp-voice": (guildId) => `/guilds/${guildId}/temp-voice`,
