@@ -273,7 +273,7 @@ export function LogListPage() {
         </SelectContent>
       </Select>
 
-      {logsQuery.isPending && <Loading rows={8} />}
+      {logsQuery.isPending && <Loading />}
       {isForbidden && (
         <Alert variant="destructive">
           <AlertDescription>この操作を行う権限がありません。</AlertDescription>

@@ -11,7 +11,7 @@ export function GuildListPage() {
   const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
 
   if (guildsQuery.isPending) {
-    return <Loading rows={4} />;
+    return <Loading />;
   }
 
   if (guildsQuery.isError) {

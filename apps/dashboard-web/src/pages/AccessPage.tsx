@@ -427,7 +427,7 @@ export function AccessPage() {
   }
 
   if (isPending) {
-    return <Loading rows={6} />;
+    return <Loading />;
   }
 
   if (isError || !grantsQuery.data || !myCapabilitiesQuery.data) {

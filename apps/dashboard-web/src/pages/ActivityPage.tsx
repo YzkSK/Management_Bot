@@ -146,7 +146,7 @@ function RankingTable({ guildId, range, now, live }: { guildId: string; range: A
         </Select>
       </div>
       {query.isPending ? (
-        <Loading className="p-4" rows={10} />
+        <Loading />
       ) : query.isError ? (
         <p className="text-destructive p-4 text-sm">ランキングの取得に失敗しました。</p>
       ) : query.data.rows.length === 0 ? (

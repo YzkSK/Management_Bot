@@ -1,12 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Loading } from "./skeleton";
+import { Loading, Skeleton } from "./skeleton";
 
 describe("Loading", () => {
-  test("aria-busyと視覚非表示の読み込み中を持ち、既定で行のスケルトンを出す", () => {
-    const html = renderToStaticMarkup(<Loading rows={2} />);
+  test("既定はスピナーと読み込み中を出す", () => {
+    const html = renderToStaticMarkup(<Loading />);
     expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("animate-spin");
+    expect(html).toContain("読み込み中");
+  });
+
+  test("childrenがあればスケルトンを出し、読み込み中は視覚非表示にする", () => {
+    const html = renderToStaticMarkup(
+      <Loading>
+        <Skeleton />
+      </Loading>,
+    );
     expect(html).toContain('<span class="sr-only">読み込み中</span>');
-    expect(html.match(/data-slot="skeleton"/g)).toHaveLength(2);
+    expect(html).toContain('data-slot="skeleton"');
+    expect(html).not.toContain("animate-spin");
   });
 });

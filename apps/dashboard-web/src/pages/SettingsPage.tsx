@@ -292,7 +292,7 @@ export function SettingsPage() {
         </Button>
       </div>
 
-      {isPending && <Loading rows={5} />}
+      {isPending && <Loading />}
       {isForbidden && (
         <Alert variant="destructive">
           <AlertDescription>この操作を行う権限がありません。</AlertDescription>

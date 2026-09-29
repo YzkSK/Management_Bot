@@ -76,7 +76,7 @@ export function ActiveVoiceTab({ guildId, now }: { guildId: string; now: Date })
     ...trpc.activity.activeVoice.queryOptions({ guildId }),
     placeholderData: keepPreviousData,
   });
-  if (query.isPending) return <Loading rows={3} />;
+  if (query.isPending) return <Loading />;
   if (query.isError) return <p className="text-destructive text-sm">アクティブVCの取得に失敗しました。</p>;
   return <ActiveVoiceView channels={query.data} now={now} />;
 }

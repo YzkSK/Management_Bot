@@ -17,7 +17,7 @@ export function App() {
   const me = useQuery(trpc.me.queryOptions());
 
   if (me.isPending) {
-    return <Loading className="p-4" rows={4} />;
+    return <Loading />;
   }
 
   if (isUnauthorizedError(me.error)) {
