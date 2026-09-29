@@ -101,6 +101,54 @@ describe("ModerationPage", () => {
     expect(html).not.toContain("timeout / failed (MISSING_PERMISSIONS)");
   });
 
+  describe("名前解決", () => {
+    const guildId = "g-names";
+    function withEntry(): QueryClient {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false, retryOnMount: false } } });
+      queryClient.setQueryData(
+        trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }).queryKey,
+        {
+          entries: [
+            {
+              id: "log-1",
+              entry: {
+                category: "moderationCase",
+                guildId,
+                createdAt: "2026-08-01T00:00:00.000Z",
+                caseId: "case-1",
+                targetUserId: "u9",
+                moderatorId: "system",
+                action: "create",
+                actionType: "warn",
+              },
+            },
+          ],
+          nextCursor: null,
+        },
+      );
+      return queryClient;
+    }
+    const namesKey = trpc.logging.resolveDisplayNames.queryOptions({ guildId, userIds: ["u9"], channelIds: [] }).queryKey;
+
+    test("解決中はIDを出さずスケルトンを表示する", () => {
+      const html = renderHistory(guildId, withEntry());
+      expect(html).toContain('data-slot="skeleton"');
+      expect(html).not.toContain("u9 / 旧ログ");
+    });
+
+    test("取得失敗時はIDにフォールバックする", () => {
+      const queryClient = withEntry();
+      queryClient.getQueryCache().build(queryClient, { queryKey: namesKey }).setState({
+        status: "error",
+        error: new Error("failed"),
+        fetchStatus: "idle",
+      });
+      const html = renderHistory(guildId, queryClient);
+      expect(html).not.toContain('data-slot="skeleton"');
+      expect(html).toContain("u9 / 旧ログ");
+    });
+  });
+
   test("検知履歴を展開するとケースID、処分、検知詳細を表示する", () => {
     const expandedIds = new Set(["log-raid"]);
     let expandedStateInitialized = false;

@@ -28,7 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading, Skeleton } from "@/components/ui/skeleton";
 
 type TargetType = "user" | "role";
 
@@ -897,7 +897,12 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
           : "旧ログ（詳細なし）";
         const detailId = `moderation-history-detail-${id}`;
         const isExpanded = expandedIds.has(id);
-        const userName = namesQuery.data?.users[entry.targetUserId] ?? entry.targetUserId;
+        // 名前解決中はIDを見せずスケルトンにし、失敗・未解決のときだけIDにフォールバックする
+        const userName = namesQuery.isLoading ? (
+          <Skeleton className="inline-block h-4 w-24 align-middle" aria-label="名前を読み込み中" />
+        ) : (
+          (namesQuery.data?.users[entry.targetUserId] ?? entry.targetUserId)
+        );
         return (
           <div key={id} className="rounded-lg border">
             <button

@@ -21,7 +21,7 @@ import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading, Skeleton } from "@/components/ui/skeleton";
 
 const PAGE_SIZE = 50;
 const ALL_CATEGORIES = "__all__";
@@ -310,7 +310,12 @@ export function LogListPage() {
                       className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
                     >
                       <LogIcon entry={entry} />
-                      <span className="flex-1 text-sm">{message}</span>
+                      {namesQuery.isLoading ? (
+                        // 名前解決中はIDを含む文面を見せず、失敗・未解決のときだけIDで表示する
+                        <Skeleton className="h-4 flex-1" aria-label="読み込み中" />
+                      ) : (
+                        <span className="flex-1 text-sm">{message}</span>
+                      )}
                       <time dateTime={summary.createdAt} className="text-muted-foreground shrink-0 text-xs">
                         {formatCreatedAt(summary.createdAt)}
                       </time>

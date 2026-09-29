@@ -2,8 +2,9 @@ import * as React from "react";
 import { Loader2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="skeleton" className={cn("bg-accent animate-pulse rounded-md", className)} {...props} />;
+/** ボタンや文中にも置けるよう、divではなくblockのspanで描く。 */
+function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
+  return <span data-slot="skeleton" className={cn("bg-accent block animate-pulse rounded-md", className)} {...props} />;
 }
 
 /** 読み込み中の領域。childrenを渡せば実レイアウト同形のスケルトン、省略時はスピナーを出す。 */

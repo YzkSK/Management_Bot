@@ -8,6 +8,16 @@ import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
 
 const reactUseState = React.useState;
 
+/** 名前解決が完了して該当なし(IDにフォールバックする)状態にする。 */
+function resolveNoNames(queryClient: QueryClient): void {
+  const [path] = trpc.logging.resolveDisplayNames.pathKey();
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type === "added" && JSON.stringify(event.query.queryKey[0]) === JSON.stringify(path)) {
+      event.query.setData({ users: {}, channels: {} });
+    }
+  });
+}
+
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
@@ -62,6 +72,7 @@ describe("LogListPage", () => {
 
   test("一覧では自然文の見出しのみを表示し、本文は展開後に表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    resolveNoNames(queryClient);
     queryClient.setQueryData(
       trpc.logging.listLogEntries.queryOptions({
         guildId: "g1",
@@ -92,6 +103,34 @@ describe("LogListPage", () => {
     expect(html).toContain("がメッセージを投稿しました");
     // 初期状態(未展開)ではカードは折りたたまれており、本文はクリックして展開するまでDOMに現れない。
     expect(html).not.toContain("こんにちは");
+  });
+
+  test("名前解決中は見出しをスケルトンにしてIDを見せない", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
+      {
+        entries: [
+          {
+            id: "log-1",
+            entry: {
+              category: "message",
+              guildId: "g1",
+              createdAt: "2026-09-04T00:00:00.000Z",
+              channelId: "c1",
+              authorId: "a1",
+              action: "create",
+              content: "こんにちは",
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    );
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain('data-slot="skeleton"');
+    expect(html).not.toContain("がメッセージを投稿しました");
   });
 
   test("executorNameスナップショットがあるログのexecutorIdはresolveDisplayNamesの対象から除外する", () => {
@@ -172,6 +211,7 @@ describe("LogListPage", () => {
 
   test("executorIdがないmessageエントリはauthorIdを実行者列に表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    resolveNoNames(queryClient);
     queryClient.setQueryData(
       trpc.logging.listLogEntries.queryOptions({
         guildId: "g1",
@@ -610,6 +650,7 @@ describe("LogListPage", () => {
       },
     }));
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    resolveNoNames(queryClient);
     queryClient.setQueryData(
       trpc.logging.listLogEntries.queryOptions({ guildId: "g1", category: undefined, limit: 50, cursor: undefined }).queryKey,
       {
