@@ -1,26 +1,42 @@
-import type { Client, VoiceState } from "discord.js";
+import type { Client } from "discord.js";
 import type { Redis } from "ioredis";
 import {
   extendActiveVoiceTtl,
   getActiveVoiceEntry,
+  listActiveVoiceUserIds,
   removeActiveVoice,
-  replaceActiveVoice,
   upsertActiveVoice,
 } from "../application/index.js";
 import { type ActiveVoiceEntry, nextJoinedAt } from "../domain/index.js";
+import type { KeyedQueue } from "./keyed-queue.js";
 
-/** VoiceStateのうち変換に使う部分(テストで組み立てやすくするための構造型)。 */
+/** VoiceStateのうち同期に使う部分(テストで組み立てやすくするための構造型)。 */
 export interface ActiveVoiceStateLike {
+  id: string;
   channelId: string | null;
   channel: { name: string } | null;
-  guild: { afkChannelId: string | null };
-  member: { displayName: string; displayAvatarURL: (options?: { size?: number }) => string } | null;
+  guild: { id: string; afkChannelId: string | null };
+  member: {
+    displayName: string;
+    displayAvatarURL: (options?: { size?: number }) => string;
+    user: { bot: boolean };
+  } | null;
   selfMute: boolean | null;
   selfDeaf: boolean | null;
   serverMute: boolean | null;
   serverDeaf: boolean | null;
   streaming: boolean | null;
   selfVideo: boolean | null;
+}
+
+export interface ActiveVoiceGuildLike {
+  id: string;
+  voiceStates: { cache: { values(): Iterable<ActiveVoiceStateLike> } };
+}
+
+/** 同一メンバーの同期を直列化するキューのキー。 */
+export function activeVoiceQueueKey(guildId: string, userId: string): string {
+  return `${guildId}:${userId}`;
 }
 
 export function toActiveVoiceEntry(state: ActiveVoiceStateLike, joinedAt: string): ActiveVoiceEntry | undefined {
@@ -41,7 +57,7 @@ export function toActiveVoiceEntry(state: ActiveVoiceStateLike, joinedAt: string
   };
 }
 
-export async function syncActiveVoice(redis: Redis, state: VoiceState, now: Date): Promise<void> {
+export async function syncActiveVoice(redis: Redis, state: ActiveVoiceStateLike, now: Date): Promise<void> {
   const guildId = state.guild.id;
   if (state.channelId === null) return removeActiveVoice(redis, guildId, state.id);
   const prev = await getActiveVoiceEntry(redis, guildId, state.id);
@@ -49,17 +65,33 @@ export async function syncActiveVoice(redis: Redis, state: VoiceState, now: Date
   if (entry) await upsertActiveVoice(redis, guildId, state.id, entry);
 }
 
-/** 起動時: 再起動前の在室時間は分からないため、入室時刻は起動時刻とする(既知の制約)。 */
-export async function rebuildActiveVoice(redis: Redis, client: Client, now: Date): Promise<void> {
+/**
+ * 起動時の作り直し。ライブのvoiceStateUpdateと同じメンバー単位キューに積むことで、作り直し中に
+ * 届いた入退室が古いスナップショットで上書きされないようにする。Redisにエントリが残っていれば
+ * (短時間の再起動)入室時刻を引き継ぎ、無ければ起動時刻とする(それ以前の滞在は分からない)。
+ */
+export async function rebuildActiveVoice(
+  redis: Redis,
+  guilds: Iterable<ActiveVoiceGuildLike>,
+  queue: KeyedQueue,
+  now: Date,
+): Promise<void> {
   await Promise.all(
-    client.guilds.cache.map((guild) => {
-      const entries = new Map<string, ActiveVoiceEntry>();
+    [...guilds].map(async (guild) => {
+      const stored = await listActiveVoiceUserIds(redis, guild.id);
+      // ここから先は同期的にキャッシュを読み、キューに積む(await中に届いたイベントも反映済みのキャッシュを使う)。
+      const present = new Set<string>();
+      const tasks: Promise<void>[] = [];
       for (const state of guild.voiceStates.cache.values()) {
-        if (state.member?.user.bot) continue;
-        const entry = toActiveVoiceEntry(state, now.toISOString());
-        if (entry) entries.set(state.id, entry);
+        if (state.member?.user.bot || state.channelId === null) continue;
+        present.add(state.id);
+        tasks.push(queue.run(activeVoiceQueueKey(guild.id, state.id), () => syncActiveVoice(redis, state, now)));
       }
-      return replaceActiveVoice(redis, guild.id, entries);
+      for (const userId of stored) {
+        if (present.has(userId)) continue;
+        tasks.push(queue.run(activeVoiceQueueKey(guild.id, userId), () => removeActiveVoice(redis, guild.id, userId)));
+      }
+      await Promise.all(tasks);
     }),
   );
 }

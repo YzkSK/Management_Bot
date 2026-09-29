@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { toActiveVoiceEntry } from "./active-voice-sync.js";
 
 const base = {
+  id: "u1",
   channelId: "c1",
   channel: { name: "雑談VC" },
-  guild: { afkChannelId: "afk" },
-  member: { displayName: "Alice", displayAvatarURL: () => "https://cdn/a.png" },
+  guild: { id: "g1", afkChannelId: "afk" },
+  member: { displayName: "Alice", displayAvatarURL: () => "https://cdn/a.png", user: { bot: false } },
   selfMute: false,
   selfDeaf: false,
   serverMute: false,

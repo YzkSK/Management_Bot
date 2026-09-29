@@ -8,7 +8,7 @@ import {
   getActiveVoiceEntry,
   readActiveVoice,
   removeActiveVoice,
-  replaceActiveVoice,
+  listActiveVoiceUserIds,
   upsertActiveVoice,
 } from "./active-voice-store.js";
 
@@ -92,12 +92,10 @@ describe.skipIf(!(await isRedisAvailable()))("active-voice-store", () => {
     expect(await redis.ttl(activeVoiceKey(guildId))).toBeGreaterThan(5);
   });
 
-  test("replaceは古いエントリを消して作り直す(再起動中に退室した人を残さない)", async () => {
-    await upsertActiveVoice(redis, guildId, "gone", entry());
-    await replaceActiveVoice(redis, guildId, new Map([["u1", entry()]]));
-    expect(Object.keys(await redis.hgetall(activeVoiceKey(guildId)))).toEqual(["u1"]);
-    await replaceActiveVoice(redis, guildId, new Map());
-    expect(await redis.exists(activeVoiceKey(guildId))).toBe(0);
+  test("保存済みメンバーのIDを列挙する", async () => {
+    expect(await listActiveVoiceUserIds(redis, guildId)).toEqual([]);
+    await upsertActiveVoice(redis, guildId, "u1", entry());
+    expect(await listActiveVoiceUserIds(redis, guildId)).toEqual(["u1"]);
   });
 
   test("キーが無ければ空、壊れた値は捨てる", async () => {

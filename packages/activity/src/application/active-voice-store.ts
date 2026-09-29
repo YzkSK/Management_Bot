@@ -23,20 +23,9 @@ export async function removeActiveVoice(redis: Redis, guildId: string, userId: s
   await redis.hdel(activeVoiceKey(guildId), userId);
 }
 
-/** 起動時の作り直し用。既存キーを消してから現在の在室者だけを書く。 */
-export async function replaceActiveVoice(
-  redis: Redis,
-  guildId: string,
-  entries: ReadonlyMap<string, ActiveVoiceEntry>,
-): Promise<void> {
-  const key = activeVoiceKey(guildId);
-  const tx = redis.multi().del(key);
-  if (entries.size > 0) {
-    const fields: Record<string, string> = {};
-    for (const [userId, entry] of entries) fields[userId] = JSON.stringify(entry);
-    tx.hset(key, fields).expire(key, ACTIVE_VOICE_TTL_SECONDS);
-  }
-  await tx.exec();
+/** 起動時の作り直しで、いなくなったメンバーを見つけるために使う。 */
+export function listActiveVoiceUserIds(redis: Redis, guildId: string): Promise<string[]> {
+  return redis.hkeys(activeVoiceKey(guildId));
 }
 
 export async function extendActiveVoiceTtl(redis: Redis, guildIds: readonly string[]): Promise<void> {

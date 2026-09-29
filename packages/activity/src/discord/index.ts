@@ -4,7 +4,7 @@ import { Redis } from "ioredis";
 import { addHourlyActivity, type HourlyDelta } from "../application/index.js";
 import { isCounting } from "../domain/index.js";
 import { registerActivityCommand } from "./activity-command.js";
-import { extendAllActiveVoiceTtl, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
+import { activeVoiceQueueKey, extendAllActiveVoiceTtl, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
 import { InFlightWrites } from "./in-flight.js";
 import { KeyedQueue } from "./keyed-queue.js";
 import { MessageCounter } from "./message-counter.js";
@@ -48,7 +48,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
       .update(newState.guild.id, newState.id, countingOf(newState, newState.guild), now)
       .catch(logError("failed to record voice activity"));
     void activeVoiceQueue
-      .run(`${newState.guild.id}:${newState.id}`, () => syncActiveVoice(redis, newState, now))
+      .run(activeVoiceQueueKey(newState.guild.id, newState.id), () => syncActiveVoice(redis, newState, now))
       .catch(logError("failed to sync active voice"));
   });
 
@@ -66,7 +66,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
         void voice.update(guild.id, state.id, countingOf(state, guild), now).catch(logError("failed to start voice tracking"));
       }
     }
-    void rebuildActiveVoice(redis, client, now).catch(logError("failed to rebuild active voice"));
+    void rebuildActiveVoice(redis, client.guilds.cache.values(), activeVoiceQueue, now).catch(logError("failed to rebuild active voice"));
   };
   if (ctx.client.isReady()) startTrackingPresent(ctx.client);
   else ctx.client.once("ready", startTrackingPresent);
