@@ -54,6 +54,7 @@ export function toActiveVoiceEntry(state: ActiveVoiceStateLike, joinedAt: string
     serverDeaf: state.serverDeaf ?? false,
     streaming: state.streaming ?? false,
     video: state.selfVideo ?? false,
+    countingSince: null,
   };
 }
 

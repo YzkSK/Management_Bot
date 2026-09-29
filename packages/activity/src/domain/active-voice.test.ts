@@ -15,6 +15,7 @@ function entry(overrides: Partial<ActiveVoiceEntry> = {}): ActiveVoiceEntry {
     serverDeaf: false,
     streaming: false,
     video: false,
+    countingSince: null,
     ...overrides,
   };
 }
@@ -70,5 +71,18 @@ describe("groupActiveVoice", () => {
   });
   test("空なら空配列", () => {
     expect(groupActiveVoice({})).toEqual([]);
+  });
+});
+
+describe("countingSince", () => {
+  test("countingSinceの無い旧エントリはnullとして読む", () => {
+    const { countingSince: _omit, ...legacy } = entry();
+    expect(parseActiveVoiceEntry(JSON.stringify(legacy))?.countingSince).toBeNull();
+  });
+
+  test("groupActiveVoiceはメンバーにcountingSinceを載せる", () => {
+    const at = "2026-09-29T10:00:00.000Z";
+    const [channel] = groupActiveVoice({ u1: JSON.stringify(entry({ countingSince: at })) });
+    expect(channel?.members[0]?.countingSince).toBe(at);
   });
 });

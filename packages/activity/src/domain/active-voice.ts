@@ -19,6 +19,8 @@ export const activeVoiceEntrySchema = z.object({
   serverDeaf: z.boolean(),
   streaming: z.boolean(),
   video: z.boolean(),
+  /** VC時間の集計中になった時刻(checkpointで前進する)。非集計中はnull。旧形式のエントリ(項目無し)もnullとして読む。 */
+  countingSince: z.iso.datetime().nullable().default(null),
 });
 export type ActiveVoiceEntry = z.infer<typeof activeVoiceEntrySchema>;
 
@@ -33,6 +35,7 @@ export interface ActiveVoiceMember {
   streaming: boolean;
   video: boolean;
   counting: boolean;
+  countingSince: string | null;
 }
 
 export interface ActiveVoiceChannel {
@@ -88,6 +91,7 @@ export function groupActiveVoice(hash: Record<string, string>): ActiveVoiceChann
       streaming: e.streaming,
       video: e.video,
       counting: isCounting(e, e.afk ? e.channelId : null),
+      countingSince: e.countingSince,
     });
   }
   const channels = [...byChannel.values()].map(({ channel, joined }) => {
