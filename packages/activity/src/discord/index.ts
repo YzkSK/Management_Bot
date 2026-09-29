@@ -6,6 +6,7 @@ import { isCounting } from "../domain/index.js";
 import { registerActivityCommand } from "./activity-command.js";
 import { extendAllActiveVoiceTtl, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
 import { InFlightWrites } from "./in-flight.js";
+import { KeyedQueue } from "./keyed-queue.js";
 import { MessageCounter } from "./message-counter.js";
 import { VoiceTracker } from "./voice-tracker.js";
 
@@ -38,6 +39,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   const messages = new MessageCounter(write);
   // lazyConnect: 最初のVCイベントまで接続を開かない(moderationと同じ)。
   const redis = new Redis(ctx.redisUrl, { lazyConnect: true });
+  const activeVoiceQueue = new KeyedQueue();
 
   ctx.client.on("voiceStateUpdate", (_oldState, newState) => {
     if (newState.member?.user.bot) return;
@@ -45,7 +47,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     void voice
       .update(newState.guild.id, newState.id, countingOf(newState, newState.guild), now)
       .catch(logError("failed to record voice activity"));
-    void syncActiveVoice(redis, newState, now).catch(logError("failed to sync active voice"));
+    void activeVoiceQueue
+      .run(`${newState.guild.id}:${newState.id}`, () => syncActiveVoice(redis, newState, now))
+      .catch(logError("failed to sync active voice"));
   });
 
   ctx.client.on("messageCreate", (message) => {
