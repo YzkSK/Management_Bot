@@ -211,6 +211,13 @@
       "when": 1790585333237,
       "tag": "0029_round_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790670419163,
+      "tag": "0030_great_hobgoblin",
+      "breakpoints": true
     }
   ]
 }
