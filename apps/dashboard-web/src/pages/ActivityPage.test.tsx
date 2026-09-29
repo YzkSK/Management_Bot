@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
+import { ActiveVoiceView } from "./ActiveVoiceTab.js";
 import { ActivityPage, MemberDetailView } from "./ActivityPage.js";
 import { toRange } from "./activity-range.js";
 
@@ -93,5 +94,54 @@ describe("MemberDetailView", () => {
     expect(html).toContain("サーバー内 1位");
     expect(html).toContain("1h 0m");
     expect(html).toContain("1時間前");
+  });
+});
+
+describe("ActiveVoiceView", () => {
+  const member = {
+    userId: "u1",
+    name: "Alice",
+    avatarUrl: null,
+    selfMute: false,
+    selfDeaf: false,
+    serverMute: false,
+    serverDeaf: false,
+    streaming: true,
+    video: false,
+    counting: true,
+  };
+  test("概要・チャンネルカード・継続時間・状態アイコンを表示する", () => {
+    const html = renderToStaticMarkup(
+      <ActiveVoiceView
+        now={now}
+        channels={[
+          {
+            channelId: "c1",
+            channelName: "雑談VC",
+            afk: false,
+            startedAt: "2026-09-29T10:46:00.000Z",
+            members: [member, { ...member, userId: "u2", name: "Bob", streaming: false, serverMute: true, counting: false }],
+          },
+          {
+            channelId: "c2",
+            channelName: "AFK",
+            afk: true,
+            startedAt: "2026-09-29T11:00:00.000Z",
+            members: [{ ...member, userId: "u3", name: "Carol", streaming: false, counting: false }],
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("VC <b");
+    expect(html).toMatch(/VC <b[^>]*>2<\/b> チャンネル ・ 在室 <b[^>]*>3<\/b> 人/);
+    expect(html).toContain("雑談VC");
+    expect(html).toContain("1h 14m");
+    expect(html).toContain('aria-label="画面共有中"');
+    expect(html).toContain('aria-label="サーバーミュート"');
+    expect(html).toContain("opacity-50");
+    expect(html).not.toContain("集計対象外");
+  });
+  test("在室者がいなければ空状態", () => {
+    expect(renderToStaticMarkup(<ActiveVoiceView now={now} channels={[]} />)).toContain("現在VCにいるメンバーはいません。");
   });
 });

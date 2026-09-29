@@ -4,6 +4,7 @@ import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { trpc } from "../trpc.js";
+import { ActiveVoiceTab } from "./ActiveVoiceTab.js";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_PERIODS,
+  ACTIVITY_REFRESH_MS,
   type ActivityPeriod,
   type ActivityRange,
   type ActivitySeriesPoint,
@@ -28,8 +30,7 @@ type RankingSort = "voice" | "messages";
 const MESSAGE_COLOR = "#2563eb";
 const VOICE_COLOR = "#f59e0b";
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
-/** 集計範囲の終端(現在時刻)を進めて再取得する間隔。botの書き込み間隔(10秒)に合わせる。 */
-export const ACTIVITY_REFRESH_MS = 10_000;
+export { ACTIVITY_REFRESH_MS } from "./activity-range.js";
 
 function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (value: ActivityPeriod) => void }) {
   return (
@@ -308,7 +309,11 @@ function MemberTab({ guildId, range, now }: { guildId: string; range: ActivityRa
   );
 }
 
-type ActivityTab = "server" | "member";
+type ActivityTab = "server" | "member" | "voice";
+
+function toTab(value: string): ActivityTab {
+  return value === "member" || value === "voice" ? value : "server";
+}
 
 /** `now` はテストで範囲(=クエリキー)を固定するためのもの。通常はマウント時刻を使い、期間切り替え時に更新する。 */
 export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
@@ -333,13 +338,14 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">アクティビティモニター</h1>
-      <Tabs value={tab} onValueChange={(value) => setTab(value === "member" ? "member" : "server")}>
+      <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div className="flex flex-wrap items-end justify-between gap-2">
           <TabsList aria-label="アクティビティモニター">
             <TabsTrigger value="server">サーバー統計</TabsTrigger>
             <TabsTrigger value="member">メンバー</TabsTrigger>
+            <TabsTrigger value="voice">アクティブVC</TabsTrigger>
           </TabsList>
-          <PeriodPicker value={period} onChange={changePeriod} />
+          {tab !== "voice" && <PeriodPicker value={period} onChange={changePeriod} />}
         </div>
         <p className="text-muted-foreground text-xs">
           Botは除外し、ミュート中・AFKチャンネル滞在はVC時間に含みません。
@@ -349,6 +355,9 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
         </TabsContent>
         <TabsContent value="member">
           <MemberTab guildId={guildId} range={range} now={now} />
+        </TabsContent>
+        <TabsContent value="voice">
+          <ActiveVoiceTab guildId={guildId} now={now} />
         </TabsContent>
       </Tabs>
     </div>
