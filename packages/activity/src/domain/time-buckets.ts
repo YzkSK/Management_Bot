@@ -24,3 +24,9 @@ export function splitIntoHours(start: Date, end: Date): { hour: Date; seconds: n
 export function toJstDay(at: Date): string {
   return new Date(at.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+/** atを含むAsia/Tokyoの日の0時(UTC表現)を返す。 */
+export function jstDayStart(at: Date): Date {
+  const dayMs = 24 * HOUR_MS;
+  return new Date(Math.floor((at.getTime() + JST_OFFSET_MS) / dayMs) * dayMs - JST_OFFSET_MS);
+}

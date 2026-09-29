@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hourStart, splitIntoHours, toJstDay } from "./time-buckets.js";
+import { hourStart, jstDayStart, splitIntoHours, toJstDay } from "./time-buckets.js";
 
 const t = (iso: string) => new Date(iso);
 
@@ -38,5 +38,12 @@ describe("hourStart / toJstDay", () => {
   test("toJstDayはUTC15時以降を翌日にする", () => {
     expect(toJstDay(t("2026-09-29T14:59:59Z"))).toBe("2026-09-29");
     expect(toJstDay(t("2026-09-29T15:00:00Z"))).toBe("2026-09-30");
+  });
+});
+
+describe("jstDayStart", () => {
+  test("JSTの0時(UTCでは前日15時)に丸める", () => {
+    expect(jstDayStart(t("2026-09-29T14:59:59Z"))).toEqual(t("2026-09-28T15:00:00Z"));
+    expect(jstDayStart(t("2026-09-29T15:00:00Z"))).toEqual(t("2026-09-29T15:00:00Z"));
   });
 });
