@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useParams } from "react-router-dom";
@@ -67,12 +67,24 @@ function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (v
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-4">
       <span className="text-muted-foreground text-xs">{label}</span>
       <span className="text-2xl font-semibold">{value}</span>
       {sub && <span className="text-muted-foreground text-xs">{sub}</span>}
+    </div>
+  );
+}
+
+const VALUE_SKELETON = <Skeleton className="h-8 w-24" />;
+
+/** 読み込み中のグラフ枠。見出しは出し、グラフ部分だけスケルトンにする。 */
+function ChartSkeleton({ title, height = 220 }: { title: string; height?: number }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-4">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <Skeleton style={{ height }} />
     </div>
   );
 }
@@ -195,11 +207,11 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
       {query.isPending ? (
         <Loading className="gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-[84px]" />
-            ))}
+            <StatCard label="発言数" value={VALUE_SKELETON} />
+            <StatCard label="VC時間" value={VALUE_SKELETON} />
+            <StatCard label="アクティブメンバー" value={VALUE_SKELETON} sub="期間内に発言またはVC参加" />
           </div>
-          <Skeleton className="h-[280px]" />
+          <ChartSkeleton title={range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"} />
         </Loading>
       ) : query.isError ? (
         <p className="text-destructive text-sm">サーバー統計の取得に失敗しました。</p>
@@ -341,12 +353,12 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
       ) : detailQuery.isPending ? (
         <Loading className="gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[84px]" />
+            {["発言数", "VC時間", "最終発言", "最終VC参加"].map((label) => (
+              <StatCard key={label} label={label} value={VALUE_SKELETON} />
             ))}
           </div>
-          <Skeleton className="h-[240px]" />
-          <Skeleton className="h-[240px]" />
+          <ChartSkeleton title="時間帯別の活動" height={180} />
+          <ChartSkeleton title="日別" height={180} />
         </Loading>
       ) : detailQuery.isError ? (
         <p className="text-destructive text-sm">メンバーのアクティビティの取得に失敗しました。</p>
