@@ -37,9 +37,10 @@ import { Loading, Skeleton } from "@/components/ui/skeleton";
 type MemberDetail = inferOutput<typeof trpc.activity.memberDetail>;
 type RankingSort = "voice" | "messages";
 
-// ライト/ダーク両テーマで判別できるよう、色相だけでなく明度も離した2色(発言=青、VC=オレンジ)。
+// ログのカテゴリ色と揃える(発言=メッセージの青、VC=ボイスの紫、アクティブメンバー=メンバーの緑)。
 const MESSAGE_COLOR = "#2563eb";
-const VOICE_COLOR = "#f59e0b";
+const VOICE_COLOR = "#9333ea";
+const MEMBER_COLOR = "#16a34a";
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
 const emptyPoint = (bucket: string) => ({ bucket, messageCount: 0, voiceSeconds: 0 });
 
@@ -48,7 +49,7 @@ type LiveVoice = ReadonlyMap<string, number>;
 
 function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (value: ActivityPeriod) => void }) {
   return (
-    <div role="group" aria-label="期間" className="inline-flex overflow-hidden rounded-md border">
+    <div role="group" aria-label="期間" className="bg-muted inline-flex gap-0.5 rounded-lg p-1">
       {ACTIVITY_PERIODS.map((period) => (
         <button
           key={period.value}
@@ -56,8 +57,8 @@ function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (v
           aria-pressed={period.value === value}
           onClick={() => onChange(period.value)}
           className={cn(
-            "border-l px-3 py-1.5 text-sm first:border-l-0",
-            period.value === value ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+            "h-8 rounded-md px-3 text-sm",
+            period.value === value ? "bg-background font-medium shadow-xs" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {period.label}
@@ -67,10 +68,13 @@ function PeriodPicker({ value, onChange }: { value: ActivityPeriod; onChange: (v
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
+function StatCard({ label, value, sub, color }: { label: string; value: ReactNode; sub?: string; color?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border p-4">
-      <span className="text-muted-foreground text-xs">{label}</span>
+    <div className="bg-card flex flex-col gap-1 rounded-xl border p-4">
+      <span className="text-muted-foreground flex items-center gap-2 text-xs">
+        {color && <span className="size-2 rounded-sm" style={{ backgroundColor: color }} aria-hidden="true" />}
+        {label}
+      </span>
       <span className="text-2xl font-semibold">{value}</span>
       {sub && <span className="text-muted-foreground text-xs">{sub}</span>}
     </div>
@@ -82,14 +86,14 @@ const VALUE_SKELETON = <Skeleton className="h-8 w-24" />;
 /** 読み込み中のグラフ枠。見出しは出し、グラフ部分だけスケルトンにする。 */
 function ChartSkeleton({ title, height = 220 }: { title: string; height?: number }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-4">
+    <div className="bg-card flex flex-col gap-2 rounded-xl border p-4">
       <h3 className="text-sm font-semibold">{title}</h3>
       <Skeleton style={{ height }} />
     </div>
   );
 }
 
-/** 発言数(左軸)とVC時間(右軸、時間単位)の棒グラフ。 */
+/** 発言数とVC時間(時間単位)の棒グラフ。数値の目盛りは共通にし、単位だけ「件 / h」と併記する。 */
 function ActivityChart({
   data,
   height = 220,
@@ -103,15 +107,21 @@ function ActivityChart({
       <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" />
-        <YAxis yAxisId="messages" tickLine={false} axisLine={false} fontSize={12} width={40} stroke="var(--muted-foreground)" />
-        <YAxis yAxisId="voice" orientation="right" tickLine={false} axisLine={false} fontSize={12} width={40} stroke="var(--muted-foreground)" />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          fontSize={11}
+          width={72}
+          stroke="var(--muted-foreground)"
+          tickFormatter={(value: number) => (value === 0 ? "0" : `${value}件 / ${value}h`)}
+        />
         <Tooltip
           contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
           cursor={{ fill: "var(--accent)" }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar yAxisId="messages" dataKey="messages" name="発言数" fill={MESSAGE_COLOR} radius={[3, 3, 0, 0]} />
-        <Bar yAxisId="voice" dataKey="voiceHours" name="VC時間(h)" fill={VOICE_COLOR} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="messages" name="発言数(件)" fill={MESSAGE_COLOR} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="voiceHours" name="VC時間(h)" fill={VOICE_COLOR} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -207,9 +217,9 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
       {query.isPending ? (
         <Loading className="gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="発言数" value={VALUE_SKELETON} />
-            <StatCard label="VC時間" value={VALUE_SKELETON} />
-            <StatCard label="アクティブメンバー" value={VALUE_SKELETON} sub="期間内に発言またはVC参加" />
+            <StatCard label="発言数" value={VALUE_SKELETON} color={MESSAGE_COLOR} />
+            <StatCard label="VC時間" value={VALUE_SKELETON} color={VOICE_COLOR} />
+            <StatCard label="アクティブメンバー" value={VALUE_SKELETON} sub="期間内に発言またはVC参加" color={MEMBER_COLOR} />
           </div>
           <ChartSkeleton title={range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"} />
         </Loading>
@@ -218,15 +228,16 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="発言数" value={NUMBER_FORMAT.format(query.data.totals.messageCount)} />
-            <StatCard label="VC時間" value={formatDuration(query.data.totals.voiceSeconds + liveTotal)} />
+            <StatCard label="発言数" value={NUMBER_FORMAT.format(query.data.totals.messageCount)} color={MESSAGE_COLOR} />
+            <StatCard label="VC時間" value={formatDuration(query.data.totals.voiceSeconds + liveTotal)} color={VOICE_COLOR} />
             <StatCard
               label="アクティブメンバー"
               value={NUMBER_FORMAT.format(query.data.totals.activeMembers)}
               sub="期間内に発言またはVC参加"
+              color={MEMBER_COLOR}
             />
           </div>
-          <div className="flex flex-col gap-2 rounded-lg border p-4">
+          <div className="bg-card flex flex-col gap-2 rounded-xl border p-4">
             <h3 className="text-sm font-semibold">{range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"}</h3>
             <ActivityChart
               data={chartData(addToBucket(query.data.series, currentBucket(now, range.granularity), liveTotal, emptyPoint), range)}
@@ -299,11 +310,11 @@ export function MemberDetailView({
         <StatCard label="最終発言" value={formatRelative(detail.lastMessageAt, now)} />
         <StatCard label="最終VC参加" value={inVoice ? "VC中" : formatRelative(detail.lastVoiceAt, now)} />
       </div>
-      <div className="flex flex-col gap-2 rounded-lg border p-4">
+      <div className="bg-card flex flex-col gap-2 rounded-xl border p-4">
         <h3 className="text-sm font-semibold">時間帯別の活動</h3>
         <ActivityChart data={byHour} height={180} />
       </div>
-      <div className="flex flex-col gap-2 rounded-lg border p-4">
+      <div className="bg-card flex flex-col gap-2 rounded-xl border p-4">
         <h3 className="text-sm font-semibold">日別</h3>
         <ActivityChart data={chartData(daily, { ...range, granularity: "day" })} height={180} />
       </div>
@@ -447,10 +458,10 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">アクティビティモニター</h1>
+      <h1 className="text-2xl font-bold">アクティビティモニター</h1>
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <TabsList aria-label="アクティビティモニター">
+          <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
             <TabsTrigger value="server">サーバー統計</TabsTrigger>
             <TabsTrigger value="member">メンバー</TabsTrigger>
             <TabsTrigger value="voice">アクティブVC</TabsTrigger>
