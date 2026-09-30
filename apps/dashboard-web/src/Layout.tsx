@@ -18,6 +18,8 @@ interface LayoutProps {
 export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showSidebar = true }: LayoutProps) {
   const { guildId } = useParams<{ guildId?: string }>();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  // サーバー選択画面(guildId未指定)ではサイドバーを出さない(issue #527)。
+  const sidebarVisible = showSidebar && Boolean(guildId);
 
   return (
     <Dialog open={isSidebarOpen} onOpenChange={setSidebarOpen}>
@@ -25,10 +27,10 @@ export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showS
         <Toaster richColors position="top-right" />
         <Header
           discordUsername={discordUsername} avatarUrl={avatarUrl} onLogout={onLogout} isSidebarOpen={isSidebarOpen} showStatus={showStatus}
-          showMenuButton={showSidebar}
+          showMenuButton={sidebarVisible}
         />
         <div className="flex min-h-0 flex-1">
-          {showSidebar && <Sidebar guildId={guildId} open={isSidebarOpen} onOpenChange={setSidebarOpen} />}
+          {sidebarVisible && <Sidebar guildId={guildId} open={isSidebarOpen} onOpenChange={setSidebarOpen} />}
           <main className="bg-muted/40 min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
             <Outlet />
           </main>
