@@ -1,14 +1,66 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/ui/skeleton";
+
+const CARD = "bg-card flex w-full items-center gap-3.5 rounded-xl border p-4 text-left";
+
+function GuildInitial({ name }: { name: string }) {
+  return (
+    <span className="bg-muted flex size-12 shrink-0 items-center justify-center rounded-2xl text-lg font-bold" aria-hidden="true">
+      {name.slice(0, 1)}
+    </span>
+  );
+}
+
+function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
+  if (!guild.canViewActivity) {
+    return (
+      <button
+        type="button"
+        aria-describedby={`guild-access-note-${guild.id}`}
+        className={`${CARD} text-muted-foreground opacity-50`}
+        onClick={() => toast.error(NO_ACCESS_MESSAGE)}
+      >
+        <GuildInitial name={guild.name} />
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="truncate font-medium">{guild.name}</span>
+          <span id={`guild-access-note-${guild.id}`} className="text-xs">
+            アクセス権限がありません
+          </span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <Link to={`/guilds/${guild.id}/activity`} className={`${CARD} hover:bg-accent/50`}>
+      <GuildInitial name={guild.name} />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="truncate font-medium">{guild.name}</span>
+        <span
+          className="text-muted-foreground text-xs"
+          title={
+            guild.isManaged
+              ? undefined
+              : "Discord上でオーナーまたは「サーバー管理」権限がないため、閲覧権限のある機能のみ利用できます。"
+          }
+        >
+          {guild.isManaged ? "管理者" : "閲覧のみ(管理者権限がありません)"}
+        </span>
+      </span>
+    </Link>
+  );
+}
 
 export function GuildListPage() {
   const guildsQuery = useQuery(trpc.guildSettings.listMyGuilds.queryOptions());
+  const [keyword, setKeyword] = useState("");
 
   if (guildsQuery.isPending) {
     return <Loading />;
@@ -24,51 +76,38 @@ export function GuildListPage() {
 
   if (guildsQuery.data.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">
+      <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
         表示できるサーバーが見つかりませんでした。Botがサーバーに導入されているかご確認ください。
       </p>
     );
   }
 
+  const normalized = keyword.trim().toLowerCase();
+  const guilds = normalized === "" ? guildsQuery.data : guildsQuery.data.filter((g) => g.name.toLowerCase().includes(normalized));
+
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">サーバーを選択</h1>
-      <ul className="flex flex-col gap-2">
-        {guildsQuery.data.map((guild) =>
-          guild.canViewLogs ? (
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold">サーバーを選択</h1>
+          <p className="text-muted-foreground text-sm">Botが導入されていて、あなたが所属しているサーバーです。</p>
+        </div>
+        <label className="text-muted-foreground flex w-full flex-col gap-1.5 text-sm sm:w-64">
+          サーバー名で絞り込み
+          <Input type="search" placeholder="検索" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+        </label>
+      </div>
+      {guilds.length === 0 ? (
+        <p className="text-muted-foreground text-sm">「{keyword}」に一致するサーバーはありません。</p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {guilds.map((guild) => (
             <li key={guild.id}>
-              <Button asChild variant="outline" className="w-full justify-start">
-                <Link to={`/guilds/${guild.id}/logs`}>
-                  {guild.name}
-                  {!guild.isManaged && (
-                    <span
-                      className="ml-auto text-xs text-muted-foreground"
-                      title="Discord上でオーナーまたは「サーバー管理」権限がないため、閲覧権限のある機能のみ利用できます。"
-                    >
-                      管理者権限がありません
-                    </span>
-                  )}
-                </Link>
-              </Button>
+              <GuildCard guild={guild} />
             </li>
-          ) : (
-            <li key={guild.id}>
-              <Button
-                type="button"
-                variant="outline"
-                aria-describedby={`guild-access-note-${guild.id}`}
-                className="w-full justify-start text-muted-foreground opacity-50"
-                onClick={() => toast.error(NO_ACCESS_MESSAGE)}
-              >
-                {guild.name}
-                <span id={`guild-access-note-${guild.id}`} className="ml-auto text-xs">
-                  アクセス権限がありません
-                </span>
-              </Button>
-            </li>
-          ),
-        )}
-      </ul>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

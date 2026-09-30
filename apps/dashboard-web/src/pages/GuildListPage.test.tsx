@@ -28,36 +28,36 @@ describe("GuildListPage", () => {
     expect(html).toContain("表示できるサーバーが見つかりませんでした");
   });
 
-  test("取得成功時はサーバー一覧をログ一覧画面へのリンクとして描画する", () => {
+  test("取得成功時はサーバー一覧をアクティビティ画面へのリンクとして描画する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "テストサーバー", isManaged: true, canViewLogs: true },
+      { id: "g1", name: "テストサーバー", isManaged: true, canViewActivity: true },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("テストサーバー");
-    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).toContain('href="/guilds/g1/activity"');
   });
 
-  test("管理者権限のないサーバーもリンクとして描画しつつ理由を明示する(issue #199, @everyoneのVIEW_LOGS等は別途利用できるため)", () => {
+  test("管理者権限のないサーバーもリンクとして描画しつつ理由を明示する(issue #199, @everyoneのVIEW_ACTIVITY等は別途利用できるため)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "非管理サーバー", isManaged: false, canViewLogs: true },
+      { id: "g1", name: "非管理サーバー", isManaged: false, canViewActivity: true },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("非管理サーバー");
     expect(html).toContain("管理者権限がありません");
-    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).toContain('href="/guilds/g1/activity"');
   });
 
-  test("VIEW_LOGS権限がないサーバーはリンクにせずクリック不可の表示にする(issue #263)", () => {
+  test("VIEW_ACTIVITY権限がないサーバーはリンクにせずクリック不可の表示にする(issue #263)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "権限なしサーバー", isManaged: false, canViewLogs: false },
+      { id: "g1", name: "権限なしサーバー", isManaged: false, canViewActivity: false },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("権限なしサーバー");
     expect(html).toContain("アクセス権限がありません");
-    expect(html).not.toContain('href="/guilds/g1/logs"');
+    expect(html).not.toContain('href="/guilds/g1/activity"');
     expect(html).toContain('aria-describedby="guild-access-note-g1"');
   });
 });

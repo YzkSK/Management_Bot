@@ -49,18 +49,18 @@ function SidebarNav({
           value={guildId ?? ""}
           onValueChange={(value) => {
             const guild = guilds.find((g) => g.id === value);
-            if (!guild?.canViewLogs) {
+            if (!guild?.canViewActivity) {
               toast.error(NO_ACCESS_MESSAGE);
               return;
             }
-            navigate(`/guilds/${value}/logs`);
+            navigate(`/guilds/${value}/activity`);
           }}
           onOpenChange={(selectOpen) => {
             if (selectOpen) {
               pickedGuildRef.current = null;
               return;
             }
-            if (pickedGuildRef.current?.canViewLogs) onNavigate?.();
+            if (pickedGuildRef.current?.canViewActivity) onNavigate?.();
           }}
           disabled={guilds.length === 0}
         >
@@ -72,7 +72,7 @@ function SidebarNav({
               <SelectItem
                 key={guild.id}
                 value={guild.id}
-                className={!guild.canViewLogs ? "text-muted-foreground opacity-50" : undefined}
+                className={!guild.canViewActivity ? "text-muted-foreground opacity-50" : undefined}
                 onPointerUp={() => {
                   pickedGuildRef.current = guild;
                 }}
@@ -81,7 +81,7 @@ function SidebarNav({
                 }}
               >
                 {guild.name}
-                {!guild.canViewLogs && "(権限なし)"}
+                {!guild.canViewActivity && "(権限なし)"}
               </SelectItem>
             ))}
           </SelectContent>
