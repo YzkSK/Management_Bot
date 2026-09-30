@@ -12,7 +12,7 @@ import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
-import { LOGOUT_FAILED_MESSAGE, UserSettingsPage } from "./pages/UserSettingsPage.js";
+import { LOGOUT_FAILED_MESSAGE } from "./pages/UserSettingsPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loading } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -60,7 +60,6 @@ export function App() {
           element={layout}
         >
           <Route index element={<GuildListPage />} />
-          <Route path="settings" element={<UserSettingsPage />} />
         </Route>
         <Route
           path="/status"

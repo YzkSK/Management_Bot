@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { ChevronDown, Menu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { UserSettingsDialog } from "./pages/UserSettingsPage.js";
 import { STATUS_REFETCH_MS } from "./pages/StatusPage.js";
 import { STATE_META } from "./pages/status-labels.js";
 import { trpc } from "./trpc.js";
@@ -44,6 +46,7 @@ function StatusLamp() {
 }
 
 export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, showStatus = false, showMenuButton = true }: HeaderProps) {
+  const [isUserSettingsOpen, setUserSettingsOpen] = useState(false);
   return (
     <header className="bg-background z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 md:px-4">
       <div className="flex min-w-0 items-center gap-1">
@@ -82,13 +85,12 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
           <ChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link to="/settings">ユーザー設定</Link>
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onLogout}>ログアウト</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <UserSettingsDialog open={isUserSettingsOpen} onOpenChange={setUserSettingsOpen} />
       </div>
     </header>
   );
