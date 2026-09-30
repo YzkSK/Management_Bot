@@ -25,7 +25,8 @@ const runner = createDecayRunner(
   db,
   (message) => {
     console.log(message);
-    reporter.recordRun(true);
+    // 他の実行・レプリカがロック中でスキップした場合(createAdvisoryLockRunner)は実行成功として記録しない。
+    if (!message.startsWith("Skipping ")) reporter.recordRun(true);
   },
   (error) => {
     console.error("moderation-decay job failed:", error);

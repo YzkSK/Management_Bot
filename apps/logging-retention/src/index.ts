@@ -25,7 +25,8 @@ const runner = createPurgeRunner(
   db,
   (message) => {
     console.log(message);
-    reporter.recordRun(true);
+    // 他の実行・レプリカがロック中でスキップした場合(createAdvisoryLockRunner)は実行成功として記録しない。
+    if (!message.startsWith("Skipping ")) reporter.recordRun(true);
   },
   (error) => {
     console.error("logging-retention job failed:", error);
