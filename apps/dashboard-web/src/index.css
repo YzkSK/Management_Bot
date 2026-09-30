@@ -87,6 +87,12 @@
 
 @theme {
   --animate-save-bar-in: save-bar-in 200ms ease-out;
+  --animate-save-bar-out: save-bar-out 200ms ease-in forwards;
+  @keyframes save-bar-out {
+    to {
+      opacity: 0;
+    }
+  }
   @keyframes save-bar-in {
     from {
       opacity: 0;
