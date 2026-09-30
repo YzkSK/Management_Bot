@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { CAPABILITIES, hasCapability } from "@management-bot/shared";
+import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
 import { SaveBar } from "@/components/save-bar";
@@ -90,7 +92,16 @@ function ForceDeleteButton({
   );
 }
 
-function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfigured: boolean }) {
+/** canForceDeleteがfalse(VIEW_TEMP_VOICEのみ)の場合は強制削除ボタンを出さない(issue #527)。 */
+function ActiveChannelsTab({
+  guildId,
+  isConfigured,
+  canForceDelete,
+}: {
+  guildId: string;
+  isConfigured: boolean;
+  canForceDelete: boolean;
+}) {
   const queryClient = useQueryClient();
   const listQuery = useQuery({
     ...trpc.tempVoice.listActiveChannels.queryOptions({ guildId }),
@@ -141,7 +152,9 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
                   <td className="px-3 py-2.5 text-right">{channel.memberCount}人</td>
                   <td className="text-muted-foreground px-3 py-2.5">{new Date(channel.createdAt).toLocaleString("ja-JP")}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                    {canForceDelete && (
+                      <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -157,7 +170,9 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
                     {new Date(channel.createdAt).toLocaleString("ja-JP")}
                   </span>
                 </div>
-                <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                {canForceDelete && (
+                  <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                )}
               </li>
             ))}
           </ul>
@@ -512,10 +527,13 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
 export function TempVoicePage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [tab, setTab] = useState<TempVoiceTab>("list");
+  const capabilities = useGuildCapabilities(guildId);
+  const canManage = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_TEMP_VOICE);
 
+  // 設定・拒否禁止ロールはMANAGE_TEMP_VOICE必須(issue #527)。VIEWのみのユーザーには取得しない。
   const configQuery = useQuery({
     ...trpc.tempVoice.getConfig.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: Boolean(guildId) && canManage,
   });
 
   if (!guildId) {
@@ -523,6 +541,17 @@ export function TempVoicePage() {
       <Alert variant="destructive">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
+    );
+  }
+
+  if (capabilities === undefined) return <Loading />;
+
+  if (!canManage) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-bold">一時VC</h1>
+        <ActiveChannelsTab guildId={guildId} isConfigured={false} canForceDelete={false} />
+      </div>
     );
   }
 
@@ -558,7 +587,7 @@ export function TempVoicePage() {
 
         <TabsContent value="list" className="flex flex-col gap-4">
           {!isConfigured && <NotConfiguredBanner onGoSettings={() => setTab("settings")} />}
-          <ActiveChannelsTab guildId={guildId} isConfigured={isConfigured} />
+          <ActiveChannelsTab guildId={guildId} isConfigured={isConfigured} canForceDelete />
         </TabsContent>
 
         <TabsContent value="roles" className="flex flex-col gap-4">

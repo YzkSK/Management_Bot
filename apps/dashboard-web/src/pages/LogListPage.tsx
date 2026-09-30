@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { LogCategory, LogEntry } from "@management-bot/shared";
+import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry } from "@management-bot/shared";
 import {
   appEmojiNameFor,
   CHANGE_FIELD_LABELS,
@@ -13,6 +13,7 @@ import {
   isBulkDeleteLogEntry,
   summarizeLogEntry,
 } from "@management-bot/shared";
+import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { ChevronLeft, ChevronRight, Lock, Settings } from "lucide-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
@@ -149,6 +150,8 @@ function withNameSkeletons(message: string): ReactNode {
 
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
+  const capabilities = useGuildCapabilities(guildId);
+  const canManageSettings = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_LOGGING_SETTINGS);
   const [categories, setCategories] = useState<LogCategory[]>([]);
   const [page, setPage] = useState(0);
   const queryClient = useQueryClient();
@@ -281,12 +284,14 @@ export function LogListPage() {
             {CONNECTION_STATUS_LABELS[connectionStatus]}
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link to={`/guilds/${guildId}/logs/settings`}>
-            <Settings aria-hidden="true" />
-            ログ設定
-          </Link>
-        </Button>
+        {canManageSettings && (
+          <Button asChild variant="outline">
+            <Link to={`/guilds/${guildId}/logs/settings`}>
+              <Settings aria-hidden="true" />
+              ログ設定
+            </Link>
+          </Button>
+        )}
       </div>
 
       <CategoryFilter
