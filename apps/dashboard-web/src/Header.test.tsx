@@ -18,12 +18,12 @@ describe("Header", () => {
   test("discordUsernameとユーザーメニューのトリガーを描画する", () => {
     const html = renderHeader();
     expect(html).toContain("yuzuki_nom1");
-    expect(html).toContain("Management Bot Dashboard");
+    expect(html).toContain("Management Bot");
   });
 
   test("タイトルはギルド選択画面(トップ)へのリンクになっている", () => {
     const html = renderHeader();
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot Dashboard<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot<\/a>/);
   });
 
   test("avatarUrlがあればアバター画像を描画する", () => {

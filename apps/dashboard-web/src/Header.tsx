@@ -33,7 +33,7 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen }: 
           </Button>
         </DialogTrigger>
         <Link to="/" className="truncate text-sm font-semibold hover:underline">
-          Management Bot Dashboard
+          Management Bot
         </Link>
       </div>
       <DropdownMenu>

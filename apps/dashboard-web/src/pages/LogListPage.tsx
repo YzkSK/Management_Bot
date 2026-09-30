@@ -337,16 +337,19 @@ export function LogListPage() {
                         aria-hidden="true"
                       />
                       <LogIcon entry={entry} />
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-                        <span className="min-w-0 flex-1 text-sm">{withNameSkeletons(message)}</span>
-                        <span className="flex shrink-0 items-center gap-2 text-xs">
-                          <span className="font-medium" style={{ color: CATEGORY_ACCENT[entry.category] }}>
-                            {CATEGORY_LABELS[entry.category]}
-                          </span>
-                          <time dateTime={summary.createdAt} className="text-muted-foreground">
+                      <span className="flex min-w-0 flex-1 flex-col-reverse gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="flex shrink-0 items-center gap-2 text-xs sm:gap-3">
+                          <time dateTime={summary.createdAt} className="text-muted-foreground sm:order-first sm:w-36">
                             {formatCreatedAt(summary.createdAt)}
                           </time>
+                          <span
+                            className="order-first font-medium sm:order-none sm:w-28"
+                            style={{ color: CATEGORY_ACCENT[entry.category] }}
+                          >
+                            {CATEGORY_LABELS[entry.category]}
+                          </span>
                         </span>
+                        <span className="min-w-0 flex-1 text-sm">{withNameSkeletons(message)}</span>
                       </span>
                     </button>
 

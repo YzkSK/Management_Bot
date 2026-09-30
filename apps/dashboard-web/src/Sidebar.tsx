@@ -64,7 +64,7 @@ function SidebarNav({
           }}
           disabled={guilds.length === 0}
         >
-          <SelectTrigger className="w-full" aria-label="サーバーを選択">
+          <SelectTrigger className="h-12 w-full" aria-label="サーバーを選択">
             <SelectValue placeholder="サーバーを選択" />
           </SelectTrigger>
           <SelectContent>
@@ -80,8 +80,15 @@ function SidebarNav({
                   if (e.key === "Enter" || e.key === " ") pickedGuildRef.current = guild;
                 }}
               >
-                {guild.name}
-                {!guild.canViewActivity && "(権限なし)"}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold" aria-hidden="true">
+                    {guild.name.slice(0, 1)}
+                  </span>
+                  <span className="truncate">
+                    {guild.name}
+                    {!guild.canViewActivity && "(権限なし)"}
+                  </span>
+                </span>
               </SelectItem>
             ))}
           </SelectContent>

@@ -54,6 +54,14 @@ function seedBaseQueries(
   );
 }
 
+/** 権限名ラベルの直前にあるチェックボックスのタグを返す(チェックボックスはラベル文字列の前に描画する)。 */
+function checkboxTagBefore(html: string, label: string): string {
+  const labelIndex = html.indexOf(`>${label}</label>`);
+  const start = html.lastIndexOf('type="checkbox"', labelIndex);
+  const tagStart = html.lastIndexOf("<input", start);
+  return html.slice(tagStart, html.indexOf(">", start));
+}
+
 describe("AccessPage", () => {
   test("取得完了前はローディング表示になる", () => {
     const queryClient = new QueryClient();
@@ -105,7 +113,7 @@ describe("AccessPage", () => {
     expect(html).toContain(CAPABILITY_LABELS.VIEW_LOGS);
   });
 
-  test("getMyCapabilitiesが保有するcapabilityのスイッチは有効、保有しないものはdisabledになる", () => {
+  test("getMyCapabilitiesが保有するcapabilityのチェックボックスは有効、保有しないものはdisabledになる", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", {
       myCapabilities: CAPABILITIES.MANAGE_ACCESS,
@@ -114,26 +122,19 @@ describe("AccessPage", () => {
 
     const html = renderPage("g1", queryClient);
 
-    const manageAccessLabelIndex = html.indexOf(CAPABILITY_LABELS.MANAGE_ACCESS);
-    const manageAccessSwitchStart = html.indexOf('role="switch"', manageAccessLabelIndex);
-    const manageAccessSwitchEnd = html.indexOf(">", manageAccessSwitchStart);
-    expect(html.slice(manageAccessSwitchStart, manageAccessSwitchEnd)).not.toContain('disabled=""');
-
-    const viewLogsLabelIndex = html.indexOf(CAPABILITY_LABELS.VIEW_LOGS);
-    const viewLogsSwitchStart = html.indexOf('role="switch"', viewLogsLabelIndex);
-    const viewLogsSwitchEnd = html.indexOf(">", viewLogsSwitchStart);
-    expect(html.slice(viewLogsSwitchStart, viewLogsSwitchEnd)).toContain(`disabled=""`);
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.MANAGE_ACCESS)).not.toContain('disabled=""');
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).toContain('disabled=""');
   });
 
-  test("自分自身が保有capabilities=0の場合は全スイッチをdisabledにする", () => {
+  test("自分自身が保有capabilities=0の場合は全チェックボックスをdisabledにする", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", { myCapabilities: 0 });
 
     const html = renderPage("g1", queryClient);
 
-    const switchIndex = html.indexOf('role="switch"');
-    const switchTagEnd = html.indexOf(">", switchIndex);
-    expect(html.slice(switchIndex, switchTagEnd)).toContain(`disabled=""`);
+    for (const label of Object.values(CAPABILITY_LABELS)) {
+      expect(checkboxTagBefore(html, label)).toContain('disabled=""');
+    }
   });
 
   test("プリセット選択欄は、付与済みの権限と一致するプリセット名を表示する(#505)", () => {

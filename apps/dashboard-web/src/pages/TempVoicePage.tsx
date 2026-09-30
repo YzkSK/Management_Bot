@@ -47,6 +47,49 @@ function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
   );
 }
 
+function ForceDeleteButton({
+  guildId,
+  channel,
+  disabled,
+  onConfirm,
+}: {
+  guildId: string;
+  channel: { channelId: string; memberCount: number };
+  disabled: boolean;
+  onConfirm: (input: { guildId: string; channelId: string }) => void;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+          強制削除
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+        <DialogHeader>
+          <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
+          <DialogDescription>
+            現在{channel.memberCount}人が通話中です。削除するとチャンネルと在室者は即座に切断されます。この操作は取り消せません。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">キャンセル</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button
+              variant="destructive"
+              onClick={() => onConfirm({ guildId, channelId: channel.channelId })}
+            >
+              削除する
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfigured: boolean }) {
   const queryClient = useQueryClient();
   const listQuery = useQuery({
@@ -79,47 +122,46 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
           現在アクティブな一時VCはありません。作成用チャンネルに入室すると自動で作成されます。
         </p>
       ) : (
-        <ul className="bg-card divide-y rounded-xl border">
-          {listQuery.data.map((channel) => (
-            <li key={channel.channelId} className="flex items-center gap-3 px-4 py-3">
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-sm">{channel.channelName ?? channel.channelId}</span>
-                <span className="text-muted-foreground text-xs">
-                  オーナー {channel.ownerName ?? channel.ownerId} ・ {channel.memberCount}人 ・{" "}
-                  {new Date(channel.createdAt).toLocaleString("ja-JP")}
-                </span>
-              </div>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={!isConfigured}>
-                    強制削除
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
-                  <DialogHeader>
-                    <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
-                    <DialogDescription>
-                      現在{channel.memberCount}人が通話中です。削除するとチャンネルと在室者は即座に切断されます。この操作は取り消せません。
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="outline">キャンセル</Button>
-                    </DialogClose>
-                    <DialogClose asChild>
-                      <Button
-                        variant="destructive"
-                        onClick={() => forceDeleteMutation.mutate({ guildId, channelId: channel.channelId })}
-                      >
-                        削除する
-                      </Button>
-                    </DialogClose>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </li>
-          ))}
-        </ul>
+        <div className="bg-card overflow-hidden rounded-xl border">
+          <table className="hidden w-full text-sm md:table">
+            <thead>
+              <tr className="text-muted-foreground border-b text-left text-xs">
+                <th className="px-4 py-2.5 font-medium">チャンネル</th>
+                <th className="px-3 py-2.5 font-medium">オーナー</th>
+                <th className="px-3 py-2.5 text-right font-medium">在室人数</th>
+                <th className="px-3 py-2.5 font-medium">作成日時</th>
+                <th className="px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {listQuery.data.map((channel) => (
+                <tr key={channel.channelId} className="border-b last:border-b-0">
+                  <td className="px-4 py-2.5">{channel.channelName ?? channel.channelId}</td>
+                  <td className="px-3 py-2.5">{channel.ownerName ?? channel.ownerId}</td>
+                  <td className="px-3 py-2.5 text-right">{channel.memberCount}人</td>
+                  <td className="text-muted-foreground px-3 py-2.5">{new Date(channel.createdAt).toLocaleString("ja-JP")}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul className="divide-y md:hidden">
+            {listQuery.data.map((channel) => (
+              <li key={channel.channelId} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-sm">{channel.channelName ?? channel.channelId}</span>
+                  <span className="text-muted-foreground text-xs">
+                    オーナー {channel.ownerName ?? channel.ownerId} ・ {channel.memberCount}人 ・{" "}
+                    {new Date(channel.createdAt).toLocaleString("ja-JP")}
+                  </span>
+                </div>
+                <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

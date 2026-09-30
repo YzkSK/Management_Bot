@@ -19,7 +19,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Loading } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -377,17 +376,22 @@ function TargetEditor({
               }
               const grantable = (granterCapabilities & option.bit) === option.bit;
               return (
-                <label key={option.value} className="flex min-h-9 items-center justify-between gap-4 text-sm">
-                  <span>{option.label}</span>
-                  <Switch
+                <label
+                  key={option.value}
+                  className={cn("flex min-h-9 items-center gap-2.5 text-sm", grantable ? "cursor-pointer" : "text-muted-foreground")}
+                >
+                  <input
+                    type="checkbox"
+                    className="accent-foreground size-4"
                     checked={selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
-                    onCheckedChange={(checked) =>
+                    onChange={(e) =>
                       setSelectedCapabilities((prev) =>
-                        checked ? [...prev, option.value] : prev.filter((n) => n !== option.value),
+                        e.target.checked ? [...prev, option.value] : prev.filter((n) => n !== option.value),
                       )
                     }
                   />
+                  {option.label}
                 </label>
               );
             })}

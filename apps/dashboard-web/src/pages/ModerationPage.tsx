@@ -152,18 +152,27 @@ function ThresholdsTab({ guildId, thresholds }: { guildId: string; thresholds: r
             />
             <span className="w-36 text-sm font-medium">{VIOLATION_TYPE_LABELS[row.violationType]}</span>
             {!isPresetIndependentViolationType(row.violationType) && (
-              <Select value={row.preset} onValueChange={(value) => updateRow(row.violationType, { preset: value as ModerationPreset })}>
-                <SelectTrigger className="w-24" aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODERATION_PRESETS.map((preset) => (
-                    <SelectItem key={preset} value={preset}>
-                      {PRESET_LABELS[preset]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div
+                role="radiogroup"
+                aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}
+                className="bg-muted flex gap-0.5 rounded-lg p-0.5"
+              >
+                {MODERATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    role="radio"
+                    aria-checked={row.preset === preset}
+                    onClick={() => updateRow(row.violationType, { preset })}
+                    className={cn(
+                      "h-8 rounded-md px-3 text-xs",
+                      row.preset === preset ? "bg-background font-bold shadow-xs" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {PRESET_LABELS[preset]}
+                  </button>
+                ))}
+              </div>
             )}
             {!isPresetIndependentViolationType(row.violationType) && (
               <span className="text-muted-foreground min-w-0 basis-full text-xs md:flex-1 md:basis-auto">
