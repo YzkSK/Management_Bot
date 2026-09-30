@@ -4,7 +4,7 @@ import { CAPABILITIES } from "@management-bot/shared";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { CAPABILITY_LABELS } from "./capability-labels.js";
+import { CAPABILITY_LABELS, CAPABILITY_PRESETS } from "./capability-labels.js";
 import { AccessPage } from "./AccessPage.js";
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
@@ -136,14 +136,34 @@ describe("AccessPage", () => {
     expect(html.slice(switchIndex, switchTagEnd)).toContain(`disabled=""`);
   });
 
-  test("権限プリセットのボタンが表示される", () => {
+  test("プリセット選択欄は、付与済みの権限と一致するプリセット名を表示する(#505)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS });
+    const moderator = CAPABILITY_PRESETS.find((p) => p.label === "モデレーター")?.capabilities ?? 0;
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: moderator }],
+    });
 
     const html = renderPage("g1", queryClient);
 
+    expect(html).toContain('aria-label="権限プリセット"');
+    // 一覧の各対象にも一致したプリセット名を添える(@everyone=モデレーター、未付与のAdmin=権限なし)
     expect(html).toContain("モデレーター");
-    expect(html).toContain("フル管理者");
+    expect(html).not.toContain("カスタム");
+  });
+
+  test("プリセットと一致しない付与はカスタム、未付与は権限なしと表示する(#505)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.VIEW_LOGS_RAW }],
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("カスタム");
+    // Adminロールは未付与
+    expect(html).toContain("権限なし");
   });
 
   test("サイドバーの検索ボックスが表示される", () => {

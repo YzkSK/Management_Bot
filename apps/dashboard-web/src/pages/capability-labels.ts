@@ -57,3 +57,12 @@ export const CAPABILITY_PRESETS: readonly CapabilityPreset[] = [
     capabilities: Object.values(CAPABILITIES).reduce((acc, bit) => acc | bit, 0),
   },
 ];
+
+export const NO_CAPABILITIES_LABEL = "権限なし";
+export const CUSTOM_PRESET_LABEL = "カスタム";
+
+/** 権限の組み合わせがどのプリセットと一致するか。一致しなければ「カスタム」、何もなければ「権限なし」。 */
+export function presetLabelFor(capabilities: number): string {
+  if (capabilities === 0) return NO_CAPABILITIES_LABEL;
+  return CAPABILITY_PRESETS.find((preset) => preset.capabilities === capabilities)?.label ?? CUSTOM_PRESET_LABEL;
+}

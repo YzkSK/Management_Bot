@@ -1,16 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useState } from "react";
+import { Lock } from "lucide-react";
 import { useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { CAPABILITIES, canGrantCapabilities, type CapabilityName } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { CAPABILITY_GROUPS, CAPABILITY_OPTIONS, CAPABILITY_PRESETS } from "./capability-labels.js";
+import {
+  CAPABILITY_GROUPS,
+  CAPABILITY_OPTIONS,
+  CAPABILITY_PRESETS,
+  CUSTOM_PRESET_LABEL,
+  NO_CAPABILITIES_LABEL,
+  presetLabelFor,
+} from "./capability-labels.js";
+import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loading } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 type TargetType = "user" | "role";
 
@@ -183,12 +194,14 @@ function TargetSidebar({
   grantedUsers,
   selected,
   onSelect,
+  presetOf,
 }: {
   guildId: string;
   roles: readonly SidebarTarget[];
   grantedUsers: readonly SidebarTarget[];
   selected: SidebarTarget | undefined;
   onSelect: (target: SidebarTarget) => void;
+  presetOf: (target: SidebarTarget) => string;
 }) {
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
@@ -197,7 +210,7 @@ function TargetSidebar({
   const visibleUsers = normalizedSearch === "" ? grantedUsers : grantedUsers.filter(filterByName);
 
   return (
-    <div className="flex w-full flex-col gap-2 sm:w-60 sm:shrink-0">
+    <div className="bg-card flex w-72 shrink-0 flex-col gap-2 self-start rounded-xl border p-3">
       <Input
         type="text"
         placeholder="ロール・ユーザーを検索"
@@ -214,12 +227,14 @@ function TargetSidebar({
               <button
                 key={targetKey(role)}
                 type="button"
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  selected && targetKey(selected) === targetKey(role) ? "bg-accent font-semibold" : ""
-                }`}
+                className={cn(
+                  "flex min-h-10 items-center justify-between gap-2 rounded-md px-2 text-left text-sm hover:bg-accent/60",
+                  selected && targetKey(selected) === targetKey(role) && "bg-accent font-semibold",
+                )}
                 onClick={() => onSelect(role)}
               >
-                {role.name}
+                <span className="min-w-0 truncate">{role.name}</span>
+                <span className="text-muted-foreground shrink-0 text-xs font-normal">{presetOf(role)}</span>
               </button>
             ))}
           </div>
@@ -232,12 +247,14 @@ function TargetSidebar({
               <button
                 key={targetKey(user)}
                 type="button"
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  selected && targetKey(selected) === targetKey(user) ? "bg-accent font-semibold" : ""
-                }`}
+                className={cn(
+                  "flex min-h-10 items-center justify-between gap-2 rounded-md px-2 text-left text-sm hover:bg-accent/60",
+                  selected && targetKey(selected) === targetKey(user) && "bg-accent font-semibold",
+                )}
                 onClick={() => onSelect(user)}
               >
-                {user.name}
+                <span className="min-w-0 truncate">{user.name}</span>
+                <span className="text-muted-foreground shrink-0 text-xs font-normal">{presetOf(user)}</span>
               </button>
             ))}
           </div>
@@ -253,13 +270,11 @@ function TargetEditor({
   target,
   existingCapabilities,
   granterCapabilities,
-  onSaved,
 }: {
   guildId: string;
   target: SidebarTarget;
   existingCapabilities: number;
   granterCapabilities: number;
-  onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
   const [selectedCapabilities, setSelectedCapabilities] = useState<readonly CapabilityName[]>(
@@ -271,106 +286,122 @@ function TargetEditor({
     setSelectedCapabilities(capabilitiesToNames(existingCapabilities));
   }, [target.targetType, target.targetId, existingCapabilities]);
 
+  const onError = (error: unknown) =>
+    toast.error(
+      error instanceof TRPCClientError && error.data?.code === "BAD_REQUEST"
+        ? "対象がこのサーバーに存在しません。"
+        : "保存に失敗しました。時間をおいて再度お試しください。",
+    );
   const grantMutation = useMutation({
     ...trpc.access.grantCapabilities.mutationOptions(),
     onSuccess: async () => {
+      toast.success("保存しました");
       await refreshAccessQueries(queryClient, guildId);
-      onSaved();
     },
+    onError,
   });
   const revokeMutation = useMutation({
     ...trpc.access.revokeCapabilityGrant.mutationOptions(),
     onSuccess: async () => {
+      toast.success("権限を剥奪しました");
       await refreshAccessQueries(queryClient, guildId);
-      onSaved();
     },
+    onError,
   });
 
   const capabilities = namesToCapabilities(selectedCapabilities);
-  const canSave = capabilities !== 0 && canGrantCapabilities(granterCapabilities, capabilities);
-  const canRevokeExisting = existingCapabilities !== 0 && canGrantCapabilities(granterCapabilities, existingCapabilities);
+  const dirty = capabilities !== existingCapabilities;
+  // 全て外して保存した場合は付与自体を剥奪する。既存付与・新しい付与のどちらも自分の権限の範囲内でなければ保存できない。
+  const canSave =
+    canGrantCapabilities(granterCapabilities, capabilities) && canGrantCapabilities(granterCapabilities, existingCapabilities);
   const isPending = grantMutation.isPending || revokeMutation.isPending;
+  const currentPreset = presetLabelFor(capabilities);
+  const isOffPreset = currentPreset === CUSTOM_PRESET_LABEL || currentPreset === NO_CAPABILITIES_LABEL;
+
+  const save = () => {
+    if (!canSave) {
+      toast.error("自分が持っていない権限は付与・変更できません。");
+      return;
+    }
+    if (capabilities === 0) {
+      revokeMutation.mutate({ guildId, targetType: target.targetType, targetId: target.targetId });
+    } else {
+      grantMutation.mutate({ guildId, targetType: target.targetType, targetId: target.targetId, capabilities });
+    }
+  };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4">
-      <h1 className="text-lg font-semibold">{target.name} を編集</h1>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-medium">プリセットから選択</span>
-        <div className="flex flex-wrap gap-2">
-          {CAPABILITY_PRESETS.map((preset) => (
-            <Button
-              key={preset.label}
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!canGrantCapabilities(granterCapabilities, preset.capabilities)}
-              onClick={() => setSelectedCapabilities(capabilitiesToNames(preset.capabilities))}
-            >
-              {preset.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {CAPABILITY_GROUPS.map((group) => (
-        <div key={group.title} className="flex flex-col gap-2 border-b pb-4">
-          <h2 className="text-sm font-semibold">{group.title}</h2>
-          {group.items.map((name) => {
-            const option = CAPABILITY_OPTIONS.find((o) => o.value === name);
-            if (!option) {
-              return null;
-            }
-            const grantable = (granterCapabilities & option.bit) === option.bit;
-            return (
-              <label key={option.value} className="flex items-center justify-between gap-4 py-1 text-sm">
-                <span>{option.label}</span>
-                <Switch
-                  checked={selectedCapabilities.includes(option.value)}
-                  disabled={!grantable}
-                  onCheckedChange={(checked) =>
-                    setSelectedCapabilities((prev) =>
-                      checked ? [...prev, option.value] : prev.filter((n) => n !== option.value),
-                    )
-                  }
-                />
-              </label>
-            );
-          })}
-        </div>
-      ))}
-
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          disabled={!canSave || isPending}
-          onClick={() =>
-            grantMutation.mutate({ guildId, targetType: target.targetType, targetId: target.targetId, capabilities })
-          }
-        >
-          保存する
-        </Button>
-        {existingCapabilities !== 0 && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!canRevokeExisting || isPending}
-            onClick={() =>
-              revokeMutation.mutate({ guildId, targetType: target.targetType, targetId: target.targetId })
-            }
+    <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-xl border p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold">{target.name} を編集</h2>
+        <label className="text-muted-foreground flex items-center gap-2 text-sm">
+          プリセットから選択
+          <Select
+            value={currentPreset}
+            onValueChange={(label) => {
+              const preset = CAPABILITY_PRESETS.find((p) => p.label === label);
+              if (preset) setSelectedCapabilities(capabilitiesToNames(preset.capabilities));
+            }}
           >
-            剥奪
-          </Button>
-        )}
+            <SelectTrigger className="w-36" aria-label="権限プリセット">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {isOffPreset && (
+                <SelectItem value={currentPreset} disabled>
+                  {currentPreset}
+                </SelectItem>
+              )}
+              {CAPABILITY_PRESETS.map((preset) => (
+                <SelectItem
+                  key={preset.label}
+                  value={preset.label}
+                  disabled={!canGrantCapabilities(granterCapabilities, preset.capabilities)}
+                >
+                  {preset.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
       </div>
-      {(grantMutation.isError || revokeMutation.isError) && (
-        <p className="text-destructive text-xs">
-          {grantMutation.error instanceof TRPCClientError && grantMutation.error.data?.code === "BAD_REQUEST"
-            ? "対象がこのサーバーに存在しません。"
-            : "保存に失敗しました。"}
-        </p>
-      )}
-    </div>
+
+      <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+        {CAPABILITY_GROUPS.map((group) => (
+          <div key={group.title} className="flex flex-col gap-1 border-b pb-3">
+            <h3 className="text-sm font-semibold">{group.title}</h3>
+            {group.items.map((name) => {
+              const option = CAPABILITY_OPTIONS.find((o) => o.value === name);
+              if (!option) {
+                return null;
+              }
+              const grantable = (granterCapabilities & option.bit) === option.bit;
+              return (
+                <label key={option.value} className="flex min-h-9 items-center justify-between gap-4 text-sm">
+                  <span>{option.label}</span>
+                  <Switch
+                    checked={selectedCapabilities.includes(option.value)}
+                    disabled={!grantable}
+                    onCheckedChange={(checked) =>
+                      setSelectedCapabilities((prev) =>
+                        checked ? [...prev, option.value] : prev.filter((n) => n !== option.value),
+                      )
+                    }
+                  />
+                </label>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      <SaveBar
+        dirty={dirty}
+        saving={isPending}
+        onSave={save}
+        onDiscard={() => setSelectedCapabilities(capabilitiesToNames(existingCapabilities))}
+      />
+    </section>
   );
 }
 
@@ -420,8 +451,9 @@ export function AccessPage() {
 
   if (isForbidden) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>この操作を行う権限がありません。</AlertDescription>
+      <Alert variant="warning">
+        <Lock />
+        <AlertDescription>この操作を行う権限がありません。アクセス権限の変更には「アクセス権限の管理」権限が必要です。</AlertDescription>
       </Alert>
     );
   }
@@ -458,27 +490,54 @@ export function AccessPage() {
     }));
 
   const activeTarget = selectedTarget ?? roles[0] ?? grantedUsers[0];
+  const presetOf = (target: SidebarTarget) => presetLabelFor(grantByKey.get(targetKey(target)) ?? 0);
+  const allTargets = [...roles, ...grantedUsers];
+  // 追加直後で一覧(付与済み)にまだ無い個別ユーザーも選択欄に出す
+  const selectableTargets =
+    activeTarget && !allTargets.some((t) => targetKey(t) === targetKey(activeTarget)) ? [...allTargets, activeTarget] : allTargets;
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="sr-only">アクセス権限</h1>
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <TargetSidebar
-          guildId={guildId}
-          roles={roles}
-          grantedUsers={grantedUsers}
-          selected={activeTarget}
-          onSelect={setSelectedTarget}
-        />
+      <h1 className="text-2xl font-bold">アクセス権限</h1>
+      {/* 狭い画面では一覧と編集欄を縦に積むとスクロールが増えるため、対象は選択欄で選ぶ */}
+      <div className="flex flex-col gap-2 lg:hidden">
+        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm">
+          編集する対象
+          <Select
+            value={activeTarget ? targetKey(activeTarget) : undefined}
+            onValueChange={(key) => setSelectedTarget(selectableTargets.find((t) => targetKey(t) === key))}
+          >
+            <SelectTrigger className="w-full" aria-label="編集する対象">
+              <SelectValue placeholder="対象を選択" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectableTargets.map((target) => (
+                <SelectItem key={targetKey(target)} value={targetKey(target)}>
+                  {target.name}({presetOf(target)})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <AddUserSelect guildId={guildId} onSelect={setSelectedTarget} />
+      </div>
+      <div className="flex gap-4">
+        <div className="hidden lg:flex">
+          <TargetSidebar
+            guildId={guildId}
+            roles={roles}
+            grantedUsers={grantedUsers}
+            selected={activeTarget}
+            onSelect={setSelectedTarget}
+            presetOf={presetOf}
+          />
+        </div>
         {activeTarget ? (
           <TargetEditor
             guildId={guildId}
             target={activeTarget}
             existingCapabilities={grantByKey.get(targetKey(activeTarget)) ?? 0}
             granterCapabilities={granterCapabilities}
-            onSaved={() => {
-              /* listCapabilityGrantsの再取得で最新状態に追従するため、選択状態はそのまま維持する。 */
-            }}
           />
         ) : (
           <p className="text-muted-foreground text-sm">対象を選択してください。</p>
