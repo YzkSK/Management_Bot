@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@management-bot/config": "workspace:*",
+    "@management-bot/shared": "workspace:*",
+    "ioredis": "^5.4.0",
     "node-cron": "^4.6.0"
   },
   "devDependencies": {

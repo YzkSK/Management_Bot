@@ -19,6 +19,8 @@
         "@management-bot/activity": "workspace:*",
         "@management-bot/config": "workspace:*",
         "@management-bot/db": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "ioredis": "^5.4.0",
         "node-cron": "^4.6.0",
       },
       "devDependencies": {
@@ -32,6 +34,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@management-bot/config": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "ioredis": "^5.4.0",
         "node-cron": "^4.6.0",
       },
       "devDependencies": {
@@ -132,7 +136,9 @@
         "@management-bot/config": "workspace:*",
         "@management-bot/db": "workspace:*",
         "@management-bot/logging": "workspace:*",
+        "@management-bot/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
+        "ioredis": "^5.4.0",
         "node-cron": "^4.6.0",
       },
       "devDependencies": {
@@ -148,7 +154,9 @@
         "@management-bot/config": "workspace:*",
         "@management-bot/db": "workspace:*",
         "@management-bot/moderation": "workspace:*",
+        "@management-bot/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
+        "ioredis": "^5.4.0",
         "node-cron": "^4.6.0",
       },
       "devDependencies": {
@@ -164,7 +172,9 @@
         "@management-bot/config": "workspace:*",
         "@management-bot/dashboard-access": "workspace:*",
         "@management-bot/db": "workspace:*",
+        "@management-bot/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
+        "ioredis": "^5.4.0",
         "node-cron": "^4.6.0",
       },
       "devDependencies": {

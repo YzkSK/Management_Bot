@@ -1,10 +1,13 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
+import { startInfraReporter } from "@management-bot/shared";
+import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createRollupRunner } from "./run-rollup.js";
 
 const rollupEnvSchema = envSchema.pick({
   DATABASE_URL: true,
+  REDIS_URL: true,
   ACTIVITY_ROLLUP_CRON: true,
 });
 
@@ -17,7 +20,18 @@ if (!cron.validate(env.ACTIVITY_ROLLUP_CRON)) {
 
 // inFlight(run-rollup.ts)により同時実行は常に1つに制限されているため、プールは1で足りる。
 const { db, close } = createDb(env.DATABASE_URL, { max: 1 });
-const runner = createRollupRunner(db);
+const reporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "activity-rollup", service: "worker" });
+const runner = createRollupRunner(
+  db,
+  (message) => {
+    console.log(message);
+    reporter.recordRun(true);
+  },
+  (error) => {
+    console.error("activity-rollup job failed:", error);
+    reporter.recordRun(false);
+  },
+);
 
 const task = cron.schedule(env.ACTIVITY_ROLLUP_CRON, () => void runner.run(), { timezone: TIMEZONE });
 

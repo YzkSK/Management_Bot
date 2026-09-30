@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
-import { buildInviteUrl, mapWithConcurrency } from "@management-bot/shared";
+import { buildInviteUrl, HEARTBEAT_INTERVAL_MS, mapWithConcurrency, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import { FEATURES } from "./features.js";
 import { applyAppEmojis, syncAppEmojis } from "./sync-app-emojis.js";
@@ -33,11 +33,23 @@ const botEnvSchema = envSchema.pick({
 });
 
 const env = parseEnv(botEnvSchema);
+const infraReporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "bot", service: "bot" });
 
 console.info(`Starting bot v${RELEASE_VERSION}`);
 
 const { db, close } = createDb(env.DATABASE_URL);
 const client = new BotClient();
+// ステータス画面(issue #507)向け。ready=0ならGateway未接続として停止扱いにする。
+const botDetailTimer = setInterval(
+  () =>
+    infraReporter.setDetail({
+      ready: client.isReady() ? 1 : 0,
+      pingMs: client.ws.ping,
+      guilds: client.guilds.cache.size,
+    }),
+  HEARTBEAT_INTERVAL_MS,
+);
+botDetailTimer.unref();
 const pendingOnboardings = new Set<Promise<void>>();
 // consumerGroupは機能ごとに一意にする(DomainEventBus参照)。同一typeを複数機能が
 // 同じgroupで購読すると配送を取り合うため、機能キーをそのままgroup名に使う。
@@ -52,6 +64,8 @@ const shutdown = async () => {
   await Promise.allSettled(pendingOnboardings);
   await Promise.all([...eventBuses.values()].map((bus) => bus.close()));
   await close();
+  clearInterval(botDetailTimer);
+  infraReporter.stop();
 };
 process.once("SIGTERM", () => void shutdown());
 process.once("SIGINT", () => void shutdown());

@@ -1,10 +1,13 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
+import { startInfraReporter } from "@management-bot/shared";
+import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createPurgeRunner } from "./run-purge.js";
 
 const retentionEnvSchema = envSchema.pick({
   DATABASE_URL: true,
+  REDIS_URL: true,
   LOGGING_RETENTION_CRON: true,
 });
 
@@ -17,7 +20,18 @@ if (!cron.validate(env.LOGGING_RETENTION_CRON)) {
 
 // inFlight(run-purge.ts)により同時実行は常に1つに制限されているため、プールは1で足りる。
 const { db, close } = createDb(env.DATABASE_URL, { max: 1 });
-const runner = createPurgeRunner(db);
+const reporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "logging-retention", service: "worker" });
+const runner = createPurgeRunner(
+  db,
+  (message) => {
+    console.log(message);
+    reporter.recordRun(true);
+  },
+  (error) => {
+    console.error("logging-retention job failed:", error);
+    reporter.recordRun(false);
+  },
+);
 
 const task = cron.schedule(env.LOGGING_RETENTION_CRON, () => void runner.run(), { timezone: TIMEZONE });
 
