@@ -52,4 +52,25 @@ describe("0033_drop_unused_capabilities", () => {
       { targetId: "logs", capabilities: 1 << 2 },
     ]);
   });
+
+  test("前提の閲覧権限が欠けた管理・生データ閲覧権限には閲覧権限を補う", async () => {
+    // MANAGE_LOGGING_SETTINGS(1<<4)のみ、VIEW_LOGS_RAW(1<<3)のみ、MANAGE_TEMP_VOICE(1<<6)のみ
+    await db.insert(capabilityGrants).values([
+      { id: randomUUID(), guildId, targetType: "role", targetId: "log-manage", capabilities: 1 << 4 },
+      { id: randomUUID(), guildId, targetType: "role", targetId: "log-raw", capabilities: 1 << 3 },
+      { id: randomUUID(), guildId, targetType: "role", targetId: "vc-manage", capabilities: 1 << 6 },
+    ]);
+
+    await runMigration();
+
+    const rows = await db
+      .select({ targetId: capabilityGrants.targetId, capabilities: capabilityGrants.capabilities })
+      .from(capabilityGrants)
+      .where(eq(capabilityGrants.guildId, guildId));
+    expect(rows.sort((a, b) => a.targetId.localeCompare(b.targetId))).toEqual([
+      { targetId: "log-manage", capabilities: (1 << 4) | (1 << 2) },
+      { targetId: "log-raw", capabilities: (1 << 3) | (1 << 2) },
+      { targetId: "vc-manage", capabilities: (1 << 6) | (1 << 5) },
+    ]);
+  });
 });

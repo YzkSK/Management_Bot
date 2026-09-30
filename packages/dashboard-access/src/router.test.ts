@@ -106,6 +106,24 @@ async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
 }
 
 describe("capabilityGrantsRouter.listCapabilityGrants", () => {
+  test("前提の閲覧権限を欠く管理権限のみの付与はBAD_REQUEST(issue #527)", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.MANAGE_TEMP_VOICE | CAPABILITIES.VIEW_TEMP_VOICE);
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(
+      caller.grantCapabilities({
+        guildId,
+        targetType: "user",
+        targetId: "u2",
+        capabilities: CAPABILITIES.MANAGE_TEMP_VOICE,
+      }),
+    );
+
+    expect(error).toBeDefined();
+    const rows = await db.select().from(capabilityGrants).where(eq(capabilityGrants.targetId, "u2"));
+    expect(rows).toHaveLength(0);
+  });
+
   test("MANAGE_ACCESSを持たない場合はFORBIDDEN", async () => {
     const caller = createCaller(buildContext());
 

@@ -59,3 +59,36 @@ export function canGrantCapabilities(granterCaps: number, targetCaps: number): b
     (targetCaps & ~granterCaps) === 0
   );
 }
+
+/**
+ * [依存するcapability, その前提となるcapability]の組(issue #527)。管理・生データ閲覧は対応する閲覧権限を前提とし、
+ * 「管理できるがページを閲覧できない」組み合わせを付与できないようにする。
+ */
+const CAPABILITY_PREREQUISITES: readonly (readonly [number, number])[] = [
+  [CAPABILITIES.VIEW_LOGS_RAW, CAPABILITIES.VIEW_LOGS],
+  [CAPABILITIES.MANAGE_LOGGING_SETTINGS, CAPABILITIES.VIEW_LOGS],
+  [CAPABILITIES.MANAGE_TEMP_VOICE, CAPABILITIES.VIEW_TEMP_VOICE],
+];
+
+/** 含まれるすべてのcapabilityについて、その前提capabilityも含まれているか。 */
+export function hasCapabilityPrerequisites(caps: number): boolean {
+  return CAPABILITY_PREREQUISITES.every(
+    ([dependent, prerequisite]) => !hasCapability(caps, dependent) || hasCapability(caps, prerequisite),
+  );
+}
+
+/** 含まれるcapabilityの前提capabilityを追加する(付与画面でONにしたとき用)。 */
+export function addCapabilityPrerequisites(caps: number): number {
+  return CAPABILITY_PREREQUISITES.reduce(
+    (acc, [dependent, prerequisite]) => (hasCapability(acc, dependent) ? acc | prerequisite : acc),
+    caps,
+  );
+}
+
+/** 前提capabilityが欠けたcapabilityを取り除く(付与画面でOFFにしたとき用)。 */
+export function removeUnmetDependents(caps: number): number {
+  return CAPABILITY_PREREQUISITES.reduce(
+    (acc, [dependent, prerequisite]) => (hasCapability(acc, prerequisite) ? acc : acc & ~dependent),
+    caps,
+  );
+}

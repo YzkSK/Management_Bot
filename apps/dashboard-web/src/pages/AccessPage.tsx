@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CAPABILITIES, canGrantCapabilities, type CapabilityName } from "@management-bot/shared";
+import {
+  addCapabilityPrerequisites,
+  CAPABILITIES,
+  canGrantCapabilities,
+  removeUnmetDependents,
+  type CapabilityName,
+} from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import {
   CAPABILITY_GROUPS,
@@ -386,9 +392,15 @@ function TargetEditor({
                     checked={selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
                     onChange={(e) =>
-                      setSelectedCapabilities((prev) =>
-                        e.target.checked ? [...prev, option.value] : prev.filter((n) => n !== option.value),
-                      )
+                      // 管理権限をONにすると前提の閲覧権限もONに、閲覧権限をOFFにすると依存する権限もOFFにする(issue #527)。
+                      setSelectedCapabilities((prev) => {
+                        const current = namesToCapabilities(prev);
+                        return capabilitiesToNames(
+                          e.target.checked
+                            ? addCapabilityPrerequisites(current | option.bit)
+                            : removeUnmetDependents(current & ~option.bit),
+                        );
+                      })
                     }
                   />
                   {option.label}

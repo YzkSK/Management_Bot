@@ -1,4 +1,10 @@
-import { CAPABILITIES, canGrantCapabilities, discordIdSchema, isKnownCapabilityMask } from "@management-bot/shared";
+import {
+  CAPABILITIES,
+  canGrantCapabilities,
+  discordIdSchema,
+  hasCapabilityPrerequisites,
+  isKnownCapabilityMask,
+} from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -131,6 +137,9 @@ export const capabilityGrantsRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!isKnownCapabilityMask(input.capabilities)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities contains unknown bits" });
+      }
+      if (!hasCapabilityPrerequisites(input.capabilities)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities lacks a required view capability" });
       }
       if (!canGrantCapabilities(ctx.capabilities, input.capabilities)) {
         throw new TRPCError({

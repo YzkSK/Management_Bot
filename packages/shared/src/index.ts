@@ -5,6 +5,9 @@ export {
   hasCapability,
   canGrantCapabilities,
   isKnownCapabilityMask,
+  hasCapabilityPrerequisites,
+  addCapabilityPrerequisites,
+  removeUnmetDependents,
   type CapabilityName,
 } from "./capabilities.js";
 export {
