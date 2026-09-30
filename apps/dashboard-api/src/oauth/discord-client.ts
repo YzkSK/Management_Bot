@@ -80,6 +80,8 @@ const userGuildSchema = z.object({
   id: z.string(),
   name: z.string(),
   owner: z.boolean(),
+  /** アイコンのハッシュ。未設定ならnull。 */
+  icon: z.string().nullable().optional(),
   /** ビットフィールドを10進文字列で表す(discord.jsのPermissionsBitFieldと同様の理由でBigInt互換の文字列表現)。 */
   permissions: z.string().regex(/^\d+$/, "permissions must be an unsigned decimal string"),
 });

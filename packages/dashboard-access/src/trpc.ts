@@ -51,6 +51,8 @@ export interface ManagedGuild {
    * (閲覧可否は各procedure側のrequireCapabilityがFORBIDDENで最終的に強制する)。
    */
   isManaged: boolean;
+  /** サーバーアイコンの画像URL。アイコン未設定ならnull(頭文字で表示する)。 */
+  iconUrl: string | null;
 }
 
 export interface DashboardAccessContext {

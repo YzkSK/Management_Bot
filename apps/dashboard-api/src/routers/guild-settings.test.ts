@@ -59,8 +59,8 @@ function buildContext(overrides: { getGuildMembership: GuildMembershipResolver }
     readRedisHash: async () => ({}),
     isGuildMember: async () => true,
     listMyGuilds: async () => [
-      { id: guildId1, name: "guild-1", isManaged: false },
-      { id: guildId2, name: "guild-2", isManaged: false },
+      { id: guildId1, name: "guild-1", isManaged: false, iconUrl: null },
+      { id: guildId2, name: "guild-2", isManaged: false, iconUrl: null },
     ],
   };
 }

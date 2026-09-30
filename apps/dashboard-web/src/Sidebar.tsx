@@ -4,6 +4,7 @@ import { FEATURE_METADATA } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
+import { GuildIcon } from "./guild-icon.js";
 import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
@@ -81,9 +82,7 @@ function SidebarNav({
                 }}
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold" aria-hidden="true">
-                    {guild.name.slice(0, 1)}
-                  </span>
+                  <GuildIcon name={guild.name} iconUrl={guild.iconUrl} className="size-7 rounded-lg text-xs" />
                   <span className="truncate">
                     {guild.name}
                     {!guild.canViewActivity && "(権限なし)"}

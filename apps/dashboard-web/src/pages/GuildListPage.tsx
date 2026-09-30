@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
+import { GuildIcon } from "../guild-icon.js";
 import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,12 +12,8 @@ import { Loading } from "@/components/ui/skeleton";
 
 const CARD = "bg-card flex w-full items-center gap-3.5 rounded-xl border p-4 text-left";
 
-function GuildInitial({ name }: { name: string }) {
-  return (
-    <span className="bg-muted flex size-12 shrink-0 items-center justify-center rounded-2xl text-lg font-bold" aria-hidden="true">
-      {name.slice(0, 1)}
-    </span>
-  );
+function GuildInitial({ guild }: { guild: ManagedGuildWithAccess }) {
+  return <GuildIcon name={guild.name} iconUrl={guild.iconUrl} className="size-12 rounded-2xl text-lg" />;
 }
 
 function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
@@ -28,7 +25,7 @@ function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
         className={`${CARD} text-muted-foreground opacity-50`}
         onClick={() => toast.error(NO_ACCESS_MESSAGE)}
       >
-        <GuildInitial name={guild.name} />
+        <GuildInitial guild={guild} />
         <span className="flex min-w-0 flex-col gap-1">
           <span className="truncate font-medium">{guild.name}</span>
           <span id={`guild-access-note-${guild.id}`} className="text-xs">
@@ -40,7 +37,7 @@ function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
   }
   return (
     <Link to={`/guilds/${guild.id}/activity`} className={`${CARD} hover:bg-accent/50`}>
-      <GuildInitial name={guild.name} />
+      <GuildInitial guild={guild} />
       <span className="flex min-w-0 flex-col gap-1">
         <span className="truncate font-medium">{guild.name}</span>
         <span
