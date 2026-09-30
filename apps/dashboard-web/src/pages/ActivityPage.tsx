@@ -134,7 +134,7 @@ function MetricChart({
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={[...rows]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--border)" />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" />
+          <XAxis dataKey="label" interval="equidistantPreserveStart" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" />
           <YAxis
             tickLine={false}
             axisLine={false}
