@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { LogCategory } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { SettingsPage } from "./SettingsPage.js";
 
@@ -17,193 +18,112 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
   );
 }
 
+interface Seed {
+  retention?: { category: LogCategory; retentionDays: number }[];
+  channel?: { category: LogCategory; channelId: string | null }[];
+  accessStatus?: "ok" | "forbidden";
+  display?: { hideAuditLogCorrelation: boolean; hideBotEvents: boolean };
+}
+
+function seeded({
+  retention = [{ category: "message", retentionDays: 30 }],
+  channel = [{ category: "message", channelId: "c1" }],
+  accessStatus = "ok",
+  display = { hideAuditLogCorrelation: true, hideBotEvents: true },
+}: Seed = {}): QueryClient {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+  queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, retention);
+  queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, channel);
+  queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
+    channels: accessStatus === "ok" ? [{ id: "c1", name: "general" }] : [],
+    accessStatus,
+  });
+  queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, display);
+  return queryClient;
+}
+
+function switchTags(html: string): string[] {
+  return html
+    .split('role="switch"')
+    .slice(1)
+    .map((part) => part.slice(0, part.indexOf(">")));
+}
+
 describe("SettingsPage", () => {
   test("取得完了前はローディング表示になる", () => {
-    const queryClient = new QueryClient();
-    const html = renderPage("g1", queryClient);
+    const html = renderPage("g1", new QueryClient());
     expect(html).toContain("読み込み中");
   });
 
   test("channelOptionsのaccessStatusがforbiddenならBot権限不足メッセージを表示する", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [],
-      accessStatus: "forbidden",
-    });
-
-    const html = renderPage("g1", queryClient);
-
+    const html = renderPage("g1", seeded({ accessStatus: "forbidden" }));
     expect(html).toContain("Botに権限がないため");
   });
 
-  test("取得成功時はカテゴリごとの保持期間・出力先チャンネルを描画する", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-
-    const html = renderPage("g1", queryClient);
-
+  test("カテゴリごとの保持期間・出力先チャンネルの入力欄を描画する", () => {
+    const html = renderPage("g1", seeded());
     expect(html).toContain("メッセージ");
     expect(html).toContain('value="30"');
     expect(html).toContain('aria-label="メッセージの保持期間(日)"');
     expect(html).toContain('aria-label="メッセージの出力先チャンネル"');
   });
 
-  test("一括設定のコントロールを描画し、カテゴリごとの設定はdetails配下に隠す", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
+  test("カテゴリごとの設定は初期状態で格納されている(#505)", () => {
+    const html = renderPage("g1", seeded());
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toMatch(/id="per-category-settings" hidden=""/);
+    expect(html.indexOf("一括設定")).toBeLessThan(html.indexOf("カテゴリごとに設定する(任意)"));
+  });
 
-    const html = renderPage("g1", queryClient);
-
-    expect(html).toContain("一括設定(すべてのカテゴリへ同じ値を適用)");
+  test("一括設定のボタンは下書きへ反映するだけで、保存は保存バーから行う(#505)", () => {
+    const html = renderPage("g1", seeded());
     expect(html).toContain('aria-label="全カテゴリの出力先チャンネル"');
-    expect(html).toContain("全カテゴリに適用");
-    expect(html).toContain("<details>");
-    expect(html).toContain("カテゴリごとに設定する(任意)");
-    expect(html.indexOf("一括設定")).toBeLessThan(html.indexOf("<details>"));
+    expect(html).toContain("全カテゴリに反映");
+    expect(html).toContain("保持期間を0にすると無期限で保持します。");
+  });
+
+  test("変更がない間は未保存バーを出さない", () => {
+    const html = renderPage("g1", seeded());
+    expect(html).not.toContain("保存されていない変更があります");
   });
 
   test("全カテゴリが同じ値のときは一括設定欄に現在値を反映する", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 14 },
-      { category: "member", retentionDays: 14 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-      { category: "member", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-
-    const html = renderPage("g1", queryClient);
-
+    const html = renderPage(
+      "g1",
+      seeded({
+        retention: [
+          { category: "message", retentionDays: 14 },
+          { category: "member", retentionDays: 14 },
+        ],
+      }),
+    );
     expect(html).toContain('id="bulk-retention-days"');
     expect(html).toContain('min="0" max="36500"');
     expect(html).toContain('value="14"');
   });
 
-  test("カテゴリごとに値がバラバラなら一括設定欄は空欄で、適用ボタンを無効化する", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 14 },
-      { category: "member", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-      { category: "member", channelId: null },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-
-    const html = renderPage("g1", queryClient);
-
-    expect(html).toContain('id="bulk-retention-days"');
+  test("カテゴリごとに値がバラバラなら一括設定欄は空欄にする", () => {
+    const html = renderPage(
+      "g1",
+      seeded({
+        retention: [
+          { category: "message", retentionDays: 14 },
+          { category: "member", retentionDays: 30 },
+        ],
+      }),
+    );
     expect(html).toContain('placeholder="カテゴリごとに異なる"');
-    // 一括適用ボタン(保持期間側)が空欄のためdisabledになっている
-    const buttonIndex = html.indexOf("全カテゴリに適用");
-    const buttonTagStart = html.lastIndexOf("<button", buttonIndex);
-    expect(html.slice(buttonTagStart, buttonIndex)).toContain("disabled");
   });
 
-  test("監査ログ相関を一覧に表示するチェックボックスが表示され、初期状態はオフ(非表示がデフォルト)", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-    queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
-      hideAuditLogCorrelation: true,
-      hideBotEvents: true,
-    });
+  test("監査ログ相関・Botイベントの表示スイッチは保存済みの値を反映する", () => {
+    const off = switchTags(renderPage("g1", seeded()));
+    expect(off[0]).toContain('aria-checked="false"');
+    expect(off[1]).toContain('aria-checked="false"');
 
-    const html = renderPage("g1", queryClient);
-
-    expect(html).toContain("ログ一覧に「監査ログ相関」カテゴリを表示する");
-    const switchIndex = html.indexOf('role="switch"');
-    const switchTagEnd = html.indexOf(">", switchIndex);
-    expect(html.slice(switchIndex, switchTagEnd)).toContain('aria-checked="false"');
-  });
-
-  test("hideAuditLogCorrelationがfalse(表示中)のときスイッチはchecked状態になる", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-    queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
-      hideAuditLogCorrelation: false,
-      hideBotEvents: true,
-    });
-
-    const html = renderPage("g1", queryClient);
-
-    const switchIndex = html.indexOf('role="switch"');
-    const switchTagEnd = html.indexOf(">", switchIndex);
-    expect(html.slice(switchIndex, switchTagEnd)).toContain('aria-checked="true"');
-  });
-
-  test("Botイベントを一覧に表示するスイッチが表示され、初期状態はオフ(非表示がデフォルト)", () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-    queryClient.setQueryData(trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", retentionDays: 30 },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelSettings.queryOptions({ guildId: "g1" }).queryKey, [
-      { category: "message", channelId: "c1" },
-    ]);
-    queryClient.setQueryData(trpc.logging.listChannelOptions.queryOptions({ guildId: "g1" }).queryKey, {
-      channels: [{ id: "c1", name: "general" }],
-      accessStatus: "ok",
-    });
-    queryClient.setQueryData(trpc.logging.getDisplaySettings.queryOptions({ guildId: "g1" }).queryKey, {
-      hideAuditLogCorrelation: true,
-      hideBotEvents: true,
-    });
-
-    const html = renderPage("g1", queryClient);
-
-    expect(html).toContain("ログ一覧にBotによるイベントを表示する");
-    const switches = html.split('role="switch"');
-    const secondSwitchTag = switches[2]?.slice(0, switches[2].indexOf(">"));
-    expect(secondSwitchTag).toContain('aria-checked="false"');
+    const on = switchTags(
+      renderPage("g1", seeded({ display: { hideAuditLogCorrelation: false, hideBotEvents: false } })),
+    );
+    expect(on[0]).toContain('aria-checked="true"');
+    expect(on[1]).toContain('aria-checked="true"');
   });
 });
