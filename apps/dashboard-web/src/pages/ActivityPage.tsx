@@ -12,7 +12,7 @@ import {
   currentJstHour,
   liveVoiceSeconds,
   parseActivityNotification,
-  sumLive,
+  longestLive,
 } from "./activity-live.js";
 import { buildGuildWsUrl } from "./log-notifications.js";
 import { useGuildWs } from "./use-guild-ws.js";
@@ -260,7 +260,7 @@ export function RankingTable({
 }
 
 function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {  const query = useQuery({ ...trpc.activity.serverSummary.queryOptions({ guildId, ...range }), placeholderData: keepPreviousData });
-  const liveTotal = sumLive(live);
+  const liveTotal = longestLive(live);
 
   return (
     <div className="flex flex-col gap-4">
@@ -269,7 +269,7 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard label="アクティブメンバー" value={VALUE_SKELETON} sub="期間内に発言またはVC参加" color={MEMBER_COLOR} />
             <StatCard label="発言数" value={VALUE_SKELETON} sub="期間内の合計" color={MESSAGE_COLOR} />
-            <StatCard label="VC時間" value={VALUE_SKELETON} sub="全メンバーの延べ時間" color={VOICE_COLOR} />
+            <StatCard label="VC時間" value={VALUE_SKELETON} sub="誰かがVCにいた時間" color={VOICE_COLOR} />
           </div>
           <ChartSkeleton title={range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"} />
         </Loading>
@@ -288,7 +288,7 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
             <StatCard
               label="VC時間"
               value={formatDuration(query.data.totals.voiceSeconds + liveTotal)}
-              sub="全メンバーの延べ時間"
+              sub="誰かがVCにいた時間"
               color={VOICE_COLOR}
             />
           </div>

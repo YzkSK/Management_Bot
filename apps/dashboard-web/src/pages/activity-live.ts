@@ -34,10 +34,12 @@ export function liveVoiceSeconds(
   return live;
 }
 
-export function sumLive(live: ReadonlyMap<string, number>): number {
-  let sum = 0;
-  for (const seconds of live.values()) sum += seconds;
-  return sum;
+/**
+ * サーバー全体のVC時間は誰かがVCにいた時間のため、在室中の区間のうち最も長いもの(最初に入った人の経過)を足す(issue #508)。
+ * ponytail: 最初に入った人が抜けて他の人が残っている場合、残っている人の開始からしか数えない(checkpointの60秒以内の誤差)。
+ */
+export function longestLive(live: ReadonlyMap<string, number>): number {
+  return Math.max(0, ...live.values());
 }
 
 /** ponytail: 進行中区間は全て現在のbucketへ寄せる(checkpointが60秒ごとなので時間境界をまたぐ誤差は最大60秒)。 */

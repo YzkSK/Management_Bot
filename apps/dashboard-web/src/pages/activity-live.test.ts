@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addToBucket, currentBucket, currentJstHour, liveVoiceSeconds, parseActivityNotification, sumLive } from "./activity-live.js";
+import { addToBucket, currentBucket, currentJstHour, liveVoiceSeconds, parseActivityNotification, longestLive } from "./activity-live.js";
 
 const clock = new Date("2026-09-29T12:00:30.000Z");
 
@@ -21,7 +21,8 @@ describe("liveVoiceSeconds", () => {
     expect(live.get("u1")).toBe(30);
     expect(live.has("u2")).toBe(false);
     expect(live.get("u3")).toBe(0);
-    expect(sumLive(live)).toBe(30);
+    expect(longestLive(live)).toBe(30);
+    expect(longestLive(new Map())).toBe(0);
   });
 });
 
