@@ -84,7 +84,10 @@ function ThresholdsTab({ guildId, thresholds }: { guildId: string; thresholds: r
   const [saving, setSaving] = useState(false);
 
   const serverRows = withDefaults(thresholds);
-  const draft = draftState ?? { rows: serverRows, escalation: escalationQuery.data };
+  // 強度の取得前に行を編集した下書きは escalation が undefined のままなので、取得後の値で補う(codexレビュー対応)。
+  const draft = draftState
+    ? { ...draftState, escalation: draftState.escalation ?? escalationQuery.data }
+    : { rows: serverRows, escalation: escalationQuery.data };
   const changedRows = draft.rows.filter((row, i) => row.enabled !== serverRows[i]?.enabled || row.preset !== serverRows[i]?.preset);
   const escalationChanged = draft.escalation !== undefined && draft.escalation !== escalationQuery.data;
   const updateRow = (violationType: ModerationViolationType, patch: Partial<ThresholdSetting>) =>
