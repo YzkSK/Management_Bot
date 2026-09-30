@@ -25,7 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading, Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type TargetType = "user" | "role";
@@ -98,6 +98,16 @@ interface SidebarTarget {
   readonly targetType: TargetType;
   readonly targetId: string;
   readonly name: string;
+  /** 個別ユーザーの名前を解決中か。解決中はIDを見せずスケルトンを出す。 */
+  readonly isNameLoading?: boolean;
+}
+
+/** 名前解決中はIDの代わりにスケルトンを出し、失敗・未解決のときだけIDにフォールバックする(#503と同じ方針)。 */
+function TargetName({ target }: { target: SidebarTarget }) {
+  if (target.isNameLoading) {
+    return <Skeleton className="inline-block h-4 w-24 align-middle" aria-label="名前を読み込み中" />;
+  }
+  return <>{target.name}</>;
 }
 
 function targetKey(target: { targetType: TargetType; targetId: string }): string {
@@ -258,7 +268,9 @@ function TargetSidebar({
                 )}
                 onClick={() => onSelect(user)}
               >
-                <span className="min-w-0 truncate">{user.name}</span>
+                <span className="min-w-0 truncate">
+                  <TargetName target={user} />
+                </span>
                 <span className="text-muted-foreground shrink-0 text-xs font-normal">{presetOf(user)}</span>
               </button>
             ))}
@@ -338,7 +350,9 @@ function TargetEditor({
   return (
     <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-xl border p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">{target.name} を編集</h2>
+        <h2 className="text-lg font-bold">
+          <TargetName target={target} /> を編集
+        </h2>
         <label className="text-muted-foreground flex items-center gap-2 text-sm">
           プリセットから選択
           <Select
@@ -503,9 +517,15 @@ export function AccessPage() {
       targetType: "user",
       targetId: grant.targetId,
       name: targetUserNamesQuery.data?.[grant.targetId] ?? grant.targetId,
+      isNameLoading: targetUserNamesQuery.isPending,
     }));
 
-  const activeTarget = selectedTarget ?? roles[0] ?? grantedUsers[0];
+  // selectedTargetは選択時点のコピーのため、名前解決後の表示に追従するよう最新の一覧から引き直す。
+  const activeTarget =
+    (selectedTarget && [...roles, ...grantedUsers].find((t) => targetKey(t) === targetKey(selectedTarget))) ??
+    selectedTarget ??
+    roles[0] ??
+    grantedUsers[0];
   const presetOf = (target: SidebarTarget) => presetLabelFor(grantByKey.get(targetKey(target)) ?? 0);
   const allTargets = [...roles, ...grantedUsers];
   // 追加直後で一覧(付与済み)にまだ無い個別ユーザーも選択欄に出す
@@ -529,7 +549,7 @@ export function AccessPage() {
             <SelectContent>
               {selectableTargets.map((target) => (
                 <SelectItem key={targetKey(target)} value={targetKey(target)}>
-                  {target.name}({presetOf(target)})
+                  <TargetName target={target} />({presetOf(target)})
                 </SelectItem>
               ))}
             </SelectContent>

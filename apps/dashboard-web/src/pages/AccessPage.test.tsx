@@ -100,6 +100,20 @@ describe("AccessPage", () => {
     expect(html).toContain("unknown-user");
   });
 
+  test("ユーザー名の解決中はIDを見せずスケルトンを表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", { myCapabilities: CAPABILITIES.MANAGE_ACCESS });
+    // resolveTargetUserNamesを未取得のままにするため、seedBaseQueriesとは別のgrantsで上書きする。
+    queryClient.setQueryData(trpc.access.listCapabilityGrants.queryOptions({ guildId: "g1" }).queryKey, [
+      { id: "grant-1", targetType: "user", targetId: "pending-user", capabilities: CAPABILITIES.VIEW_LOGS },
+    ]);
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain('aria-label="名前を読み込み中"');
+    expect(html).not.toContain("pending-user");
+  });
+
   test("初期選択は先頭のロールで、権限タブにそのロールの権限グループが描画される", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     seedBaseQueries(queryClient, "g1", {
