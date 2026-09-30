@@ -111,7 +111,7 @@ function ActivityChart({
           tickLine={false}
           axisLine={false}
           fontSize={11}
-          width={72}
+          width={96}
           stroke="var(--muted-foreground)"
           tickFormatter={(value: number) => (value === 0 ? "0" : `${value}件 / ${value}h`)}
         />
