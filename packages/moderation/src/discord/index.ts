@@ -38,7 +38,10 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // lazyConnect: メッセージが実際に届くまで接続を開かない(テスト等でのRedis依存を避ける)。
   const redis = new Redis(ctx.redisUrl, { lazyConnect: true });
   ctx.onShutdown(async () => {
-    redis.disconnect();
+    // disconnectは送信中のコマンドを"Connection is closed"で失敗させるため、接続中・接続済みならquitで応答を待って閉じる
+    // (再接続待ち=Redis停止中にquitすると停止処理が長く待たされるのでdisconnectする)。
+    if (["connecting", "connect", "ready"].includes(redis.status)) await redis.quit().catch(() => redis.disconnect());
+    else redis.disconnect();
   });
 
   // whitelist/thresholds/ngwordsをguild単位でまとめてTTLキャッシュする(#352)。
