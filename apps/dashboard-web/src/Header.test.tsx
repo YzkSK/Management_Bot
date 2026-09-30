@@ -47,4 +47,8 @@ describe("Header", () => {
     expect(closedHtml).toContain('aria-expanded="false"');
     expect(openHtml).toContain('aria-expanded="true"');
   });
+
+  test("ステータス閲覧者でなければ状態ランプを出さない(issue #507)", () => {
+    expect(renderHeader()).not.toContain("ステータス:");
+  });
 });
