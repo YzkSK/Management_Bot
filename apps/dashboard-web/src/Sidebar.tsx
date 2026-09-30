@@ -1,29 +1,65 @@
 import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FEATURE_METADATA } from "@management-bot/shared";
+import { hasCapability } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { GuildIcon } from "./guild-icon.js";
+import { firstAccessiblePath, GUILD_PAGES, guildPagePath, type GuildPage } from "./guild-pages.js";
 import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogContent, DialogTitle } from "@/components/ui/dialog";
 
-/** ページ実装済みの機能のみここに登録する(未実装の機能はリンクにしない)。 */
-const FEATURE_PATHS: Record<string, (guildId: string) => string> = {
-  activity: (guildId) => `/guilds/${guildId}/activity`,
-  logging: (guildId) => `/guilds/${guildId}/logs`,
-  moderation: (guildId) => `/guilds/${guildId}/moderation`,
-  "temp-voice": (guildId) => `/guilds/${guildId}/temp-voice`,
-};
-
 interface SidebarProps {
   guildId?: string;
   /** モバイル幅でのドロワー開閉状態。デスクトップ幅(md以上)では常に表示するため参照しない。 */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+}
+
+function PageSection({
+  title,
+  pages,
+  guildId,
+  onNavigate,
+  className,
+}: {
+  title: string;
+  pages: readonly GuildPage[];
+  guildId?: string;
+  onNavigate?: () => void;
+  className: string;
+}) {
+  if (pages.length === 0) return null;
+  return (
+    <>
+      <p className={cn("text-muted-foreground px-3 pb-1 text-xs font-semibold", className)}>{title}</p>
+      <ul className="flex flex-col gap-0.5">
+        {pages.map((page) => (
+          <li key={page.key}>
+            {guildId ? (
+              <NavLink
+                to={guildPagePath(guildId, page)}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
+                    isActive && "bg-accent text-accent-foreground font-medium",
+                  )
+                }
+              >
+                {page.name}
+              </NavLink>
+            ) : (
+              <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">{page.name}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
 }
 
 function SidebarNav({
@@ -42,6 +78,13 @@ function SidebarNav({
   // 同一guildの再選択時はRadix SelectPrimitiveのonValueChangeが発火しないため、
   // SelectItem側で直接どのguildが押されたかを記録する。
   const pickedGuildRef = useRef<ManagedGuildWithAccess | null>(null);
+  // サーバー選択中は閲覧権限のあるページだけを出す(issue #527)。未選択時は全項目を非リンクで出す。
+  const currentGuild = guilds.find((g) => g.id === guildId);
+  const visiblePages = currentGuild
+    ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
+    : GUILD_PAGES;
+  const featurePages = visiblePages.filter((page) => page.key !== "access");
+  const adminPages = visiblePages.filter((page) => page.key === "access");
 
   return (
     <>
@@ -50,18 +93,21 @@ function SidebarNav({
           value={guildId ?? ""}
           onValueChange={(value) => {
             const guild = guilds.find((g) => g.id === value);
-            if (!guild?.canViewActivity) {
+            const path = guild ? firstAccessiblePath(guild.id, guild.capabilities) : null;
+            if (!path) {
               toast.error(NO_ACCESS_MESSAGE);
               return;
             }
-            navigate(`/guilds/${value}/activity`);
+            navigate(path);
           }}
           onOpenChange={(selectOpen) => {
             if (selectOpen) {
               pickedGuildRef.current = null;
               return;
             }
-            if (pickedGuildRef.current?.canViewActivity) onNavigate?.();
+            if (pickedGuildRef.current && firstAccessiblePath(pickedGuildRef.current.id, pickedGuildRef.current.capabilities)) {
+              onNavigate?.();
+            }
           }}
           disabled={guilds.length === 0}
         >
@@ -73,7 +119,7 @@ function SidebarNav({
               <SelectItem
                 key={guild.id}
                 value={guild.id}
-                className={!guild.canViewActivity ? "text-muted-foreground opacity-50" : undefined}
+                className={!firstAccessiblePath(guild.id, guild.capabilities) ? "text-muted-foreground opacity-50" : undefined}
                 onPointerUp={() => {
                   pickedGuildRef.current = guild;
                 }}
@@ -85,7 +131,7 @@ function SidebarNav({
                   <GuildIcon name={guild.name} iconUrl={guild.iconUrl} className="size-7 rounded-lg text-xs" />
                   <span className="truncate">
                     {guild.name}
-                    {!guild.canViewActivity && "(権限なし)"}
+                    {!firstAccessiblePath(guild.id, guild.capabilities) && "(権限なし)"}
                   </span>
                 </span>
               </SelectItem>
@@ -93,54 +139,8 @@ function SidebarNav({
           </SelectContent>
         </Select>
       </div>
-      <p className="text-muted-foreground px-3 pt-2 pb-1 text-xs font-semibold">機能</p>
-      <ul className="flex flex-col gap-0.5">
-        {FEATURE_METADATA.map((feature) => {
-          const buildPath = FEATURE_PATHS[feature.key];
-          const path = guildId && buildPath ? buildPath(guildId) : undefined;
-          return (
-            <li key={feature.key}>
-              {path ? (
-                <NavLink
-                  to={path}
-                  onClick={onNavigate}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
-                      isActive && "bg-accent text-accent-foreground font-medium",
-                    )
-                  }
-                >
-                  {feature.name}
-                </NavLink>
-              ) : (
-                <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">{feature.name}</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="text-muted-foreground px-3 pt-4 pb-1 text-xs font-semibold">管理</p>
-      <ul className="flex flex-col gap-0.5">
-        <li>
-          {guildId ? (
-            <NavLink
-              to={`/guilds/${guildId}/access`}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
-                  isActive && "bg-accent text-accent-foreground font-medium",
-                )
-              }
-            >
-              アクセス権限
-            </NavLink>
-          ) : (
-            <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">アクセス権限</span>
-          )}
-        </li>
-      </ul>
+      <PageSection title="機能" pages={featurePages} guildId={guildId} onNavigate={onNavigate} className="pt-2" />
+      <PageSection title="管理" pages={adminPages} guildId={guildId} onNavigate={onNavigate} className="pt-4" />
     </>
   );
 }

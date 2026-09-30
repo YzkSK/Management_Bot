@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { GuildIcon } from "../guild-icon.js";
+import { firstAccessiblePath } from "../guild-pages.js";
 import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,7 +18,8 @@ function GuildInitial({ guild }: { guild: ManagedGuildWithAccess }) {
 }
 
 function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
-  if (!guild.canViewActivity) {
+  const path = firstAccessiblePath(guild.id, guild.capabilities);
+  if (!path) {
     return (
       <button
         type="button"
@@ -36,7 +38,7 @@ function GuildCard({ guild }: { guild: ManagedGuildWithAccess }) {
     );
   }
   return (
-    <Link to={`/guilds/${guild.id}/activity`} className={`${CARD} hover:bg-accent/50`}>
+    <Link to={path} className={`${CARD} hover:bg-accent/50`}>
       <GuildInitial guild={guild} />
       <span className="flex min-w-0 flex-col gap-1">
         <span className="truncate font-medium">{guild.name}</span>
