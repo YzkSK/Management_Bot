@@ -42,7 +42,7 @@ describe("ModerationPage", () => {
     seedBaseQueries(queryClient, guildId);
     queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, []);
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 }).queryKey,
       {
         entries: [
           {
@@ -106,7 +106,7 @@ describe("ModerationPage", () => {
     function withEntry(): QueryClient {
       const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false, retryOnMount: false } } });
       queryClient.setQueryData(
-        trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }).queryKey,
+        trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 }).queryKey,
         {
           entries: [
             {
@@ -168,7 +168,7 @@ describe("ModerationPage", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 }).queryKey,
       {
         entries: [
           {

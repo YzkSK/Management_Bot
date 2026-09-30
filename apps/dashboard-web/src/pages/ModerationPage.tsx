@@ -842,7 +842,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
 }
 
 export function ModerationHistoryTab({ guildId }: { guildId: string }) {
-  const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, category: "moderationCase", limit: 50 }));
+  const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 }));
   const targetUserIds = useMemo(
     () =>
       query.data
