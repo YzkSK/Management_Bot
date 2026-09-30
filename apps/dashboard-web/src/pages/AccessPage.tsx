@@ -209,7 +209,7 @@ function TargetSidebar({
   const visibleUsers = normalizedSearch === "" ? grantedUsers : grantedUsers.filter(filterByName);
 
   return (
-    <div className="bg-card flex w-72 shrink-0 flex-col gap-2 self-start rounded-xl border p-3">
+    <div className="bg-card flex max-h-full min-h-0 w-72 shrink-0 flex-col gap-2 rounded-xl border p-3">
       <Input
         type="text"
         placeholder="ロール・ユーザーを検索"
@@ -525,8 +525,9 @@ export function AccessPage() {
         </label>
         <AddUserSelect guildId={guildId} onSelect={setSelectedTarget} />
       </div>
-      <div className="flex gap-4">
-        <div className="hidden lg:flex">
+      <div className="flex items-start gap-4">
+        {/* 一覧は画面に収まる高さに抑え、ロール・ユーザーの部分だけをスクロールさせる(ヘッダー・フッター・見出し分を差し引く) */}
+        <div className="sticky top-0 hidden max-h-[calc(100dvh-14rem)] lg:flex">
           <TargetSidebar
             guildId={guildId}
             roles={roles}
