@@ -107,3 +107,24 @@ export {
 } from "./log-suppression.js";
 export { appEmojiNameFor } from "./app-emoji-name.js";
 export { setAppEmojis, findAppEmoji, appEmojiText, type AppEmoji } from "./app-emoji.js";
+export {
+  INFRA_LOG_STREAM,
+  INFRA_LOG_MAXLEN,
+  INFRA_STATUS_KEY,
+  INFRA_LOG_INGEST_CHANNEL,
+  HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_STALE_MS,
+  INFRA_LOG_SERVICES,
+  INFRA_LOG_LEVELS,
+  infraLogEntrySchema,
+  infraHeartbeatSchema,
+  formatConsoleArgs,
+  appendInfraLog,
+  startInfraReporter,
+  type InfraLogService,
+  type InfraLogLevel,
+  type InfraLogEntry,
+  type InfraHeartbeat,
+  type InfraRedisClient,
+  type InfraReporter,
+} from "./infra-status.js";
