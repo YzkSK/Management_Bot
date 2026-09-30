@@ -5,7 +5,7 @@ import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
 import { ActiveVoiceView } from "./ActiveVoiceTab.js";
-import { ActivityPage, MemberDetailView } from "./ActivityPage.js";
+import { ActivityPage, MemberDetailView, RankingTable } from "./ActivityPage.js";
 import { toRange } from "./activity-range.js";
 
 const guildId = "g1";
@@ -27,25 +27,39 @@ function newClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
 }
 
+function seedRanking(queryClient: QueryClient, rows: unknown[]): ReturnType<typeof toRange> {
+  const range = toRange("7d", now);
+  queryClient.setQueryData(
+    trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort: "voice", page: 0 }).queryKey,
+    { rows, total: rows.length, pageSize: 20 },
+  );
+  return range;
+}
+
+function renderRanking(queryClient: QueryClient, range: ReturnType<typeof toRange>, selectedUserId = ""): string {
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <RankingTable
+        guildId={guildId}
+        range={range}
+        now={now}
+        live={new Map()}
+        sort="voice"
+        selectedUserId={selectedUserId}
+        onSelect={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+}
+
 describe("ActivityPage", () => {
-  test("サーバー統計タブに合計カードとランキングを表示する(名前が解決できないメンバーはID)", () => {
+  test("サーバー統計タブはアクティブメンバー→発言数→VC時間の順に合計カードを出し、ランキングは出さない(#505)", () => {
     const queryClient = newClient();
     const range = toRange("7d", now);
     queryClient.setQueryData(trpc.activity.serverSummary.queryOptions({ guildId, ...range }).queryKey, {
       totals: { messageCount: 1210, voiceSeconds: 57 * 3600, activeMembers: 43 },
       series: [{ bucket: "2026-09-28", messageCount: 100, voiceSeconds: 3600 }],
     });
-    queryClient.setQueryData(
-      trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort: "voice", page: 0 }).queryKey,
-      {
-        rows: [
-          { userId: "u1", name: "メンバーA", messageCount: 312, voiceSeconds: 14 * 3600 + 20 * 60, lastActiveAt: "2026-09-29T11:00:00.000Z" },
-          { userId: "u2", name: null, messageCount: 5, voiceSeconds: 0, lastActiveAt: null },
-        ],
-        total: 2,
-        pageSize: 20,
-      },
-    );
 
     const html = renderPage(queryClient);
 
@@ -53,24 +67,41 @@ describe("ActivityPage", () => {
     expect(html).toContain("1,210");
     expect(html).toContain("57h 0m");
     expect(html).toContain("43");
+    expect(html.indexOf("アクティブメンバー")).toBeLessThan(html.indexOf("発言数"));
+    expect(html).not.toContain("メンバーランキング");
+  });
+});
+
+describe("RankingTable", () => {
+  test("ランキングを表示し、名前が解決できないメンバーはIDを出す", () => {
+    const queryClient = newClient();
+    const range = seedRanking(queryClient, [
+      { userId: "u1", name: "メンバーA", messageCount: 312, voiceSeconds: 14 * 3600 + 20 * 60, lastActiveAt: "2026-09-29T11:00:00.000Z" },
+      { userId: "u2", name: null, messageCount: 5, voiceSeconds: 0, lastActiveAt: null },
+    ]);
+
+    const html = renderRanking(queryClient, range);
+
+    expect(html).toContain("メンバーランキング");
     expect(html).toContain("メンバーA");
     expect(html).toContain("14h 20m");
     expect(html).toContain("u2");
   });
 
+  test("選択中のメンバーの行を強調する", () => {
+    const queryClient = newClient();
+    const range = seedRanking(queryClient, [
+      { userId: "u1", name: "メンバーA", messageCount: 1, voiceSeconds: 0, lastActiveAt: null },
+    ]);
+
+    expect(renderRanking(queryClient, range, "u1")).toContain("bg-accent");
+  });
+
   test("期間内に活動が無ければ案内を表示する", () => {
     const queryClient = newClient();
-    const range = toRange("7d", now);
-    queryClient.setQueryData(trpc.activity.serverSummary.queryOptions({ guildId, ...range }).queryKey, {
-      totals: { messageCount: 0, voiceSeconds: 0, activeMembers: 0 },
-      series: [],
-    });
-    queryClient.setQueryData(
-      trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort: "voice", page: 0 }).queryKey,
-      { rows: [], total: 0, pageSize: 20 },
-    );
+    const range = seedRanking(queryClient, []);
 
-    expect(renderPage(queryClient)).toContain("この期間の活動はありません");
+    expect(renderRanking(queryClient, range)).toContain("この期間の活動はありません");
   });
 });
 

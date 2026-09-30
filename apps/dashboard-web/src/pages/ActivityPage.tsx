@@ -132,8 +132,23 @@ function chartData(series: readonly ActivitySeriesPoint[], range: ActivityRange)
   return fillSeries(series, range).map((p) => ({ ...p, label: formatBucketLabel(p.bucket, range.granularity) }));
 }
 
-function RankingTable({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {
-  const [sort, setSort] = useState<RankingSort>("voice");
+export function RankingTable({
+  guildId,
+  range,
+  now,
+  live,
+  sort,
+  selectedUserId,
+  onSelect,
+}: {
+  guildId: string;
+  range: ActivityRange;
+  now: Date;
+  live: LiveVoice;
+  sort: RankingSort;
+  selectedUserId: string;
+  onSelect: (userId: string) => void;
+}) {
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [guildId, range.from, sort]);
 
@@ -143,19 +158,8 @@ function RankingTable({ guildId, range, now, live }: { guildId: string; range: A
   });
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h3 className="text-sm font-semibold">メンバーランキング</h3>
-        <Select value={sort} onValueChange={(value) => setSort(value === "messages" ? "messages" : "voice")}>
-          <SelectTrigger className="w-40" aria-label="並び替え">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="voice">VC時間順</SelectItem>
-            <SelectItem value="messages">発言数順</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="bg-card overflow-hidden rounded-xl border">
+      <h3 className="border-b px-4 py-3 text-sm font-semibold">メンバーランキング</h3>
       {query.isPending ? (
         <Loading />
       ) : query.isError ? (
@@ -176,9 +180,17 @@ function RankingTable({ guildId, range, now, live }: { guildId: string; range: A
             </TableHeader>
             <TableBody>
               {query.data.rows.map((row, index) => (
-                <TableRow key={row.userId}>
+                <TableRow
+                  key={row.userId}
+                  className={cn("cursor-pointer", row.userId === selectedUserId && "bg-accent")}
+                  onClick={() => onSelect(row.userId)}
+                >
                   <TableCell className="text-muted-foreground">{page * query.data.pageSize + index + 1}</TableCell>
-                  <TableCell>{row.name ?? row.userId}</TableCell>
+                  <TableCell>
+                    <button type="button" className="text-left hover:underline" onClick={() => onSelect(row.userId)}>
+                      {row.name ?? row.userId}
+                    </button>
+                  </TableCell>
                   <TableCell className="text-right">{NUMBER_FORMAT.format(row.messageCount)}</TableCell>
                   {/* ponytail: 並び順は取得時のまま(次のstats通知で取り直した時に並び直る)。 */}
                   <TableCell className="text-right">{formatDuration(row.voiceSeconds + (live.get(row.userId) ?? 0))}</TableCell>
@@ -209,8 +221,7 @@ function RankingTable({ guildId, range, now, live }: { guildId: string; range: A
   );
 }
 
-function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {
-  const query = useQuery({ ...trpc.activity.serverSummary.queryOptions({ guildId, ...range }), placeholderData: keepPreviousData });
+function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {  const query = useQuery({ ...trpc.activity.serverSummary.queryOptions({ guildId, ...range }), placeholderData: keepPreviousData });
   const liveTotal = sumLive(live);
 
   return (
@@ -218,9 +229,9 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
       {query.isPending ? (
         <Loading className="gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="発言数" value={VALUE_SKELETON} color={MESSAGE_COLOR} />
-            <StatCard label="VC時間" value={VALUE_SKELETON} color={VOICE_COLOR} />
             <StatCard label="アクティブメンバー" value={VALUE_SKELETON} sub="期間内に発言またはVC参加" color={MEMBER_COLOR} />
+            <StatCard label="発言数" value={VALUE_SKELETON} sub="期間内の合計" color={MESSAGE_COLOR} />
+            <StatCard label="VC時間" value={VALUE_SKELETON} sub="期間内の合計" color={VOICE_COLOR} />
           </div>
           <ChartSkeleton title={range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"} />
         </Loading>
@@ -229,13 +240,18 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="発言数" value={NUMBER_FORMAT.format(query.data.totals.messageCount)} color={MESSAGE_COLOR} />
-            <StatCard label="VC時間" value={formatDuration(query.data.totals.voiceSeconds + liveTotal)} color={VOICE_COLOR} />
             <StatCard
               label="アクティブメンバー"
               value={NUMBER_FORMAT.format(query.data.totals.activeMembers)}
               sub="期間内に発言またはVC参加"
               color={MEMBER_COLOR}
+            />
+            <StatCard label="発言数" value={NUMBER_FORMAT.format(query.data.totals.messageCount)} sub="期間内の合計" color={MESSAGE_COLOR} />
+            <StatCard
+              label="VC時間"
+              value={formatDuration(query.data.totals.voiceSeconds + liveTotal)}
+              sub="期間内の合計"
+              color={VOICE_COLOR}
             />
           </div>
           <div className="bg-card flex flex-col gap-2 rounded-xl border p-4">
@@ -246,7 +262,6 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
           </div>
         </>
       )}
-      <RankingTable guildId={guildId} range={range} now={now} live={live} />
     </div>
   );
 }
@@ -325,6 +340,7 @@ export function MemberDetailView({
 
 function MemberTab({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {
   const [userId, setUserId] = useState("");
+  const [sort, setSort] = useState<RankingSort>("voice");
   const memberOptions = useMemberOptions(guildId);
   const detailQuery = useQuery({
     ...trpc.activity.memberDetail.queryOptions({ guildId, userId, from: range.from, to: range.to }),
@@ -334,9 +350,11 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-muted-foreground flex w-full flex-col gap-1.5 text-sm sm:w-72">
+          メンバー
         <Select value={userId} onValueChange={setUserId} disabled={memberOptions.isPending || memberOptions.isError}>
-          <SelectTrigger className="w-64" aria-label="メンバーを選択">
+          <SelectTrigger className="w-full" aria-label="メンバーを選択">
             <SelectValue placeholder="メンバーを選択" />
           </SelectTrigger>
           <SelectContent>
@@ -347,6 +365,19 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
             ))}
           </SelectContent>
         </Select>
+        </label>
+        <label className="text-muted-foreground flex w-full flex-col gap-1.5 text-sm sm:w-44">
+          並び替え
+          <Select value={sort} onValueChange={(value) => setSort(value === "messages" ? "messages" : "voice")}>
+            <SelectTrigger className="w-full" aria-label="並び替え">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="voice">VC時間順</SelectItem>
+              <SelectItem value="messages">発言数順</SelectItem>
+            </SelectContent>
+          </Select>
+        </label>
         {memberOptions.nextAfter && (
           <Button
             type="button"
@@ -360,8 +391,11 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
         )}
       </div>
       {memberOptions.isError && <p className="text-destructive text-sm">メンバー候補の取得に失敗しました。</p>}
+      <RankingTable guildId={guildId} range={range} now={now} live={live} sort={sort} selectedUserId={userId} onSelect={setUserId} />
       {userId === "" ? (
-        <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">メンバーを選択してください。</p>
+        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+          メンバーを選択すると、時間帯別・日別の活動を表示します。
+        </p>
       ) : detailQuery.isPending ? (
         <Loading className="gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -459,15 +493,17 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">アクティビティモニター</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">アクティビティモニター</h1>
+        {tab !== "voice" && <PeriodPicker value={period} onChange={changePeriod} />}
+      </div>
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
-        <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
           <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
             <TabsTrigger value="server">サーバー統計</TabsTrigger>
             <TabsTrigger value="member">メンバー</TabsTrigger>
             <TabsTrigger value="voice">アクティブVC</TabsTrigger>
           </TabsList>
-          {tab !== "voice" && <PeriodPicker value={period} onChange={changePeriod} />}
         </div>
         <p className="text-muted-foreground text-xs">
           Botは除外し、ミュート中・AFKチャンネル滞在はVC時間に含みません。
