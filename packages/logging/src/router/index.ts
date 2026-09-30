@@ -23,8 +23,8 @@ const listLogEntriesInput = z.object({
   /** 指定時はこれらのカテゴリのみ返す(未指定・空配列は全カテゴリ)。 */
   categories: z.array(z.enum(LOG_CATEGORIES)).max(LOG_CATEGORIES.length).optional(),
   limit: z.number().int().min(1).max(100).default(50),
-  /** 前回レスポンスのnextCursorをそのまま渡す不透明なトークン。 */
-  cursor: z.string().min(1).optional(),
+  /** 先頭から読み飛ばす件数。 */
+  offset: z.number().int().min(0).default(0),
 });
 
 const guildIdInput = z.object({
@@ -93,12 +93,7 @@ export const loggingRouter = router({
           : undefined;
       const excludeBotEvents = displaySettings.hideBotEvents;
 
-      let result;
-      try {
-        result = await listLogEntries(ctx.db, { ...input, excludeCategories, excludeBotEvents });
-      } catch {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid cursor" });
-      }
+      const result = await listLogEntries(ctx.db, { ...input, excludeCategories, excludeBotEvents });
       const hasRawAccess = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_LOGS_RAW);
       const present = (row: ListedLogEntry): ListedLogEntry => ({
         ...row,
@@ -109,7 +104,7 @@ export const loggingRouter = router({
       return {
         hasRawAccess,
         entries: result.entries.map(present),
-        nextCursor: result.nextCursor,
+        totalCount: result.totalCount,
       };
     }),
 

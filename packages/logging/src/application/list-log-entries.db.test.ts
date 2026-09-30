@@ -3,7 +3,7 @@ import { createDb, guilds, logEntries } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { LogEntry } from "../domain/index.js";
-import { decodeCursor, encodeCursor, listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
+import { listLogEntries, maskSensitiveFields } from "./list-log-entries.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -153,9 +153,9 @@ describe("listLogEntries", () => {
         entry: { action: "create", messageId, content: `content-${index + 1}` },
       })),
     });
-    expect(firstPage.nextCursor).not.toBeNull();
+    expect(firstPage.totalCount).toBe(2);
 
-    const secondPage = await listLogEntries(db, { guildId, limit: 50, cursor: firstPage.nextCursor! });
+    const secondPage = await listLogEntries(db, { guildId, limit: 50, offset: 1 });
 
     expect(secondPage.entries.map(({ entry }) => entry)).toEqual([expect.objectContaining({ userId: "unrelated" })]);
   });
@@ -237,7 +237,7 @@ describe("listLogEntries", () => {
     expect(result.entries.map((e) => (e.entry as { userId: string }).userId)).toEqual(["human"]);
   });
 
-  test("createdAt降順で返し、まだ後続がある場合のみnextCursorを返す", async () => {
+  test("createdAt降順で返し、フィルタ一致の総件数を返す", async () => {
     await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
     await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");
     await insert(memberEntry({ userId: "u3" }), "2026-08-31T00:00:02.000Z");
@@ -248,43 +248,18 @@ describe("listLogEntries", () => {
       "u3",
       "u2",
     ]);
-    expect(result.nextCursor).not.toBeNull();
-    expect(decodeCursor(result.nextCursor!).createdAt).toBe("2026-08-31T00:00:01.000Z");
+    expect(result.totalCount).toBe(3);
   });
 
-  test("残件がちょうどlimit件でも、それ以上残っていなければnextCursorはnull", async () => {
-    await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
-    await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");
-
-    const result = await listLogEntries(db, { guildId, limit: 2 });
-
-    expect(result.entries).toHaveLength(2);
-    expect(result.nextCursor).toBeNull();
-  });
-
-  test("limit未満しか返らない場合はnextCursorがnull", async () => {
-    await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
-
-    const result = await listLogEntries(db, { guildId, limit: 50 });
-
-    expect(result.nextCursor).toBeNull();
-  });
-
-  test("cursorより古いエントリのみ返す", async () => {
+  test("offset分を読み飛ばしたエントリを返す", async () => {
     await insert(memberEntry({ userId: "u1" }), "2026-08-31T00:00:00.000Z");
     await insert(memberEntry({ userId: "u2" }), "2026-08-31T00:00:01.000Z");
 
-    const result = await listLogEntries(db, {
-      guildId,
-      limit: 50,
-      cursor: encodeCursor({
-        createdAt: "2026-08-31T00:00:01.000Z",
-        id: "00000000-0000-0000-0000-000000000000",
-      }),
-    });
+    const result = await listLogEntries(db, { guildId, limit: 50, offset: 1 });
 
     expect(result.entries).toHaveLength(1);
     expect((result.entries[0]?.entry as { userId: string }).userId).toBe("u1");
+    expect(result.totalCount).toBe(2);
   });
 
   test("同一createdAtのエントリはidの降順で欠落・重複なく分割される", async () => {
@@ -294,11 +269,10 @@ describe("listLogEntries", () => {
 
     const page1 = await listLogEntries(db, { guildId, limit: 2 });
     expect(page1.entries).toHaveLength(2);
-    expect(page1.nextCursor).not.toBeNull();
+    expect(page1.totalCount).toBe(3);
 
-    const page2 = await listLogEntries(db, { guildId, limit: 2, cursor: page1.nextCursor! });
+    const page2 = await listLogEntries(db, { guildId, limit: 2, offset: 2 });
     expect(page2.entries).toHaveLength(1);
-    expect(page2.nextCursor).toBeNull();
 
     const seenIds = [...page1.entries, ...page2.entries].map((e) => e.id);
     expect(new Set(seenIds).size).toBe(3);
