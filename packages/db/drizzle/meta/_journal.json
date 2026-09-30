@@ -225,6 +225,13 @@
       "when": 1790700050186,
       "tag": "0031_awesome_robin_chapel",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790770951377,
+      "tag": "0032_magenta_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

@@ -87,3 +87,13 @@ export const capabilityGrants = pgTable(
     check("target_type_check", sql`${table.targetType} IN ('user', 'role')`),
   ],
 );
+
+/**
+ * Bot全体ステータス画面(issue #507)の閲覧を許可されたユーザー。Botオーナーは
+ * Discord APIから自動判定するためここには保存しない。表示名は追加時点のものを保持する。
+ */
+export const statusViewers = pgTable("status_viewers", {
+  discordUserId: text("discord_user_id").primaryKey(),
+  discordUsername: text("discord_username").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
