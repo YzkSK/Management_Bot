@@ -27,6 +27,7 @@ describe("evaluateWorker", () => {
 describe("evaluateBot", () => {
   test("Gateway未接続は停止、ping遅延は遅延", () => {
     expect(evaluateBot({ aliveAt: fresh, detail: { ready: 0 } }, now)).toBe("down");
+    expect(evaluateBot({ aliveAt: fresh }, now)).toBe("down");
     expect(evaluateBot({ aliveAt: fresh, detail: { ready: 1, pingMs: 1500 } }, now)).toBe("warn");
     expect(evaluateBot({ aliveAt: fresh, detail: { ready: 1, pingMs: 40 } }, now)).toBe("ok");
   });

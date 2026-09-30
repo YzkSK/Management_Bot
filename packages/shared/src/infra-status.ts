@@ -47,7 +47,7 @@ export interface InfraRedisClient {
 export interface InfraReporter {
   /** 定期ジョブの実行結果を記録し、即座にハートビートへ反映する。 */
   recordRun(ok: boolean): void;
-  /** 画面に出す数値(Gateway ping等)を差し替える。次のハートビートで反映する。 */
+  /** 画面に出す数値(Gateway ping等)を差し替え、即座にハートビートへ反映する。 */
   setDetail(detail: Record<string, number>): void;
   stop(): void;
 }
@@ -109,6 +109,7 @@ export function startInfraReporter(
     },
     setDetail(detail) {
       state.detail = detail;
+      writeHeartbeat();
     },
     stop() {
       clearInterval(timer);

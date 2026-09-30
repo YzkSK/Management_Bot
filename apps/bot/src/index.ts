@@ -40,15 +40,15 @@ console.info(`Starting bot v${RELEASE_VERSION}`);
 const { db, close } = createDb(env.DATABASE_URL);
 const client = new BotClient();
 // ステータス画面(issue #507)向け。ready=0ならGateway未接続として停止扱いにする。
-const botDetailTimer = setInterval(
-  () =>
-    infraReporter.setDetail({
-      ready: client.isReady() ? 1 : 0,
-      pingMs: client.ws.ping,
-      guilds: client.guilds.cache.size,
-    }),
-  HEARTBEAT_INTERVAL_MS,
-);
+// 起動直後とready時にも即座に反映し、接続前の状態を稼働中と誤表示しない。
+const reportBotDetail = () =>
+  infraReporter.setDetail({
+    ready: client.isReady() ? 1 : 0,
+    pingMs: client.ws.ping,
+    guilds: client.guilds.cache.size,
+  });
+reportBotDetail();
+const botDetailTimer = setInterval(reportBotDetail, HEARTBEAT_INTERVAL_MS);
 botDetailTimer.unref();
 const pendingOnboardings = new Set<Promise<void>>();
 // consumerGroupは機能ごとに一意にする(DomainEventBus参照)。同一typeを複数機能が
@@ -95,6 +95,7 @@ try {
   };
 
   client.once("ready", (readyClient) => {
+    reportBotDetail();
     console.log(`Logged in as ${readyClient.user.tag}`);
     console.log(`Invite URL: ${buildInviteUrl(env.DISCORD_CLIENT_ID)}`);
     // 絵文字登録の失敗でBotを止めない(未登録の絵文字は利用側でフォールバックする前提)。

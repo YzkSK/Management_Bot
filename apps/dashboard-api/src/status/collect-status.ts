@@ -59,7 +59,8 @@ export function evaluateWorker(hb: InfraHeartbeat | undefined, now: Date): Servi
 }
 
 export function evaluateBot(hb: InfraHeartbeat | undefined, now: Date): ServiceState {
-  if (isStale(hb, now) || hb?.detail?.ready === 0) return "down";
+  // readyが未報告(起動直後・ログイン失敗)の間も停止扱いにする。
+  if (isStale(hb, now) || hb?.detail?.ready !== 1) return "down";
   return (hb?.detail?.pingMs ?? 0) > BOT_PING_WARN_MS ? "warn" : "ok";
 }
 
