@@ -1,7 +1,7 @@
 export type ActivityPeriod = "24h" | "7d" | "30d" | "90d";
 
 export const ACTIVITY_PERIODS: readonly { value: ActivityPeriod; label: string }[] = [
-  { value: "24h", label: "24時間" },
+  { value: "24h", label: "今日" },
   { value: "7d", label: "7日" },
   { value: "30d", label: "30日" },
   { value: "90d", label: "90日" },
@@ -24,9 +24,15 @@ const DAY_MS = 24 * HOUR_MS;
 const JST_OFFSET_MS = 9 * HOUR_MS;
 const PERIOD_MS: Record<ActivityPeriod, number> = { "24h": DAY_MS, "7d": 7 * DAY_MS, "30d": 30 * DAY_MS, "90d": 90 * DAY_MS };
 
+/** 日本時間のその日の0時。 */
+function jstDayStartMs(ms: number): number {
+  return Math.floor((ms + JST_OFFSET_MS) / DAY_MS) * DAY_MS - JST_OFFSET_MS;
+}
+
+/** 「今日」は日本時間の0時から今まで(時間帯が重複しないよう、直近24時間ではなく当日にする)。 */
 export function toRange(period: ActivityPeriod, now: Date): ActivityRange {
   return {
-    from: new Date(now.getTime() - PERIOD_MS[period]).toISOString(),
+    from: new Date(period === "24h" ? jstDayStartMs(now.getTime()) : now.getTime() - PERIOD_MS[period]).toISOString(),
     to: now.toISOString(),
     granularity: period === "24h" ? "hour" : "day",
   };
@@ -40,12 +46,12 @@ function toJstDay(ms: number): string {
 export function fillSeries(series: readonly ActivitySeriesPoint[], range: ActivityRange): ActivitySeriesPoint[] {
   const byBucket = new Map(series.map((p) => [p.bucket, p]));
   const fromMs = Date.parse(range.from);
-  const toMs = Date.parse(range.to);
   const buckets: string[] = [];
   if (range.granularity === "hour") {
-    for (let ms = Math.floor(fromMs / HOUR_MS) * HOUR_MS; ms < toMs; ms += HOUR_MS) buckets.push(new Date(ms).toISOString());
+    // 当日の0時〜23時を常に24本並べる(まだ来ていない時間は0)。
+    for (let ms = fromMs; ms < fromMs + DAY_MS; ms += HOUR_MS) buckets.push(new Date(ms).toISOString());
   } else {
-    const lastDay = toJstDay(toMs - 1);
+    const lastDay = toJstDay(Date.parse(range.to) - 1);
     for (let ms = fromMs; ; ms += DAY_MS) {
       const day = toJstDay(ms);
       buckets.push(day);

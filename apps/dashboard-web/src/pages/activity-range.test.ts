@@ -4,9 +4,9 @@ import { fillSeries, formatBucketLabel, formatDuration, formatRelative, toRange 
 const now = new Date("2026-09-29T12:34:56.000Z");
 
 describe("toRange", () => {
-  test("24時間は時間別、それ以外は日別", () => {
+  test("今日(24h)は日本時間の0時からの時間別、それ以外は日別", () => {
     expect(toRange("24h", now)).toEqual({
-      from: "2026-09-28T12:34:56.000Z",
+      from: "2026-09-28T15:00:00.000Z",
       to: "2026-09-29T12:34:56.000Z",
       granularity: "hour",
     });
@@ -37,11 +37,10 @@ describe("fillSeries", () => {
     expect(filled[0]).toEqual({ bucket: "2026-09-22", messageCount: 0, voiceSeconds: 0 });
   });
 
-  test("時間別はUTCの各時間を0で補完する(25本)", () => {
+  test("時間別は当日の0時〜23時の24本を0で補完する", () => {
     const filled = fillSeries([], toRange("24h", now));
-    expect(filled).toHaveLength(25);
-    expect(filled[0]?.bucket).toBe("2026-09-28T12:00:00.000Z");
-    expect(filled[24]?.bucket).toBe("2026-09-29T12:00:00.000Z");
+    expect(filled).toHaveLength(24);
+    expect(filled.map((p) => formatBucketLabel(p.bucket, "hour"))).toEqual(Array.from({ length: 24 }, (_, h) => `${h}時`));
   });
 });
 
