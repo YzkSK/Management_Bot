@@ -26,16 +26,13 @@ export function setTheme(theme: Theme): void {
 }
 
 /**
- * テーマが"system"の間、OS側の配色設定変更にも追従させる(codexレビュー対応)。
- * "system"以外を選んでいる間は何もしない。呼び出し元はuseEffectのクリーンアップとして
- * 戻り値の解除関数を呼ぶこと。
+ * OS側の配色設定が変わったら、その時点で保存されているテーマを適用し直す(codexレビュー対応)。
+ * "system"以外を選んでいる間は再適用しても見た目は変わらない。アプリ起動時に一度だけ呼ぶ。
+ * 戻り値は解除関数。
  */
-export function watchSystemTheme(theme: Theme): () => void {
-  if (theme !== "system") {
-    return () => {};
-  }
+export function followSystemTheme(): () => void {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const onChange = () => applyTheme("system");
+  const onChange = () => applyTheme(getStoredTheme());
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 }

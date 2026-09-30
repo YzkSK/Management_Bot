@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { isUnauthorizedError } from "./is-unauthorized-error.js";
-import { API_URL, trpc } from "./trpc.js";
+import { logout } from "./logout.js";
+import { trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { AccessPage } from "./pages/AccessPage.js";
 import { ActivityPage } from "./pages/ActivityPage.js";
@@ -10,8 +11,10 @@ import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
+import { LOGOUT_FAILED_MESSAGE, UserSettingsPage } from "./pages/UserSettingsPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loading } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 export function App() {
   const me = useQuery(trpc.me.queryOptions());
@@ -35,12 +38,7 @@ export function App() {
   }
 
   const handleLogout = async () => {
-    const response = await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
-    if (!response.ok) {
-      window.alert("ログアウトに失敗しました。時間をおいて再度お試しください。");
-      return;
-    }
-    window.location.href = `${API_URL}/auth/login`;
+    if (!(await logout())) toast.error(LOGOUT_FAILED_MESSAGE);
   };
 
   return (
@@ -53,6 +51,7 @@ export function App() {
           }
         >
           <Route index element={<GuildListPage />} />
+          <Route path="settings" element={<UserSettingsPage />} />
         </Route>
         <Route
           path="/guilds/:guildId"

@@ -1,14 +1,11 @@
-import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getStoredTheme, setTheme, watchSystemTheme, type Theme } from "./theme.js";
 import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -20,25 +17,15 @@ interface HeaderProps {
   isSidebarOpen: boolean;
 }
 
-const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
-  { value: "light", label: "ライト" },
-  { value: "dark", label: "ダーク" },
-  { value: "system", label: "システムに合わせる" },
-];
-
 export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen }: HeaderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
-
-  useEffect(() => watchSystemTheme(theme), [theme]);
-
   return (
-    <header className="bg-background z-30 flex h-14 shrink-0 items-center justify-between border-b px-4">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="bg-background z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 md:px-4">
+      <div className="flex min-w-0 items-center gap-1">
         <DialogTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 md:hidden"
+            className="size-11 shrink-0 md:hidden"
             aria-label="メニューを開閉"
             aria-expanded={isSidebarOpen}
           >
@@ -50,24 +37,24 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen }: 
         </Link>
       </div>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex min-w-0 shrink-0 items-center gap-2 rounded-md p-1 text-sm hover:bg-accent">
-          {avatarUrl && <img src={avatarUrl} alt="" className="size-7 shrink-0 rounded-full" />}
-          <span className="max-w-20 truncate sm:max-w-none">{discordUsername}</span>
+        <DropdownMenuTrigger
+          className="flex h-11 min-w-0 shrink-0 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent"
+          aria-label="ユーザーメニュー"
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="size-7 shrink-0 rounded-full" />
+          ) : (
+            <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">
+              {discordUsername.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span className="hidden max-w-40 truncate sm:inline">{discordUsername}</span>
+          <ChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>テーマ</DropdownMenuLabel>
-          {THEME_OPTIONS.map((option) => (
-            <DropdownMenuItem
-              key={option.value}
-              onSelect={() => {
-                setTheme(option.value);
-                setThemeState(option.value);
-              }}
-              className={option.value === theme ? "font-medium" : undefined}
-            >
-              {option.label}
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuItem asChild>
+            <Link to="/settings">ユーザー設定</Link>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onLogout}>ログアウト</DropdownMenuItem>
         </DropdownMenuContent>
