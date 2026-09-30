@@ -221,18 +221,18 @@ function LockdownPanel({ guildId }: { guildId: string }) {
   return (
     <section
       className={cn(
-        "grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border p-4 lg:grid-cols-[1fr_auto_auto] lg:gap-4",
+        "grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border p-4 md:grid-cols-[1fr_auto_auto] md:gap-4",
         locked ? "border-destructive/30 bg-destructive/10" : "bg-card",
       )}
     >
       {/* PCでは1行、狭い画面では自動ロックダウンを上段に分けて2段にする。DOM順(読み上げ順)は常に状態→トグル→ボタン。 */}
-      <div className="row-start-2 min-w-0 lg:row-start-1">
+      <div className="row-start-2 min-w-0 md:row-start-1">
         <p className={cn("text-sm font-bold", locked && "text-destructive")}>現在の状態: {locked ? "ロック中" : "解除中"}</p>
         <p className="text-muted-foreground text-xs">
           ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
         </p>
       </div>
-      <label className="col-span-2 row-start-1 flex items-center justify-between gap-2 border-b pb-3 text-sm whitespace-nowrap lg:col-span-1 lg:border-0 lg:pb-0">
+      <label className="col-span-2 row-start-1 flex items-center justify-between gap-2 border-b pb-3 text-sm whitespace-nowrap md:col-span-1 md:border-0 md:pb-0">
         レイド時に自動でロックダウン
         <Switch
           checked={query.data.autoLockdownOnRaid}
@@ -244,7 +244,7 @@ function LockdownPanel({ guildId }: { guildId: string }) {
       <Button
         type="button"
         variant={query.data.requestedLocked ? "outline" : "destructive"}
-        className="row-start-2 lg:row-start-1"
+        className="row-start-2 md:row-start-1"
         disabled={isPending}
         onClick={() => requestedLockMutation.mutate({ guildId, requestedLocked: !query.data.requestedLocked })}
       >
