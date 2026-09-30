@@ -232,6 +232,13 @@
       "when": 1790770951377,
       "tag": "0032_magenta_spencer_smythe",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790798457386,
+      "tag": "0033_drop_unused_capabilities",
+      "breakpoints": true
     }
   ]
 }
