@@ -548,7 +548,7 @@ export function AccessPage() {
             </SelectTrigger>
             <SelectContent>
               {selectableTargets.map((target) => (
-                <SelectItem key={targetKey(target)} value={targetKey(target)}>
+                <SelectItem key={targetKey(target)} value={targetKey(target)} textValue={target.name}>
                   <TargetName target={target} />({presetOf(target)})
                 </SelectItem>
               ))}
