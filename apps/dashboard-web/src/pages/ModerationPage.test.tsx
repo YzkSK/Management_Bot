@@ -84,7 +84,7 @@ describe("ModerationPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     queryClient.setQueryData(
@@ -123,7 +123,7 @@ describe("ModerationPage", () => {
               },
             },
           ],
-          nextCursor: null,
+          totalCount: 0,
         },
       );
       return queryClient;
@@ -197,7 +197,7 @@ describe("ModerationPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     queryClient.setQueryData(

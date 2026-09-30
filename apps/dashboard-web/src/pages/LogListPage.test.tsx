@@ -63,12 +63,27 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
-      { entries: [], nextCursor: null },
+      { entries: [], totalCount: 0 },
     );
     const html = renderPage("g1", queryClient);
     expect(html).toContain("該当するログはありません");
+  });
+
+  test("総件数から現在ページ・総ページ数と最大5個のページ番号を表示する(#520)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
+      { hasRawAccess: true, entries: [], totalCount: 401 },
+    );
+    const html = renderPage("g1", queryClient);
+    expect(html).toContain("1 / 9 ページ(全401件)");
+    expect(html).toContain('aria-current="page"');
+    const pageButtons = [...html.matchAll(/<button[^>]*>(\d+)<\/button>/g)].map((m) => m[1]);
+    expect(pageButtons).toEqual(["1", "2", "3", "4", "5"]);
+    expect(html).toContain('aria-label="前のページ"');
+    expect(html).toContain('aria-label="次のページ"');
   });
 
   test("一覧では自然文の見出しのみを表示し、本文は展開後に表示する", () => {
@@ -79,7 +94,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -96,7 +111,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     const html = renderPage("g1", queryClient);
@@ -109,7 +124,7 @@ describe("LogListPage", () => {
   test("名前解決中は見出しの名前部分だけをスケルトンにしてIDを見せない", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -125,7 +140,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     const html = renderPage("g1", queryClient);
@@ -143,7 +158,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -161,7 +176,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     renderPage("g1", queryClient);
@@ -181,7 +196,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -199,7 +214,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     renderPage("g1", queryClient);
@@ -220,7 +235,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -237,7 +252,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     const html = renderPage("g1", queryClient);
@@ -252,7 +267,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -268,7 +283,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     queryClient.setQueryData(
@@ -292,7 +307,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -308,7 +323,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     queryClient.setQueryData(
@@ -331,7 +346,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -348,7 +363,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     // userIds: ["mod1", "u1"](実行者・投稿者の両方)でキャッシュしておき、queryKeyが一致した場合のみ
@@ -373,7 +388,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -390,7 +405,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     // channelIds: ["c1", "c2"]でキャッシュしておき、queryKeyが一致した場合のみusersの解決結果がヒットすることで
@@ -416,7 +431,7 @@ describe("LogListPage", () => {
         guildId: "g1",
         categories: undefined,
         limit: 50,
-        cursor: undefined,
+        offset: 0,
       }).queryKey,
       {
         entries: [
@@ -433,7 +448,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
     queryClient.setQueryData(
@@ -464,7 +479,7 @@ describe("LogListPage", () => {
     }));
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -479,7 +494,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
 
@@ -493,7 +508,7 @@ describe("LogListPage", () => {
   test("一括削除に関連する投稿ログを初期状態で折りたたんで表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -524,7 +539,7 @@ describe("LogListPage", () => {
             ],
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
 
@@ -549,7 +564,7 @@ describe("LogListPage", () => {
     }));
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -581,7 +596,7 @@ describe("LogListPage", () => {
             ],
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
 
@@ -596,7 +611,7 @@ describe("LogListPage", () => {
   test("折りたたまれた投稿ログの投稿者IDも表示名解決の対象にする", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -625,7 +640,7 @@ describe("LogListPage", () => {
             ],
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
 
@@ -655,7 +670,7 @@ describe("LogListPage", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     resolveNoNames(queryClient);
     queryClient.setQueryData(
-      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, cursor: undefined }).queryKey,
+      trpc.logging.listLogEntries.queryOptions({ guildId: "g1", categories: undefined, limit: 50, offset: 0 }).queryKey,
       {
         entries: [
           {
@@ -679,7 +694,7 @@ describe("LogListPage", () => {
             },
           },
         ],
-        nextCursor: null,
+        totalCount: 0,
       },
     );
 

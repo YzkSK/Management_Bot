@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { LogCategory, LogEntry } from "@management-bot/shared";
 import {
@@ -14,11 +14,11 @@ import {
   summarizeLogEntry,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
-import { Lock, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Settings } from "lucide-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
-import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
+import { visiblePages } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -150,7 +150,7 @@ function withNameSkeletons(message: string): ReactNode {
 export function LogListPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [categories, setCategories] = useState<LogCategory[]>([]);
-  const [pagination, setPagination] = useState(INITIAL_PAGINATION);
+  const [page, setPage] = useState(0);
   const queryClient = useQueryClient();
 
   const logsQuery = useQuery({
@@ -158,10 +158,15 @@ export function LogListPage() {
       guildId: guildId ?? "",
       categories: categories.length === 0 ? undefined : categories,
       limit: PAGE_SIZE,
-      cursor: currentCursor(pagination),
+      offset: page * PAGE_SIZE,
     }),
     enabled: Boolean(guildId),
   });
+  const totalPages = Math.ceil((logsQuery.data?.totalCount ?? 0) / PAGE_SIZE);
+  // 保持期間による削除などで総件数が減り、表示中のページが範囲外になった場合は最終ページへ寄せる。
+  useEffect(() => {
+    if (logsQuery.data && page > 0 && page >= totalPages) setPage(Math.max(totalPages - 1, 0));
+  }, [logsQuery.data, page, totalPages]);
 
   const subjectIds = useMemo(
     () =>
@@ -237,7 +242,7 @@ export function LogListPage() {
   const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionStatus = useLogEntryNotifications(guildId ?? "", (notifiedCategory) => {
     // 過去ページを閲覧中は表示中の内容を壊さないよう、最新ページ(先頭)表示中のみ自動更新する。
-    if (pagination.pageIndex !== 0) return;
+    if (page !== 0) return;
     if (categories.length > 0 && !categories.some((c) => c === notifiedCategory)) return;
     if (invalidateTimerRef.current) return; // 連続通知は1回のrefetchにまとめる
     invalidateTimerRef.current = setTimeout(() => {
@@ -247,7 +252,7 @@ export function LogListPage() {
           guildId: guildId ?? "",
           categories: categories.length === 0 ? undefined : categories,
           limit: PAGE_SIZE,
-          cursor: undefined,
+          offset: 0,
         }).queryKey,
       });
     }, INVALIDATE_DEBOUNCE_MS);
@@ -288,7 +293,7 @@ export function LogListPage() {
         selected={categories}
         onChange={(next) => {
           setCategories(next);
-          setPagination(INITIAL_PAGINATION);
+          setPage(0);
         }}
       />
 
@@ -611,24 +616,38 @@ export function LogListPage() {
               })}
             </div>
           )}
-          <div className="flex justify-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pagination.pageIndex === 0}
-              onClick={() => setPagination(goPrevPage(pagination))}
-            >
-              前へ
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={logsQuery.data.nextCursor === null}
-              onClick={() => setPagination(goNextPage(pagination, logsQuery.data.nextCursor))}
-            >
-              次へ
-            </Button>
-          </div>
+          {totalPages > 1 && (
+            <nav aria-label="ページ" className="flex justify-center gap-2">
+              <Button type="button" variant="outline" size="icon" aria-label="前のページ" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                <ChevronLeft />
+              </Button>
+              {visiblePages(page, totalPages).map((p) => (
+                <Button
+                  key={p}
+                  type="button"
+                  variant={p === page ? "default" : "outline"}
+                  size="icon"
+                  aria-current={p === page ? "page" : undefined}
+                  onClick={() => setPage(p)}
+                >
+                  {p + 1}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="次のページ"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage(page + 1)}
+              >
+                <ChevronRight />
+              </Button>
+            </nav>
+          )}
+          <p className="text-muted-foreground text-center text-sm">
+            {page + 1} / {Math.max(totalPages, 1)} ページ(全{logsQuery.data.totalCount}件)
+          </p>
         </>
       )}
     </div>

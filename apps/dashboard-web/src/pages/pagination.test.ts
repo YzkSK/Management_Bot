@@ -1,36 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { INITIAL_PAGINATION, currentCursor, goNextPage, goPrevPage } from "./pagination.js";
+import { visiblePages } from "./pagination.js";
 
-describe("pagination", () => {
-  test("初期状態はカーソルundefinedの1ページ目", () => {
-    expect(currentCursor(INITIAL_PAGINATION)).toBeUndefined();
+describe("visiblePages", () => {
+  test("総ページ数が5以下なら全ページを返す", () => {
+    expect(visiblePages(0, 3)).toEqual([0, 1, 2]);
   });
 
-  test("nextCursorがnullなら次へ進まない", () => {
-    const next = goNextPage(INITIAL_PAGINATION, null);
-    expect(next).toEqual(INITIAL_PAGINATION);
+  test("0ページなら空", () => {
+    expect(visiblePages(0, 0)).toEqual([]);
   });
 
-  test("次へ進むとnextCursorが現在のカーソルになる", () => {
-    const next = goNextPage(INITIAL_PAGINATION, "cursor-1");
-    expect(currentCursor(next)).toBe("cursor-1");
+  test("中央付近では現在ページを中心に5個返す", () => {
+    expect(visiblePages(5, 10)).toEqual([3, 4, 5, 6, 7]);
   });
 
-  test("前へ戻ると直前のカーソルに戻る", () => {
-    const next = goNextPage(INITIAL_PAGINATION, "cursor-1");
-    const prev = goPrevPage(next);
-    expect(currentCursor(prev)).toBeUndefined();
+  test("先頭付近では先頭から5個返す", () => {
+    expect(visiblePages(1, 10)).toEqual([0, 1, 2, 3, 4]);
   });
 
-  test("1ページ目で前へ戻っても変化しない", () => {
-    expect(goPrevPage(INITIAL_PAGINATION)).toEqual(INITIAL_PAGINATION);
-  });
-
-  test("既に訪れたページへ再度次へ進んでもカーソル履歴は増えない", () => {
-    const next = goNextPage(INITIAL_PAGINATION, "cursor-1");
-    const prev = goPrevPage(next);
-    const nextAgain = goNextPage(prev, "cursor-1-different");
-    expect(currentCursor(nextAgain)).toBe("cursor-1");
-    expect(nextAgain.cursors).toHaveLength(2);
+  test("末尾付近では末尾までの5個返す", () => {
+    expect(visiblePages(9, 10)).toEqual([5, 6, 7, 8, 9]);
   });
 });
