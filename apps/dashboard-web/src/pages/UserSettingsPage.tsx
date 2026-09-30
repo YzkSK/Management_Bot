@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { toast } from "sonner";
 import { logout } from "../logout.js";
 import { getStoredTheme, setTheme, type Theme } from "../theme.js";
@@ -84,10 +84,24 @@ export function UserSettingsPage() {
 }
 
 /** ページ遷移せず、今の画面に重ねて開くユーザー設定(Discordの設定画面と同じ見せ方)。 */
-export function UserSettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function UserSettingsDialog({
+  open,
+  onOpenChange,
+  returnFocusRef,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** DialogTriggerを使わずに開くため、閉じた後のフォーカス復帰先を明示する。 */
+  returnFocusRef: RefObject<HTMLElement | null>;
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="inset-4 flex overflow-hidden rounded-xl border shadow-2xl md:inset-x-[max(1rem,calc(50%-36rem))] md:inset-y-12">
+      <DialogContent
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          returnFocusRef.current?.focus();
+        }}
+        className="inset-4 flex overflow-hidden rounded-xl border shadow-2xl md:inset-x-[max(1rem,calc(50%-36rem))] md:inset-y-12">
         <nav className="bg-muted/40 hidden w-56 shrink-0 flex-col gap-1 border-r p-4 md:flex" aria-label="ユーザー設定の項目">
           <DialogTitle className="text-muted-foreground px-2 py-1 text-xs font-bold">ユーザー設定</DialogTitle>
           <a href="#user-settings-account" className="hover:bg-accent rounded-md px-2 py-1.5 text-sm">
