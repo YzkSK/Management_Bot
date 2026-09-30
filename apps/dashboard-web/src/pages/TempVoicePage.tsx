@@ -36,7 +36,7 @@ interface TempVoiceConfigData {
 function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
   return (
     <Alert variant="info" className="py-2">
-      <AlertDescription className="flex flex-wrap items-baseline gap-1 text-sm">
+      <AlertDescription className="block text-sm">
         一時VCがまだ設定されていません。
         <button type="button" className="font-medium underline" onClick={onGoSettings}>
           設定タブ
