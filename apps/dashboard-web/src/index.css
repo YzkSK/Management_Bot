@@ -84,3 +84,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+@theme {
+  --animate-save-bar-in: save-bar-in 200ms ease-out;
+  @keyframes save-bar-in {
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+  }
+}
