@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { activityDaily, activityHourly, createDb, guilds } from "@management-bot/db";
 import { eq } from "drizzle-orm";
-import { getMemberDetail, getMemberRanking, getServerSummary } from "./queries.js";
+import { getMemberDetail, getMemberRanking, getServerSummary, VOICE_OCCUPIED_USER_ID } from "./queries.js";
 import { addHourlyActivity } from "./record-activity.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -19,8 +19,14 @@ beforeAll(async () => {
     { guildId, userId: "a", hour: t("2026-09-28T14:00:00Z"), messageCount: 3, voiceSeconds: 600 }, // JST 9/28 23時
     { guildId, userId: "a", hour: t("2026-09-28T15:00:00Z"), messageCount: 1, voiceSeconds: 1200 }, // JST 9/29 0時
     { guildId, userId: "b", hour: t("2026-09-29T01:00:00Z"), messageCount: 10, voiceSeconds: 0 },
+    // VCにいたのはaだけなので、誰かがVCにいた時間はaの滞在時間と同じ。
+    { guildId, userId: VOICE_OCCUPIED_USER_ID, hour: t("2026-09-28T14:00:00Z"), messageCount: 0, voiceSeconds: 600 },
+    { guildId, userId: VOICE_OCCUPIED_USER_ID, hour: t("2026-09-28T15:00:00Z"), messageCount: 0, voiceSeconds: 1200 },
   ]);
-  await db.insert(activityDaily).values([{ guildId, userId: "a", day: "2026-06-01", messageCount: 5, voiceSeconds: 100 }]);
+  await db.insert(activityDaily).values([
+    { guildId, userId: "a", day: "2026-06-01", messageCount: 5, voiceSeconds: 100 },
+    { guildId, userId: VOICE_OCCUPIED_USER_ID, day: "2026-06-01", messageCount: 0, voiceSeconds: 100 },
+  ]);
 });
 afterAll(async () => {
   await db.delete(guilds).where(eq(guilds.id, guildId));
@@ -49,6 +55,27 @@ describe("getServerSummary", () => {
     const r = await getServerSummary(db, { guildId, from: t("2026-05-31T15:00:00Z"), to: NOW, granularity: "day" });
     expect(r.totals.messageCount).toBe(19);
     expect(r.series[0]).toEqual({ bucket: "2026-06-01", messageCount: 5, voiceSeconds: 100 });
+  });
+
+  test("VC時間は延べ時間ではなく誰かがVCにいた時間で数え、予約IDはメンバーとして数えない(issue #508)", async () => {
+    const other = `guild-${randomUUID()}`;
+    const hour = t("2026-09-29T03:00:00Z");
+    await db.insert(guilds).values({ id: other, name: "other" });
+    try {
+      await addHourlyActivity(db, [
+        { guildId: other, userId: "x", hour, messageCount: 0, voiceSeconds: 3600 },
+        { guildId: other, userId: "y", hour, messageCount: 0, voiceSeconds: 3600 },
+        { guildId: other, userId: VOICE_OCCUPIED_USER_ID, hour, messageCount: 0, voiceSeconds: 3600 },
+      ]);
+      const range = { guildId: other, from: WEEK_FROM, to: NOW };
+      const r = await getServerSummary(db, { ...range, granularity: "hour" });
+      expect(r.totals).toEqual({ messageCount: 0, voiceSeconds: 3600, activeMembers: 2 });
+      expect(r.series).toEqual([{ bucket: hour.toISOString(), messageCount: 0, voiceSeconds: 3600 }]);
+      const ranking = await getMemberRanking(db, { ...range, sort: "voice", limit: 10, offset: 0 });
+      expect(ranking.rows.map((row) => row.userId).sort()).toEqual(["x", "y"]);
+    } finally {
+      await db.delete(guilds).where(eq(guilds.id, other));
+    }
   });
 
   test("活動が無ければ0と空の推移", async () => {

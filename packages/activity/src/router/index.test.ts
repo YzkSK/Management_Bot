@@ -6,6 +6,7 @@ import { createCallerFactory } from "@management-bot/dashboard-access";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { activityRouter } from "./index.js";
+import { VOICE_OCCUPIED_USER_ID } from "../application/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -35,6 +36,8 @@ beforeEach(async () => {
   await db.insert(activityHourly).values([
     { guildId, userId: "a", hour: new Date("2026-09-28T14:00:00Z"), messageCount: 3, voiceSeconds: 600 },
     { guildId, userId: "b", hour: new Date("2026-09-29T01:00:00Z"), messageCount: 10, voiceSeconds: 0 },
+    // サーバー全体のVC時間(誰かがVCにいた時間)の行(issue #508)。
+    { guildId, userId: VOICE_OCCUPIED_USER_ID, hour: new Date("2026-09-28T14:00:00Z"), messageCount: 0, voiceSeconds: 600 },
   ]);
 });
 

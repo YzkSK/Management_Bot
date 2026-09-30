@@ -1,4 +1,4 @@
-import type { HourlyDelta } from "../application/index.js";
+import { VOICE_OCCUPIED_USER_ID, type HourlyDelta } from "../application/index.js";
 import { splitIntoHours } from "../domain/index.js";
 
 /**
@@ -8,6 +8,11 @@ import { splitIntoHours } from "../domain/index.js";
  */
 export class VoiceTracker {
   private readonly openSince = new Map<string, { guildId: string; userId: string; since: Date }>();
+  /**
+   * サーバー単位の「誰か1人でも計上中」の区間(issue #508)。計上中の人数が0→1で開始し、1→0で閉じる。
+   * VOICE_OCCUPIED_USER_IDの行として書き、延べ時間ではないサーバー全体のVC時間に使う。
+   */
+  private readonly occupied = new Map<string, { since: Date; members: number }>();
 
   constructor(private readonly write: (deltas: HourlyDelta[]) => Promise<void>) {}
 
@@ -15,12 +20,22 @@ export class VoiceTracker {
     const key = `${guildId}:${userId}`;
     const open = this.openSince.get(key);
     if (counting) {
-      if (!open) this.openSince.set(key, { guildId, userId, since: at });
+      if (open) return;
+      this.openSince.set(key, { guildId, userId, since: at });
+      const guild = this.occupied.get(guildId);
+      if (guild) guild.members += 1;
+      else this.occupied.set(guildId, { since: at, members: 1 });
       return;
     }
     if (!open) return;
     this.openSince.delete(key);
-    await this.write(toDeltas(open.guildId, open.userId, open.since, at));
+    const deltas = toDeltas(open.guildId, open.userId, open.since, at);
+    const guild = this.occupied.get(guildId);
+    if (guild && --guild.members === 0) {
+      this.occupied.delete(guildId);
+      deltas.push(...toDeltas(guildId, VOICE_OCCUPIED_USER_ID, guild.since, at));
+    }
+    await this.write(deltas);
   }
 
   countingSince(guildId: string, userId: string): Date | undefined {
@@ -40,13 +55,22 @@ export class VoiceTracker {
       open.since = at;
       advanced.push({ guildId: open.guildId, userId: open.userId });
     }
+    for (const [guildId, guild] of this.occupied) {
+      if (guild.since >= at) continue;
+      deltas.push(...toDeltas(guildId, VOICE_OCCUPIED_USER_ID, guild.since, at));
+      guild.since = at;
+    }
     if (deltas.length > 0) await this.write(deltas);
     return advanced;
   }
 
   async closeAll(at: Date): Promise<void> {
-    const entries = [...this.openSince.values()];
+    const entries = [
+      ...this.openSince.values(),
+      ...[...this.occupied].map(([guildId, { since }]) => ({ guildId, userId: VOICE_OCCUPIED_USER_ID, since })),
+    ];
     this.openSince.clear();
+    this.occupied.clear();
     const deltas = entries.flatMap((e) => toDeltas(e.guildId, e.userId, e.since, at));
     if (deltas.length > 0) await this.write(deltas);
   }

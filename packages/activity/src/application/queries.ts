@@ -19,6 +19,12 @@ interface RangeFilter {
   userId?: string;
 }
 
+/**
+ * サーバー内で誰か1人でもVCにいた時間(重なりを除いた時間)を記録する予約ユーザーID(issue #508)。
+ * Discordのユーザーは数値のスノーフレークなので衝突しない。ランキング・メンバー集計からは除外する。
+ */
+export const VOICE_OCCUPIED_USER_ID = "voice-occupied";
+
 const count = z.coerce.number().int();
 const nullableIso = z.coerce
   .date()
@@ -33,7 +39,8 @@ const nullableIso = z.coerce
  * 列: user_id, at(時間先頭またはJSTの0時), day(JST日付), hod(JSTの時、日次行はNULL), message_count, voice_seconds
  */
 function activitySource(f: RangeFilter): SQL {
-  const userFilter = f.userId === undefined ? sql`` : sql` AND user_id = ${f.userId}`;
+  const userFilter =
+    f.userId === undefined ? sql` AND user_id <> ${VOICE_OCCUPIED_USER_ID}` : sql` AND user_id = ${f.userId}`;
   const lastDay = toJstDay(new Date(f.to.getTime() - 1));
   return sql`
     SELECT user_id, hour AS at,
@@ -72,14 +79,20 @@ export async function getServerSummary(
   db: Db,
   input: { guildId: string; from: Date; to: Date; granularity: Granularity },
 ): Promise<{ totals: { messageCount: number; voiceSeconds: number; activeMembers: number }; series: SeriesPoint[] }> {
-  const source = activitySource(input);
+  const members = activitySource(input);
+  // VC時間は延べ時間ではなく、誰かがVCにいた時間(予約ユーザーIDの行)で数える(issue #508)。
+  const occupied = activitySource({ ...input, userId: VOICE_OCCUPIED_USER_ID });
+  const series = sql`
+    SELECT at, day, message_count, 0 AS voice_seconds FROM (${members}) m
+    UNION ALL
+    SELECT at, day, 0 AS message_count, voice_seconds FROM (${occupied}) o`;
   const [totalsRows, seriesRows] = await Promise.all([
     db.execute(sql`
-      SELECT COALESCE(SUM(message_count), 0)::bigint AS message_count,
-             COALESCE(SUM(voice_seconds), 0)::bigint AS voice_seconds,
-             (COUNT(DISTINCT user_id) FILTER (WHERE message_count > 0 OR voice_seconds > 0))::int AS active_members
-      FROM (${source}) src`),
-    db.execute(seriesQuery(source, input.granularity)),
+      SELECT (SELECT COALESCE(SUM(message_count), 0) FROM (${members}) m)::bigint AS message_count,
+             (SELECT COALESCE(SUM(voice_seconds), 0) FROM (${occupied}) o)::bigint AS voice_seconds,
+             (SELECT COUNT(DISTINCT user_id) FILTER (WHERE message_count > 0 OR voice_seconds > 0) FROM (${members}) m)::int
+               AS active_members`),
+    db.execute(seriesQuery(series, input.granularity)),
   ]);
   const totals = z
     .tuple([z.object({ message_count: count, voice_seconds: count, active_members: count })])
