@@ -1,7 +1,7 @@
 import { INFRA_LOG_SERVICES, type InfraLogService } from "@management-bot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -68,6 +68,11 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
       <Tabs value={tab} onValueChange={(value) => go(parseTab(value, isOwner))} className="gap-4">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
           <div className="flex flex-col gap-1.5">
+            {/* サイドバーを出さない画面なので、サーバー一覧へ戻る導線を置く。 */}
+            <Link to="/" className="text-muted-foreground hover:text-foreground -ml-1 flex w-fit items-center gap-0.5 text-sm">
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              サーバー一覧へ戻る
+            </Link>
             <h1 className="text-2xl font-bold">ステータス</h1>
             <p className="text-muted-foreground text-sm">
               Bot全体の各機能の稼働状況です。
