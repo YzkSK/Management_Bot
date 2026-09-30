@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useParams } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_URL, trpc } from "../trpc.js";
 import { ActiveVoiceTab } from "./ActiveVoiceTab.js";
 import {
@@ -93,7 +93,7 @@ function ChartSkeleton({ title, height = 220 }: { title: string; height?: number
   );
 }
 
-/** 発言数とVC時間(時間単位)の棒グラフ。数値の目盛りは共通にし、単位だけ「件 / h」と併記する。 */
+/** 発言数とVC時間を別々の棒グラフで横に並べる(単位と桁が違うため、目盛りを共通にしない)。 */
 function ActivityChart({
   data,
   height = 220,
@@ -103,28 +103,56 @@ function ActivityChart({
 }) {
   const rows = data.map((d) => ({ label: d.label, messages: d.messageCount, voiceHours: Math.round((d.voiceSeconds / 3600) * 10) / 10 }));
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid vertical={false} stroke="var(--border)" />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" />
-        <YAxis
-          tickLine={false}
-          axisLine={false}
-          fontSize={11}
-          width={96}
-          stroke="var(--muted-foreground)"
-          tickFormatter={(value: number) => (value === 0 ? "0" : `${value}件 / ${value}h`)}
-        />
-        <Tooltip
-          contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-          cursor={{ fill: "var(--accent)" }}
-        />
-        {/* 既定(itemSorter="value")は名前順に並べ替えて棒の並びと逆になるため、描画順のままにする */}
-        <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={null} />
-        <Bar dataKey="messages" name="発言数(件)" fill={MESSAGE_COLOR} radius={[3, 3, 0, 0]} />
-        <Bar dataKey="voiceHours" name="VC時間(h)" fill={VOICE_COLOR} radius={[3, 3, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <MetricChart rows={rows} dataKey="messages" name="発言数" unit="件" color={MESSAGE_COLOR} height={height} />
+      <MetricChart rows={rows} dataKey="voiceHours" name="VC時間" unit="h" color={VOICE_COLOR} height={height} />
+    </div>
+  );
+}
+
+function MetricChart({
+  rows,
+  dataKey,
+  name,
+  unit,
+  color,
+  height,
+}: {
+  rows: readonly { label: string; messages: number; voiceHours: number }[];
+  dataKey: "messages" | "voiceHours";
+  name: string;
+  unit: string;
+  color: string;
+  height: number;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-muted-foreground flex items-center gap-2 text-xs">
+        <span className="size-2 rounded-sm" style={{ backgroundColor: color }} aria-hidden="true" />
+        {name}({unit})
+      </span>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={[...rows]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid vertical={false} stroke="var(--border)" />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            fontSize={11}
+            width={48}
+            allowDecimals={dataKey === "voiceHours"}
+            stroke="var(--muted-foreground)"
+            tickFormatter={(value: number) => (value === 0 ? "0" : `${value}${unit}`)}
+          />
+          <Tooltip
+            contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+            cursor={{ fill: "var(--accent)" }}
+            formatter={(value) => [`${String(value)}${unit}`, name]}
+          />
+          <Bar dataKey={dataKey} name={name} fill={color} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
