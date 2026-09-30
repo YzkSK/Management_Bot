@@ -87,7 +87,8 @@ function SidebarNav({
           </SelectContent>
         </Select>
       </div>
-      <ul className="flex flex-col gap-1">
+      <p className="text-muted-foreground px-3 pt-2 pb-1 text-xs font-semibold">機能</p>
+      <ul className="flex flex-col gap-0.5">
         {FEATURE_METADATA.map((feature) => {
           const buildPath = FEATURE_PATHS[feature.key];
           const path = guildId && buildPath ? buildPath(guildId) : undefined;
@@ -99,7 +100,7 @@ function SidebarNav({
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
-                      "block rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground",
+                      "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
                       isActive && "bg-accent text-accent-foreground font-medium",
                     )
                   }
@@ -107,11 +108,14 @@ function SidebarNav({
                   {feature.name}
                 </NavLink>
               ) : (
-                <span className="text-muted-foreground block px-3 py-2 text-sm">{feature.name}</span>
+                <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">{feature.name}</span>
               )}
             </li>
           );
         })}
+      </ul>
+      <p className="text-muted-foreground px-3 pt-4 pb-1 text-xs font-semibold">管理</p>
+      <ul className="flex flex-col gap-0.5">
         <li>
           {guildId ? (
             <NavLink
@@ -119,7 +123,7 @@ function SidebarNav({
               onClick={onNavigate}
               className={({ isActive }) =>
                 cn(
-                  "block rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground",
+                  "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
                   isActive && "bg-accent text-accent-foreground font-medium",
                 )
               }
@@ -127,7 +131,7 @@ function SidebarNav({
               アクセス権限
             </NavLink>
           ) : (
-            <span className="text-muted-foreground block px-3 py-2 text-sm">アクセス権限</span>
+            <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">アクセス権限</span>
           )}
         </li>
       </ul>
