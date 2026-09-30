@@ -21,11 +21,12 @@ export function decodeCursor(cursor: string): LogEntryCursor {
 
 export interface ListLogEntriesInput {
   guildId: string;
-  category?: LogCategory;
+  /** 指定時はこれらのカテゴリのみ返す(未指定・空配列は全カテゴリ)。 */
+  categories?: readonly LogCategory[];
   limit: number;
   /** 前ページ最終行からencodeCursorで得たカーソル。これより古いエントリを返す。 */
   cursor?: string;
-  /** これらのカテゴリは結果から除外する(categoryフィルタと併用可)。 */
+  /** これらのカテゴリは結果から除外する(categoriesフィルタと併用可)。 */
   excludeCategories?: readonly LogCategory[];
   /** trueの場合、authorIsBot=trueの行を結果から除外する。 */
   excludeBotEvents?: boolean;
@@ -91,9 +92,11 @@ export async function listLogEntries(
   input: ListLogEntriesInput,
 ): Promise<ListLogEntriesResult> {
   const conditions = [eq(logEntries.guildId, input.guildId), isNotCollapsedMessageCreate(input.guildId)];
-  // メッセージだけに絞った画面では親ケースが表示されないため、一括削除を通常どおり表示する。
-  if (input.category !== "message") conditions.push(isNotCollapsedModerationBulkDelete());
-  if (input.category) conditions.push(eq(logEntries.category, input.category));
+  const categories = input.categories && input.categories.length > 0 ? input.categories : undefined;
+  // メッセージを含みモデレーションを含まない絞り込みでは親ケースが表示されないため、一括削除を通常どおり表示する。
+  const parentCaseHidden = categories !== undefined && categories.includes("message") && !categories.includes("moderationCase");
+  if (!parentCaseHidden) conditions.push(isNotCollapsedModerationBulkDelete());
+  if (categories) conditions.push(inArray(logEntries.category, [...categories]));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
   }

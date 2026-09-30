@@ -20,7 +20,8 @@ import { LOGGING_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js
 
 const listLogEntriesInput = z.object({
   guildId: discordIdSchema,
-  category: z.enum(LOG_CATEGORIES).optional(),
+  /** 指定時はこれらのカテゴリのみ返す(未指定・空配列は全カテゴリ)。 */
+  categories: z.array(z.enum(LOG_CATEGORIES)).max(LOG_CATEGORIES.length).optional(),
   limit: z.number().int().min(1).max(100).default(50),
   /** 前回レスポンスのnextCursorをそのまま渡す不透明なトークン。 */
   cursor: z.string().min(1).optional(),
@@ -87,7 +88,7 @@ export const loggingRouter = router({
     .query(async ({ ctx, input }) => {
       const displaySettings = await getDisplaySettings(ctx.db, input.guildId);
       const excludeCategories =
-        displaySettings.hideAuditLogCorrelation && input.category !== "auditLogCorrelation"
+        displaySettings.hideAuditLogCorrelation && !input.categories?.includes("auditLogCorrelation")
           ? (["auditLogCorrelation"] as const)
           : undefined;
       const excludeBotEvents = displaySettings.hideBotEvents;

@@ -766,7 +766,7 @@ describe("loggingRouter.listLogEntries + display settings", () => {
       discordClientId: "test-client-id",
     });
 
-    const result = await caller.listLogEntries({ guildId, category: "auditLogCorrelation", limit: 50 });
+    const result = await caller.listLogEntries({ guildId, categories: ["auditLogCorrelation"], limit: 50 });
 
     expect(result.entries.map(({ entry }) => entry.category)).toEqual(["auditLogCorrelation"]);
   });

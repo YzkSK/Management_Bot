@@ -99,17 +99,41 @@ describe("listLogEntries", () => {
     expect(result.entries[0]?.entry.guildId).toBe(guildId);
   });
 
-  test("categoryで絞り込む", async () => {
+  test("categoriesで絞り込む", async () => {
     await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
     await insert(
       { category: "guild", guildId, createdAt: "2026-08-31T00:00:01.000Z", action: "update" },
       "2026-08-31T00:00:01.000Z",
     );
 
-    const result = await listLogEntries(db, { guildId, category: "member", limit: 50 });
+    const result = await listLogEntries(db, { guildId, categories: ["member"], limit: 50 });
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]?.entry.category).toBe("member");
+  });
+
+  test("categoriesに複数指定するといずれかに一致するカテゴリを返す(#505)", async () => {
+    await insert(memberEntry(), "2026-08-31T00:00:00.000Z");
+    await insert(
+      { category: "guild", guildId, createdAt: "2026-08-31T00:00:01.000Z", action: "update" },
+      "2026-08-31T00:00:01.000Z",
+    );
+    await insert(messageCreateEntry("message-x", "content-x"), "2026-08-31T00:00:02.000Z");
+
+    const result = await listLogEntries(db, { guildId, categories: ["member", "guild"], limit: 50 });
+
+    expect(result.entries.map(({ entry }) => entry.category).sort()).toEqual(["guild", "member"]);
+  });
+
+  test("messageを含みmoderationCaseを含まない絞り込みでは、ケースに集約される一括削除もそのまま表示する(#505)", async () => {
+    await insert(bulkDeleteEntry(["message-1"], "case-1"), "2026-09-20T00:01:00.000Z");
+    await insert(moderationCaseEntry("case-1"), "2026-09-20T00:02:00.000Z");
+
+    const messageOnly = await listLogEntries(db, { guildId, categories: ["message", "member"], limit: 50 });
+    const withCase = await listLogEntries(db, { guildId, categories: ["message", "moderationCase"], limit: 50 });
+
+    expect(messageOnly.entries.map(({ entry }) => entry.category)).toEqual(["message"]);
+    expect(withCase.entries.map(({ entry }) => entry.category)).toEqual(["moderationCase"]);
   });
 
   test("一括削除に含まれる15件の投稿ログを子ログへ集約し、次ページで重複表示しない", async () => {
