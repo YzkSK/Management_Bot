@@ -36,14 +36,19 @@ function seedRanking(queryClient: QueryClient, rows: unknown[]): ReturnType<type
   return range;
 }
 
-function renderRanking(queryClient: QueryClient, range: ReturnType<typeof toRange>, selectedUserId = ""): string {
+function renderRanking(
+  queryClient: QueryClient,
+  range: ReturnType<typeof toRange>,
+  selectedUserId = "",
+  live: ReadonlyMap<string, number> = new Map(),
+): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <RankingTable
         guildId={guildId}
         range={range}
         now={now}
-        live={new Map()}
+        live={live}
         sort="voice"
         selectedUserId={selectedUserId}
         onSelect={() => {}}
@@ -95,6 +100,19 @@ describe("RankingTable", () => {
     ]);
 
     expect(renderRanking(queryClient, range, "u1")).toContain("bg-accent");
+  });
+
+  test("今VCで計上中のメンバーは最終活動の代わりにVC中と表示する", () => {
+    const queryClient = newClient();
+    const range = seedRanking(queryClient, [
+      { userId: "u1", name: "メンバーA", messageCount: 0, voiceSeconds: 600, lastActiveAt: "2026-09-29T11:00:00.000Z" },
+      { userId: "u2", name: "メンバーB", messageCount: 1, voiceSeconds: 0, lastActiveAt: "2026-09-29T11:00:00.000Z" },
+    ]);
+
+    const html = renderRanking(queryClient, range, "", new Map([["u1", 120]]));
+
+    expect(html.match(/VC中/g)).toHaveLength(1);
+    expect(html).toContain("12m");
   });
 
   test("期間内に活動が無ければ案内を表示する", () => {

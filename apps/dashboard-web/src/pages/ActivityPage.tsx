@@ -194,7 +194,17 @@ export function RankingTable({
                   <TableCell className="text-right">{NUMBER_FORMAT.format(row.messageCount)}</TableCell>
                   {/* ponytail: 並び順は取得時のまま(次のstats通知で取り直した時に並び直る)。 */}
                   <TableCell className="text-right">{formatDuration(row.voiceSeconds + (live.get(row.userId) ?? 0))}</TableCell>
-                  <TableCell className="text-muted-foreground text-right">{formatRelative(row.lastActiveAt, now)}</TableCell>
+                  <TableCell className="text-muted-foreground text-right">
+                    {/* 今VC時間を計上中のメンバーは最終活動ではなく進行中であることを示す(メンバー詳細の「VC中」と同じ判定)。 */}
+                    {live.has(row.userId) ? (
+                      <span className="text-success inline-flex items-center gap-1.5 font-medium">
+                        <span className="bg-success size-2 rounded-full" aria-hidden="true" />
+                        VC中
+                      </span>
+                    ) : (
+                      formatRelative(row.lastActiveAt, now)
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
