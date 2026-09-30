@@ -38,11 +38,12 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   const redis = new Redis(ctx.redisUrl, { lazyConnect: true });
   // 通知の失敗はログのみ(次の通知・画面の再接続時の取り直しで回復する)。
   const notify = (guildId: string, kind: ActivityChangeKind) =>
-    void publishActivityChanged(redis, guildId, kind).catch(logError("failed to publish activity change"));
+    publishActivityChanged(redis, guildId, kind).catch(logError("failed to publish activity change"));
+  // 通知もinFlightに含め、シャットダウン時にRedisを閉じる前に送り終える。
   const write = (deltas: HourlyDelta[]) =>
     inFlight.track(
-      addHourlyActivity(ctx.db, deltas).then(() => {
-        for (const guildId of new Set(deltas.map((d) => d.guildId))) notify(guildId, "stats");
+      addHourlyActivity(ctx.db, deltas).then(async () => {
+        await Promise.all([...new Set(deltas.map((d) => d.guildId))].map((guildId) => notify(guildId, "stats")));
       }),
     );
   const voice = new VoiceTracker(write);
@@ -124,6 +125,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     }
     // イベントハンドラやタイマーから開始済みの書き込みも、DBが閉じられる前に完了を待つ。
     await inFlight.drain();
-    redis.disconnect();
+    // disconnectは送信中のコマンドを"Connection is closed"で失敗させるため、接続中・接続済みならquitで応答を待って閉じる
+    // (再接続待ち=Redis停止中にquitすると停止処理が長く待たされるのでdisconnectする)。
+    if (["connecting", "connect", "ready"].includes(redis.status)) await redis.quit().catch(() => redis.disconnect());
+    else redis.disconnect();
   });
 }
