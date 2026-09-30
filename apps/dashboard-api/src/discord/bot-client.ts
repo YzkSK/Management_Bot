@@ -454,3 +454,30 @@ export async function fetchGuildMemberNames(
   }
   return new Map(userIds.flatMap((userId) => (names.has(userId) ? [[userId, names.get(userId)!] as const] : [])));
 }
+
+const applicationUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  global_name: z.string().nullable().optional(),
+});
+
+const applicationSchema = z.object({
+  owner: applicationUserSchema.optional(),
+  team: z.object({ members: z.array(z.object({ user: applicationUserSchema })) }).nullable().optional(),
+});
+
+export interface BotOwner {
+  id: string;
+  name: string;
+}
+
+/**
+ * Botアプリの所有者(Team所有ならTeamメンバー全員)を返す。ステータス画面(issue #507)の
+ * 閲覧可否判定に使う。Team所有の場合`owner`はTeamの疑似ユーザーになるため、membersを優先する。
+ */
+export async function fetchBotOwners(botToken: string): Promise<readonly BotOwner[]> {
+  const app = await discordGet(botToken, "/oauth2/applications/@me", applicationSchema);
+  if (app === "not_found") return [];
+  const users = app.team ? app.team.members.map((member) => member.user) : app.owner ? [app.owner] : [];
+  return users.map((user) => ({ id: user.id, name: user.global_name ?? user.username }));
+}

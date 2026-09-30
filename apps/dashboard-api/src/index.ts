@@ -4,7 +4,11 @@ import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { Redis } from "ioredis";
 import { cors } from "hono/cors";
-import { appRouter } from "./app-router.js";
+import { createTtlCache, startInfraReporter } from "@management-bot/shared";
+import { createAppRouter } from "./app-router.js";
+import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
+import { collectStatus } from "./status/collect-status.js";
+import { readInfraLogs, subscribeInfraLogIngest } from "./status/infra-logs.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
@@ -26,6 +30,14 @@ const env = parseEnv(dashboardEnvSchema);
 const { db } = createDb(env.DATABASE_URL);
 // lazyConnect: 最初の利用(アクティブVC取得・変更通知の購読)まで接続しない。
 const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
+startInfraReporter(redis, { name: "api", service: "api" });
+// オーナーはDeveloper Portalでしか変わらないため数分キャッシュする(issue #507)。
+const botOwnersCache = createTtlCache<readonly BotOwner[]>(5 * 60_000);
+const appRouter = createAppRouter({
+  getBotOwners: () => botOwnersCache("owners", () => fetchBotOwners(env.DISCORD_TOKEN)),
+  collectStatus: () => collectStatus(db, redis),
+  readLogs: (service) => readInfraLogs(redis, service),
+});
 const isProduction = process.env.NODE_ENV === "production";
 
 const app = new Hono();
@@ -71,6 +83,10 @@ logNotifications.ready.catch((error: unknown) => {
 
 subscribeActivityChanges(redis).catch((error: unknown) => {
   console.error("Failed to subscribe activity changes (activity live updates disabled)", error);
+});
+
+subscribeInfraLogIngest(redis).catch((error: unknown) => {
+  console.error("Failed to subscribe infra log ingest (PostgreSQL/Redis logs disabled)", error);
 });
 
 export default { fetch: app.fetch, websocket };
