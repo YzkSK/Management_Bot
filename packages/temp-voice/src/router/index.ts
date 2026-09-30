@@ -41,7 +41,7 @@ const tempVoiceManageProcedure = <TInput extends z.ZodType<{ guildId: string }>>
   protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE));
 
 export const tempVoiceRouter = router({
-  getConfig: tempVoiceViewProcedure(guildIdInput)
+  getConfig: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => getTempVoiceConfig(ctx.db, input.guildId)),
 
   /**
@@ -105,7 +105,7 @@ export const tempVoiceRouter = router({
   clearConfig: tempVoiceManageProcedure(guildIdInput)
     .mutation(({ ctx, input }) => clearTempVoiceCreateChannel(ctx.db, input.guildId)),
 
-  getDenyProtectedRoles: tempVoiceViewProcedure(guildIdInput)
+  getDenyProtectedRoles: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => listDenyProtectedRoleIds(ctx.db, input.guildId)),
 
   setDenyProtectedRoles: tempVoiceManageProcedure(setDenyProtectedRolesInput)

@@ -81,14 +81,15 @@ async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
 }
 
 describe("tempVoiceRouter.getConfig / setConfig", () => {
-  test("VIEW_TEMP_VOICEを持たない場合はFORBIDDEN", async () => {
+  test("VIEW_TEMP_VOICEのみでは設定を閲覧できずFORBIDDEN", async () => {
+    await grant(CAPABILITIES.VIEW_TEMP_VOICE);
     const caller = createCaller(buildContext());
     const error = await captureRejection(caller.getConfig({ guildId }));
     expect(error).toBeDefined();
   });
 
   test("未設定ギルドはnullを返す", async () => {
-    await grant(CAPABILITIES.VIEW_TEMP_VOICE);
+    await grant(CAPABILITIES.MANAGE_TEMP_VOICE);
     const caller = createCaller(buildContext());
 
     expect(await caller.getConfig({ guildId })).toBeNull();
@@ -179,6 +180,13 @@ describe("tempVoiceRouter.clearConfig", () => {
 });
 
 describe("tempVoiceRouter.getDenyProtectedRoles / setDenyProtectedRoles", () => {
+  test("VIEW_TEMP_VOICEのみでは拒否禁止ロールを閲覧できずFORBIDDEN", async () => {
+    await grant(CAPABILITIES.VIEW_TEMP_VOICE);
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.getDenyProtectedRoles({ guildId }));
+    expect(error).toBeDefined();
+  });
+
   test("実在しないロールIDはBAD_REQUESTで拒否する", async () => {
     await grant(CAPABILITIES.MANAGE_TEMP_VOICE);
     const caller = createCaller(buildContext());
