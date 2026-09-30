@@ -119,7 +119,8 @@ function ActivityChart({
           contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
           cursor={{ fill: "var(--accent)" }}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {/* 既定(itemSorter="value")は名前順に並べ替えて棒の並びと逆になるため、描画順のままにする */}
+        <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={null} />
         <Bar dataKey="messages" name="発言数(件)" fill={MESSAGE_COLOR} radius={[3, 3, 0, 0]} />
         <Bar dataKey="voiceHours" name="VC時間(h)" fill={VOICE_COLOR} radius={[3, 3, 0, 0]} />
       </BarChart>
