@@ -10,6 +10,7 @@ import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { LOGOUT_FAILED_MESSAGE, UserSettingsPage } from "./pages/UserSettingsPage.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -41,23 +42,43 @@ export function App() {
     if (!(await logout())) toast.error(LOGOUT_FAILED_MESSAGE);
   };
 
+  const { statusAccess } = me.data;
+  const layout = (
+    <Layout
+      discordUsername={me.data.discordUsername}
+      avatarUrl={me.data.avatarUrl}
+      onLogout={handleLogout}
+      showStatus={statusAccess !== null}
+    />
+  );
+
   return (
     <BrowserRouter>
       <Routes>
         <Route
           path="/"
-          element={
-            <Layout discordUsername={me.data.discordUsername} avatarUrl={me.data.avatarUrl} onLogout={handleLogout} />
-          }
+          element={layout}
         >
           <Route index element={<GuildListPage />} />
           <Route path="settings" element={<UserSettingsPage />} />
         </Route>
         <Route
-          path="/guilds/:guildId"
+          path="/status"
           element={
-            <Layout discordUsername={me.data.discordUsername} avatarUrl={me.data.avatarUrl} onLogout={handleLogout} />
+            <Layout
+              discordUsername={me.data.discordUsername}
+              avatarUrl={me.data.avatarUrl}
+              onLogout={handleLogout}
+              showStatus={statusAccess !== null}
+              showSidebar={false}
+            />
           }
+        >
+          <Route index element={statusAccess ? <StatusPage isOwner={statusAccess === "owner"} /> : <NotFoundPage />} />
+        </Route>
+        <Route
+          path="/guilds/:guildId"
+          element={layout}
         >
           <Route path="activity" element={<ActivityPage />} />
           <Route path="logs" element={<LogListPage />} />
