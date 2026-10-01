@@ -30,11 +30,12 @@ async function replyOwnerOnly(interaction: ModalSubmitInteraction): Promise<void
 async function updateControlPanel(
   interaction: ModalSubmitInteraction,
   channelId: string,
+  ownerId: string,
   voiceChannel: VoiceBasedChannel,
 ): Promise<void> {
   await interaction.message?.edit({
     flags: MessageFlags.IsComponentsV2,
-    components: [buildControlPanelContainer(channelId, readTempVoiceState(voiceChannel))],
+    components: [buildControlPanelContainer(channelId, ownerId, readTempVoiceState(voiceChannel))],
   });
 }
 
@@ -113,7 +114,7 @@ export async function handleTempVoiceModalSubmit(
         });
       }
 
-      await updateControlPanel(interaction, voiceChannel.id, updatedVoiceChannel);
+      await updateControlPanel(interaction, voiceChannel.id, row.ownerId, updatedVoiceChannel);
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",
         action: "renamed",
@@ -144,7 +145,7 @@ export async function handleTempVoiceModalSubmit(
         throw error;
       }
 
-      await updateControlPanel(interaction, voiceChannel.id, updatedVoiceChannel);
+      await updateControlPanel(interaction, voiceChannel.id, row.ownerId, updatedVoiceChannel);
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",
         action: "userLimitChanged",
@@ -176,7 +177,7 @@ export async function handleTempVoiceModalSubmit(
         throw error;
       }
 
-      await updateControlPanel(interaction, voiceChannel.id, updatedVoiceChannel);
+      await updateControlPanel(interaction, voiceChannel.id, row.ownerId, updatedVoiceChannel);
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",
         action: "bitrateChanged",

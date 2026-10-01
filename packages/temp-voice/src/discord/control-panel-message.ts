@@ -73,9 +73,9 @@ export function readTempVoiceState(voiceChannel: VoiceBasedChannel): TempVoiceSt
 /**
  * 制御パネルメッセージのContainer(Components V2)を、現在状態に応じたボタンラベルで組み立てる(#408)。
  * 呼び出し側(send用/edit用でflagsの型が微妙に異なる)が`{ flags: MessageFlags.IsComponentsV2, components: [container] }`
- * の形で包んで使う。
+ * の形で包んで使う。新規送信時はオーナー表示のメンションで通知が飛ばないよう`allowedMentions: { parse: [] }`を付ける(#531)。
  */
-export function buildControlPanelContainer(channelId: string, state: TempVoiceState): ContainerBuilder {
+export function buildControlPanelContainer(channelId: string, ownerId: string, state: TempVoiceState): ContainerBuilder {
   const container = new ContainerBuilder()
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent("## 🔊 一時VC — 制御パネル\nこのVCのオーナーだけが下のボタンを操作できます。"),
@@ -84,6 +84,7 @@ export function buildControlPanelContainer(channelId: string, state: TempVoiceSt
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
         [
+          `オーナー: <@${ownerId}>`,
           `人数制限: ${state.userLimit === 0 ? "無制限" : `${state.userLimit}人`}`,
           `音質: ${Math.round(state.bitrate / 1000)} kbps`,
           `状態: ${state.isLocked ? "🔒 ロック中" : "🔓 未ロック"} / ${state.isHidden ? `${appEmojiText(HIDDEN_APP_EMOJI_NAME, "🙈")} 非表示中` : "👁️ 表示中"}`,

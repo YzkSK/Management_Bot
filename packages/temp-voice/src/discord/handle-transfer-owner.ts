@@ -134,7 +134,7 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
 
     await interaction.editReply({
       flags: MessageFlags.IsComponentsV2,
-      components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
+      components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
     });
 
     await deps.eventBus.publish({

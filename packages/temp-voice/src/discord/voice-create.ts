@@ -203,7 +203,8 @@ export async function handleVoiceCreate(deps: HandleVoiceCreateDeps, newState: V
   await controlChannel
     .send({
       flags: MessageFlags.IsComponentsV2,
-      components: [buildControlPanelContainer(voiceChannel.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
+      components: [buildControlPanelContainer(voiceChannel.id, member.id, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
+      allowedMentions: { parse: [] },
     })
     .catch(() => {
       // 制御メッセージ送信の失敗は致命的ではない(VC自体は使える)ため握りつぶす。
