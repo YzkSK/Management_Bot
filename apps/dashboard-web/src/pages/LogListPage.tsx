@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry } from "@management-bot/shared";
+import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry, type MessageAttachment } from "@management-bot/shared";
 import {
   appEmojiNameFor,
   CHANGE_FIELD_LABELS,
@@ -146,6 +146,27 @@ function withNameSkeletons(message: string): ReactNode {
         part
       ),
     );
+}
+
+/** 画像は<img>、Tenor等のGIF(gifvはmp4で記録される、#528)は<video>でプレビューし、それ以外はリンクにする。 */
+function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
+  const className = "h-24 w-24 rounded-md border object-cover";
+  if (attachment.contentType?.startsWith("image/") || attachment.contentType?.startsWith("video/")) {
+    return (
+      <a href={attachment.url} target="_blank" rel="noreferrer">
+        {attachment.contentType.startsWith("video/") ? (
+          <video src={attachment.url} aria-label={attachment.filename} className={className} autoPlay loop muted playsInline />
+        ) : (
+          <img src={attachment.url} alt={attachment.filename} className={className} />
+        )}
+      </a>
+    );
+  }
+  return (
+    <a href={attachment.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
+      {attachment.filename}
+    </a>
+  );
 }
 
 export function LogListPage() {
@@ -380,27 +401,9 @@ export function LogListPage() {
                                 </p>
                                 {deletedMessage.attachments && deletedMessage.attachments.length > 0 && (
                                   <div className="flex flex-wrap gap-2">
-                                    {deletedMessage.attachments.map((attachment) =>
-                                      attachment.contentType?.startsWith("image/") ? (
-                                        <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
-                                          <img
-                                            src={attachment.url}
-                                            alt={attachment.filename}
-                                            className="h-24 w-24 rounded-md border object-cover"
-                                          />
-                                        </a>
-                                      ) : (
-                                        <a
-                                          key={attachment.url}
-                                          href={attachment.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-sm text-primary underline"
-                                        >
-                                          {attachment.filename}
-                                        </a>
-                                      ),
-                                    )}
+                                    {deletedMessage.attachments.map((attachment) => (
+                                      <AttachmentPreview key={attachment.url} attachment={attachment} />
+                                    ))}
                                   </div>
                                 )}
                               </article>
@@ -475,27 +478,9 @@ export function LogListPage() {
 
                         {summary.attachments !== null && summary.attachments.length > 0 && (
                           <div className="flex flex-wrap gap-2 rounded-md border bg-card p-3">
-                            {summary.attachments.map((attachment) =>
-                              attachment.contentType?.startsWith("image/") ? (
-                                <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
-                                  <img
-                                    src={attachment.url}
-                                    alt={attachment.filename}
-                                    className="h-24 w-24 rounded-md border object-cover"
-                                  />
-                                </a>
-                              ) : (
-                                <a
-                                  key={attachment.url}
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-sm text-primary underline"
-                                >
-                                  {attachment.filename}
-                                </a>
-                              ),
-                            )}
+                            {summary.attachments.map((attachment) => (
+                              <AttachmentPreview key={attachment.url} attachment={attachment} />
+                            ))}
                           </div>
                         )}
 
@@ -564,27 +549,9 @@ export function LogListPage() {
                                   )}
                                   {collapsedSummary.attachments !== null && collapsedSummary.attachments.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
-                                      {collapsedSummary.attachments.map((attachment) =>
-                                        attachment.contentType?.startsWith("image/") ? (
-                                          <a key={attachment.url} href={attachment.url} target="_blank" rel="noreferrer">
-                                            <img
-                                              src={attachment.url}
-                                              alt={attachment.filename}
-                                              className="h-24 w-24 rounded-md border object-cover"
-                                            />
-                                          </a>
-                                        ) : (
-                                          <a
-                                            key={attachment.url}
-                                            href={attachment.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-sm text-primary underline"
-                                          >
-                                            {attachment.filename}
-                                          </a>
-                                        ),
-                                      )}
+                                      {collapsedSummary.attachments.map((attachment) => (
+                                        <AttachmentPreview key={attachment.url} attachment={attachment} />
+                                      ))}
                                     </div>
                                   )}
                                   {nestedEntries && nestedEntries.length > 0 && (
