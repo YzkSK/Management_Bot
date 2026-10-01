@@ -592,7 +592,9 @@ describe("LogListPage", () => {
                   content: "削除対象の投稿本文",
                   attachments: [
                     { url: "https://cdn.discordapp.com/a.png", filename: "a.png", contentType: "image/png" },
-                    { url: "https://media.tenor.com/x/cat.mp4", filename: "cat.mp4", contentType: "video/mp4" },
+                    { url: "https://media.tenor.com/x/cat.mp4", filename: "cat.mp4", contentType: "video/mp4", gifv: true },
+                    { url: "https://cdn.discordapp.com/clip.mp4", filename: "clip.mp4", contentType: "video/mp4" },
+                    { url: "https://cdn.discordapp.com/SPOILER_b.png", filename: "SPOILER_b.png", contentType: "image/png" },
                   ],
                 },
               },
@@ -608,7 +610,11 @@ describe("LogListPage", () => {
     expect(html).toContain("投稿者A");
     expect(html).toContain("削除対象の投稿本文");
     expect(html).toContain('<img src="https://cdn.discordapp.com/a.png"');
-    expect(html).toContain('<video src="https://media.tenor.com/x/cat.mp4"');
+    expect(html).toMatch(/<video src="https:\/\/media\.tenor\.com\/x\/cat\.mp4"[^>]*autoPlay=""[^>]*loop=""/);
+    expect(html).toMatch(/<video src="https:\/\/cdn\.discordapp\.com\/clip\.mp4"[^>]*controls=""/);
+    expect(html).not.toMatch(/clip\.mp4"[^>]*autoPlay/);
+    expect(html).toMatch(/SPOILER_b\.png"[^>]*blur-xl/);
+    expect(html).toContain("ネタバレ");
     mock.restore();
   });
 

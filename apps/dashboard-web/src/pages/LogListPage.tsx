@@ -148,26 +148,49 @@ function withNameSkeletons(message: string): ReactNode {
     );
 }
 
-/** 画像は<img>、Tenor等のGIF(gifvはmp4で記録される、#528)は<video>でプレビューし、それ以外・ネタバレ指定はリンクにする。 */
+/**
+ * 画像は<img>、Tenor等のGIF(gifv、実体はmp4)は自動ループ再生、通常の動画はコントロール付きで手動再生にする(#528)。
+ * ネタバレ指定(SPOILER_)はDiscordと同様にぼかして伏せ、クリックで解除する(解除前は動画を再生しない)。
+ */
 function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
-  const className = "h-24 w-24 rounded-md border object-cover";
-  // ネタバレ指定(SPOILER_)はプレビューで中身を露出させないようリンクのみにする。
-  const isSpoiler = attachment.filename.startsWith("SPOILER_");
-  if (!isSpoiler && (attachment.contentType?.startsWith("image/") || attachment.contentType?.startsWith("video/"))) {
+  const [revealed, setRevealed] = useState(false);
+  const isImage = attachment.contentType?.startsWith("image/") ?? false;
+  const isVideo = attachment.contentType?.startsWith("video/") ?? false;
+  if (!isImage && !isVideo) {
     return (
-      <a href={attachment.url} target="_blank" rel="noreferrer">
-        {attachment.contentType.startsWith("video/") ? (
-          <video src={attachment.url} aria-label={attachment.filename} className={className} autoPlay loop muted playsInline />
-        ) : (
-          <img src={attachment.url} alt={attachment.filename} className={className} />
-        )}
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
+        {attachment.filename}
       </a>
     );
   }
+  const hidden = attachment.filename.startsWith("SPOILER_") && !revealed;
+  const className = cn("rounded-md border object-cover", isVideo && !attachment.gifv ? "h-40 w-64" : "h-24 w-24", hidden && "blur-xl");
+  const media = !isVideo ? (
+    <img src={attachment.url} alt={attachment.filename} className={className} />
+  ) : attachment.gifv ? (
+    <video src={attachment.url} aria-label={attachment.filename} className={className} autoPlay={!hidden} loop muted playsInline />
+  ) : (
+    <video src={attachment.url} aria-label={attachment.filename} className={className} controls={!hidden} preload="metadata" />
+  );
   return (
-    <a href={attachment.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
-      {attachment.filename}
-    </a>
+    <div className="relative overflow-hidden rounded-md">
+      {isVideo && !attachment.gifv ? (
+        media
+      ) : (
+        <a href={attachment.url} target="_blank" rel="noreferrer">
+          {media}
+        </a>
+      )}
+      {hidden && (
+        <button
+          type="button"
+          onClick={() => setRevealed(true)}
+          className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-semibold text-white"
+        >
+          ネタバレ
+        </button>
+      )}
+    </div>
   );
 }
 
