@@ -63,15 +63,25 @@ function fakeDb(
 }
 
 function fakeControlChannel() {
-  return { id: "ctrl-1", type: ChannelType.GuildText, permissionOverwrites: { edit: mock(() => Promise.resolve()) } };
+  const panel = { author: { id: "bot-id" }, edit: mock(() => Promise.resolve()) };
+  return {
+    id: "ctrl-1",
+    type: ChannelType.GuildText,
+    permissionOverwrites: { edit: mock(() => Promise.resolve()) },
+    send: mock(() => Promise.resolve()),
+    messages: { fetch: mock(() => Promise.resolve({ first: () => panel })) },
+    panel,
+  };
 }
 
 function fakeVoiceChannel() {
   return {
     id: "vc-1",
     isVoiceBased: () => true,
-    guild: { client: { user: { id: "bot-id" } } },
-    permissionOverwrites: { edit: mock(() => Promise.resolve()) },
+    guild: { client: { user: { id: "bot-id" } }, roles: { everyone: { id: "everyone-id" } } },
+    userLimit: 0,
+    bitrate: 64000,
+    permissionOverwrites: { cache: { get: () => undefined }, edit: mock(() => Promise.resolve()) },
   };
 }
 
@@ -95,6 +105,7 @@ function fakeClient(controlChannel: unknown, voiceChannel?: unknown) {
         },
       },
     },
+    user: { id: "bot-id" },
     guilds: { cache: { get: () => undefined } },
   };
 }
@@ -158,6 +169,9 @@ describe("createGraceRunner", () => {
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ action: "ownerTransferred", trigger: "autoGraceExpired", previousOwnerId: "old-owner", newOwnerId: "new-owner" }),
     );
+    // 制御パネルを新オーナー表示に更新し、新オーナーへのメンション付き通知を送る(#531)。
+    expect(JSON.stringify(controlChannel.panel.edit.mock.calls[0])).toContain("オーナー: <@new-owner>");
+    expect(JSON.stringify(controlChannel.send.mock.calls[0])).toContain("<@new-owner>");
   });
 
   test("手動移譲が先にオーナーを変更していた場合(CAS失敗)、付与した権限をロールバックしイベントを発行しない(codexレビュー指摘: 手動移譲とcronの競合防止)", async () => {

@@ -8,6 +8,7 @@ import {
   revokeOwnerVoiceAccess,
   rollbackGrantedViewerIfNotOwner,
 } from "./control-channel-permission.js";
+import { announceOwnerTransfer } from "./owner-transfer-notice.js";
 import type { VoiceSessionStore } from "./voice-session-store.js";
 import { type Client, type VoiceBasedChannel } from "discord.js";
 
@@ -136,6 +137,8 @@ async function processExpiredChannelLocked(deps: GraceRunnerDeps, lockedDb: Db, 
         console.error(`temp-voice: failed to revoke previous owner voice channel permission for ${row.channelId}`, error);
       });
     }
+
+    await announceOwnerTransfer(deps.client, row.controlChannelId, row.gracePeriodOwnerId, newOwnerId, "autoGraceExpired", voiceChannel);
 
     const guild = deps.client.guilds.cache.get(row.guildId);
     await deps.eventBus.publish({

@@ -9,6 +9,7 @@ import {
   rollbackGrantedViewerIfNotOwner,
 } from "./control-channel-permission.js";
 import { OWNER_TRANSFER_LOCK_KEY_PREFIX } from "./run-grace.js";
+import { announceOwnerTransfer } from "./owner-transfer-notice.js";
 import { parseTransferOwnerSelectCustomId } from "./transfer-owner-message.js";
 import { MessageFlags, type StringSelectMenuInteraction, type VoiceBasedChannel } from "discord.js";
 import { statusText } from "./status-text.js";
@@ -137,6 +138,8 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
       allowedMentions: { parse: [] },
       components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
     });
+
+    await announceOwnerTransfer(client, row.controlChannelId, row.ownerId, newOwnerId, "manual");
 
     await deps.eventBus.publish({
       type: "temp-voice.event.recorded",

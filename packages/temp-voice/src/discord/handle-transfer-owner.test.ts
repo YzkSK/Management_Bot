@@ -70,6 +70,7 @@ function fakeControlChannel(overrides: Partial<Record<string, unknown>> = {}) {
     id: "ctrl-1",
     type: ChannelType.GuildText,
     permissionOverwrites: { edit: mock(() => Promise.resolve()) },
+    send: mock(() => Promise.resolve()),
     ...overrides,
   };
 }
@@ -168,6 +169,9 @@ describe("handleTempVoiceTransferOwner", () => {
       expect.objectContaining({ action: "ownerTransferred", trigger: "manual", previousOwnerId: "owner-1", newOwnerId: "member-1" }),
     );
     expect(interaction.editReply).toHaveBeenCalled();
+    // 制御パネルは新オーナー表示で再描画し、新オーナーへのメンション付き通知を送る(#531)。
+    expect(JSON.stringify((interaction.editReply as ReturnType<typeof mock>).mock.calls[0])).toContain("オーナー: <@member-1>");
+    expect(JSON.stringify(controlChannel.send.mock.calls[0])).toContain("<@member-1>");
   });
 
   test("自動再割当cronが先にオーナーを変更していた場合(CAS失敗)、権限をロールバックしイベントを発行しない(codexレビュー指摘: 手動移譲とcronの競合防止)", async () => {
