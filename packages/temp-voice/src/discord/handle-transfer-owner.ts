@@ -133,11 +133,16 @@ export async function handleTempVoiceTransferOwner(deps: HandleTransferOwnerDeps
       console.error(`temp-voice: failed to revoke previous owner voice channel permission for ${voiceChannel.id}`, error);
     });
 
-    await interaction.editReply({
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] },
-      components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
-    });
+    // DB移譲は確定済みのため、パネル再描画の失敗で通知・イベント発行を止めない(#531、codexレビュー指摘)。
+    await interaction
+      .editReply({
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] },
+        components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel as VoiceBasedChannel))],
+      })
+      .catch((error: unknown) => {
+        console.error(`temp-voice: failed to refresh control panel for ${voiceChannel.id} after owner transfer`, error);
+      });
 
     await announceOwnerTransfer(client, row.controlChannelId, row.ownerId, newOwnerId, "manual");
 

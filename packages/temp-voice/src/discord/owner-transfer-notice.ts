@@ -1,5 +1,5 @@
 import { ChannelType, ContainerBuilder, MessageFlags, TextDisplayBuilder, type Client, type MessageCreateOptions, type VoiceBasedChannel } from "discord.js";
-import { buildControlPanelContainer, readTempVoiceState } from "./control-panel-message.js";
+import { buildControlPanelContainer, buildTempVoiceCustomId, readTempVoiceState } from "./control-panel-message.js";
 
 export type OwnerTransferTrigger = "manual" | "autoGraceExpired";
 
@@ -30,9 +30,12 @@ export async function announceOwnerTransfer(
   if (voiceChannel) {
     try {
       const panel = (await controlChannel.messages.fetch({ after: "0", limit: 1 })).first();
-      if (panel && panel.author.id === client.user?.id) {
+      // 移譲通知等を誤ってパネルとして上書きしないよう、パネルのボタンcustomIdを含むかも確認する。
+      const panelCustomId = buildTempVoiceCustomId("rename", voiceChannel.id);
+      if (panel && panel.author.id === client.user?.id && JSON.stringify(panel.components).includes(panelCustomId)) {
         await panel.edit({
           flags: MessageFlags.IsComponentsV2,
+          allowedMentions: { parse: [] },
           components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel))],
         });
       }

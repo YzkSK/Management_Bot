@@ -63,7 +63,7 @@ function fakeDb(
 }
 
 function fakeControlChannel() {
-  const panel = { author: { id: "bot-id" }, edit: mock(() => Promise.resolve()) };
+  const panel = { author: { id: "bot-id" }, components: [{ customId: "temp-voice:rename:vc-1" }], edit: mock(() => Promise.resolve()) };
   return {
     id: "ctrl-1",
     type: ChannelType.GuildText,

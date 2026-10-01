@@ -13,7 +13,7 @@ function fakeVoiceChannel() {
 }
 
 function fakeSetup(panelAuthorId = "bot-id", editImpl = () => Promise.resolve()) {
-  const panel = { author: { id: panelAuthorId }, edit: mock(editImpl) };
+  const panel = { author: { id: panelAuthorId }, components: [{ customId: "temp-voice:rename:vc-1" }], edit: mock(editImpl) };
   const controlChannel = {
     type: ChannelType.GuildText,
     send: mock(() => Promise.resolve()),
@@ -60,6 +60,19 @@ describe("announceOwnerTransfer", () => {
     const { client, panel } = fakeSetup("someone");
     await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "autoGraceExpired", fakeVoiceChannel());
     expect(panel.edit).not.toHaveBeenCalled();
+  });
+
+  test("最古メッセージがパネルでない(制御パネルのcustomIdを含まない)ならeditしない", async () => {
+    const { client, panel } = fakeSetup();
+    panel.components = [];
+    await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "autoGraceExpired", fakeVoiceChannel());
+    expect(panel.edit).not.toHaveBeenCalled();
+  });
+
+  test("パネルeditはメンション通知を飛ばさない", async () => {
+    const { client, panel } = fakeSetup();
+    await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "autoGraceExpired", fakeVoiceChannel());
+    expect(panel.edit).toHaveBeenCalledWith(expect.objectContaining({ allowedMentions: { parse: [] } }));
   });
 
   test("パネル更新に失敗しても通知は送る", async () => {
