@@ -168,7 +168,8 @@ function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
   const media = !isVideo ? (
     <img src={attachment.url} alt={attachment.filename} className={className} />
   ) : attachment.gifv ? (
-    <video src={attachment.url} aria-label={attachment.filename} className={className} autoPlay={!hidden} loop muted playsInline />
+    // 読込済みのvideoにautoPlayを後から付けても再生は始まらないため、ネタバレ解除時はkeyで再マウントする。
+    <video key={String(hidden)} src={attachment.url} aria-label={attachment.filename} className={className} autoPlay={!hidden} loop muted playsInline />
   ) : (
     <video src={attachment.url} aria-label={attachment.filename} className={className} controls={!hidden} preload="metadata" />
   );
