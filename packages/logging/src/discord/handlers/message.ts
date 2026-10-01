@@ -6,7 +6,7 @@ import { type GetChannelId, type WriteLogEntryDeps } from "../../application/ind
 import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
-type MessageAttachments = { url: string; filename: string; contentType?: string }[] | undefined;
+type MessageAttachments = { url: string; filename: string; contentType?: string; gifv?: true }[] | undefined;
 type BulkDeleteMessageLogEntry = LogEntry & {
   category: "message";
   action: "bulkDelete";
@@ -71,6 +71,7 @@ function toEmbedMediaAttachments(message: AnyMessage): NonNullable<MessageAttach
       url,
       filename: new URL(url).pathname.split("/").pop() || "embed",
       contentType: isGifv ? "video/mp4" : "image/*",
+      ...(isGifv ? { gifv: true as const } : {}),
     });
   }
   return media;
