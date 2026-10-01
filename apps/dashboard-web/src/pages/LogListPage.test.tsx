@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
+import { LogListPage, gifOnlyContentUrl, shouldShowRawLogPayload } from "./LogListPage.js";
 
 const reactUseState = React.useState;
 
@@ -719,5 +719,19 @@ describe("LogListPage", () => {
     expect(html).toContain("メッセージ ID: m1");
     expect(html).toContain("a.png");
     mock.restore();
+  });
+});
+
+describe("gifOnlyContentUrl", () => {
+  const gif = { url: "https://media.klipy.com/a.mp4", filename: "a.mp4", contentType: "video/mp4", gifv: true as const };
+
+  test("本文がURLのみでGIFプレビューがあればそのURLを返す", () => {
+    expect(gifOnlyContentUrl(" https://klipy.com/gifs/x ", [gif])).toBe("https://klipy.com/gifs/x");
+  });
+
+  test("本文にURL以外の文字がある・GIFがない場合はundefined", () => {
+    expect(gifOnlyContentUrl("見て https://klipy.com/gifs/x", [gif])).toBeUndefined();
+    expect(gifOnlyContentUrl("https://klipy.com/gifs/x", [{ ...gif, gifv: undefined }])).toBeUndefined();
+    expect(gifOnlyContentUrl(null, [gif])).toBeUndefined();
   });
 });

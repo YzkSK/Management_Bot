@@ -15,7 +15,7 @@ import {
 } from "@management-bot/shared";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { ChevronLeft, ChevronRight, Lock, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Lock, Settings } from "lucide-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
@@ -149,10 +149,20 @@ function withNameSkeletons(message: string): ReactNode {
 }
 
 /**
+ * 本文がGIFリンク(Tenor/Klipy等)のURLだけで、そのGIFがプレビュー表示される場合はそのURLを返す。
+ * この場合は本文のURL表示を省き、プレビュー右上のリンクボタンから元ページへ飛べるようにする(#528)。
+ */
+export function gifOnlyContentUrl(content: string | null | undefined, attachments: readonly MessageAttachment[] | null | undefined) {
+  const url = content?.trim();
+  if (!url || !/^https?:\/\/\S+$/.test(url) || !attachments?.some((a) => a.gifv)) return undefined;
+  return url;
+}
+
+/**
  * 画像は<img>、Tenor等のGIF(gifv、実体はmp4)は自動ループ再生、通常の動画はコントロール付きで手動再生にする(#528)。
  * ネタバレ指定(SPOILER_)はDiscordと同様にぼかして伏せ、クリックで解除する(解除前は動画を再生しない)。
  */
-function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
+function AttachmentPreview({ attachment, linkUrl }: { attachment: MessageAttachment; linkUrl?: string | undefined }) {
   const [revealed, setRevealed] = useState(false);
   const isImage = attachment.contentType?.startsWith("image/") ?? false;
   const isVideo = attachment.contentType?.startsWith("video/") ?? false;
@@ -190,6 +200,17 @@ function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
         >
           ネタバレ
         </button>
+      )}
+      {attachment.gifv && linkUrl && (
+        <a
+          href={linkUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="元のページを開く"
+          className="absolute top-1 right-1 rounded bg-black/60 p-1 text-white hover:bg-black/80"
+        >
+          <ExternalLink className="size-3" />
+        </a>
       )}
     </div>
   );
@@ -370,6 +391,7 @@ export function LogListPage() {
             <div className="bg-card flex flex-col overflow-hidden rounded-xl border">
               {logsQuery.data.entries.map(({ id, entry, collapsedEntries }) => {
                 const summary = summarizeLogEntry(entry);
+                const gifLinkUrl = gifOnlyContentUrl(summary.content, summary.attachments);
                 const names = namesQuery.isLoading
                   ? { users: pendingNames(subjectIds), channels: pendingNames(channelIds) }
                   : { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
@@ -421,14 +443,20 @@ export function LogListPage() {
                                 className="flex flex-col gap-2 rounded-md border p-3"
                               >
                                 <p className="text-sm font-medium">{deletedMessage.authorName ?? deletedMessage.authorId}</p>
-                                <p className="text-sm whitespace-pre-wrap">{deletedMessage.content || "本文なし"}</p>
+                                {!gifOnlyContentUrl(deletedMessage.content, deletedMessage.attachments) && (
+                                  <p className="text-sm whitespace-pre-wrap">{deletedMessage.content || "本文なし"}</p>
+                                )}
                                 <p className="text-muted-foreground font-mono text-xs">
                                   メッセージ ID: {deletedMessage.messageId ?? "取得不可"}
                                 </p>
                                 {deletedMessage.attachments && deletedMessage.attachments.length > 0 && (
                                   <div className="flex flex-wrap gap-2">
                                     {deletedMessage.attachments.map((attachment) => (
-                                      <AttachmentPreview key={attachment.url} attachment={attachment} />
+                                      <AttachmentPreview
+                                        key={attachment.url}
+                                        attachment={attachment}
+                                        linkUrl={gifOnlyContentUrl(deletedMessage.content, deletedMessage.attachments)}
+                                      />
                                     ))}
                                   </div>
                                 )}
@@ -436,7 +464,7 @@ export function LogListPage() {
                             ))}
                           </section>
                         )}
-                        {(summary.content !== null || summary.previousContent !== null) && (
+                        {((summary.content !== null && !gifLinkUrl) || summary.previousContent !== null) && (
                           <div className="grid gap-2 md:grid-cols-2">
                             {summary.previousContent !== null && (
                               <p className="bg-destructive/10 flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap">
@@ -444,7 +472,7 @@ export function LogListPage() {
                                 <del>{summary.previousContent || "(本文なし)"}</del>
                               </p>
                             )}
-                            {summary.content && (
+                            {summary.content && !gifLinkUrl && (
                               <p
                                 className={cn(
                                   "flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap",
@@ -505,7 +533,7 @@ export function LogListPage() {
                         {summary.attachments !== null && summary.attachments.length > 0 && (
                           <div className="flex flex-wrap gap-2 rounded-md border bg-card p-3">
                             {summary.attachments.map((attachment) => (
-                              <AttachmentPreview key={attachment.url} attachment={attachment} />
+                              <AttachmentPreview key={attachment.url} attachment={attachment} linkUrl={gifLinkUrl} />
                             ))}
                           </div>
                         )}
@@ -570,13 +598,17 @@ export function LogListPage() {
                               return (
                                 <article key={collapsedId} className="flex flex-col gap-2 rounded-md border bg-card p-3">
                                   <p className="text-sm">{collapsedMessage}</p>
-                                  {collapsedSummary.content !== null && (
+                                  {collapsedSummary.content !== null && !gifOnlyContentUrl(collapsedSummary.content, collapsedSummary.attachments) && (
                                     <p className="text-sm whitespace-pre-wrap">{collapsedSummary.content || "本文なし"}</p>
                                   )}
                                   {collapsedSummary.attachments !== null && collapsedSummary.attachments.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
                                       {collapsedSummary.attachments.map((attachment) => (
-                                        <AttachmentPreview key={attachment.url} attachment={attachment} />
+                                        <AttachmentPreview
+                                          key={attachment.url}
+                                          attachment={attachment}
+                                          linkUrl={gifOnlyContentUrl(collapsedSummary.content, collapsedSummary.attachments)}
+                                        />
                                       ))}
                                     </div>
                                   )}
