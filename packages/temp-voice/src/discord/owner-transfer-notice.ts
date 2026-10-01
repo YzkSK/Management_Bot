@@ -5,9 +5,12 @@ export type OwnerTransferTrigger = "manual" | "autoGraceExpired";
 
 /** オーナー移譲の通知メッセージ(#531)。新オーナーにだけメンション通知が飛ぶようallowedMentionsを絞る。 */
 export function buildOwnerTransferNotice(previousOwnerId: string, newOwnerId: string, trigger: OwnerTransferTrigger): MessageCreateOptions {
-  const reason = trigger === "manual" ? `<@${previousOwnerId}> さんからオーナー権限が移譲されました。` : `前オーナー <@${previousOwnerId}> さんの不在が続いたため、オーナー権限が自動で移譲されました。`;
+  const body =
+    trigger === "manual"
+      ? `<@${previousOwnerId}> さんから <@${newOwnerId}> さんへオーナー権限が移譲されました。`
+      : `前オーナー <@${previousOwnerId}> さんの不在が続いたため、<@${newOwnerId}> さんへオーナー権限が自動で移譲されました。`;
   const container = new ContainerBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`## 👑 オーナー移譲\n<@${newOwnerId}> さんがこのVCの新しいオーナーになりました。\n${reason}`),
+    new TextDisplayBuilder().setContent(`## 👑 オーナー移譲\n${body}`),
   );
   return { flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { users: [newOwnerId] } };
 }
