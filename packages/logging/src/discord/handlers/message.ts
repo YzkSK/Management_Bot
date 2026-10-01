@@ -58,13 +58,14 @@ function toFileAttachments(message: AnyMessage): NonNullable<MessageAttachments>
 /**
  * Tenor等のGIFリンクはファイル添付ではなくDiscordが生成するembed(gifv/image)として届くため、
  * そのメディアURLも添付ファイル扱いで記録し、ログカードで画像表示できるようにする(#528)。
- * gifvはvideo(mp4)、imageはthumbnailに実体のURLが入る(Discord API仕様)。
+ * gifvはvideo(mp4)、imageはimage(リンク展開ではthumbnail)に実体のURLが入る。
+ * ponytail: create時点でembed未展開(後追いmessageUpdateで付与)の場合は記録されない。頻発するなら後追い展開を拾う。
  */
 function toEmbedMediaAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
   const media: NonNullable<MessageAttachments> = [];
   for (const embed of message.embeds) {
     const isGifv = embed.data.type === "gifv";
-    const url = isGifv ? embed.video?.url : embed.data.type === "image" ? embed.thumbnail?.url : undefined;
+    const url = isGifv ? embed.video?.url : embed.data.type === "image" ? (embed.image?.url ?? embed.thumbnail?.url) : undefined;
     if (!url) continue;
     media.push({
       url,
