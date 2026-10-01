@@ -36,7 +36,8 @@ const nullableIso = z.coerce
  * ロールアップは加算と削除を同一トランザクションで行うため、同じ活動が両方に存在することはない
  * (ロールアップ前の古い時間行もそのまま拾えるよう、90日の境界では分けずに両テーブルを読む)。
  * 日次行はJSTの日付単位のため、fromとtoを含む日の行はその日全体が対象になる。
- * 列: user_id, at(時間先頭またはJSTの0時), day(JST日付), hod(JSTの時、日次行はNULL), message_count, voice_seconds
+ * 列: user_id, at(時間先頭またはJSTの0時), day(JST日付), hod(JSTの時、日次行はNULL), message_count, voice_seconds,
+ *     last_at(秒精度の最終活動時刻、導入前の行と日次行はNULL)
  */
 function activitySource(f: RangeFilter): SQL {
   const userFilter =
@@ -46,14 +47,14 @@ function activitySource(f: RangeFilter): SQL {
     SELECT user_id, hour AS at,
            to_char(hour AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
            extract(hour FROM hour AT TIME ZONE 'Asia/Tokyo')::int AS hod,
-           message_count, voice_seconds
+           message_count, voice_seconds, GREATEST(last_message_at, last_voice_at) AS last_at
     FROM activity_hourly
     WHERE guild_id = ${f.guildId}
       AND hour >= ${f.from.toISOString()}::timestamptz AND hour < ${f.to.toISOString()}::timestamptz${userFilter}
     UNION ALL
     SELECT user_id, (day::timestamp AT TIME ZONE 'Asia/Tokyo') AS at,
            to_char(day, 'YYYY-MM-DD') AS day, NULL::int AS hod,
-           message_count, voice_seconds
+           message_count, voice_seconds, NULL::timestamptz AS last_at
     FROM activity_daily
     WHERE guild_id = ${f.guildId} AND day >= ${toJstDay(f.from)}::date AND day <= ${lastDay}::date${userFilter}`;
 }
@@ -111,7 +112,7 @@ const SORT_COLUMN: Record<RankingSort, SQL> = {
 function aggregatedByUser(source: SQL): SQL {
   return sql`
     SELECT user_id, SUM(message_count)::bigint AS message_count, SUM(voice_seconds)::bigint AS voice_seconds,
-           MAX(at) FILTER (WHERE message_count > 0 OR voice_seconds > 0) AS last_active_at
+           COALESCE(MAX(last_at), MAX(at) FILTER (WHERE message_count > 0 OR voice_seconds > 0)) AS last_active_at
     FROM (${source}) src GROUP BY user_id
     HAVING SUM(message_count) > 0 OR SUM(voice_seconds) > 0`;
 }

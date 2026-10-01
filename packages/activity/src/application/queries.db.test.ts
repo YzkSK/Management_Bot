@@ -97,6 +97,22 @@ describe("getMemberRanking", () => {
     expect(r.rows.map((x) => x.userId)).toEqual(["b"]);
     expect(r.total).toBe(2);
   });
+
+  test("最終活動は時間先頭ではなく秒精度の最終時刻を返す(issue #535)", async () => {
+    const other = `guild-${randomUUID()}`;
+    const hour = t("2026-09-29T03:00:00Z");
+    await db.insert(guilds).values({ id: other, name: "other" });
+    try {
+      await addHourlyActivity(db, [
+        { guildId: other, userId: "x", hour, messageCount: 1, voiceSeconds: 0, lastMessageAt: t("2026-09-29T03:10:00Z") },
+        { guildId: other, userId: "x", hour, messageCount: 0, voiceSeconds: 600, lastVoiceAt: t("2026-09-29T03:50:00Z") },
+      ]);
+      const r = await getMemberRanking(db, { guildId: other, from: WEEK_FROM, to: NOW, sort: "voice", limit: 10, offset: 0 });
+      expect(r.rows[0]?.lastActiveAt).toBe("2026-09-29T03:50:00.000Z");
+    } finally {
+      await db.delete(guilds).where(eq(guilds.id, other));
+    }
+  });
 });
 
 describe("getMemberDetail", () => {
