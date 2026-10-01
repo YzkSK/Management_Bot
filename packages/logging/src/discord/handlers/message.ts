@@ -68,7 +68,7 @@ function toFileAttachments(message: AnyMessage): NonNullable<MessageAttachments>
  */
 function toAnimatedPreviewUrl(videoUrl: string, thumbnailUrl: string | undefined): string | undefined {
   if (thumbnailUrl && /\.(gif|webp)(\?|$)/i.test(thumbnailUrl)) return thumbnailUrl;
-  const tenor = /^(https:\/\/media\d*\.tenor\.com\/[A-Za-z0-9_-]+)AAAPo(\/[^?]+)\.mp4$/.exec(videoUrl);
+  const tenor = /^(https:\/\/media\d*\.tenor\.com\/(?:m\/)?[A-Za-z0-9_-]+)AAAPo(\/[^?]+)\.mp4$/.exec(videoUrl);
   return tenor ? `${tenor[1]}AAAAC${tenor[2]}.gif` : undefined;
 }
 

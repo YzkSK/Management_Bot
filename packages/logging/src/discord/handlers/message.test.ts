@@ -104,6 +104,16 @@ describe("toMessageCreateLogEntry", () => {
     ]);
   });
 
+  test("Tenorの/m/形式のmp4 URLもGIF版のpreviewUrlに読み替える", () => {
+    const entry = toMessageCreateLogEntry(
+      fakeMessage({
+        embeds: [{ data: { type: "gifv" }, video: { url: "https://media1.tenor.com/m/xyzAAAPo/hello.mp4" } }],
+      }),
+      BOT_USER_ID,
+    );
+    expect(entry?.attachments?.[0]?.previewUrl).toBe("https://media1.tenor.com/m/xyzAAAAC/hello.gif");
+  });
+
   test("embedの後追い生成だけのmessageUpdateはログ化しない", () => {
     const gif = { data: { type: "gifv" }, video: { url: "https://media.tenor.com/abc/cat.mp4" } };
     expect(

@@ -167,7 +167,13 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   const summary = summarizeLogEntry(entry);
   // GIFリンク(Tenor/Klipy等)はMediaGalleryでプレビューするため、本文の元URL・添付ファイルのリンク一覧からは省く(#528)。
   const displayContent = contentWithoutGifLinks(summary.content, summary.attachments) ?? null;
-  const linkAttachments = (summary.attachments ?? []).filter((a) => !a.gifv);
+  // 画像・GIF(Tenorのgifvはmp4)はリンクだけでなくMediaGalleryでプレビュー表示する(#528)。
+  // MediaGalleryは1つ10件が上限(Discord API仕様)のため、超過分はリンク一覧のみに留める。
+  const galleryAttachments = (summary.attachments ?? [])
+    .filter((a) => a.contentType?.startsWith("image/") || a.contentType?.startsWith("video/"))
+    .slice(0, MAX_MEDIA_GALLERY_ITEMS);
+  // ギャラリーに載ったGIFだけリンク一覧から省く(上限超過で載らなかった分はリンクとして残す)。
+  const linkAttachments = (summary.attachments ?? []).filter((a) => !(a.gifv && galleryAttachments.includes(a)));
   const { accent, title, icon } = getPresentation(entry);
   const description = formatLogMessage(entry, summary, MENTION_NAMES);
 
@@ -217,12 +223,7 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   }
   // 監査ログ相関で実行者が判明している場合のみ。メンション記法なのでDiscord側で表示名に解決される。
   if (entry.executorId !== undefined) bodyLines.push(formatField(`${cardEmoji("executor")} 実行者`, `<@${entry.executorId}>`));
-  // 画像・GIF(Tenorのgifvはmp4)はリンクだけでなくMediaGalleryでプレビュー表示する(#528)。
-  // MediaGalleryは1つ10件が上限(Discord API仕様)のため、超過分はリンク一覧のみに留める。
-  const mediaItems = (summary.attachments ?? [])
-    .filter((a) => a.contentType?.startsWith("image/") || a.contentType?.startsWith("video/"))
-    .slice(0, MAX_MEDIA_GALLERY_ITEMS)
-    .map((a) => new MediaGalleryItemBuilder().setURL(a.previewUrl ?? a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
+  const mediaItems = galleryAttachments.map((a) => new MediaGalleryItemBuilder().setURL(a.previewUrl ?? a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
 
   // イベント発生日時はプレビューも含めたカードの一番下に表示する(見た目のフィードバック反映)。
   // プレビューがなければ本文と同じTextDisplayに含め、余計な余白を作らない。

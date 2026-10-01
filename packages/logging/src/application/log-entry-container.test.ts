@@ -226,6 +226,27 @@ describe("buildLogEntryContainers", () => {
     expect(JSON.stringify(containers[0]!.toJSON())).toContain('"url":"https://media.klipy.com/a.webp"');
   });
 
+  test("MediaGallery上限を超えたGIFは添付リンクとして残す", () => {
+    const gifs = Array.from({ length: 11 }, (_, i) => ({
+      url: `https://media.klipy.com/${i}.mp4`,
+      filename: `${i}.mp4`,
+      contentType: "video/mp4",
+      gifv: true as const,
+    }));
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      attachments: gifs,
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    expect(text).toContain("[10.mp4](https://media.klipy.com/10.mp4)");
+    expect(text).not.toContain("[9.mp4]");
+  });
+
   test("画像・動画の添付はMediaGalleryでプレビュー表示する(#528)", () => {
     const entry: LogEntry = {
       category: "message",
