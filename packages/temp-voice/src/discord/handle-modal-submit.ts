@@ -35,6 +35,7 @@ async function updateControlPanel(
 ): Promise<void> {
   await interaction.message?.edit({
     flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
     components: [buildControlPanelContainer(channelId, ownerId, readTempVoiceState(voiceChannel))],
   });
 }

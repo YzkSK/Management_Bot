@@ -129,6 +129,7 @@ export async function handleTempVoiceSelectMenu(
 
   await interaction.editReply({
     flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
     components: [buildControlPanelContainer(voiceChannel.id, row.ownerId, readTempVoiceState(updatedChannel))],
   });
 

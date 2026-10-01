@@ -106,6 +106,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] },
         components: [buildControlPanelContainer(voiceChannel.id, row.ownerId, { ...before, isLocked: !before.isLocked })],
       });
       await deps.eventBus.publish({
@@ -137,6 +138,7 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] },
         components: [buildControlPanelContainer(voiceChannel.id, row.ownerId, { ...before, isHidden: !before.isHidden })],
       });
       await deps.eventBus.publish({
