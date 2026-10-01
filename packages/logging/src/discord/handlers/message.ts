@@ -47,13 +47,37 @@ function isThreadStarterMessage(message: AnyMessage): boolean {
 }
 
 /** 添付ファイルの実体は保存せずDiscord CDNのURL・ファイル名・content typeのみ抽出する(ストレージ節約)。 */
-function toAttachments(message: AnyMessage): MessageAttachments {
-  if (message.attachments.size === 0) return undefined;
+function toFileAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
   return message.attachments.map((attachment) => ({
     url: attachment.url,
     filename: attachment.name,
     contentType: attachment.contentType ?? undefined,
   }));
+}
+
+/**
+ * Tenor等のGIFリンクはファイル添付ではなくDiscordが生成するembed(gifv/image)として届くため、
+ * そのメディアURLも添付ファイル扱いで記録し、ログカードで画像表示できるようにする(#528)。
+ * gifvはvideo(mp4)、imageはthumbnailに実体のURLが入る(Discord API仕様)。
+ */
+function toEmbedMediaAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
+  const media: NonNullable<MessageAttachments> = [];
+  for (const embed of message.embeds) {
+    const isGifv = embed.data.type === "gifv";
+    const url = isGifv ? embed.video?.url : embed.data.type === "image" ? embed.thumbnail?.url : undefined;
+    if (!url) continue;
+    media.push({
+      url,
+      filename: new URL(url).pathname.split("/").pop() || "embed",
+      contentType: isGifv ? "video/mp4" : "image/*",
+    });
+  }
+  return media;
+}
+
+function toAttachments(message: AnyMessage): MessageAttachments {
+  const attachments = [...toFileAttachments(message), ...toEmbedMediaAttachments(message)];
+  return attachments.length > 0 ? attachments : undefined;
 }
 
 function baseFields(
@@ -111,7 +135,9 @@ export function toMessageUpdateLogEntry(
   if (!base) return undefined;
   if (oldMessage.partial) return undefined;
   const contentChanged = oldMessage.content !== newMessage.content;
-  const attachmentsChanged = JSON.stringify(toAttachments(oldMessage)) !== JSON.stringify(toAttachments(newMessage));
+  // embedの後追い生成(Tenorリンクの展開等)だけのmessageUpdateをログ化しないよう、比較はファイル添付のみで行う。
+  const attachmentsChanged =
+    JSON.stringify(toFileAttachments(oldMessage)) !== JSON.stringify(toFileAttachments(newMessage));
   if (!contentChanged && !attachmentsChanged) return undefined;
   return {
     category: "message",

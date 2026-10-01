@@ -23,6 +23,7 @@ function fakeMessage(
     pinned: boolean;
     system: boolean;
     attachments: { url: string; name: string; contentType: string | null }[];
+    embeds: { data: { type: string }; video?: { url: string }; thumbnail?: { url: string } }[];
   }> = {},
 ) {
   const attachments = overrides.attachments ?? [];
@@ -35,6 +36,7 @@ function fakeMessage(
     partial: false,
     pinned: false,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    embeds: [],
     ...overrides,
     attachments: { size: attachments.length, map: (fn: (a: (typeof attachments)[number]) => unknown) => attachments.map(fn) },
   } as never;
@@ -63,6 +65,31 @@ describe("toMessageCreateLogEntry", () => {
       BOT_USER_ID,
     );
     expect(entry?.attachments).toEqual([{ url: "https://cdn.discordapp.com/x.png", filename: "x.png", contentType: "image/png" }]);
+  });
+
+  test("Tenor等のgifv/image embedのメディアURLも添付として記録する(#528)", () => {
+    const entry = toMessageCreateLogEntry(
+      fakeMessage({
+        content: "https://tenor.com/view/cat-123",
+        embeds: [
+          { data: { type: "gifv" }, video: { url: "https://media.tenor.com/abc/cat.mp4" } },
+          { data: { type: "image" }, thumbnail: { url: "https://example.com/dog.png" } },
+          { data: { type: "rich" } },
+        ],
+      }),
+      BOT_USER_ID,
+    );
+    expect(entry?.attachments).toEqual([
+      { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4" },
+      { url: "https://example.com/dog.png", filename: "dog.png", contentType: "image/*" },
+    ]);
+  });
+
+  test("embedの後追い生成だけのmessageUpdateはログ化しない", () => {
+    const gif = { data: { type: "gifv" }, video: { url: "https://media.tenor.com/abc/cat.mp4" } };
+    expect(
+      toMessageUpdateLogEntry(fakeMessage({ content: "same" }), fakeMessage({ content: "same", embeds: [gif] }), BOT_USER_ID),
+    ).toBeUndefined();
   });
 
   test("添付ファイルがなければattachmentsはundefined", () => {
