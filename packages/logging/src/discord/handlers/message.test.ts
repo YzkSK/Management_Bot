@@ -72,7 +72,12 @@ describe("toMessageCreateLogEntry", () => {
       fakeMessage({
         content: "https://tenor.com/view/cat-123",
         embeds: [
-          { data: { type: "gifv" }, url: "https://tenor.com/view/cat-123", video: { url: "https://media.tenor.com/abc/cat.mp4" } },
+          { data: { type: "gifv" }, url: "https://tenor.com/view/cat-123", video: { url: "https://media.tenor.com/abcAAAPo/cat.mp4" } },
+          {
+            data: { type: "gifv" },
+            video: { url: "https://static.klipy.com/x/a.mp4" },
+            thumbnail: { url: "https://static.klipy.com/x/a.webp" },
+          },
           { data: { type: "image" }, thumbnail: { url: "https://example.com/dog.png" } },
           { data: { type: "rich" } },
         ],
@@ -80,7 +85,21 @@ describe("toMessageCreateLogEntry", () => {
       BOT_USER_ID,
     );
     expect(entry?.attachments).toEqual([
-      { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4", gifv: true, sourceUrl: "https://tenor.com/view/cat-123" },
+      {
+        url: "https://media.tenor.com/abcAAAPo/cat.mp4",
+        filename: "cat.mp4",
+        contentType: "video/mp4",
+        gifv: true,
+        sourceUrl: "https://tenor.com/view/cat-123",
+        previewUrl: "https://media.tenor.com/abcAAAAC/cat.gif",
+      },
+      {
+        url: "https://static.klipy.com/x/a.mp4",
+        filename: "a.mp4",
+        contentType: "video/mp4",
+        gifv: true,
+        previewUrl: "https://static.klipy.com/x/a.webp",
+      },
       { url: "https://example.com/dog.png", filename: "dog.png", contentType: "image/*" },
     ]);
   });

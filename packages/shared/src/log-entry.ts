@@ -37,6 +37,11 @@ export const messageAttachmentSchema = z.object({
   gifv: z.literal(true).optional(),
   /** embed由来の場合の元ページURL(本文中のTenor/Klipy等のリンク)。Dashboardで本文からこのURLを分離し、リンクボタンにする。 */
   sourceUrl: z.url().optional(),
+  /**
+   * gifvのアニメーション画像版URL(GIF/アニメーションWebP)。DiscordのMediaGalleryはmp4を再生ボタン付きの動画として扱い
+   * 自動ループ再生しないため、ログカードではこちらを表示する(#528)。取得できなかった場合は未設定。
+   */
+  previewUrl: z.url().optional(),
 });
 
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;

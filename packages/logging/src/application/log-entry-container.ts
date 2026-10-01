@@ -222,7 +222,7 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   const mediaItems = (summary.attachments ?? [])
     .filter((a) => a.contentType?.startsWith("image/") || a.contentType?.startsWith("video/"))
     .slice(0, MAX_MEDIA_GALLERY_ITEMS)
-    .map((a) => new MediaGalleryItemBuilder().setURL(a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
+    .map((a) => new MediaGalleryItemBuilder().setURL(a.previewUrl ?? a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
 
   // イベント発生日時はプレビューも含めたカードの一番下に表示する(見た目のフィードバック反映)。
   // プレビューがなければ本文と同じTextDisplayに含め、余計な余白を作らない。

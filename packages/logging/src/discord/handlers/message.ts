@@ -6,7 +6,7 @@ import { type GetChannelId, type WriteLogEntryDeps } from "../../application/ind
 import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
-type MessageAttachments = { url: string; filename: string; contentType?: string; gifv?: true; sourceUrl?: string }[] | undefined;
+type MessageAttachments = { url: string; filename: string; contentType?: string; gifv?: true; sourceUrl?: string; previewUrl?: string }[] | undefined;
 type BulkDeleteMessageLogEntry = LogEntry & {
   category: "message";
   action: "bulkDelete";
@@ -61,18 +61,31 @@ function toFileAttachments(message: AnyMessage): NonNullable<MessageAttachments>
  * gifvはvideo(mp4)、imageはimage(リンク展開ではthumbnail)に実体のURLが入る。
  * ponytail: create時点でembed未展開(後追いmessageUpdateで付与)の場合は記録されない。頻発するなら後追い展開を拾う。
  */
+/**
+ * gifvのアニメーション画像版URLを求める。Klipy等はembedのthumbnailがアニメーションWebP/GIFなのでそれを使う。
+ * Tenorはthumbnailが静止画(png)のため、mp4のURL(`<id>AAAPo/<slug>.mp4`)をGIF版(`<id>AAAAC/<slug>.gif`)に読み替える。
+ * ponytail: TenorのURL規則に依存。規則が変わったらmp4表示(再生ボタン付き)にフォールバックするだけで壊れはしない。
+ */
+function toAnimatedPreviewUrl(videoUrl: string, thumbnailUrl: string | undefined): string | undefined {
+  if (thumbnailUrl && /\.(gif|webp)(\?|$)/i.test(thumbnailUrl)) return thumbnailUrl;
+  const tenor = /^(https:\/\/media\d*\.tenor\.com\/[A-Za-z0-9_-]+)AAAPo(\/[^?]+)\.mp4$/.exec(videoUrl);
+  return tenor ? `${tenor[1]}AAAAC${tenor[2]}.gif` : undefined;
+}
+
 function toEmbedMediaAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
   const media: NonNullable<MessageAttachments> = [];
   for (const embed of message.embeds) {
     const isGifv = embed.data.type === "gifv";
     const url = isGifv ? embed.video?.url : embed.data.type === "image" ? (embed.image?.url ?? embed.thumbnail?.url) : undefined;
     if (!url) continue;
+    const previewUrl = isGifv ? toAnimatedPreviewUrl(url, embed.thumbnail?.url) : undefined;
     media.push({
       url,
       filename: new URL(url).pathname.split("/").pop() || "embed",
       contentType: isGifv ? "video/mp4" : "image/*",
       ...(isGifv ? { gifv: true as const } : {}),
       ...(embed.url ? { sourceUrl: embed.url } : {}),
+      ...(previewUrl ? { previewUrl } : {}),
     });
   }
   return media;

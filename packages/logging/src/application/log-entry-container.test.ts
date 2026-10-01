@@ -212,6 +212,7 @@ describe("buildLogEntryContainers", () => {
           contentType: "video/mp4",
           gifv: true,
           sourceUrl: "https://klipy.com/gifs/x",
+          previewUrl: "https://media.klipy.com/a.webp",
         },
       ],
     };
@@ -221,6 +222,8 @@ describe("buildLogEntryContainers", () => {
     expect(text).not.toContain("添付ファイル");
     const types = containers[0]!.toJSON().components.map((c) => c.type);
     expect(types.slice(-2)).toEqual([12, 10]);
+    // mp4ではなくアニメーション画像版を表示し、Discord上で自動ループ再生させる。
+    expect(JSON.stringify(containers[0]!.toJSON())).toContain('"url":"https://media.klipy.com/a.webp"');
   });
 
   test("画像・動画の添付はMediaGalleryでプレビュー表示する(#528)", () => {
