@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { ChannelType, type Client, type VoiceBasedChannel } from "discord.js";
+import { ChannelType, Collection, type Client, type VoiceBasedChannel } from "discord.js";
 import { announceOwnerTransfer, buildOwnerTransferNotice } from "./owner-transfer-notice.js";
 
 function fakeVoiceChannel() {
@@ -13,17 +13,23 @@ function fakeVoiceChannel() {
 }
 
 function fakeSetup(panelAuthorId = "bot-id", editImpl = () => Promise.resolve()) {
-  const panel = { author: { id: panelAuthorId }, components: [{ customId: "temp-voice:rename:vc-1" }], edit: mock(editImpl) };
+  const panel = { id: "panel", author: { id: panelAuthorId }, components: [{ customId: "temp-voice:rename:vc-1", label: "オーナー移譲" }], edit: mock(editImpl), delete: mock(() => Promise.resolve()) };
+  const oldNotice = { id: "old-notice", author: { id: "bot-id" }, components: [{ content: "## 👑 オーナー移譲" }], delete: mock(() => Promise.resolve()) };
+  const otherNotice = { id: "other", author: { id: "someone" }, components: [{ content: "## 👑 オーナー移譲" }], delete: mock(() => Promise.resolve()) };
   const controlChannel = {
     type: ChannelType.GuildText,
-    send: mock(() => Promise.resolve()),
-    messages: { fetch: mock(() => Promise.resolve({ first: () => panel })) },
+    send: mock(() => Promise.resolve({ id: "new-notice" })),
+    messages: {
+      fetch: mock((options: { after?: string }) =>
+        Promise.resolve(new Collection(options.after ? [["panel", panel]] : [["notice", oldNotice], ["other", otherNotice], ["panel", panel]])),
+      ),
+    },
   };
   const client = {
     user: { id: "bot-id" },
     channels: { cache: { get: (id: string) => (id === "ctrl-1" ? controlChannel : undefined) } },
   } as unknown as Client;
-  return { client, controlChannel, panel };
+  return { client, controlChannel, panel, oldNotice, otherNotice };
 }
 
 describe("buildOwnerTransferNotice", () => {
@@ -45,7 +51,32 @@ describe("announceOwnerTransfer", () => {
     const { client, controlChannel } = fakeSetup();
     await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "manual");
     expect(controlChannel.send).toHaveBeenCalledTimes(1);
-    expect(controlChannel.messages.fetch).not.toHaveBeenCalled();
+    expect(controlChannel.messages.fetch).not.toHaveBeenCalledWith({ after: "0", limit: 1 });
+  });
+
+  test("前回のbotの移譲通知だけを削除し、パネルや他者のメッセージは消さない", async () => {
+    const { client, controlChannel, panel, oldNotice, otherNotice } = fakeSetup();
+    await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "manual");
+    expect(oldNotice.delete).toHaveBeenCalledTimes(1);
+    expect(panel.delete).not.toHaveBeenCalled();
+    expect(otherNotice.delete).not.toHaveBeenCalled();
+    expect(controlChannel.send).toHaveBeenCalledTimes(1);
+  });
+
+  test("1件の削除に失敗しても残りの旧通知の削除を続ける", async () => {
+    const { client, controlChannel, oldNotice } = fakeSetup();
+    oldNotice.delete = mock(() => Promise.reject(new Error("boom")));
+    const another = { id: "old-2", author: { id: "bot-id" }, components: [{ content: "## 👑 オーナー移譲" }], delete: mock(() => Promise.resolve()) };
+    controlChannel.messages.fetch = mock(() => Promise.resolve(new Collection([["a", oldNotice], ["b", another]])));
+    await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "manual");
+    expect(another.delete).toHaveBeenCalledTimes(1);
+  });
+
+  test("新通知の送信に失敗したら旧通知を削除しない", async () => {
+    const { client, controlChannel, oldNotice } = fakeSetup();
+    controlChannel.send = mock(() => Promise.reject(new Error("boom")));
+    await announceOwnerTransfer(client, "ctrl-1", "old-owner", "new-owner", "manual");
+    expect(oldNotice.delete).not.toHaveBeenCalled();
   });
 
   test("voiceChannel有り(自動移譲)は最古のbotメッセージ=パネルを新オーナー表示でeditしてから通知する", async () => {
