@@ -6,7 +6,7 @@ import {
   formatLogMessage,
   summarizeLogEntry,
 } from "@management-bot/shared";
-import { ContainerBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import { ContainerBuilder, MediaGalleryItemBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import type { LogEntry } from "../domain/index.js";
 import { ACCENT_COLORS, getPresentation } from "./log-entry-presentation.js";
 
@@ -43,6 +43,7 @@ function cardEmoji(key: keyof typeof LOG_CARD_APP_EMOJIS): string {
  * ログがDBに保存されたままチャンネルに一切届かなくなる。超過時は切り詰めて必ず上限内に収める。
  */
 const MAX_TEXT_DISPLAY_LENGTH = 4_000;
+const MAX_MEDIA_GALLERY_ITEMS = 10;
 const TEXT_DISPLAY_TRUNCATION_SUFFIX = "\n…(省略)";
 
 function fitTextDisplay(content: string): string {
@@ -217,6 +218,14 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
 
   mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
   mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
+
+  // 画像・GIF(Tenorのgifvはmp4)はリンクだけでなくMediaGalleryでプレビュー表示する(#528)。
+  // MediaGalleryは1つ10件が上限(Discord API仕様)のため、超過分はリンク一覧のみに留める。
+  const mediaItems = (summary.attachments ?? [])
+    .filter((a) => a.contentType?.startsWith("image/") || a.contentType?.startsWith("video/"))
+    .slice(0, MAX_MEDIA_GALLERY_ITEMS)
+    .map((a) => new MediaGalleryItemBuilder().setURL(a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
+  if (mediaItems.length > 0) mainContainer.addMediaGalleryComponents((gallery) => gallery.addItems(mediaItems));
 
   const containers = [mainContainer];
 

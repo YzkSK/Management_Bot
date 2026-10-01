@@ -196,6 +196,30 @@ describe("buildLogEntryContainers", () => {
     expect(text).toContain("[a.png](https://cdn.example.com/a.png)");
   });
 
+  test("画像・動画の添付はMediaGalleryでプレビュー表示する(#528)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      attachments: [
+        { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4" },
+        { url: "https://cdn.example.com/SPOILER_a.png", filename: "SPOILER_a.png", contentType: "image/png" },
+        { url: "https://cdn.example.com/a.txt", filename: "a.txt", contentType: "text/plain" },
+      ],
+    };
+    const gallery = buildLogEntryContainers(entry)[0]!.toJSON().components.find((c) => c.type === 12);
+    expect(gallery).toEqual({
+      type: 12,
+      items: [
+        { media: { url: "https://media.tenor.com/abc/cat.mp4" }, spoiler: false },
+        { media: { url: "https://cdn.example.com/SPOILER_a.png" }, spoiler: true },
+      ],
+    });
+  });
+
   test("role/updateのpermissions変更は剥奪を−、付与を+で列挙する", () => {
     const entry: LogEntry = {
       category: "role",
