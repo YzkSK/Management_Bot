@@ -35,6 +35,8 @@ export const messageAttachmentSchema = z.object({
   contentType: z.string().optional(),
   /** Tenor等のGIFリンク(gifv embed)由来。実体はmp4だが、通常の動画添付と区別してGIFとして自動ループ再生する(#528)。 */
   gifv: z.literal(true).optional(),
+  /** embed由来の場合の元ページURL(本文中のTenor/Klipy等のリンク)。Dashboardで本文からこのURLを分離し、リンクボタンにする。 */
+  sourceUrl: z.url().optional(),
 });
 
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;

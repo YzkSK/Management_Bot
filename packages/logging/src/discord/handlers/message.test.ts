@@ -23,7 +23,7 @@ function fakeMessage(
     pinned: boolean;
     system: boolean;
     attachments: { url: string; name: string; contentType: string | null }[];
-    embeds: { data: { type: string }; video?: { url: string }; thumbnail?: { url: string } }[];
+    embeds: { data: { type: string }; url?: string; video?: { url: string }; thumbnail?: { url: string } }[];
   }> = {},
 ) {
   const attachments = overrides.attachments ?? [];
@@ -72,7 +72,7 @@ describe("toMessageCreateLogEntry", () => {
       fakeMessage({
         content: "https://tenor.com/view/cat-123",
         embeds: [
-          { data: { type: "gifv" }, video: { url: "https://media.tenor.com/abc/cat.mp4" } },
+          { data: { type: "gifv" }, url: "https://tenor.com/view/cat-123", video: { url: "https://media.tenor.com/abc/cat.mp4" } },
           { data: { type: "image" }, thumbnail: { url: "https://example.com/dog.png" } },
           { data: { type: "rich" } },
         ],
@@ -80,7 +80,7 @@ describe("toMessageCreateLogEntry", () => {
       BOT_USER_ID,
     );
     expect(entry?.attachments).toEqual([
-      { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4", gifv: true },
+      { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4", gifv: true, sourceUrl: "https://tenor.com/view/cat-123" },
       { url: "https://example.com/dog.png", filename: "dog.png", contentType: "image/*" },
     ]);
   });
