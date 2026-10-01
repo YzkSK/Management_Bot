@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry, type MessageAttachment } from "@management-bot/shared";
+import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry, type MessageAttachment, contentWithoutGifLinks } from "@management-bot/shared";
 import {
   appEmojiNameFor,
   CHANGE_FIELD_LABELS,
@@ -146,27 +146,6 @@ function withNameSkeletons(message: string): ReactNode {
         part
       ),
     );
-}
-
-/**
- * 本文からプレビュー表示するGIFの元ページURL(sourceUrl)を取り除く。URLはプレビュー右上のリンクボタンから開ける(#528)。
- * 取り除いた結果が空になった場合は本文表示自体を省くためnullを返す。sourceUrlを持たない(移行前の)ログは本文をそのまま返す。
- */
-export function contentWithoutGifLinks(
-  content: string | null | undefined,
-  attachments: readonly MessageAttachment[] | null | undefined,
-): string | null | undefined {
-  if (!content) return content;
-  let stripped = content;
-  for (const attachment of attachments ?? []) {
-    if (!attachment.gifv || !attachment.sourceUrl) continue;
-    // URLの前方一致(sourceUrlを接頭辞に持つ別URL)を壊さないよう、空白区切りのトークンとして完全一致した場合だけ除去する。
-    const escaped = attachment.sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    stripped = stripped.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"), "$1");
-  }
-  if (stripped === content) return content;
-  const trimmed = stripped.trim();
-  return trimmed === "" ? null : trimmed;
 }
 
 /**

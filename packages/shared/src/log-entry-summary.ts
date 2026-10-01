@@ -1,15 +1,32 @@
 import { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subject.js";
-import type { LogEntry } from "./log-entry.js";
+import type { LogEntry, MessageAttachment } from "./log-entry.js";
 
 export interface LogEntryFieldChange {
   before: string | number | boolean | null;
   after: string | number | boolean | null;
 }
 
-export interface LogEntryAttachment {
-  url: string;
-  filename: string;
-  contentType?: string;
+export type LogEntryAttachment = MessageAttachment;
+
+/**
+ * 本文からプレビュー表示するGIFの元ページURL(sourceUrl)を取り除く。Dashboardはプレビューのリンクボタン、Discordのログカードはプレビュー自体で代替する(#528)。
+ * 取り除いた結果が空になった場合は本文表示自体を省くためnullを返す。sourceUrlを持たない(移行前の)ログは本文をそのまま返す。
+ */
+export function contentWithoutGifLinks(
+  content: string | null | undefined,
+  attachments: readonly LogEntryAttachment[] | null | undefined,
+): string | null | undefined {
+  if (!content) return content;
+  let stripped = content;
+  for (const attachment of attachments ?? []) {
+    if (!attachment.gifv || !attachment.sourceUrl) continue;
+    // URLの前方一致(sourceUrlを接頭辞に持つ別URL)を壊さないよう、空白区切りのトークンとして完全一致した場合だけ除去する。
+    const escaped = attachment.sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    stripped = stripped.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"), "$1");
+  }
+  if (stripped === content) return content;
+  const trimmed = stripped.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 export interface LogEntrySummary {

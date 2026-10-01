@@ -78,6 +78,7 @@ export { getLogEntrySubjectId, getLogEntrySubjectField } from "./log-entry-subje
 export { CATEGORY_LABELS } from "./category-labels.js";
 export {
   summarizeLogEntry,
+  contentWithoutGifLinks,
   type LogEntrySummary,
   type LogEntryFieldChange,
   type LogEntryAttachment,

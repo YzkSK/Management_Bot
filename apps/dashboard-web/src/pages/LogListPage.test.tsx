@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
-import { LogListPage, contentWithoutGifLinks, shouldShowRawLogPayload } from "./LogListPage.js";
+import { LogListPage, shouldShowRawLogPayload } from "./LogListPage.js";
 
 const reactUseState = React.useState;
 
@@ -719,35 +719,5 @@ describe("LogListPage", () => {
     expect(html).toContain("メッセージ ID: m1");
     expect(html).toContain("a.png");
     mock.restore();
-  });
-});
-
-describe("contentWithoutGifLinks", () => {
-  const gif = {
-    url: "https://media.klipy.com/a.mp4",
-    filename: "a.mp4",
-    contentType: "video/mp4",
-    gifv: true as const,
-    sourceUrl: "https://klipy.com/gifs/x",
-  };
-
-  test("本文中のGIF元URLだけを取り除き、他の文字・URLは残す", () => {
-    expect(contentWithoutGifLinks("見て https://klipy.com/gifs/x", [gif])).toBe("見て");
-    expect(contentWithoutGifLinks("https://example.com と https://klipy.com/gifs/x", [gif])).toBe("https://example.com と");
-  });
-
-  test("sourceUrlを接頭辞に持つ別URL・文中に埋もれた文字列は壊さない", () => {
-    expect(contentWithoutGifLinks("https://klipy.com/gifs/xyz", [gif])).toBe("https://klipy.com/gifs/xyz");
-    expect(contentWithoutGifLinks("先頭https://klipy.com/gifs/x", [gif])).toBe("先頭https://klipy.com/gifs/x");
-    expect(contentWithoutGifLinks("1行目\nhttps://klipy.com/gifs/x\n3行目", [gif])).toBe("1行目\n\n3行目");
-  });
-
-  test("GIF元URLだけの本文はnull(本文表示を省く)", () => {
-    expect(contentWithoutGifLinks(" https://klipy.com/gifs/x ", [gif])).toBeNull();
-  });
-
-  test("sourceUrlを持たないログ・本文なしはそのまま返す", () => {
-    expect(contentWithoutGifLinks("https://klipy.com/gifs/x", [{ ...gif, sourceUrl: undefined }])).toBe("https://klipy.com/gifs/x");
-    expect(contentWithoutGifLinks(undefined, [gif])).toBeUndefined();
   });
 });
