@@ -590,7 +590,10 @@ describe("LogListPage", () => {
                   messageId: "m1",
                   action: "create",
                   content: "削除対象の投稿本文",
-                  attachments: [{ url: "https://cdn.discordapp.com/a.png", filename: "a.png", contentType: "image/png" }],
+                  attachments: [
+                    { url: "https://cdn.discordapp.com/a.png", filename: "a.png", contentType: "image/png" },
+                    { url: "https://media.tenor.com/x/cat.mp4", filename: "cat.mp4", contentType: "video/mp4" },
+                  ],
                 },
               },
             ],
@@ -604,7 +607,8 @@ describe("LogListPage", () => {
 
     expect(html).toContain("投稿者A");
     expect(html).toContain("削除対象の投稿本文");
-    expect(html).toContain("a.png");
+    expect(html).toContain('<img src="https://cdn.discordapp.com/a.png"');
+    expect(html).toContain('<video src="https://media.tenor.com/x/cat.mp4"');
     mock.restore();
   });
 
