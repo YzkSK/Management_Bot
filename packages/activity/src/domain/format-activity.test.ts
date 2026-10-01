@@ -24,16 +24,11 @@ describe("buildActivityMeReply", () => {
       },
       7,
     );
-    expect(text).toBe(
-      [
-        "**直近7日のアクティビティ**",
-        "発言数: 312 / VC時間: 14h 20m",
-        "サーバー内順位: 発言 1位 / VC -",
-        "",
-        "09/23 発言 40 / VC 2h 10m",
-        "09/24 発言 0 / VC 1m",
-      ].join("\n"),
-    );
+    expect(text).toEqual({
+      title: "直近7日のアクティビティ",
+      summary: "**発言数**: 312 / **VC時間**: 14h 20m\n**サーバー内順位**: 発言 1位 / VC -",
+      daily: "09/23 発言 40 / VC 2h 10m\n09/24 発言 0 / VC 1m",
+    });
   });
 
   test("活動が無ければその旨を返す", () => {
@@ -41,6 +36,6 @@ describe("buildActivityMeReply", () => {
       { totals: { messageCount: 0, voiceSeconds: 0 }, rank: { messages: null, voice: null }, daily: [] },
       30,
     );
-    expect(text).toBe("直近30日のアクティビティはありません。");
+    expect(text).toEqual({ title: "直近30日のアクティビティ", summary: "直近30日のアクティビティはありません。", daily: null });
   });
 });

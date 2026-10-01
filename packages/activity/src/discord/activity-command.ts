@@ -3,13 +3,18 @@ import {
   ApplicationCommandOptionType,
   type ChatInputCommandInteraction,
   type Client,
+  ContainerBuilder,
   MessageFlags,
+  SeparatorSpacingSize,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from "discord.js";
 import { getMemberDetail, type MemberDetail } from "../application/index.js";
-import { buildActivityMeReply } from "../domain/index.js";
+import { type ActivityMeReply, buildActivityMeReply } from "../domain/index.js";
 
 const DAY_MS = 86_400_000;
+/** ログカード(logging の ACCENT_COLORS.neutral / negative)と同じ色。機能パッケージ間はimportしないため複製。 */
+const NEUTRAL_ACCENT = 0x80848e;
+const ERROR_ACCENT = 0xf23f42;
 
 export const ACTIVITY_COMMAND: RESTPostAPIChatInputApplicationCommandsJSONBody = {
   name: "activity",
@@ -39,23 +44,42 @@ export function parsePeriodDays(value: string | null): 7 | 30 {
   return value === "30" ? 30 : 7;
 }
 
+/** ログメッセージと同じComponents V2カード(見出し → 区切り線 → 日別 → 集計時刻)を作る。 */
+export function buildActivityMeContainer(reply: ActivityMeReply, now: Date): ContainerBuilder {
+  const container = new ContainerBuilder()
+    .setAccentColor(NEUTRAL_ACCENT)
+    .addTextDisplayComponents((text) => text.setContent(`### ${reply.title}\n${reply.summary}`));
+  if (reply.daily) {
+    container
+      .addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small))
+      .addTextDisplayComponents((text) => text.setContent(`-# 日別\n${reply.daily}`));
+  }
+  return container
+    .addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents((text) => text.setContent(`-# <t:${Math.floor(now.getTime() / 1000)}:f> 時点`));
+}
+
+function buildErrorContainer(message: string): ContainerBuilder {
+  return new ContainerBuilder().setAccentColor(ERROR_ACCENT).addTextDisplayComponents((text) => text.setContent(message));
+}
+
 export async function buildActivityMeResponse(
   input: { guildId: string; userId: string; periodDays: number; now: Date },
   getDetail: (query: { guildId: string; userId: string; from: Date; to: Date }) => Promise<MemberDetail>,
-): Promise<string> {
+): Promise<ContainerBuilder> {
   const detail = await getDetail({
     guildId: input.guildId,
     userId: input.userId,
     from: new Date(input.now.getTime() - input.periodDays * DAY_MS),
     to: input.now,
   });
-  return buildActivityMeReply(detail, input.periodDays);
+  return buildActivityMeContainer(buildActivityMeReply(detail, input.periodDays), input.now);
 }
 
 async function handleActivityMe(ctx: FeatureModuleContext, interaction: ChatInputCommandInteraction<"cached" | "raw">): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const content = await buildActivityMeResponse(
+    const container = await buildActivityMeResponse(
       {
         guildId: interaction.guildId,
         userId: interaction.user.id,
@@ -64,10 +88,13 @@ async function handleActivityMe(ctx: FeatureModuleContext, interaction: ChatInpu
       },
       (query) => getMemberDetail(ctx.db, query),
     );
-    await interaction.editReply(content);
+    await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
   } catch (error) {
     console.error("activity: failed to handle /activity me", error);
-    await interaction.editReply("アクティビティの取得に失敗しました。時間をおいて再度お試しください。");
+    await interaction.editReply({
+      components: [buildErrorContainer("アクティビティの取得に失敗しました。時間をおいて再度お試しください。")],
+      flags: MessageFlags.IsComponentsV2,
+    });
   }
 }
 

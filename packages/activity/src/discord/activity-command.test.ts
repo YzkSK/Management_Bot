@@ -24,14 +24,28 @@ describe("buildActivityMeResponse", () => {
   test("本人のguild/userと直近N日の範囲で集計し、返信本文を作る", async () => {
     const getDetail = mock(async () => detail);
     const now = new Date("2026-09-29T12:00:00Z");
-    const text = await buildActivityMeResponse({ guildId: "g", userId: "u", periodDays: 7, now }, getDetail);
+    const container = await buildActivityMeResponse({ guildId: "g", userId: "u", periodDays: 7, now }, getDetail);
     expect(getDetail).toHaveBeenCalledWith({
       guildId: "g",
       userId: "u",
       from: new Date("2026-09-22T12:00:00Z"),
       to: now,
     });
-    expect(text).toContain("発言数: 5 / VC時間: 10m");
+    const json = JSON.stringify(container.toJSON());
+    expect(json).toContain("### 直近7日のアクティビティ");
+    expect(json).toContain("**発言数**: 5 / **VC時間**: 10m");
+    expect(json).toContain("09/29 発言 5 / VC 10m");
+  });
+
+  test("活動なしは日別セクションを出さない", async () => {
+    const empty = { ...detail, totals: { messageCount: 0, voiceSeconds: 0 }, daily: [] };
+    const container = await buildActivityMeResponse(
+      { guildId: "g", userId: "u", periodDays: 30, now: new Date() },
+      async () => empty,
+    );
+    const json = JSON.stringify(container.toJSON());
+    expect(json).toContain("直近30日のアクティビティはありません。");
+    expect(json).not.toContain("日別");
   });
 });
 

@@ -12,16 +12,29 @@ export interface ActivityMeSummary {
   daily: readonly { bucket: string; messageCount: number; voiceSeconds: number }[];
 }
 
-/** `/activity me` の返信本文。dailyのbucketはYYYY-MM-DD(JST)。 */
-export function buildActivityMeReply(summary: ActivityMeSummary, periodDays: number): string {
+/** `/activity me` のカード表示用テキスト。dailyはアクティビティが無ければnull。dailyのbucketはYYYY-MM-DD(JST)。 */
+export interface ActivityMeReply {
+  title: string;
+  summary: string;
+  daily: string | null;
+}
+
+export function buildActivityMeReply(summary: ActivityMeSummary, periodDays: number): ActivityMeReply {
   const { totals, rank, daily } = summary;
-  if (totals.messageCount === 0 && totals.voiceSeconds === 0) return `直近${periodDays}日のアクティビティはありません。`;
+  const title = `直近${periodDays}日のアクティビティ`;
+  if (totals.messageCount === 0 && totals.voiceSeconds === 0) {
+    return { title, summary: `直近${periodDays}日のアクティビティはありません。`, daily: null };
+  }
   const rankText = (value: number | null) => (value === null ? "-" : `${value}位`);
-  return [
-    `**直近${periodDays}日のアクティビティ**`,
-    `発言数: ${totals.messageCount} / VC時間: ${formatDuration(totals.voiceSeconds)}`,
-    `サーバー内順位: 発言 ${rankText(rank.messages)} / VC ${rankText(rank.voice)}`,
-    "",
-    ...daily.map((d) => `${d.bucket.slice(5).replace("-", "/")} 発言 ${d.messageCount} / VC ${formatDuration(d.voiceSeconds)}`),
-  ].join("\n");
+  return {
+    title,
+    summary: [
+      `**発言数**: ${totals.messageCount} / **VC時間**: ${formatDuration(totals.voiceSeconds)}`,
+      `**サーバー内順位**: 発言 ${rankText(rank.messages)} / VC ${rankText(rank.voice)}`,
+    ].join("\n"),
+    daily:
+      daily
+        .map((d) => `${d.bucket.slice(5).replace("-", "/")} 発言 ${d.messageCount} / VC ${formatDuration(d.voiceSeconds)}`)
+        .join("\n") || null,
+  };
 }
