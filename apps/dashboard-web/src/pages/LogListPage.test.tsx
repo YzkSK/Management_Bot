@@ -736,6 +736,12 @@ describe("contentWithoutGifLinks", () => {
     expect(contentWithoutGifLinks("https://example.com と https://klipy.com/gifs/x", [gif])).toBe("https://example.com と");
   });
 
+  test("sourceUrlを接頭辞に持つ別URL・文中に埋もれた文字列は壊さない", () => {
+    expect(contentWithoutGifLinks("https://klipy.com/gifs/xyz", [gif])).toBe("https://klipy.com/gifs/xyz");
+    expect(contentWithoutGifLinks("先頭https://klipy.com/gifs/x", [gif])).toBe("先頭https://klipy.com/gifs/x");
+    expect(contentWithoutGifLinks("1行目\nhttps://klipy.com/gifs/x\n3行目", [gif])).toBe("1行目\n\n3行目");
+  });
+
   test("GIF元URLだけの本文はnull(本文表示を省く)", () => {
     expect(contentWithoutGifLinks(" https://klipy.com/gifs/x ", [gif])).toBeNull();
   });

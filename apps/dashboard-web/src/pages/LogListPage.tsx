@@ -159,7 +159,10 @@ export function contentWithoutGifLinks(
   if (!content) return content;
   let stripped = content;
   for (const attachment of attachments ?? []) {
-    if (attachment.gifv && attachment.sourceUrl) stripped = stripped.replaceAll(attachment.sourceUrl, "");
+    if (!attachment.gifv || !attachment.sourceUrl) continue;
+    // URLの前方一致(sourceUrlを接頭辞に持つ別URL)を壊さないよう、空白区切りのトークンとして完全一致した場合だけ除去する。
+    const escaped = attachment.sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    stripped = stripped.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"), "$1");
   }
   if (stripped === content) return content;
   const trimmed = stripped.trim();
@@ -628,10 +631,18 @@ export function LogListPage() {
                                           return (
                                             <article key={nestedId} className="rounded-md border bg-card p-2">
                                               <p className="text-sm">{formatLogMessage(nestedEntry, nestedSummary, names)}</p>
-                                              {nestedSummary.content !== null && (
+                                              {nestedSummary.content !== null &&
+                                                contentWithoutGifLinks(nestedSummary.content, nestedSummary.attachments) !== null && (
                                                 <p className="mt-1 text-sm whitespace-pre-wrap">
-                                                  {nestedSummary.content || "本文なし"}
+                                                  {contentWithoutGifLinks(nestedSummary.content, nestedSummary.attachments) || "本文なし"}
                                                 </p>
+                                              )}
+                                              {nestedSummary.attachments !== null && nestedSummary.attachments.length > 0 && (
+                                                <div className="mt-1 flex flex-wrap gap-2">
+                                                  {nestedSummary.attachments.map((attachment) => (
+                                                    <AttachmentPreview key={attachment.url} attachment={attachment} />
+                                                  ))}
+                                                </div>
                                               )}
                                             </article>
                                           );
