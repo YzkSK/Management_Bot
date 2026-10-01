@@ -148,10 +148,12 @@ function withNameSkeletons(message: string): ReactNode {
     );
 }
 
-/** 画像は<img>、Tenor等のGIF(gifvはmp4で記録される、#528)は<video>でプレビューし、それ以外はリンクにする。 */
+/** 画像は<img>、Tenor等のGIF(gifvはmp4で記録される、#528)は<video>でプレビューし、それ以外・ネタバレ指定はリンクにする。 */
 function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
   const className = "h-24 w-24 rounded-md border object-cover";
-  if (attachment.contentType?.startsWith("image/") || attachment.contentType?.startsWith("video/")) {
+  // ネタバレ指定(SPOILER_)はプレビューで中身を露出させないようリンクのみにする。
+  const isSpoiler = attachment.filename.startsWith("SPOILER_");
+  if (!isSpoiler && (attachment.contentType?.startsWith("image/") || attachment.contentType?.startsWith("video/"))) {
     return (
       <a href={attachment.url} target="_blank" rel="noreferrer">
         {attachment.contentType.startsWith("video/") ? (
