@@ -1,6 +1,7 @@
 import {
   CHANGE_FIELD_LABELS,
   appEmojiText,
+  contentWithoutGifLinks,
   diffPermissions,
   formatChangeValue,
   formatLogMessage,
@@ -164,6 +165,9 @@ function buildMemberJoinFields(entry: LogEntry): string[] {
  */
 export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   const summary = summarizeLogEntry(entry);
+  // GIFリンク(Tenor/Klipy等)はMediaGalleryでプレビューするため、本文の元URL・添付ファイルのリンク一覧からは省く(#528)。
+  const displayContent = contentWithoutGifLinks(summary.content, summary.attachments) ?? null;
+  const linkAttachments = (summary.attachments ?? []).filter((a) => !a.gifv);
   const { accent, title, icon } = getPresentation(entry);
   const description = formatLogMessage(entry, summary, MENTION_NAMES);
 
@@ -191,11 +195,11 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
   if (summary.previousContent !== null) {
     bodyLines.push(formatMultilineField("編集前", `> ${summary.previousContent.replaceAll("\n", "\n> ") || "(本文なし)"}`));
   }
-  if (summary.content !== null) {
+  if (displayContent !== null) {
     bodyLines.push(
       formatMultilineField(
         summary.previousContent !== null ? "編集後" : "本文",
-        `> ${summary.content.replaceAll("\n", "\n> ") || "(本文なし)"}`,
+        `> ${displayContent.replaceAll("\n", "\n> ") || "(本文なし)"}`,
       ),
     );
   }
@@ -206,26 +210,33 @@ export function buildLogEntryContainers(entry: LogEntry): ContainerBuilder[] {
       bodyLines.push(formatChangesLine(field, change));
     }
   }
-  if (summary.attachments !== null && summary.attachments.length > 0) {
+  if (linkAttachments.length > 0) {
     bodyLines.push(
-      formatMultilineField(`${cardEmoji("attachment")} 添付ファイル`, summary.attachments.map((a) => `[${a.filename}](${a.url})`).join("\n")),
+      formatMultilineField(`${cardEmoji("attachment")} 添付ファイル`, linkAttachments.map((a) => `[${a.filename}](${a.url})`).join("\n")),
     );
   }
   // 監査ログ相関で実行者が判明している場合のみ。メンション記法なのでDiscord側で表示名に解決される。
   if (entry.executorId !== undefined) bodyLines.push(formatField(`${cardEmoji("executor")} 実行者`, `<@${entry.executorId}>`));
-  // イベント発生日時は本文・フィールドの一番下に表示する(見た目のフィードバック反映)。
-  bodyLines.push(`-# ${formatTimestamp(entry.createdAt)}`);
-
-  mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
-  mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
-
   // 画像・GIF(Tenorのgifvはmp4)はリンクだけでなくMediaGalleryでプレビュー表示する(#528)。
   // MediaGalleryは1つ10件が上限(Discord API仕様)のため、超過分はリンク一覧のみに留める。
   const mediaItems = (summary.attachments ?? [])
     .filter((a) => a.contentType?.startsWith("image/") || a.contentType?.startsWith("video/"))
     .slice(0, MAX_MEDIA_GALLERY_ITEMS)
     .map((a) => new MediaGalleryItemBuilder().setURL(a.url).setSpoiler(a.filename.startsWith("SPOILER_")));
-  if (mediaItems.length > 0) mainContainer.addMediaGalleryComponents((gallery) => gallery.addItems(mediaItems));
+
+  // イベント発生日時はプレビューも含めたカードの一番下に表示する(見た目のフィードバック反映)。
+  // プレビューがなければ本文と同じTextDisplayに含め、余計な余白を作らない。
+  const timestampLine = `-# ${formatTimestamp(entry.createdAt)}`;
+  if (mediaItems.length === 0) bodyLines.push(timestampLine);
+
+  mainContainer.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small));
+  if (bodyLines.length > 0) {
+    mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(fitTextDisplay(bodyLines.join("\n\n"))));
+  }
+  if (mediaItems.length > 0) {
+    mainContainer.addMediaGalleryComponents((gallery) => gallery.addItems(mediaItems));
+    mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(timestampLine));
+  }
 
   const containers = [mainContainer];
 

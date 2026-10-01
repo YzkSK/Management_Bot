@@ -196,6 +196,33 @@ describe("buildLogEntryContainers", () => {
     expect(text).toContain("[a.png](https://cdn.example.com/a.png)");
   });
 
+  test("GIFリンクのみの投稿は本文URL・添付リンクを省き、プレビューの下に日時を表示する(#528)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      content: "https://klipy.com/gifs/x",
+      attachments: [
+        {
+          url: "https://media.klipy.com/a.mp4",
+          filename: "a.mp4",
+          contentType: "video/mp4",
+          gifv: true,
+          sourceUrl: "https://klipy.com/gifs/x",
+        },
+      ],
+    };
+    const containers = buildLogEntryContainers(entry);
+    const text = textOf(containers);
+    expect(text).not.toContain("https://klipy.com/gifs/x");
+    expect(text).not.toContain("添付ファイル");
+    const types = containers[0]!.toJSON().components.map((c) => c.type);
+    expect(types.slice(-2)).toEqual([12, 10]);
+  });
+
   test("画像・動画の添付はMediaGalleryでプレビュー表示する(#528)", () => {
     const entry: LogEntry = {
       category: "message",
