@@ -223,7 +223,9 @@ export function createGetGuildMemberNamesWith(
 function createGetGuildMemberNames(
   botToken: string,
 ): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
-  return createGetGuildMemberNamesWith((guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds));
+  // 一括取得はgetGuildMembersPageと同じキャッシュを通し、同じページを二重にfetchしない。
+  const getPage = createGetGuildMembersPage(botToken);
+  return createGetGuildMemberNamesWith((guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds, getPage));
 }
 
 /**

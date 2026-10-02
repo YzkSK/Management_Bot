@@ -23,6 +23,23 @@ function toRange(input: { from: string; to: string }): { from: Date; to: Date } 
   return { from, to };
 }
 
+/**
+ * ランキング用のアバターURL。メンバー一覧の先頭ページ(キャッシュ済み)から引く。アバターは装飾なので、
+ * 取得失敗時は空にしてランキング自体は返す。
+ * ponytail: 先頭ページ(1000人)に含まれないメンバーはアバターなし(頭文字表示)。大規模guildで要るなら個別取得を足す。
+ */
+async function fetchAvatarUrls(
+  getGuildMembersPage: (guildId: string) => Promise<{ members: readonly { id: string; avatarUrl?: string }[] }>,
+  guildId: string,
+): Promise<ReadonlyMap<string, string>> {
+  try {
+    const page = await getGuildMembersPage(guildId);
+    return new Map(page.members.flatMap((m) => (m.avatarUrl ? [[m.id, m.avatarUrl] as const] : [])));
+  } catch {
+    return new Map();
+  }
+}
+
 export const activityRouter = router({
   serverSummary: activityViewProcedure(rangeInput.extend({ granularity: z.enum(["hour", "day"]) })).query(({ ctx, input }) =>
     getServerSummary(ctx.db, { guildId: input.guildId, granularity: input.granularity, ...toRange(input) }),
@@ -39,11 +56,14 @@ export const activityRouter = router({
       ...toRange(input),
     });
     const ids = result.rows.map((r) => r.userId);
-    const names = ids.length > 0 ? await ctx.getGuildMemberNames(input.guildId, ids) : new Map<string, string>();
+    const [names, avatars] =
+      ids.length > 0
+        ? await Promise.all([ctx.getGuildMemberNames(input.guildId, ids), fetchAvatarUrls(ctx.getGuildMembersPage, input.guildId)])
+        : [new Map<string, string>(), new Map<string, string>()];
     return {
       ...result,
       pageSize: PAGE_SIZE,
-      rows: result.rows.map((r) => ({ ...r, name: names.get(r.userId) ?? null })),
+      rows: result.rows.map((r) => ({ ...r, name: names.get(r.userId) ?? null, avatarUrl: avatars.get(r.userId) ?? null })),
     };
   }),
 

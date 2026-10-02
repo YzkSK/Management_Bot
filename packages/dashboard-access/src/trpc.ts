@@ -32,6 +32,8 @@ export type GuildAccessStatus = "ok" | "forbidden" | "not_found";
 export interface MemberOption {
   id: string;
   name: string;
+  /** DiscordのアバターURL(メンバー一覧APIで取得できた場合のみ)。 */
+  avatarUrl?: string;
 }
 
 export interface MemberPage {

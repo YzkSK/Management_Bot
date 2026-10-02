@@ -646,7 +646,7 @@ describe("fetchGuildMembersPage", () => {
       calls++;
       if (url.includes("/guilds/g1/members?limit=1000&after=0")) {
         return jsonResponse(200, [
-          { user: { id: "u1", username: "user1", global_name: "User One" }, nick: "ニックネーム" },
+          { user: { id: "111", username: "user1", global_name: "User One", avatar: "abc" }, nick: "ニックネーム" },
           { user: { id: "u2", username: "user2", global_name: null }, nick: null },
         ]);
       }
@@ -658,7 +658,7 @@ describe("fetchGuildMembersPage", () => {
     expect(calls).toBe(1);
     expect(result).toEqual({
       members: [
-        { id: "u1", name: "ニックネーム" },
+        { id: "111", name: "ニックネーム", avatarUrl: "https://cdn.discordapp.com/avatars/111/abc.png?size=64" },
         { id: "u2", name: "user2" },
       ],
       nextAfter: undefined,

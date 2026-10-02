@@ -62,7 +62,10 @@ function buildContext(
     getGuildCategoryOptions: async () => [],
     getGuildAccessStatus: async () => "ok" as const,
     verifyGuildRole: async () => true,
-    getGuildMembersPage: async () => ({ members: [{ id: "a", name: "Alice" }], nextAfter: undefined }),
+    getGuildMembersPage: async () => ({
+      members: [{ id: "a", name: "Alice", avatarUrl: "https://cdn.discordapp.com/avatars/a/x.png" }],
+      nextAfter: undefined,
+    }),
     readRedisHash,
     isGuildMember: async () => true,
     listMyGuilds: async () => [],
@@ -108,9 +111,9 @@ describe("activityRouter", () => {
     await grant(CAPABILITIES.VIEW_ACTIVITY);
     const caller = createCaller(buildContext(async () => new Map([["b", "Bob"]])));
     const result = await caller.memberRanking({ guildId, from, to, sort: "messages", page: 0 });
-    expect(result.rows.map((r) => [r.userId, r.name])).toEqual([
-      ["b", "Bob"],
-      ["a", null],
+    expect(result.rows.map((r) => [r.userId, r.name, r.avatarUrl])).toEqual([
+      ["b", "Bob", null],
+      ["a", null, "https://cdn.discordapp.com/avatars/a/x.png"],
     ]);
     expect(result.pageSize).toBe(20);
     expect(result.total).toBe(2);
@@ -122,7 +125,7 @@ describe("activityRouter", () => {
     const detail = await caller.memberDetail({ guildId, userId: "a", from, to });
     expect(detail.totals).toEqual({ messageCount: 3, voiceSeconds: 600 });
     const options = await caller.listMemberOptions({ guildId });
-    expect(options.members).toEqual([{ id: "a", name: "Alice" }]);
+    expect(options.members.map((m) => [m.id, m.name])).toEqual([["a", "Alice"]]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ChannelOption, GuildAccessStatus, MemberOption, RoleOption } from "@management-bot/dashboard-access";
 import { mapWithConcurrency } from "@management-bot/shared";
+import { buildAvatarUrl } from "../oauth/discord-client.js";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -31,7 +32,12 @@ const guildRoleSchema = z.object({ id: z.string(), name: z.string(), permissions
 const guildMemberSchema = z.object({ roles: z.array(z.string()) });
 
 const guildMemberListEntrySchema = z.object({
-  user: z.object({ id: z.string(), username: z.string(), global_name: z.string().nullable().optional() }),
+  user: z.object({
+    id: z.string(),
+    username: z.string(),
+    global_name: z.string().nullable().optional(),
+    avatar: z.string().nullable().optional(),
+  }),
   nick: z.string().nullable().optional(),
 });
 
@@ -354,6 +360,11 @@ export async function fetchGuildMembersPage(
     members: page.map((member) => ({
       id: member.user.id,
       name: member.nick || member.user.global_name || member.user.username,
+      // アバター未設定はURLを付けない(画面側で頭文字を出す)。
+      // URLに埋め込むため、IDはsnowflake・ハッシュは16進(アニメはa_付き)の形式のものだけ使う。
+      ...(/^\d+$/.test(member.user.id) &&
+        member.user.avatar &&
+        /^(a_)?[0-9a-f]+$/.test(member.user.avatar) && { avatarUrl: `${buildAvatarUrl({ id: member.user.id, avatar: member.user.avatar })}?size=64` }),
     })),
     nextAfter: page.length === MEMBER_LIST_PAGE_SIZE ? page[page.length - 1]!.user.id : undefined,
   };
@@ -384,9 +395,12 @@ interface BulkMemberNamesResult {
  * (issue #213)。1000人を超えるguildでは最初の1000人(idの昇順)のみが対象になり、それ以外は
  * allowIndividualFallback=trueの場合のみ個別取得にフォールバックする。
  */
-async function fetchBulkMemberNames(botToken: string, guildId: string): Promise<BulkMemberNamesResult> {
+async function fetchBulkMemberNames(
+  guildId: string,
+  fetchPage: (guildId: string) => Promise<MemberPage>,
+): Promise<BulkMemberNamesResult> {
   try {
-    const page = await fetchGuildMembersPage(botToken, guildId);
+    const page = await fetchPage(guildId);
     return { names: new Map(page.members.map((member) => [member.id, member.name])), allowIndividualFallback: true };
   } catch (error) {
     if (error instanceof DiscordAccessForbiddenError) {
@@ -438,10 +452,12 @@ export async function fetchGuildMemberNames(
   botToken: string,
   guildId: string,
   userIds: readonly string[],
+  /** 一括取得に使うページ取得関数。呼び出し側のキャッシュ(getGuildMembersPage)を共有して二重fetchを避けるため差し替え可能にする。 */
+  fetchPage: (guildId: string) => Promise<MemberPage> = (id) => fetchGuildMembersPage(botToken, id),
 ): Promise<Map<string, string>> {
   if (userIds.length === 0) return new Map();
 
-  const { names: bulkNames, allowIndividualFallback } = await fetchBulkMemberNames(botToken, guildId);
+  const { names: bulkNames, allowIndividualFallback } = await fetchBulkMemberNames(guildId, fetchPage);
   const missingUserIds = userIds.filter((userId) => !bulkNames.has(userId));
   const fallbackNames =
     allowIndividualFallback && missingUserIds.length > 0
