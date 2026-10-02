@@ -58,6 +58,7 @@ function buildContext(
     getGuildVoiceChannelOptions: overrides.getGuildVoiceChannelOptions ?? (async () => [{ id: "vc-1", name: "ロビー" }]),
     getGuildCategoryOptions: overrides.getGuildCategoryOptions ?? (async () => [{ id: "cat-1", name: "一時VC" }]),
     getGuildAccessStatus: async () => "ok" as const,
+    getGuildOwnerId: async () => null,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
     readRedisHash: async () => ({}),

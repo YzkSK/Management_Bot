@@ -291,6 +291,15 @@ export async function fetchGuildAccessStatus(botToken: string, guildId: string):
 }
 
 /**
+ * guildのオーナーのユーザーIDを返す。アクセス権限画面でオーナーを編集不可として表示するために使う
+ * (issue #523)。guildが見つからない/Botが未参加(403/404)の場合はnullを返す。
+ */
+export async function fetchGuildOwnerId(botToken: string, guildId: string): Promise<string | null> {
+  const guild = await discordGet(botToken, `/guilds/${guildId}`, z.object({ owner_id: z.string() }));
+  return guild === "not_found" ? null : guild.owner_id;
+}
+
+/**
  * capability grantのtargetId実在検証専用(issue #198)。Bot脱退・権限異常による403を
  * 「roleが存在しない」と誤診しないよう、fetchGuildRolesとは異なり403を例外として投げる
  * (isGuildMemberと同じfail-closedの考え方)。guild不明(404)はfalseを返す。

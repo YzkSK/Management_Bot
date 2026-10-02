@@ -28,6 +28,7 @@ import {
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
+  fetchGuildOwnerId,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -70,6 +71,7 @@ const guildCategoriesCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
 const guildAccessStatusCache = createTtlCache<GuildAccessStatus>(GUILD_TTL_MS);
+const guildOwnerIdCache = createTtlCache<string | null>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
 const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
 /**
@@ -161,6 +163,10 @@ function createGetBotPermissions(botToken: string): (guildId: string) => Promise
  */
 function createGetGuildAccessStatus(botToken: string): (guildId: string) => Promise<GuildAccessStatus> {
   return (guildId) => guildAccessStatusCache(guildId, () => fetchGuildAccessStatus(botToken, guildId));
+}
+
+function createGetGuildOwnerId(botToken: string): (guildId: string) => Promise<string | null> {
+  return (guildId) => guildOwnerIdCache(guildId, () => fetchGuildOwnerId(botToken, guildId));
 }
 
 function createGetGuildRoles(botToken: string): (guildId: string) => Promise<readonly RoleOption[]> {
@@ -366,6 +372,7 @@ export function createContext(
       getGuildVoiceChannelOptions: createGetGuildVoiceChannelOptions(botToken),
       getGuildCategoryOptions: createGetGuildCategoryOptions(botToken),
       getGuildAccessStatus: createGetGuildAccessStatus(botToken),
+      getGuildOwnerId: createGetGuildOwnerId(botToken),
       verifyGuildRole: createVerifyGuildRole(botToken),
       getGuildMembersPage: createGetGuildMembersPage(botToken),
       isGuildMember: createIsGuildMember(botToken),

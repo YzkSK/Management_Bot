@@ -136,6 +136,12 @@ export interface DashboardAccessContext {
    */
   getGuildAccessStatus: (guildId: string) => Promise<GuildAccessStatus>;
   /**
+   * guildのオーナーのユーザーIDを返す(取得できない場合はnull)。オーナーの実効capabilitiesは
+   * grantに関係なく常に全権限のため、アクセス権限画面でオーナーを編集不可として表示するのに使う
+   * (issue #523)。表示専用なのでdashboard-api側で短命キャッシュしてよい。
+   */
+  getGuildOwnerId: (guildId: string) => Promise<string | null>;
+  /**
    * guildId直下でroleIdが実在するかをキャッシュを介さず確認する。capability grantのtargetId
    * 実在検証専用(issue #198)。getGuildRolesは表示用に短命キャッシュされうるため、削除直後の
    * roleへの誤付与を防ぐにはこちらを使うこと(verifyGuildChannelと同じ考え方)。

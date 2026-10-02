@@ -77,6 +77,7 @@ function buildContext(
     getBotPermissions: overrides.getBotPermissions ?? (async () => 0n),
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
     getGuildAccessStatus: overrides.getGuildAccessStatus ?? (async () => "ok" as const),
+    getGuildOwnerId: async () => null,
     verifyGuildRole: overrides.verifyGuildRole ?? (async () => true),
     getGuildMembersPage: overrides.getGuildMembersPage ?? membersPageOf(),
     readRedisHash: async () => ({}),
