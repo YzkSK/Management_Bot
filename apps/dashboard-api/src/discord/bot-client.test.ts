@@ -9,6 +9,7 @@ import {
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
+  fetchGuildOwnerId,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -1023,5 +1024,27 @@ describe("fetchGuildAccessStatus", () => {
     }) as typeof fetch;
 
     expect(await fetchGuildAccessStatus("access-status-token-4", "g1")).toBe("forbidden");
+  });
+});
+
+describe("fetchGuildOwnerId(issue #523)", () => {
+  test("guildのowner_idを返す", async () => {
+    mockFetch({ "/guilds/g1": { status: 200, body: { id: "g1", owner_id: "owner-1" } } });
+
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBe("owner-1");
+  });
+
+  test("Bot未参加(404)・権限不足(403)はnullを返す", async () => {
+    mockFetch({ "/guilds/g1": { status: 404 } });
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBeNull();
+
+    mockFetch({ "/guilds/g1": { status: 403 } });
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBeNull();
+  });
+
+  test("owner_idを欠くレスポンスはスキーマ検証で例外にする", async () => {
+    mockFetch({ "/guilds/g1": { status: 200, body: { id: "g1" } } });
+
+    await expect(fetchGuildOwnerId("test-bot-token", "g1")).rejects.toThrow();
   });
 });
