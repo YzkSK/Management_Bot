@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_URL, trpc } from "../trpc.js";
@@ -15,10 +16,10 @@ import {
   longestLive,
 } from "./activity-live.js";
 import { buildGuildWsUrl } from "./log-notifications.js";
+import { visiblePages } from "./pagination.js";
 import { useGuildWs } from "./use-guild-ws.js";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -160,11 +161,49 @@ function chartData(series: readonly ActivitySeriesPoint[], range: ActivityRange)
   return fillSeries(series, range).map((p) => ({ ...p, label: formatBucketLabel(p.bucket, range.granularity) }));
 }
 
+/** 画像の先読みをこれ以上待たない時間。応答しない画像でランキングが読み込み中のまま止まらないようにする。 */
+const IMAGE_PRELOAD_TIMEOUT_MS = 5000;
+
+/**
+ * ランキングを全員のアバターが揃ってから出すため、画像を先読みして状態を返す。
+ * 読み込めなかった(またはタイムアウトした)画像はok=falseにし、呼び出し側で頭文字表示に倒す。
+ */
+function useImageStatus(urls: readonly string[]): { ready: boolean; ok: (url: string) => boolean } {
+  const [status, setStatus] = useState<ReadonlyMap<string, boolean>>(new Map());
+  // 1枚読み込むたびに残りの先読みをやり直さないよう、effectはURL集合(key)が変わった時だけ走らせ、既読判定はrefで見る。
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const key = urls.join("\n");
+
+  useEffect(() => {
+    const pending = key === "" ? [] : key.split("\n").filter((url) => !statusRef.current.has(url));
+    if (pending.length === 0) return;
+    let alive = true;
+    const settle = (url: string, ok: boolean) => {
+      if (alive) setStatus((prev) => (prev.has(url) ? prev : new Map(prev).set(url, ok)));
+    };
+    for (const url of pending) {
+      const img = new Image();
+      img.onload = () => settle(url, true);
+      img.onerror = () => settle(url, false);
+      img.src = url;
+    }
+    const timer = setTimeout(() => pending.forEach((url) => settle(url, false)), IMAGE_PRELOAD_TIMEOUT_MS);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [key]);
+
+  return { ready: urls.every((url) => status.has(url)), ok: (url) => status.get(url) === true };
+}
+
 export function RankingTable({
   guildId,
   range,
   now,
   live,
+  liveReady = true,
   sort,
   selectedUserId,
   onSelect,
@@ -173,6 +212,8 @@ export function RankingTable({
   range: ActivityRange;
   now: Date;
   live: LiveVoice;
+  /** 進行中のVC(VC中表示・VC時間の加算)を取得済みか。揃うまでランキングを読み込み中にする。 */
+  liveReady?: boolean;
   sort: RankingSort;
   selectedUserId: string;
   onSelect: (userId: string) => void;
@@ -184,11 +225,12 @@ export function RankingTable({
     ...trpc.activity.memberRanking.queryOptions({ guildId, from: range.from, to: range.to, sort, page }),
     placeholderData: keepPreviousData,
   });
+  const avatars = useImageStatus(query.data?.rows.flatMap((row) => (row.avatarUrl ? [row.avatarUrl] : [])) ?? []);
 
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
       <h3 className="border-b px-4 py-3 text-sm font-semibold">メンバーランキング</h3>
-      {query.isPending ? (
+      {query.isPending || !avatars.ready || !liveReady ? (
         <Loading />
       ) : query.isError ? (
         <p className="text-destructive p-4 text-sm">ランキングの取得に失敗しました。</p>
@@ -196,62 +238,94 @@ export function RankingTable({
         <p className="text-muted-foreground p-8 text-center text-sm">この期間の活動はありません。</p>
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <TableHead>メンバー</TableHead>
-                <TableHead className="text-right">発言数</TableHead>
-                <TableHead className="text-right">VC時間</TableHead>
-                <TableHead className="text-right">最終活動</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {query.data.rows.map((row, index) => (
-                <TableRow
-                  key={row.userId}
-                  className={cn("cursor-pointer", row.userId === selectedUserId && "bg-accent")}
-                  onClick={() => onSelect(row.userId)}
-                >
-                  <TableCell className="text-muted-foreground">{page * query.data.pageSize + index + 1}</TableCell>
-                  <TableCell>
-                    <button type="button" className="text-left hover:underline" onClick={() => onSelect(row.userId)}>
-                      {row.name ?? row.userId}
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-right">{NUMBER_FORMAT.format(row.messageCount)}</TableCell>
-                  {/* ponytail: 並び順は取得時のまま(次のstats通知で取り直した時に並び直る)。 */}
-                  <TableCell className="text-right">{formatDuration(row.voiceSeconds + (live.get(row.userId) ?? 0))}</TableCell>
-                  <TableCell className="text-muted-foreground text-right">
-                    {/* 今VC時間を計上中のメンバーは最終活動ではなく進行中であることを示す(メンバー詳細の「VC中」と同じ判定)。 */}
-                    {live.has(row.userId) ? (
-                      <span className="text-success inline-flex items-center gap-1.5 font-medium">
-                        <span className="bg-success size-2 rounded-full" aria-hidden="true" />
-                        VC中
+          <ul className="divide-y">
+            {(() => {
+              // ponytail: 並び順は取得時のまま(次のstats通知で取り直した時に並び直る)。バーはこのページ内の最大VC時間を基準にする。
+              const voiceOf = (row: { userId: string; voiceSeconds: number }) => row.voiceSeconds + (live.get(row.userId) ?? 0);
+              const maxVoice = Math.max(1, ...query.data.rows.map(voiceOf));
+              return query.data.rows.map((row, index) => {
+                const name = row.name ?? row.userId;
+                const voice = voiceOf(row);
+                const inVoice = live.has(row.userId);
+                return (
+                  <li key={row.userId}>
+                    <button
+                      type="button"
+                      aria-current={row.userId === selectedUserId ? "true" : undefined}
+                      onClick={() => onSelect(row.userId)}
+                      className={cn(
+                        "grid w-full grid-cols-[1.5rem_2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-left text-sm sm:grid-cols-[2rem_2.25rem_minmax(0,1fr)_minmax(8rem,14rem)_5rem]",
+                        row.userId === selectedUserId ? "bg-accent" : "hover:bg-muted/50",
+                      )}
+                    >
+                      <span className={cn("text-center tabular-nums", index + page === 0 ? "font-bold" : "text-muted-foreground")}>
+                        {page * query.data.pageSize + index + 1}
                       </span>
-                    ) : (
-                      formatRelative(row.lastActiveAt, now)
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      <span className="bg-muted relative grid size-8 place-items-center rounded-full text-xs font-semibold sm:size-9">
+                        {row.avatarUrl && avatars.ok(row.avatarUrl) ? (
+                          <img src={row.avatarUrl} alt="" className="size-full rounded-full object-cover" />
+                        ) : (
+                          <span aria-hidden="true">{[...name][0]}</span>
+                        )}
+                        {inVoice && (
+                          <span className="bg-success border-card absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2" aria-hidden="true" />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{name}</span>
+                        <span className="text-muted-foreground block text-xs">発言 {NUMBER_FORMAT.format(row.messageCount)}</span>
+                      </span>
+                      <span className="col-span-2 col-start-3 row-start-2 text-xs tabular-nums sm:col-span-1 sm:col-start-4 sm:row-start-1">
+                        <span className="text-muted-foreground flex justify-between">
+                          VC<span className="text-foreground font-medium">{formatDuration(voice)}</span>
+                        </span>
+                        <span className="bg-muted mt-1 block h-1.5 overflow-hidden rounded-full">
+                          <span className="bg-foreground/70 block h-full rounded-full" style={{ width: `${(voice / maxVoice) * 100}%` }} />
+                        </span>
+                      </span>
+                      {/* 今VC時間を計上中のメンバーは最終活動ではなく進行中であることを示す(メンバー詳細の「VC中」と同じ判定)。 */}
+                      <span className="col-start-4 row-start-1 text-right text-xs whitespace-nowrap sm:col-start-5">
+                        {inVoice ? (
+                          <span className="border-foreground/20 rounded-full border px-2 py-0.5 font-medium">VC中</span>
+                        ) : (
+                          <span className="text-muted-foreground">{formatRelative(row.lastActiveAt, now)}</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                );
+              });
+            })()}
+          </ul>
           {query.data.total > query.data.pageSize && (
-            <div className="flex items-center justify-end gap-2 border-t px-4 py-2">
-              <Button type="button" variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                前へ
+            // LogListPageのページ送りと同じ形(前後矢印+ページ番号)。
+            <nav aria-label="ランキングのページ" className="flex justify-center gap-2 border-t px-4 py-2">
+              <Button type="button" variant="outline" size="icon" aria-label="前のページ" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                <ChevronLeft />
               </Button>
+              {visiblePages(page, Math.ceil(query.data.total / query.data.pageSize)).map((p) => (
+                <Button
+                  key={p}
+                  type="button"
+                  variant={p === page ? "default" : "outline"}
+                  size="icon"
+                  aria-current={p === page ? "page" : undefined}
+                  onClick={() => setPage(p)}
+                >
+                  {p + 1}
+                </Button>
+              ))}
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="icon"
+                aria-label="次のページ"
                 disabled={(page + 1) * query.data.pageSize >= query.data.total}
                 onClick={() => setPage(page + 1)}
               >
-                次へ
+                <ChevronRight />
               </Button>
-            </div>
+            </nav>
           )}
         </>
       )}
@@ -376,7 +450,19 @@ export function MemberDetailView({
   );
 }
 
-function MemberTab({ guildId, range, now, live }: { guildId: string; range: ActivityRange; now: Date; live: LiveVoice }) {
+function MemberTab({
+  guildId,
+  range,
+  now,
+  live,
+  liveReady,
+}: {
+  guildId: string;
+  range: ActivityRange;
+  now: Date;
+  live: LiveVoice;
+  liveReady: boolean;
+}) {
   const [userId, setUserId] = useState("");
   const [sort, setSort] = useState<RankingSort>("voice");
   const memberOptions = useMemberOptions(guildId);
@@ -385,6 +471,41 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
     enabled: userId !== "",
     placeholderData: keepPreviousData,
   });
+  const rankingBlock = (
+    <RankingTable
+      key="ranking"
+      guildId={guildId}
+      range={range}
+      now={now}
+      live={live}
+      liveReady={liveReady}
+      sort={sort}
+      selectedUserId={userId}
+      onSelect={setUserId}
+    />
+  );
+  const detailBlock =
+    userId === "" ? (
+      <p key="detail" className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+        メンバーを選択すると、時間帯別・日別の活動を表示します。
+      </p>
+    ) : detailQuery.isPending ? (
+      <Loading key="detail" className="gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {["発言数", "VC時間", "最終発言", "最終VC参加"].map((label) => (
+            <StatCard key={label} label={label} value={VALUE_SKELETON} />
+          ))}
+        </div>
+        <ChartSkeleton title="時間帯別の活動" height={180} />
+        <ChartSkeleton title="日別" height={180} />
+      </Loading>
+    ) : detailQuery.isError ? (
+      <p key="detail" className="text-destructive text-sm">
+        メンバーのアクティビティの取得に失敗しました。
+      </p>
+    ) : (
+      <MemberDetailView key="detail" detail={detailQuery.data} range={range} now={now} liveSeconds={live.get(userId)} />
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -429,26 +550,9 @@ function MemberTab({ guildId, range, now, live }: { guildId: string; range: Acti
         )}
       </div>
       {memberOptions.isError && <p className="text-destructive text-sm">メンバー候補の取得に失敗しました。</p>}
-      <RankingTable guildId={guildId} range={range} now={now} live={live} sort={sort} selectedUserId={userId} onSelect={setUserId} />
-      {userId === "" ? (
-        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
-          メンバーを選択すると、時間帯別・日別の活動を表示します。
-        </p>
-      ) : detailQuery.isPending ? (
-        <Loading className="gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {["発言数", "VC時間", "最終発言", "最終VC参加"].map((label) => (
-              <StatCard key={label} label={label} value={VALUE_SKELETON} />
-            ))}
-          </div>
-          <ChartSkeleton title="時間帯別の活動" height={180} />
-          <ChartSkeleton title="日別" height={180} />
-        </Loading>
-      ) : detailQuery.isError ? (
-        <p className="text-destructive text-sm">メンバーのアクティビティの取得に失敗しました。</p>
-      ) : (
-        <MemberDetailView detail={detailQuery.data} range={range} now={now} liveSeconds={live.get(userId)} />
-      )}
+      {/* 未選択時はランキングから選ばせるので上に、選択後は詳細を主役にしてランキングを下に置く。
+          keyで並べ替えるのでランキングは再マウントされず(ページ位置を保つ)、DOM順=表示順になる。 */}
+      {userId === "" ? [rankingBlock, detailBlock] : [detailBlock, rankingBlock]}
     </div>
   );
 }
@@ -550,7 +654,7 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
           <ServerStatsTab guildId={guildId} range={range} now={clock} live={live} />
         </TabsContent>
         <TabsContent value="member">
-          <MemberTab guildId={guildId} range={range} now={clock} live={live} />
+          <MemberTab guildId={guildId} range={range} now={clock} live={live} liveReady={!activeVoice.isPending} />
         </TabsContent>
         <TabsContent value="voice">
           <ActiveVoiceTab guildId={guildId} now={clock} />

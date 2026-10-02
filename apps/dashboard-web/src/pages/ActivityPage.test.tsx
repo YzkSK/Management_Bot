@@ -93,6 +93,18 @@ describe("RankingTable", () => {
     expect(html).toContain("u2");
   });
 
+  test("アバター画像の読み込みが終わるまではランキングを出さず読み込み中にする", () => {
+    const queryClient = newClient();
+    const range = seedRanking(queryClient, [
+      { userId: "u1", name: "メンバーA", avatarUrl: "https://cdn.discordapp.com/avatars/1/a.png", messageCount: 1, voiceSeconds: 0, lastActiveAt: null },
+    ]);
+
+    const html = renderRanking(queryClient, range);
+
+    expect(html).toContain("メンバーランキング");
+    expect(html).not.toContain("メンバーA");
+  });
+
   test("選択中のメンバーの行を強調する", () => {
     const queryClient = newClient();
     const range = seedRanking(queryClient, [
