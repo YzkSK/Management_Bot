@@ -286,7 +286,13 @@ export function RankingTable({
                       {/* 今VC時間を計上中のメンバーは最終活動ではなく進行中であることを示す(メンバー詳細の「VC中」と同じ判定)。 */}
                       <span className="col-start-4 row-start-1 text-right text-xs whitespace-nowrap sm:col-start-5">
                         {inVoice ? (
-                          <span className="border-foreground/20 rounded-full border px-2 py-0.5 font-medium">VC中</span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 font-medium text-green-600 dark:text-green-400">
+                            <span className="relative flex size-2">
+                              <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-500 opacity-75 motion-reduce:animate-none" />
+                              <span className="relative inline-flex size-2 rounded-full bg-green-500" />
+                            </span>
+                            VC中
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">{formatRelative(row.lastActiveAt, now)}</span>
                         )}
