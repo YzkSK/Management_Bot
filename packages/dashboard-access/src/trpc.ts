@@ -32,6 +32,8 @@ export type GuildAccessStatus = "ok" | "forbidden" | "not_found";
 export interface MemberOption {
   id: string;
   name: string;
+  /** DiscordのアバターURL(メンバー一覧APIで取得できた場合のみ)。 */
+  avatarUrl?: string;
 }
 
 export interface MemberPage {
@@ -51,6 +53,8 @@ export interface ManagedGuild {
    * (閲覧可否は各procedure側のrequireCapabilityがFORBIDDENで最終的に強制する)。
    */
   isManaged: boolean;
+  /** サーバーアイコンの画像URL。アイコン未設定ならnull(頭文字で表示する)。 */
+  iconUrl: string | null;
 }
 
 export interface DashboardAccessContext {
@@ -132,6 +136,12 @@ export interface DashboardAccessContext {
    */
   getGuildAccessStatus: (guildId: string) => Promise<GuildAccessStatus>;
   /**
+   * guildのオーナーのユーザーIDを返す(取得できない場合はnull)。オーナーの実効capabilitiesは
+   * grantに関係なく常に全権限のため、アクセス権限画面でオーナーを編集不可として表示するのに使う
+   * (issue #523)。表示専用なのでdashboard-api側で短命キャッシュしてよい。
+   */
+  getGuildOwnerId: (guildId: string) => Promise<string | null>;
+  /**
    * guildId直下でroleIdが実在するかをキャッシュを介さず確認する。capability grantのtargetId
    * 実在検証専用(issue #198)。getGuildRolesは表示用に短命キャッシュされうるため、削除直後の
    * roleへの誤付与を防ぐにはこちらを使うこと(verifyGuildChannelと同じ考え方)。
@@ -159,6 +169,11 @@ export interface DashboardAccessContext {
    * 重複問い合わせを避けたいdashboard-api側は、短命TTLキャッシュ付きの実装をここに注入できる
    * (issue #198 パフォーマンス改善。getGuildMembershipキャッシュと同じ考え方)。
    */
+  /**
+   * アクティブVC表示用。botが同期しているRedis Hashを読む(dashboard-apiはGatewayキャッシュを持たないため)。
+   * dashboard-accessをRedisクライアントに依存させないよう、読み取り関数として注入する。
+   */
+  readRedisHash: (key: string) => Promise<Record<string, string>>;
   resolveEffectiveCapabilities?: (input: ResolveEffectiveCapabilitiesInput) => Promise<number>;
 }
 

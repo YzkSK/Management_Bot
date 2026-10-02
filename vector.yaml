@@ -1,0 +1,31 @@
+# PostgreSQL/Redisのログをステータス画面(issue #507)へ送るサイドカー設定。
+# 各コンテナのデータボリュームに書かれたログファイルを読み取り専用で読み、Redis Pub/Subへ流す
+# (VectorのredisシンクはStreams非対応のため、dashboard-apiが購読して上限付きStreamへ積み直す)。
+# Docker socketは渡さない。
+sources:
+  postgres:
+    type: file
+    include: ["/logs/postgres/log/*.log"]
+    read_from: end
+  redis:
+    type: file
+    include: ["/logs/redis/redis.log"]
+    read_from: end
+
+transforms:
+  tagged:
+    type: remap
+    inputs: [postgres, redis]
+    source: |
+      service = if starts_with(string!(.file), "/logs/postgres/") { "postgres" } else { "redis" }
+      . = { "service": service, "line": .message }
+
+sinks:
+  dashboard:
+    type: redis
+    inputs: [tagged]
+    endpoint: redis://redis:6379/0
+    key: infra:logs:ingest
+    data_type: channel
+    encoding:
+      codec: json

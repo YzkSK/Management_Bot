@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { applyTheme, getStoredTheme, setTheme, watchSystemTheme } from "./theme.js";
+import { applyTheme, followSystemTheme, getStoredTheme, setTheme } from "./theme.js";
 
 function mockLocalStorage(): Storage {
   const store = new Map<string, string>();
@@ -91,15 +91,9 @@ describe("setTheme", () => {
   });
 });
 
-describe("watchSystemTheme(codexレビュー対応: OS配色設定の変更への追従)", () => {
-  test("system以外では購読せず、解除関数は何もしない", () => {
-    const unwatch = watchSystemTheme("dark");
-    expect(addEventListener).not.toHaveBeenCalled();
-    expect(() => unwatch()).not.toThrow();
-  });
-
-  test("system選択中はOS設定変更(change)のたびにdarkクラスを再適用する", () => {
-    watchSystemTheme("system");
+describe("followSystemTheme(OS配色設定の変更への追従)", () => {
+  test("system保存中はOS設定変更のたびにdarkクラスを再適用する", () => {
+    followSystemTheme();
     expect(addEventListener).toHaveBeenCalledTimes(1);
 
     matchesDark = true;
@@ -108,8 +102,18 @@ describe("watchSystemTheme(codexレビュー対応: OS配色設定の変更へ�
     expect(toggleDark).toHaveBeenCalledWith("dark", true);
   });
 
+  test("明示テーマ保存中はOS設定が変わっても保存済みテーマのまま", () => {
+    localStorage.setItem("theme", "light");
+    followSystemTheme();
+
+    matchesDark = true;
+    mediaListeners.forEach((listener) => listener());
+
+    expect(toggleDark).toHaveBeenCalledWith("dark", false);
+  });
+
   test("解除関数を呼ぶとリスナーが外れる", () => {
-    const unwatch = watchSystemTheme("system");
+    const unwatch = followSystemTheme();
     unwatch();
 
     expect(removeEventListener).toHaveBeenCalledTimes(1);

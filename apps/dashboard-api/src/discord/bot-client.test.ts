@@ -9,6 +9,7 @@ import {
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
+  fetchGuildOwnerId,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -646,7 +647,7 @@ describe("fetchGuildMembersPage", () => {
       calls++;
       if (url.includes("/guilds/g1/members?limit=1000&after=0")) {
         return jsonResponse(200, [
-          { user: { id: "u1", username: "user1", global_name: "User One" }, nick: "ニックネーム" },
+          { user: { id: "111", username: "user1", global_name: "User One", avatar: "abc" }, nick: "ニックネーム" },
           { user: { id: "u2", username: "user2", global_name: null }, nick: null },
         ]);
       }
@@ -658,7 +659,7 @@ describe("fetchGuildMembersPage", () => {
     expect(calls).toBe(1);
     expect(result).toEqual({
       members: [
-        { id: "u1", name: "ニックネーム" },
+        { id: "111", name: "ニックネーム", avatarUrl: "https://cdn.discordapp.com/avatars/111/abc.png?size=64" },
         { id: "u2", name: "user2" },
       ],
       nextAfter: undefined,
@@ -1023,5 +1024,27 @@ describe("fetchGuildAccessStatus", () => {
     }) as typeof fetch;
 
     expect(await fetchGuildAccessStatus("access-status-token-4", "g1")).toBe("forbidden");
+  });
+});
+
+describe("fetchGuildOwnerId(issue #523)", () => {
+  test("guildのowner_idを返す", async () => {
+    mockFetch({ "/guilds/g1": { status: 200, body: { id: "g1", owner_id: "owner-1" } } });
+
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBe("owner-1");
+  });
+
+  test("Bot未参加(404)・権限不足(403)はnullを返す", async () => {
+    mockFetch({ "/guilds/g1": { status: 404 } });
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBeNull();
+
+    mockFetch({ "/guilds/g1": { status: 403 } });
+    expect(await fetchGuildOwnerId("test-bot-token", "g1")).toBeNull();
+  });
+
+  test("owner_idを欠くレスポンスはスキーマ検証で例外にする", async () => {
+    mockFetch({ "/guilds/g1": { status: 200, body: { id: "g1" } } });
+
+    await expect(fetchGuildOwnerId("test-bot-token", "g1")).rejects.toThrow();
   });
 });

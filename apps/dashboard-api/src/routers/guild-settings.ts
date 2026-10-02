@@ -1,18 +1,14 @@
 import { protectedProcedure, resolveEffectiveCapabilities, router } from "@management-bot/dashboard-access";
 import type { ManagedGuild } from "@management-bot/dashboard-access";
-import { CAPABILITIES } from "@management-bot/shared";
 
 export interface ManagedGuildWithAccess extends ManagedGuild {
   /**
-   * ログインユーザーがこのguildでログ一覧(VIEW_LOGS)を閲覧できるか(issue #263)。
+   * ログインユーザーのこのguildでの実効capabilities(issue #527)。未在籍なら0。
    * isManagedはBot設定変更可否(オーナー/MANAGE_GUILD)の軸であり、これとは独立。
-   * GuildListPageの遷移先は現状ログ一覧のみのためVIEW_LOGSのみで判定する。
-   * falseの場合、遷移してもrequireCapability(VIEW_LOGS)がFORBIDDENを返すだけなので、
-   * Dashboard UIの一覧ではクリック不可にしてよい。
-   * 遷移先の機能が増えたら(FEATURE_METADATAの実装済みキーが増えたら)、
-   * それらのviewCapabilityも合わせて判定する必要がある。
+   * Dashboard UIはこれを元にサーバー選択後の遷移先・サイドバーの表示項目を決める。
+   * 表示の出し分けは利便性のためのもので、認可は各procedureのrequireCapabilityが最終的に強制する。
    */
-  canViewLogs: boolean;
+  capabilities: number;
 }
 
 export const guildSettingsRouter = router({
@@ -26,7 +22,7 @@ export const guildSettingsRouter = router({
       guilds.map(async (guild): Promise<ManagedGuildWithAccess> => {
         const membership = await ctx.getGuildMembership(guild.id, ctx.discordUserId);
         if (!membership) {
-          return { ...guild, canViewLogs: false };
+          return { ...guild, capabilities: 0 };
         }
         const capabilities = await resolveCapabilities({
           guildId: guild.id,
@@ -34,7 +30,7 @@ export const guildSettingsRouter = router({
           isOwner: membership.isOwner,
           roleIds: membership.roleIds,
         });
-        return { ...guild, canViewLogs: (capabilities & CAPABILITIES.VIEW_LOGS) === CAPABILITIES.VIEW_LOGS };
+        return { ...guild, capabilities };
       }),
     );
   }),

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { CAPABILITIES } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { GuildListPage } from "./GuildListPage.js";
 
@@ -28,36 +29,46 @@ describe("GuildListPage", () => {
     expect(html).toContain("表示できるサーバーが見つかりませんでした");
   });
 
-  test("取得成功時はサーバー一覧をログ一覧画面へのリンクとして描画する", () => {
+  test("取得成功時はサーバー一覧をアクティビティ画面へのリンクとして描画する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "テストサーバー", isManaged: true, canViewLogs: true },
+      { id: "g1", name: "テストサーバー", isManaged: true, iconUrl: null, capabilities: CAPABILITIES.VIEW_ACTIVITY },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("テストサーバー");
-    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).toContain('href="/guilds/g1/activity"');
   });
 
-  test("管理者権限のないサーバーもリンクとして描画しつつ理由を明示する(issue #199, @everyoneのVIEW_LOGS等は別途利用できるため)", () => {
+  test("管理者権限のないサーバーもリンクとして描画しつつ理由を明示する(issue #199, @everyoneのVIEW_ACTIVITY等は別途利用できるため)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "非管理サーバー", isManaged: false, canViewLogs: true },
+      { id: "g1", name: "非管理サーバー", isManaged: false, iconUrl: null, capabilities: CAPABILITIES.VIEW_ACTIVITY },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("非管理サーバー");
     expect(html).toContain("管理者権限がありません");
-    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).toContain('href="/guilds/g1/activity"');
   });
 
-  test("VIEW_LOGS権限がないサーバーはリンクにせずクリック不可の表示にする(issue #263)", () => {
+  test("閲覧できるページが1つもないサーバーはリンクにせずクリック不可の表示にする(issue #263)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "権限なしサーバー", isManaged: false, canViewLogs: false },
+      { id: "g1", name: "権限なしサーバー", isManaged: false, iconUrl: null, capabilities: 0 },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("権限なしサーバー");
     expect(html).toContain("アクセス権限がありません");
-    expect(html).not.toContain('href="/guilds/g1/logs"');
+    expect(html).not.toContain('href="/guilds/g1/activity"');
     expect(html).toContain('aria-describedby="guild-access-note-g1"');
+  });
+
+  test("VIEW_LOGSのみのサーバーはログ一覧へのリンクになる(issue #527)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+      { id: "g1", name: "ログ閲覧サーバー", isManaged: false, iconUrl: null, capabilities: CAPABILITIES.VIEW_LOGS },
+    ]);
+    const html = renderPage(queryClient);
+    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).not.toContain("アクセス権限がありません");
   });
 });

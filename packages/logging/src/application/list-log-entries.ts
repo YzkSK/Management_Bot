@@ -1,31 +1,17 @@
 import type { Db } from "@management-bot/db";
 import { logEntries } from "@management-bot/db";
 import { SENSITIVE_LOG_FIELDS, isBulkDeleteLogEntry, type LogCategory } from "@management-bot/shared";
-import { and, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
-import { z } from "zod";
+import { and, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { parseLogEntry, type LogEntry } from "../domain/index.js";
-
-const cursorSchema = z.object({ createdAt: z.iso.datetime(), id: z.string().min(1) });
-export type LogEntryCursor = z.infer<typeof cursorSchema>;
-
-/** createdAt+idの複合カーソルを不透明な文字列にエンコードする。 */
-export function encodeCursor(cursor: LogEntryCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
-}
-
-/** 不正なカーソル文字列(改ざん・破損)はZodErrorを投げる。呼び出し側でBAD_REQUESTに変換すること。 */
-export function decodeCursor(cursor: string): LogEntryCursor {
-  const decoded: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-  return cursorSchema.parse(decoded);
-}
 
 export interface ListLogEntriesInput {
   guildId: string;
-  category?: LogCategory;
+  /** 指定時はこれらのカテゴリのみ返す(未指定・空配列は全カテゴリ)。 */
+  categories?: readonly LogCategory[];
   limit: number;
-  /** 前ページ最終行からencodeCursorで得たカーソル。これより古いエントリを返す。 */
-  cursor?: string;
-  /** これらのカテゴリは結果から除外する(categoryフィルタと併用可)。 */
+  /** 先頭から読み飛ばす件数(ページ番号×limit)。 */
+  offset?: number;
+  /** これらのカテゴリは結果から除外する(categoriesフィルタと併用可)。 */
   excludeCategories?: readonly LogCategory[];
   /** trueの場合、authorIsBot=trueの行を結果から除外する。 */
   excludeBotEvents?: boolean;
@@ -33,7 +19,8 @@ export interface ListLogEntriesInput {
 
 export interface ListLogEntriesResult {
   entries: ListedLogEntry[];
-  nextCursor: string | null;
+  /** フィルタ条件に一致する総件数。総ページ数の算出に使う。 */
+  totalCount: number;
 }
 
 export interface ListedLogEntry {
@@ -82,45 +69,36 @@ function isNotCollapsedModerationBulkDelete() {
 }
 
 /**
- * (createdAt, id)の複合カーソルによるcursorベースページネーション。
- * 同一createdAtが複数存在してもidで一意に順序付けられるため、境界での欠落・重複は起きない。
- * hasMore判定のためlimit+1件取得し、余分な1件は返却entriesに含めない。
+ * offsetベースのページネーション。任意のページへ移動でき総ページ数も出せるよう、総件数も返す。
+ * (createdAt, id)で一意に順序付けるため、同一createdAtでもページ境界の順序は安定する。
  */
 export async function listLogEntries(
   db: Db,
   input: ListLogEntriesInput,
 ): Promise<ListLogEntriesResult> {
   const conditions = [eq(logEntries.guildId, input.guildId), isNotCollapsedMessageCreate(input.guildId)];
-  // メッセージだけに絞った画面では親ケースが表示されないため、一括削除を通常どおり表示する。
-  if (input.category !== "message") conditions.push(isNotCollapsedModerationBulkDelete());
-  if (input.category) conditions.push(eq(logEntries.category, input.category));
+  const categories = input.categories && input.categories.length > 0 ? input.categories : undefined;
+  // メッセージを含みモデレーションを含まない絞り込みでは親ケースが表示されないため、一括削除を通常どおり表示する。
+  const parentCaseHidden = categories !== undefined && categories.includes("message") && !categories.includes("moderationCase");
+  if (!parentCaseHidden) conditions.push(isNotCollapsedModerationBulkDelete());
+  if (categories) conditions.push(inArray(logEntries.category, [...categories]));
   if (input.excludeCategories && input.excludeCategories.length > 0) {
     conditions.push(notInArray(logEntries.category, [...input.excludeCategories]));
   }
   if (input.excludeBotEvents) {
     conditions.push(eq(logEntries.authorIsBot, false));
   }
-  if (input.cursor) {
-    const cursor = decodeCursor(input.cursor);
-    const cursorCreatedAt = new Date(cursor.createdAt);
-    conditions.push(
-      or(
-        lt(logEntries.createdAt, cursorCreatedAt),
-        and(eq(logEntries.createdAt, cursorCreatedAt), lt(logEntries.id, cursor.id)),
-      )!,
-    );
-  }
-
-  const rows = await db
-    .select({ id: logEntries.id, payload: logEntries.payload, createdAt: logEntries.createdAt })
-    .from(logEntries)
-    .where(and(...conditions))
-    .orderBy(desc(logEntries.createdAt), desc(logEntries.id))
-    .limit(input.limit + 1);
-
-  const hasMore = rows.length > input.limit;
-  const page = rows.slice(0, input.limit);
-  const last = page[page.length - 1];
+  const where = and(...conditions);
+  const [page, [countRow]] = await Promise.all([
+    db
+      .select({ id: logEntries.id, payload: logEntries.payload })
+      .from(logEntries)
+      .where(where)
+      .orderBy(desc(logEntries.createdAt), desc(logEntries.id))
+      .limit(input.limit)
+      .offset(input.offset ?? 0),
+    db.select({ count: count() }).from(logEntries).where(where),
+  ]);
 
   const parsedPage = page.map((row) => ({ id: row.id, entry: parseLogEntry(row.payload) }));
   const moderationCaseIds = parsedPage.flatMap(({ entry }) =>
@@ -198,8 +176,7 @@ export async function listLogEntries(
       }
       return withDeletedMessageEntries(parent);
     }),
-    nextCursor:
-      hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null,
+    totalCount: countRow?.count ?? 0,
   };
 }
 

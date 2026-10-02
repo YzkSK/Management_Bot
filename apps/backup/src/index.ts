@@ -1,9 +1,12 @@
 import { parseEnv, envSchema } from "@management-bot/config";
+import { startInfraReporter } from "@management-bot/shared";
+import { Redis } from "ioredis";
 import cron from "node-cron";
 import { backupOnce } from "./dump.js";
 
 const backupEnvSchema = envSchema.pick({
   DATABASE_URL: true,
+  REDIS_URL: true,
   BACKUP_CRON: true,
   BACKUP_DIR: true,
   BACKUP_RETENTION_DAYS: true,
@@ -16,6 +19,7 @@ if (!cron.validate(env.BACKUP_CRON)) {
   throw new Error(`Invalid BACKUP_CRON: ${env.BACKUP_CRON}`);
 }
 
+const reporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "backup", service: "worker" });
 let running = false;
 
 async function runBackup() {
@@ -27,8 +31,10 @@ async function runBackup() {
   try {
     const outFile = await backupOnce(env.DATABASE_URL, env.BACKUP_DIR, env.BACKUP_RETENTION_DAYS);
     console.log(`Backup written: ${outFile}`);
+    reporter.recordRun(true);
   } catch (error) {
     console.error("Backup failed:", error);
+    reporter.recordRun(false);
   } finally {
     running = false;
   }

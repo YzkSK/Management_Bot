@@ -1,3 +1,25 @@
+import {
+  AlignLeft,
+  Bot,
+  CalendarDays,
+  ChartColumn,
+  FileText,
+  Hash,
+  Headphones,
+  House,
+  Link,
+  type LucideIcon,
+  MessageSquare,
+  Mic,
+  Podcast,
+  ShieldAlert,
+  Smile,
+  SmilePlus,
+  Sticker,
+  Tag,
+  User,
+  UserPlus,
+} from "lucide-react";
 import { CATEGORY_LABELS, LOG_CATEGORIES, type LogCategory } from "@management-bot/shared";
 
 export { CATEGORY_LABELS };
@@ -7,24 +29,51 @@ export const CATEGORY_OPTIONS: readonly { value: LogCategory; label: string }[] 
   label: CATEGORY_LABELS[category],
 }));
 
+/**
+ * ログ一覧の色バー・フィルターで使うカテゴリ色。画面全体はモノクロ基調だが、カテゴリの判別用途に限って
+ * 色相を使い分ける(関連するカテゴリは近い色相、同系統は明度で区別する)。
+ */
 export const CATEGORY_ACCENT: Record<LogCategory, string> = {
-  message: "oklch(0.55 0.14 250)",
-  reaction: "oklch(0.55 0.14 250)",
-  member: "oklch(0.6 0.14 150)",
-  role: "oklch(0.65 0.15 90)",
-  channel: "oklch(0.6 0.12 200)",
-  guild: "oklch(0.556 0 0)",
-  thread: "oklch(0.6 0.12 200)",
-  invite: "oklch(0.6 0.12 200)",
-  emoji: "oklch(0.556 0 0)",
-  sticker: "oklch(0.556 0 0)",
-  autoMod: "oklch(0.577 0.19 27)",
-  integration: "oklch(0.556 0 0)",
-  poll: "oklch(0.556 0 0)",
-  scheduledEvent: "oklch(0.556 0 0)",
-  stage: "oklch(0.556 0 0)",
-  auditLogCorrelation: "oklch(0.556 0 0)",
-  moderationCase: "oklch(0.577 0.19 27)",
-  voice: "oklch(0.55 0.16 305)",
-  tempVoice: "oklch(0.55 0.16 305)",
+  message: "#2563eb",
+  reaction: "#0ea5e9",
+  member: "#16a34a",
+  role: "#d97706",
+  channel: "#0d9488",
+  guild: "#475569",
+  thread: "#0891b2",
+  invite: "#65a30d",
+  emoji: "#ca8a04",
+  sticker: "#db2777",
+  autoMod: "#e11d48",
+  integration: "#4f46e5",
+  poll: "#ea580c",
+  scheduledEvent: "#c026d3",
+  stage: "#7c3aed",
+  auditLogCorrelation: "#71717a",
+  moderationCase: "#dc2626",
+  voice: "#9333ea",
+  tempVoice: "#a855f7",
+};
+
+/** カテゴリフィルターと、アプリ絵文字画像がない種別のログ行で使うアイコン。 */
+export const CATEGORY_ICON: Record<LogCategory, LucideIcon> = {
+  message: MessageSquare,
+  reaction: Smile,
+  member: User,
+  role: Tag,
+  channel: Hash,
+  guild: House,
+  thread: AlignLeft,
+  invite: UserPlus,
+  emoji: SmilePlus,
+  sticker: Sticker,
+  autoMod: Bot,
+  integration: Link,
+  poll: ChartColumn,
+  scheduledEvent: CalendarDays,
+  stage: Podcast,
+  auditLogCorrelation: FileText,
+  moderationCase: ShieldAlert,
+  voice: Mic,
+  tempVoice: Headphones,
 };

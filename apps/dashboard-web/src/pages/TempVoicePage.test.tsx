@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { CAPABILITIES } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { TempVoicePage } from "./TempVoicePage.js";
 
@@ -18,7 +19,14 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
   );
 }
 
+function seedCapabilities(queryClient: QueryClient, guildId: string, capabilities: number): void {
+  queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+    { id: guildId, name: "サーバー", isManaged: false, iconUrl: null, capabilities },
+  ]);
+}
+
 function seedCommonQueries(queryClient: QueryClient, guildId: string): void {
+  seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE | CAPABILITIES.MANAGE_TEMP_VOICE);
   queryClient.setQueryData(trpc.tempVoice.getDenyProtectedRoles.queryOptions({ guildId }).queryKey, []);
   queryClient.setQueryData(trpc.tempVoice.listRoleOptions.queryOptions({ guildId }).queryKey, [
     { id: "role-1", name: "モデレーター" },
@@ -71,6 +79,22 @@ describe("TempVoicePage", () => {
     const html = renderPage(guildId, queryClient);
 
     expect(html).toContain("強制削除");
+    expect(html).not.toContain("一時VCがまだ設定されていません");
+  });
+
+  test("VIEW_TEMP_VOICEのみでは一覧だけを表示し、設定・拒否禁止ロール・強制削除・未設定案内は出さない(issue #527)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
+      { channelId: "vc-2", guildId, ownerId: "owner-1", createdAt: "2026-09-24T00:00:00.000Z", memberCount: 3 },
+    ]);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).toContain("現在Discord上に存在する一時VCです");
+    expect(html).not.toContain("拒否禁止ロール");
+    expect(html).not.toContain("強制削除");
     expect(html).not.toContain("一時VCがまだ設定されていません");
   });
 

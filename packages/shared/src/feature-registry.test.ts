@@ -11,10 +11,9 @@ describe("FEATURE_METADATA", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  test("各featureがview/manage capabilityを持つ", () => {
+  test("各featureが閲覧capabilityを持つ", () => {
     for (const feature of FEATURE_METADATA) {
       expect(feature.viewCapability).toBeGreaterThan(0);
-      expect(feature.manageCapability).toBeGreaterThan(0);
     }
   });
 });

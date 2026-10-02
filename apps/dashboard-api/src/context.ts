@@ -18,6 +18,7 @@ import { createTtlCache } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import type { Context as HonoContext } from "hono";
 import { getCookie } from "hono/cookie";
+import type { Redis } from "ioredis";
 import {
   fetchAllGuildChannelNames,
   fetchBotGuildPermissions,
@@ -27,6 +28,7 @@ import {
   fetchGuildMemberNames,
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
+  fetchGuildOwnerId,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -69,6 +71,7 @@ const guildCategoriesCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
 const guildAccessStatusCache = createTtlCache<GuildAccessStatus>(GUILD_TTL_MS);
+const guildOwnerIdCache = createTtlCache<string | null>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
 const guildMembersPageCache = createTtlCache<MemberPage>(GUILD_TTL_MS);
 /**
@@ -162,6 +165,10 @@ function createGetGuildAccessStatus(botToken: string): (guildId: string) => Prom
   return (guildId) => guildAccessStatusCache(guildId, () => fetchGuildAccessStatus(botToken, guildId));
 }
 
+function createGetGuildOwnerId(botToken: string): (guildId: string) => Promise<string | null> {
+  return (guildId) => guildOwnerIdCache(guildId, () => fetchGuildOwnerId(botToken, guildId));
+}
+
 function createGetGuildRoles(botToken: string): (guildId: string) => Promise<readonly RoleOption[]> {
   return (guildId) => guildRolesCache(guildId, () => fetchGuildRoles(botToken, guildId));
 }
@@ -222,7 +229,9 @@ export function createGetGuildMemberNamesWith(
 function createGetGuildMemberNames(
   botToken: string,
 ): (guildId: string, userIds: readonly string[]) => Promise<ReadonlyMap<string, string>> {
-  return createGetGuildMemberNamesWith((guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds));
+  // 一括取得はgetGuildMembersPageと同じキャッシュを通し、同じページを二重にfetchしない。
+  const getPage = createGetGuildMembersPage(botToken);
+  return createGetGuildMemberNamesWith((guildId, userIds) => fetchGuildMemberNames(botToken, guildId, userIds, getPage));
 }
 
 /**
@@ -344,6 +353,7 @@ export function createContext(
   sessionSecret: string,
   botToken: string,
   discordClientId: string,
+  redis: Redis,
 ): (opts: unknown, c: HonoContext) => Record<string, unknown> {
   return (_opts, c) => {
     const sessionId = getCookie(c, SESSION_COOKIE);
@@ -362,11 +372,13 @@ export function createContext(
       getGuildVoiceChannelOptions: createGetGuildVoiceChannelOptions(botToken),
       getGuildCategoryOptions: createGetGuildCategoryOptions(botToken),
       getGuildAccessStatus: createGetGuildAccessStatus(botToken),
+      getGuildOwnerId: createGetGuildOwnerId(botToken),
       verifyGuildRole: createVerifyGuildRole(botToken),
       getGuildMembersPage: createGetGuildMembersPage(botToken),
       isGuildMember: createIsGuildMember(botToken),
       listMyGuilds: createListMyGuilds(db, sessionId, sessionSecret),
       getMyAvatarUrl: createGetMyAvatarUrl(db, sessionId, sessionSecret),
+      readRedisHash: (key) => redis.hgetall(key),
     };
     return ctx as unknown as Record<string, unknown>;
   };

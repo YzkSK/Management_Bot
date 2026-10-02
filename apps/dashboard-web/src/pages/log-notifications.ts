@@ -17,11 +17,11 @@ export function parseLogNotificationMessage(data: string): { category: string } 
   return result.success ? { category: result.data.category } : null;
 }
 
-/** http(s)://host/... -> ws(s)://host/ws/logs/:guildId */
-export function buildLogWsUrl(apiUrl: string, guildId: string): string {
+/** http(s)://host/... -> ws(s)://host/ws/{logs|activity}/:guildId */
+export function buildGuildWsUrl(apiUrl: string, path: "logs" | "activity", guildId: string): string {
   const url = new URL(apiUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/ws/logs/${guildId}`;
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/ws/${path}/${guildId}`;
   return url.toString();
 }
 

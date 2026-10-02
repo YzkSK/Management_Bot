@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { FEATURE_METADATA } from "@management-bot/shared";
+import { CAPABILITIES, FEATURE_METADATA } from "@management-bot/shared";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { trpc } from "./trpc.js";
@@ -49,6 +49,20 @@ describe("Sidebar", () => {
     expect(html).not.toContain('href="/guilds/undefined/access"');
   });
 
+  test("選択中サーバーで閲覧権限のない機能はリンクを表示しない(issue #527)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+      { id: "g1", name: "サーバー", isManaged: false, iconUrl: null, capabilities: CAPABILITIES.VIEW_LOGS },
+    ]);
+    const html = renderSidebar(queryClient, "g1");
+    expect(html).toContain('href="/guilds/g1/logs"');
+    expect(html).not.toContain('href="/guilds/g1/activity"');
+    expect(html).not.toContain('href="/guilds/g1/moderation"');
+    expect(html).not.toContain('href="/guilds/g1/temp-voice"');
+    expect(html).not.toContain('href="/guilds/g1/access"');
+    expect(html).not.toContain(">管理<");
+  });
+
   test("サーバー切替セレクトにアクセシブルな名前が付いている", () => {
     const html = renderSidebar(new QueryClient());
     expect(html).toContain('aria-label="サーバーを選択"');
@@ -64,7 +78,7 @@ describe("Sidebar", () => {
   test("管理者権限のないサーバーのみでもセレクトは無効化しない(issue #199, VIEW_LOGS等の閲覧capabilityは別途保持しうるため)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
-      { id: "g1", name: "非管理サーバー", isManaged: false, canViewLogs: true },
+      { id: "g1", name: "非管理サーバー", isManaged: false, iconUrl: null, capabilities: CAPABILITIES.VIEW_ACTIVITY },
     ]);
     const html = renderSidebar(queryClient);
     expect(html).not.toContain("disabled=");

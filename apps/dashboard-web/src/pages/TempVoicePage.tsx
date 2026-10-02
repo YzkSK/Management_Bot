@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
+import { toast } from "sonner";
+import { CAPABILITIES, hasCapability } from "@management-bot/shared";
+import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
+import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
+import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loading } from "@/components/ui/skeleton";
 
 type TempVoiceTab = "list" | "roles" | "settings";
 
@@ -33,7 +38,7 @@ interface TempVoiceConfigData {
 function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
   return (
     <Alert variant="info" className="py-2">
-      <AlertDescription className="flex flex-wrap items-baseline gap-1 text-sm">
+      <AlertDescription className="block text-sm">
         一時VCがまだ設定されていません。
         <button type="button" className="font-medium underline" onClick={onGoSettings}>
           設定タブ
@@ -44,7 +49,59 @@ function NotConfiguredBanner({ onGoSettings }: { onGoSettings: () => void }) {
   );
 }
 
-function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfigured: boolean }) {
+function ForceDeleteButton({
+  guildId,
+  channel,
+  disabled,
+  onConfirm,
+}: {
+  guildId: string;
+  channel: { channelId: string; memberCount: number };
+  disabled: boolean;
+  onConfirm: (input: { guildId: string; channelId: string }) => void;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+          強制削除
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+        <DialogHeader>
+          <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
+          <DialogDescription>
+            現在{channel.memberCount}人が通話中です。削除するとチャンネルと在室者は即座に切断されます。この操作は取り消せません。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">キャンセル</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button
+              variant="destructive"
+              onClick={() => onConfirm({ guildId, channelId: channel.channelId })}
+            >
+              削除する
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** canForceDeleteがfalse(VIEW_TEMP_VOICEのみ)の場合は強制削除ボタンを出さない(issue #527)。 */
+function ActiveChannelsTab({
+  guildId,
+  isConfigured,
+  canForceDelete,
+}: {
+  guildId: string;
+  isConfigured: boolean;
+  canForceDelete: boolean;
+}) {
   const queryClient = useQueryClient();
   const listQuery = useQuery({
     ...trpc.tempVoice.listActiveChannels.queryOptions({ guildId }),
@@ -52,83 +109,74 @@ function ActiveChannelsTab({ guildId, isConfigured }: { guildId: string; isConfi
   });
   const forceDeleteMutation = useMutation({
     ...trpc.tempVoice.forceDelete.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey }),
+    onSuccess: () => {
+      toast.success("削除リクエストを送信しました。数秒後に一覧から消えます。");
+      void queryClient.invalidateQueries({ queryKey: trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey });
+    },
+    onError: () => toast.error("強制削除リクエストの送信に失敗しました。"),
   });
 
-  if (listQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (listQuery.isPending) return <Loading />;
   if (listQuery.isError || !listQuery.data) {
-    return <div className="text-destructive text-sm">一時VC一覧の取得に失敗しました。</div>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>一時VC一覧の取得に失敗しました。</AlertDescription>
+      </Alert>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-sm font-semibold">一時VC一覧</h2>
-        <p className="text-muted-foreground text-xs">現在Discord上に存在する一時VCです。</p>
-      </div>
+    <div className="flex flex-col gap-3">
+      <p className="text-muted-foreground text-sm">現在Discord上に存在する一時VCです。</p>
       {listQuery.data.length === 0 ? (
-        <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">
-          現在アクティブな一時VCはありません。
+        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+          現在アクティブな一時VCはありません。作成用チャンネルに入室すると自動で作成されます。
         </p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>チャンネル</TableHead>
-              <TableHead>オーナー</TableHead>
-              <TableHead>作成日時</TableHead>
-              <TableHead>在室人数</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <div className="bg-card overflow-hidden rounded-xl border">
+          <table className="hidden w-full text-sm md:table">
+            <thead>
+              <tr className="text-muted-foreground border-b text-left text-xs">
+                <th className="px-4 py-2.5 font-medium">チャンネル</th>
+                <th className="px-3 py-2.5 font-medium">オーナー</th>
+                <th className="px-3 py-2.5 text-right font-medium">在室人数</th>
+                <th className="px-3 py-2.5 font-medium">作成日時</th>
+                <th className="px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {listQuery.data.map((channel) => (
+                <tr key={channel.channelId} className="border-b last:border-b-0">
+                  <td className="px-4 py-2.5">{channel.channelName ?? channel.channelId}</td>
+                  <td className="px-3 py-2.5">{channel.ownerName ?? channel.ownerId}</td>
+                  <td className="px-3 py-2.5 text-right">{channel.memberCount}人</td>
+                  <td className="text-muted-foreground px-3 py-2.5">{new Date(channel.createdAt).toLocaleString("ja-JP")}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {canForceDelete && (
+                      <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul className="divide-y md:hidden">
             {listQuery.data.map((channel) => (
-              <TableRow key={channel.channelId}>
-                <TableCell>{channel.channelName ?? channel.channelId}</TableCell>
-                <TableCell>{channel.ownerName ?? channel.ownerId}</TableCell>
-                <TableCell>{new Date(channel.createdAt).toLocaleString("ja-JP")}</TableCell>
-                <TableCell>{channel.memberCount}人</TableCell>
-                <TableCell className="text-right">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="destructive" size="sm" disabled={!isConfigured}>
-                        強制削除
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="top-1/2 left-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
-                      <DialogHeader>
-                        <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
-                        <DialogDescription>
-                          現在{channel.memberCount}人が通話中です。削除するとチャンネルと在室者は即座に切断されます。この操作は取り消せません。
-                        </DialogDescription>
-                      </DialogHeader>
-                      <DialogFooter>
-                        <DialogClose asChild>
-                          <Button variant="outline">キャンセル</Button>
-                        </DialogClose>
-                        <DialogClose asChild>
-                          <Button
-                            variant="destructive"
-                            onClick={() => forceDeleteMutation.mutate({ guildId, channelId: channel.channelId })}
-                          >
-                            削除する
-                          </Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </TableCell>
-              </TableRow>
+              <li key={channel.channelId} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-sm">{channel.channelName ?? channel.channelId}</span>
+                  <span className="text-muted-foreground text-xs">
+                    オーナー {channel.ownerName ?? channel.ownerId} ・ {channel.memberCount}人 ・{" "}
+                    {new Date(channel.createdAt).toLocaleString("ja-JP")}
+                  </span>
+                </div>
+                {canForceDelete && (
+                  <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                )}
+              </li>
             ))}
-          </TableBody>
-        </Table>
-      )}
-      {forceDeleteMutation.isError && (
-        <p className="text-destructive text-sm">強制削除リクエストの送信に失敗しました。</p>
-      )}
-      {forceDeleteMutation.isSuccess && (
-        <p className="text-muted-foreground text-sm">削除リクエストを送信しました。数秒後に一覧から消えます。</p>
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -143,11 +191,16 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
     ...trpc.tempVoice.setDenyProtectedRoles.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getDenyProtectedRoles.queryOptions({ guildId }).queryKey }),
+    onError: () => toast.error("拒否禁止ロールの更新に失敗しました。"),
   });
 
-  if (rolesQuery.isPending || roleOptionsQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (rolesQuery.isPending || roleOptionsQuery.isPending) return <Loading />;
   if (rolesQuery.isError || !rolesQuery.data || roleOptionsQuery.isError || !roleOptionsQuery.data) {
-    return <div className="text-destructive text-sm">拒否禁止ロールの取得に失敗しました。</div>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>拒否禁止ロールの取得に失敗しました。</AlertDescription>
+      </Alert>
+    );
   }
 
   const roleNameById = new Map(roleOptionsQuery.data.map((r) => [r.id, r.name]));
@@ -156,28 +209,29 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-sm font-semibold">拒否禁止ロール</h2>
-        <p className="text-muted-foreground text-xs">
-          選択したロールは、一時VCオーナーが個別に拒否できなくなります。@everyone は常に保護されます。
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Select value={selected} onValueChange={setSelected}>
-          <SelectTrigger className="w-64" aria-label="追加するロール">
-            <SelectValue placeholder="ロールを選択..." />
-          </SelectTrigger>
-          <SelectContent>
-            {availableOptions.map((role) => (
-              <SelectItem key={role.id} value={role.id}>
-                {role.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="flex flex-col gap-3">
+      <p className="text-muted-foreground text-sm">
+        選択したロールは、一時VCオーナーが個別に拒否できなくなります。@everyone は常に保護されます。
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm">
+          追加するロール
+          <Select value={selected} onValueChange={setSelected}>
+            <SelectTrigger className="w-full sm:w-64" aria-label="追加するロール">
+              <SelectValue placeholder="ロールを選択..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableOptions.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
         <Button
           type="button"
+          className="w-full sm:w-auto"
           disabled={selected === "" || mutation.isPending}
           onClick={() => {
             mutation.mutate({ guildId, roleIds: [...rolesQuery.data, selected] });
@@ -187,232 +241,223 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
           追加
         </Button>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {rolesQuery.data.map((roleId) => (
-          <span key={roleId} className="bg-muted flex items-center gap-1 rounded-full py-1 pr-1 pl-3 text-sm">
-            {roleNameById.get(roleId) ?? roleId}
-            <button
-              type="button"
-              aria-label={`${roleNameById.get(roleId) ?? roleId}を削除`}
-              className="hover:bg-accent rounded-full p-1"
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate({ guildId, roleIds: rolesQuery.data.filter((id) => id !== roleId) })}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
+      {rolesQuery.data.length > 0 && (
+        <ul className="bg-card divide-y rounded-xl border">
+          {rolesQuery.data.map((roleId) => (
+            <li key={roleId} className="flex items-center gap-3 px-4 py-3 text-sm">
+              <span className="min-w-0 flex-1 truncate">{roleNameById.get(roleId) ?? roleId}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`${roleNameById.get(roleId) ?? roleId}を削除`}
+                disabled={mutation.isPending}
+                onClick={() => mutation.mutate({ guildId, roleIds: rolesQuery.data.filter((id) => id !== roleId) })}
+              >
+                削除
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function ManualConfigForm({
-  guildId,
-  config,
-  isConfigured,
-  onCancel,
-  onCleared,
-}: {
-  guildId: string;
-  config: { createChannelId: string | null; categoryId: string | null };
-  isConfigured: boolean;
-  onCancel?: () => void;
-  onCleared?: () => void;
-}) {
+function ClearConfigButton({ guildId, disabled, onCleared }: { guildId: string; disabled: boolean; onCleared: () => void }) {
   const queryClient = useQueryClient();
-  const voiceOptionsQuery = useQuery(trpc.tempVoice.listVoiceChannelOptions.queryOptions({ guildId }));
-  const categoryOptionsQuery = useQuery(trpc.tempVoice.listCategoryOptions.queryOptions({ guildId }));
-  const [createChannelId, setCreateChannelId] = useState(config.createChannelId ?? "");
-  const [categoryId, setCategoryId] = useState(config.categoryId ?? "");
-  const mutation = useMutation({
-    ...trpc.tempVoice.setConfig.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey }),
-  });
   const clearMutation = useMutation({
     ...trpc.tempVoice.clearConfig.mutationOptions(),
     onSuccess: () => {
-      setCreateChannelId("");
-      setCategoryId("");
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
-      onCleared?.();
+      toast.success("一時VCの設定を解除しました");
+      void queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
+      onCleared();
     },
+    onError: () => toast.error("解除に失敗しました。"),
   });
 
-  if (voiceOptionsQuery.isPending || categoryOptionsQuery.isPending) return <div className="text-sm">読み込み中...</div>;
-  if (voiceOptionsQuery.isError || !voiceOptionsQuery.data || categoryOptionsQuery.isError || !categoryOptionsQuery.data) {
-    return <div className="text-destructive text-sm">チャンネル一覧の取得に失敗しました。</div>;
-  }
-
   return (
-    <div className="flex flex-col gap-3 rounded-md border p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">手動で設定する</p>
-        {onCancel && (
-          <button type="button" className="text-muted-foreground text-xs underline" onClick={onCancel}>
-            自動セットアップに戻る
-          </button>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">作成用ボイスチャンネル</label>
-          <Select value={createChannelId} onValueChange={setCreateChannelId}>
-            <SelectTrigger className="w-56" aria-label="作成用ボイスチャンネル">
-              <SelectValue placeholder="選択してください" />
-            </SelectTrigger>
-            <SelectContent>
-              {voiceOptionsQuery.data.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">カテゴリ</label>
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger className="w-56" aria-label="カテゴリ">
-              <SelectValue placeholder="選択してください" />
-            </SelectTrigger>
-            <SelectContent>
-              {categoryOptionsQuery.data.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <p className="text-muted-foreground text-xs">
-        セレクターに表示されるのはこのサーバーに実在するチャンネルのみです。IDを直接入力することはできません。
-      </p>
-      <div className="flex items-center gap-3">
+    <Dialog>
+      <DialogTrigger asChild>
         <Button
           type="button"
-          className="w-fit"
-          disabled={createChannelId === "" || categoryId === "" || mutation.isPending || clearMutation.isPending}
-          onClick={() => mutation.mutate({ guildId, createChannelId, categoryId })}
+          variant="outline"
+          className="text-destructive border-destructive/40 w-fit"
+          disabled={disabled || clearMutation.isPending}
         >
-          この設定を保存
+          一時VCの設定を解除
         </Button>
-        {isConfigured && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" disabled={mutation.isPending || clearMutation.isPending}>
-                設定を解除
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="top-1/2 left-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
-              <DialogHeader>
-                <DialogTitle>一時VCの設定を解除しますか?</DialogTitle>
-                <DialogDescription>
-                  作成用ボイスチャンネルとカテゴリの設定が未設定に戻り、自動セットアップ画面から再設定できるようになります。名前テンプレート等の共通設定は保持されます。
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">キャンセル</Button>
-                </DialogClose>
-                <DialogClose asChild>
-                  <Button variant="destructive" onClick={() => clearMutation.mutate({ guildId })}>
-                    解除する
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-      {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました。</p>}
-      {clearMutation.isError && <p className="text-destructive text-xs">解除に失敗しました。</p>}
-    </div>
+      </DialogTrigger>
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+        <DialogHeader>
+          <DialogTitle>一時VCの設定を解除しますか?</DialogTitle>
+          <DialogDescription>
+            作成用ボイスチャンネルとカテゴリの設定が未設定に戻り、自動セットアップ画面から再設定できるようになります。名前テンプレート等の共通設定は保持されます。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">キャンセル</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button variant="destructive" onClick={() => clearMutation.mutate({ guildId })}>
+              解除する
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function CommonConfigForm({ guildId, config }: { guildId: string; config: TempVoiceConfigData }) {
+const FIELD_LABEL = "text-muted-foreground flex min-w-0 flex-col gap-1.5 text-sm";
+
+/**
+ * 作成用チャンネル・カテゴリと共通設定を1つの下書きとして編集し、保存バーからまとめて保存する。
+ * 未設定かつ手動設定を選んでいない間は、作成用チャンネル・カテゴリの欄を出さない。
+ */
+function ConfigForm({
+  guildId,
+  config,
+  showChannelFields,
+  isConfigured,
+  onCleared,
+}: {
+  guildId: string;
+  config: TempVoiceConfigData;
+  showChannelFields: boolean;
+  isConfigured: boolean;
+  onCleared: () => void;
+}) {
   const queryClient = useQueryClient();
-  const [nameTemplate, setNameTemplate] = useState(config.nameTemplate);
-  const [userLimit, setUserLimit] = useState(String(config.defaultUserLimit));
-  const [bitrateKbps, setBitrateKbps] = useState(
-    config.defaultBitrate ? String(Math.floor(config.defaultBitrate / 1000)) : "",
-  );
-  const mutation = useMutation({
-    ...trpc.tempVoice.setConfig.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey }),
+  const voiceOptionsQuery = useQuery({
+    ...trpc.tempVoice.listVoiceChannelOptions.queryOptions({ guildId }),
+    enabled: showChannelFields,
   });
+  const categoryOptionsQuery = useQuery({
+    ...trpc.tempVoice.listCategoryOptions.queryOptions({ guildId }),
+    enabled: showChannelFields,
+  });
+  const setConfig = useMutation(trpc.tempVoice.setConfig.mutationOptions());
+  const [draftState, setDraftState] = useState<TempVoiceDraft | null>(null);
+
+  const draft = draftState ?? buildTempVoiceDraft(config);
+  const changes = diffTempVoiceConfig(config, draft);
+  const update = (patch: Partial<TempVoiceDraft>) => setDraftState({ ...draft, ...patch });
+
+  const save = async () => {
+    if (changes.errors.length > 0) return;
+    try {
+      await setConfig.mutateAsync({ guildId, ...changes.input });
+      toast.success("保存しました");
+      setDraftState(null);
+    } catch {
+      toast.error("保存に失敗しました。時間をおいて再度お試しください。");
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
+    }
+  };
+
+  const channelOptionsFailed = voiceOptionsQuery.isError || categoryOptionsQuery.isError;
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-4">
-      <p className="text-muted-foreground text-sm font-medium">共通設定(自動・手動どちらで設定した後でも変更できます)</p>
-      <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium" htmlFor="temp-voice-name-template">
+    <div className="flex flex-col gap-4">
+      {showChannelFields && (
+        <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+          <h2 className="font-bold">作成用ボイスチャンネル</h2>
+          {channelOptionsFailed ? (
+            <Alert variant="destructive">
+              <AlertDescription>チャンネル一覧の取得に失敗しました。</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={FIELD_LABEL}>
+                作成用ボイスチャンネル
+                <Select value={draft.createChannelId} onValueChange={(value) => update({ createChannelId: value })}>
+                  <SelectTrigger className="w-full" aria-label="作成用ボイスチャンネル" disabled={voiceOptionsQuery.isPending}>
+                    <SelectValue placeholder="選択してください" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(voiceOptionsQuery.data ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className={FIELD_LABEL}>
+                カテゴリ
+                <Select value={draft.categoryId} onValueChange={(value) => update({ categoryId: value })}>
+                  <SelectTrigger className="w-full" aria-label="カテゴリ" disabled={categoryOptionsQuery.isPending}>
+                    <SelectValue placeholder="選択してください" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(categoryOptionsQuery.data ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+          )}
+          <p className="text-muted-foreground text-xs">
+            セレクターに表示されるのはこのサーバーに実在するチャンネルのみです。IDを直接入力することはできません。
+          </p>
+        </section>
+      )}
+
+      <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+        <h2 className="font-bold">共通設定</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={FIELD_LABEL} htmlFor="temp-voice-name-template">
             名前テンプレート
+            <Input id="temp-voice-name-template" value={draft.nameTemplate} onChange={(e) => update({ nameTemplate: e.target.value })} />
+            <span className="text-xs">{"{username} が入室者の名前に置き換わります"}</span>
           </label>
-          <Input
-            id="temp-voice-name-template"
-            className="w-56"
-            value={nameTemplate}
-            onChange={(e) => setNameTemplate(e.target.value)}
-            onBlur={() => {
-              if (nameTemplate !== config.nameTemplate) mutation.mutate({ guildId, nameTemplate });
-            }}
-          />
-          <p className="text-muted-foreground text-xs">{"{username} が入室者の名前に置き換わります"}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className={FIELD_LABEL} htmlFor="temp-voice-user-limit">
+              デフォルト人数制限
+              <Input
+                id="temp-voice-user-limit"
+                type="number"
+                min={0}
+                max={99}
+                value={draft.userLimit}
+                onChange={(e) => update({ userLimit: e.target.value })}
+              />
+            </label>
+            <label className={FIELD_LABEL} htmlFor="temp-voice-bitrate">
+              デフォルト音質(kbps)
+              <Input
+                id="temp-voice-bitrate"
+                placeholder="サーバー既定"
+                value={draft.bitrateKbps}
+                onChange={(e) => update({ bitrateKbps: e.target.value })}
+              />
+            </label>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium" htmlFor="temp-voice-user-limit">
-            デフォルト人数制限
-          </label>
-          <Input
-            id="temp-voice-user-limit"
-            type="number"
-            min={0}
-            max={99}
-            className="w-24"
-            value={userLimit}
-            onChange={(e) => setUserLimit(e.target.value)}
-            onBlur={() => {
-              const parsed = Number(userLimit);
-              if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 99 && parsed !== config.defaultUserLimit) {
-                mutation.mutate({ guildId, defaultUserLimit: parsed });
-              } else {
-                setUserLimit(String(config.defaultUserLimit));
-              }
-            }}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium" htmlFor="temp-voice-bitrate">
-            デフォルト音質(kbps)
-          </label>
-          <Input
-            id="temp-voice-bitrate"
-            className="w-32"
-            placeholder="未設定(サーバー既定)"
-            value={bitrateKbps}
-            onChange={(e) => setBitrateKbps(e.target.value)}
-            onBlur={() => {
-              if (bitrateKbps.trim() === "") {
-                if (config.defaultBitrate !== null) mutation.mutate({ guildId, defaultBitrate: null });
-                return;
-              }
-              const parsed = Number(bitrateKbps);
-              if (Number.isInteger(parsed) && parsed > 0) {
-                mutation.mutate({ guildId, defaultBitrate: parsed * 1000 });
-              } else {
-                setBitrateKbps(config.defaultBitrate ? String(Math.floor(config.defaultBitrate / 1000)) : "");
-              }
-            }}
-          />
-        </div>
-      </div>
-      {mutation.isError && <p className="text-destructive text-xs">保存に失敗しました。</p>}
+      </section>
+
+      {changes.errors.length > 0 && (
+        <ul className="text-destructive flex flex-col gap-1 text-sm">
+          {changes.errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      )}
+
+      {isConfigured && <ClearConfigButton guildId={guildId} disabled={setConfig.isPending} onCleared={onCleared} />}
+
+      <SaveBar
+        dirty={hasTempVoiceChanges(changes)}
+        saving={setConfig.isPending}
+        onSave={() => void save()}
+        onDiscard={() => setDraftState(null)}
+      />
     </div>
   );
 }
@@ -435,50 +480,46 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
   const autoSetupMutation = useMutation({
     ...trpc.tempVoice.autoSetupConfig.mutationOptions(),
     onSuccess: () => {
+      toast.success("設定中です。数秒後に反映されない場合はBotの権限を確認してください。");
       setIsPollingAfterAutoSetup(true);
-      queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
+      void queryClient.invalidateQueries({ queryKey: trpc.tempVoice.getConfig.queryOptions({ guildId }).queryKey });
     },
+    onError: () => toast.error("自動セットアップに失敗しました。"),
   });
 
   const showAutoSetup = !isConfigured && !manualMode;
 
   return (
-    <div className="flex flex-col gap-6 rounded-lg border p-4">
-      <div>
-        <h2 className="text-sm font-semibold">設定</h2>
-        <p className="text-muted-foreground text-xs">
-          {isConfigured ? "作成用チャンネルとカテゴリを手動で変更できます。" : "作成用ボイスチャンネルとカテゴリがまだ設定されていません。"}
-        </p>
-      </div>
-
-      {showAutoSetup ? (
-        <div className="flex flex-col items-center gap-3 rounded-md border border-dashed p-6 text-center">
-          <p className="text-sm font-medium">まだ一時VCが設定されていません</p>
-          <p className="text-muted-foreground max-w-sm text-xs">
-            ボタン1つでカテゴリと作成用ボイスチャンネルをDiscord上に自動生成します。
+    <div className="flex flex-col gap-4">
+      {showAutoSetup && (
+        <section className="bg-card flex flex-col items-center gap-3 rounded-xl border p-8 text-center">
+          <h2 className="text-lg font-bold">まだ一時VCが設定されていません</h2>
+          <p className="text-muted-foreground max-w-md text-sm">
+            自動セットアップを押すと、Botがカテゴリと作成用ボイスチャンネルをDiscord上に作成します。既存のチャンネルを使う場合は手動で設定してください。
           </p>
-          <Button type="button" disabled={autoSetupMutation.isPending} onClick={() => autoSetupMutation.mutate({ guildId })}>
-            自動でセットアップ
-          </Button>
-          <button type="button" className="text-muted-foreground text-xs underline" onClick={() => setManualMode(true)}>
-            すでにチャンネルがある場合は手動で設定する
-          </button>
-          {autoSetupMutation.isError && <p className="text-destructive text-xs">自動セットアップに失敗しました。</p>}
-          {autoSetupMutation.isSuccess && (
-            <p className="text-muted-foreground text-xs">設定中です。数秒後に反映されない場合はBotの権限を確認してください。</p>
-          )}
-        </div>
-      ) : (
-        <ManualConfigForm
-          guildId={guildId}
-          config={{ createChannelId: config.createChannelId, categoryId: config.categoryId }}
-          isConfigured={isConfigured}
-          onCancel={isConfigured ? undefined : () => setManualMode(false)}
-          onCleared={() => setManualMode(false)}
-        />
+          <div className="grid w-full max-w-md grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Button type="button" size="lg" disabled={autoSetupMutation.isPending} onClick={() => autoSetupMutation.mutate({ guildId })}>
+              自動セットアップ
+            </Button>
+            <Button type="button" size="lg" variant="outline" onClick={() => setManualMode(true)}>
+              手動で設定する
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">自動セットアップにはBotの「チャンネルの管理」権限が必要です。</p>
+        </section>
       )}
-
-      <CommonConfigForm guildId={guildId} config={config} />
+      {!isConfigured && manualMode && (
+        <button type="button" className="text-muted-foreground w-fit text-sm underline" onClick={() => setManualMode(false)}>
+          自動セットアップに戻る
+        </button>
+      )}
+      <ConfigForm
+        guildId={guildId}
+        config={config}
+        showChannelFields={!showAutoSetup}
+        isConfigured={isConfigured}
+        onCleared={() => setManualMode(false)}
+      />
     </div>
   );
 }
@@ -486,10 +527,13 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
 export function TempVoicePage() {
   const { guildId } = useParams<{ guildId: string }>();
   const [tab, setTab] = useState<TempVoiceTab>("list");
+  const capabilities = useGuildCapabilities(guildId);
+  const canManage = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_TEMP_VOICE);
 
+  // 設定・拒否禁止ロールはMANAGE_TEMP_VOICE必須(issue #527)。VIEWのみのユーザーには取得しない。
   const configQuery = useQuery({
     ...trpc.tempVoice.getConfig.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: Boolean(guildId) && canManage,
   });
 
   if (!guildId) {
@@ -500,10 +544,25 @@ export function TempVoicePage() {
     );
   }
 
-  if (configQuery.isPending) return <div className="text-sm">読み込み中...</div>;
+  if (capabilities === undefined) return <Loading />;
+
+  if (!canManage) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-bold">一時VC</h1>
+        <ActiveChannelsTab guildId={guildId} isConfigured={false} canForceDelete={false} />
+      </div>
+    );
+  }
+
+  if (configQuery.isPending) return <Loading />;
   // configQuery.dataは未設定ギルドでnullを返す(エラーではない)ため、isErrorのみで判定する。
   if (configQuery.isError) {
-    return <div className="text-destructive text-sm">設定の取得に失敗しました。</div>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>設定の取得に失敗しました。</AlertDescription>
+      </Alert>
+    );
   }
 
   const config: TempVoiceConfigData = configQuery.data ?? {
@@ -517,10 +576,10 @@ export function TempVoicePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">一時VC</h1>
+      <h1 className="text-2xl font-bold">一時VC</h1>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-        <TabsList aria-label="一時VCの設定">
+        <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
           <TabsTrigger value="list">一時VC一覧</TabsTrigger>
           <TabsTrigger value="roles">拒否禁止ロール</TabsTrigger>
           <TabsTrigger value="settings">設定</TabsTrigger>
@@ -528,7 +587,7 @@ export function TempVoicePage() {
 
         <TabsContent value="list" className="flex flex-col gap-4">
           {!isConfigured && <NotConfiguredBanner onGoSettings={() => setTab("settings")} />}
-          <ActiveChannelsTab guildId={guildId} isConfigured={isConfigured} />
+          <ActiveChannelsTab guildId={guildId} isConfigured={isConfigured} canForceDelete />
         </TabsContent>
 
         <TabsContent value="roles" className="flex flex-col gap-4">

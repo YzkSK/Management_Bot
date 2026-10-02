@@ -1,4 +1,10 @@
-import { CAPABILITIES, canGrantCapabilities, discordIdSchema, isKnownCapabilityMask } from "@management-bot/shared";
+import {
+  CAPABILITIES,
+  canGrantCapabilities,
+  discordIdSchema,
+  hasCapabilityPrerequisites,
+  isKnownCapabilityMask,
+} from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -109,6 +115,14 @@ export const capabilityGrantsRouter = router({
       return { roles, accessStatus };
     }),
 
+  /**
+   * オーナーはgrantに関係なく常に全権限を持つため(resolveEffectiveCapabilities)、UIでオーナーへの
+   * 直接付与を編集・剥奪できないよう表示するためにオーナーのユーザーIDを返す(issue #523)。
+   * サーバー側ではオーナー宛てgrantの操作を拒否しない(実効権限が変わらず実害がないため)。
+   */
+  getGuildOwner: manageAccessProcedure(guildIdInput)
+    .query(async ({ ctx, input }) => ({ ownerId: await ctx.getGuildOwnerId(input.guildId) })),
+
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在メンバー)をこのprocedure経由で提供する。 */
   listMemberOptions: manageAccessProcedure(listMemberOptionsInput)
     .query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
@@ -131,6 +145,9 @@ export const capabilityGrantsRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!isKnownCapabilityMask(input.capabilities)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities contains unknown bits" });
+      }
+      if (!hasCapabilityPrerequisites(input.capabilities)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities lacks a required view capability" });
       }
       if (!canGrantCapabilities(ctx.capabilities, input.capabilities)) {
         throw new TRPCError({

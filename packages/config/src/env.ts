@@ -43,6 +43,9 @@ export const envSchema = z.object({
   // 一時VCオーナー自動再割当ジョブ
   TEMP_VOICE_GRACE_CRON: z.string().min(1).default("* * * * *"),
 
+  // アクティビティ集計のロールアップジョブ(90日超の時間単位集計を日次へ)
+  ACTIVITY_ROLLUP_CRON: z.string().min(1).default("15 4 * * *"),
+
   // 期限切れDashboardセッション削除ジョブ
   SESSION_CLEANUP_CRON: z.string().min(1).default("30 4 * * *"),
 });

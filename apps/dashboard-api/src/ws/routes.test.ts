@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, guilds, sessions } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { createLogWsRoutes } from "./routes.js";
+import { createWsRoutes } from "./routes.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -12,7 +12,7 @@ const guildId = `test-guild-${randomUUID()}`;
 const sessionSecret = "test-session-secret";
 const dashboardWebUrl = "http://localhost:5173";
 
-const { app } = createLogWsRoutes(db, sessionSecret, "test-bot-token", dashboardWebUrl);
+const { app } = createWsRoutes(db, sessionSecret, "test-bot-token", dashboardWebUrl);
 
 afterAll(async () => {
   await db.delete(guilds).where(eq(guilds.id, guildId));
@@ -29,7 +29,7 @@ function requestWith(headers: Record<string, string>): Promise<Response> {
   return app.request(`/logs/${guildId}`, { headers: { Origin: dashboardWebUrl, ...headers } });
 }
 
-describe("createLogWsRoutes /logs/:guildId (upgrade前の認可)", () => {
+describe("createWsRoutes /logs/:guildId (upgrade前の認可)", () => {
   test("Originが一致しなければ403", async () => {
     const res = await app.request(`/logs/${guildId}`, { headers: { Origin: "https://evil.example.com" } });
     expect(res.status).toBe(403);
@@ -47,6 +47,18 @@ describe("createLogWsRoutes /logs/:guildId (upgrade前の認可)", () => {
 
   test("存在しないセッションIDなら401", async () => {
     const res = await requestWith({ Cookie: "session_id=nonexistent" });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("createWsRoutes /activity/:guildId (upgrade前の認可)", () => {
+  test("Originが一致しなければ403", async () => {
+    const res = await app.request(`/activity/${guildId}`, { headers: { Origin: "https://evil.example.com" } });
+    expect(res.status).toBe(403);
+  });
+
+  test("セッションCookieが無ければ401", async () => {
+    const res = await app.request(`/activity/${guildId}`, { headers: { Origin: dashboardWebUrl } });
     expect(res.status).toBe(401);
   });
 });

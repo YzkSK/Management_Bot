@@ -14,7 +14,9 @@
     "@management-bot/config": "workspace:*",
     "@management-bot/dashboard-access": "workspace:*",
     "@management-bot/db": "workspace:*",
+    "@management-bot/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "ioredis": "^5.4.0",
     "node-cron": "^4.6.0"
   },
   "devDependencies": {

@@ -5,6 +5,9 @@ import {
   canGrantCapabilities,
   CAPABILITIES,
   isKnownCapabilityMask,
+  addCapabilityPrerequisites,
+  hasCapabilityPrerequisites,
+  removeUnmetDependents,
 } from "./capabilities.ts";
 
 describe("isKnownCapabilityMask", () => {
@@ -57,5 +60,28 @@ describe("canGrantCapabilities", () => {
 describe("BASELINE_EVERYONE_CAPABILITIES", () => {
   test("ALL_CAPABILITIESの部分集合である", () => {
     expect((BASELINE_EVERYONE_CAPABILITIES & ~ALL_CAPABILITIES) === 0).toBe(true);
+  });
+});
+
+describe("capabilityの前提関係(issue #527)", () => {
+  const { VIEW_LOGS, VIEW_LOGS_RAW, MANAGE_LOGGING_SETTINGS, VIEW_TEMP_VOICE, MANAGE_TEMP_VOICE, MANAGE_ACCESS } = CAPABILITIES;
+
+  test("管理権限のみで閲覧権限が欠けていれば前提を満たさない", () => {
+    expect(hasCapabilityPrerequisites(MANAGE_TEMP_VOICE)).toBe(false);
+    expect(hasCapabilityPrerequisites(MANAGE_LOGGING_SETTINGS)).toBe(false);
+    expect(hasCapabilityPrerequisites(VIEW_LOGS_RAW)).toBe(false);
+    expect(hasCapabilityPrerequisites(MANAGE_TEMP_VOICE | VIEW_TEMP_VOICE)).toBe(true);
+    expect(hasCapabilityPrerequisites(MANAGE_ACCESS)).toBe(true);
+    expect(hasCapabilityPrerequisites(ALL_CAPABILITIES)).toBe(true);
+  });
+
+  test("addCapabilityPrerequisitesは前提の閲覧権限を補う", () => {
+    expect(addCapabilityPrerequisites(MANAGE_LOGGING_SETTINGS | MANAGE_TEMP_VOICE)).toBe(
+      MANAGE_LOGGING_SETTINGS | VIEW_LOGS | MANAGE_TEMP_VOICE | VIEW_TEMP_VOICE,
+    );
+  });
+
+  test("removeUnmetDependentsは前提を失った権限を外す", () => {
+    expect(removeUnmetDependents(VIEW_LOGS_RAW | MANAGE_LOGGING_SETTINGS | VIEW_TEMP_VOICE)).toBe(VIEW_TEMP_VOICE);
   });
 });

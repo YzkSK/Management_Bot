@@ -6,7 +6,6 @@ export interface FeatureMetadata {
   description: string;
   icon: string;
   viewCapability: number;
-  manageCapability: number;
   defaultEnabled: boolean;
 }
 
@@ -17,7 +16,6 @@ const FEATURE_METADATA_LIST = [
     description: "VC滞在時間・メッセージ数・リアクション数・活動スコアを計測する",
     icon: "activity",
     viewCapability: CAPABILITIES.VIEW_ACTIVITY,
-    manageCapability: CAPABILITIES.MANAGE_ACTIVITY_SETTINGS,
     defaultEnabled: true,
   },
   {
@@ -26,7 +24,6 @@ const FEATURE_METADATA_LIST = [
     description: "メッセージ・メンバー・ロール等のサーバーイベントを記録する",
     icon: "scroll-text",
     viewCapability: CAPABILITIES.VIEW_LOGS,
-    manageCapability: CAPABILITIES.MANAGE_LOGGING_SETTINGS,
     defaultEnabled: true,
   },
   {
@@ -35,7 +32,6 @@ const FEATURE_METADATA_LIST = [
     description: "Join to Create方式で一時的なボイスチャンネルを作成・管理する",
     icon: "mic",
     viewCapability: CAPABILITIES.VIEW_TEMP_VOICE,
-    manageCapability: CAPABILITIES.MANAGE_TEMP_VOICE,
     defaultEnabled: true,
   },
   {
@@ -43,8 +39,7 @@ const FEATURE_METADATA_LIST = [
     name: "スパム対策",
     description: "連投・招待リンク・レイド・NGワード等を検知し段階的に対応する",
     icon: "shield-alert",
-    viewCapability: CAPABILITIES.VIEW_MODERATION,
-    manageCapability: CAPABILITIES.MANAGE_MODERATION,
+    viewCapability: CAPABILITIES.MANAGE_MODERATION,
     defaultEnabled: false,
   },
 ] as const satisfies readonly FeatureMetadata[];

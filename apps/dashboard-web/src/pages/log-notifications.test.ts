@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildLogWsUrl, nextReconnectDelayMs, parseLogNotificationMessage } from "./log-notifications.js";
+import { buildGuildWsUrl, nextReconnectDelayMs, parseLogNotificationMessage } from "./log-notifications.js";
 
 describe("parseLogNotificationMessage", () => {
   test("正しい形式ならcategoryを取り出す", () => {
@@ -21,17 +21,21 @@ describe("parseLogNotificationMessage", () => {
   });
 });
 
-describe("buildLogWsUrl", () => {
+describe("buildGuildWsUrl", () => {
   test("httpはwsに変換する", () => {
-    expect(buildLogWsUrl("http://localhost:3000", "g1")).toBe("ws://localhost:3000/ws/logs/g1");
+    expect(buildGuildWsUrl("http://localhost:3000", "logs", "g1")).toBe("ws://localhost:3000/ws/logs/g1");
   });
 
   test("httpsはwssに変換する", () => {
-    expect(buildLogWsUrl("https://api.example.com", "g1")).toBe("wss://api.example.com/ws/logs/g1");
+    expect(buildGuildWsUrl("https://api.example.com", "logs", "g1")).toBe("wss://api.example.com/ws/logs/g1");
   });
 
   test("末尾スラッシュがあっても二重スラッシュにならない", () => {
-    expect(buildLogWsUrl("http://localhost:3000/", "g1")).toBe("ws://localhost:3000/ws/logs/g1");
+    expect(buildGuildWsUrl("http://localhost:3000/", "logs", "g1")).toBe("ws://localhost:3000/ws/logs/g1");
+  });
+
+  test("アクティビティ用のパス", () => {
+    expect(buildGuildWsUrl("https://api.example.com", "activity", "g1")).toBe("wss://api.example.com/ws/activity/g1");
   });
 });
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ChannelOption, GuildAccessStatus, MemberOption, RoleOption } from "@management-bot/dashboard-access";
 import { mapWithConcurrency } from "@management-bot/shared";
+import { buildAvatarUrl } from "../oauth/discord-client.js";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -31,7 +32,12 @@ const guildRoleSchema = z.object({ id: z.string(), name: z.string(), permissions
 const guildMemberSchema = z.object({ roles: z.array(z.string()) });
 
 const guildMemberListEntrySchema = z.object({
-  user: z.object({ id: z.string(), username: z.string(), global_name: z.string().nullable().optional() }),
+  user: z.object({
+    id: z.string(),
+    username: z.string(),
+    global_name: z.string().nullable().optional(),
+    avatar: z.string().nullable().optional(),
+  }),
   nick: z.string().nullable().optional(),
 });
 
@@ -285,6 +291,15 @@ export async function fetchGuildAccessStatus(botToken: string, guildId: string):
 }
 
 /**
+ * guildのオーナーのユーザーIDを返す。アクセス権限画面でオーナーを編集不可として表示するために使う
+ * (issue #523)。guildが見つからない/Botが未参加(403/404)の場合はnullを返す。
+ */
+export async function fetchGuildOwnerId(botToken: string, guildId: string): Promise<string | null> {
+  const guild = await discordGet(botToken, `/guilds/${guildId}`, z.object({ owner_id: z.string() }));
+  return guild === "not_found" ? null : guild.owner_id;
+}
+
+/**
  * capability grantのtargetId実在検証専用(issue #198)。Bot脱退・権限異常による403を
  * 「roleが存在しない」と誤診しないよう、fetchGuildRolesとは異なり403を例外として投げる
  * (isGuildMemberと同じfail-closedの考え方)。guild不明(404)はfalseを返す。
@@ -354,6 +369,11 @@ export async function fetchGuildMembersPage(
     members: page.map((member) => ({
       id: member.user.id,
       name: member.nick || member.user.global_name || member.user.username,
+      // アバター未設定はURLを付けない(画面側で頭文字を出す)。
+      // URLに埋め込むため、IDはsnowflake・ハッシュは16進(アニメはa_付き)の形式のものだけ使う。
+      ...(/^\d+$/.test(member.user.id) &&
+        member.user.avatar &&
+        /^(a_)?[0-9a-f]+$/.test(member.user.avatar) && { avatarUrl: `${buildAvatarUrl({ id: member.user.id, avatar: member.user.avatar })}?size=64` }),
     })),
     nextAfter: page.length === MEMBER_LIST_PAGE_SIZE ? page[page.length - 1]!.user.id : undefined,
   };
@@ -384,9 +404,12 @@ interface BulkMemberNamesResult {
  * (issue #213)。1000人を超えるguildでは最初の1000人(idの昇順)のみが対象になり、それ以外は
  * allowIndividualFallback=trueの場合のみ個別取得にフォールバックする。
  */
-async function fetchBulkMemberNames(botToken: string, guildId: string): Promise<BulkMemberNamesResult> {
+async function fetchBulkMemberNames(
+  guildId: string,
+  fetchPage: (guildId: string) => Promise<MemberPage>,
+): Promise<BulkMemberNamesResult> {
   try {
-    const page = await fetchGuildMembersPage(botToken, guildId);
+    const page = await fetchPage(guildId);
     return { names: new Map(page.members.map((member) => [member.id, member.name])), allowIndividualFallback: true };
   } catch (error) {
     if (error instanceof DiscordAccessForbiddenError) {
@@ -438,10 +461,12 @@ export async function fetchGuildMemberNames(
   botToken: string,
   guildId: string,
   userIds: readonly string[],
+  /** 一括取得に使うページ取得関数。呼び出し側のキャッシュ(getGuildMembersPage)を共有して二重fetchを避けるため差し替え可能にする。 */
+  fetchPage: (guildId: string) => Promise<MemberPage> = (id) => fetchGuildMembersPage(botToken, id),
 ): Promise<Map<string, string>> {
   if (userIds.length === 0) return new Map();
 
-  const { names: bulkNames, allowIndividualFallback } = await fetchBulkMemberNames(botToken, guildId);
+  const { names: bulkNames, allowIndividualFallback } = await fetchBulkMemberNames(guildId, fetchPage);
   const missingUserIds = userIds.filter((userId) => !bulkNames.has(userId));
   const fallbackNames =
     allowIndividualFallback && missingUserIds.length > 0
@@ -453,4 +478,31 @@ export async function fetchGuildMemberNames(
     names.set(userId, name);
   }
   return new Map(userIds.flatMap((userId) => (names.has(userId) ? [[userId, names.get(userId)!] as const] : [])));
+}
+
+const applicationUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  global_name: z.string().nullable().optional(),
+});
+
+const applicationSchema = z.object({
+  owner: applicationUserSchema.optional(),
+  team: z.object({ members: z.array(z.object({ user: applicationUserSchema })) }).nullable().optional(),
+});
+
+export interface BotOwner {
+  id: string;
+  name: string;
+}
+
+/**
+ * Botアプリの所有者(Team所有ならTeamメンバー全員)を返す。ステータス画面(issue #507)の
+ * 閲覧可否判定に使う。Team所有の場合`owner`はTeamの疑似ユーザーになるため、membersを優先する。
+ */
+export async function fetchBotOwners(botToken: string): Promise<readonly BotOwner[]> {
+  const app = await discordGet(botToken, "/oauth2/applications/@me", applicationSchema);
+  if (app === "not_found") return [];
+  const users = app.team ? app.team.members.map((member) => member.user) : app.owner ? [app.owner] : [];
+  return users.map((user) => ({ id: user.id, name: user.global_name ?? user.username }));
 }

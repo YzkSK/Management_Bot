@@ -106,7 +106,8 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
-        components: [buildControlPanelContainer(voiceChannel.id, { ...before, isLocked: !before.isLocked })],
+        allowedMentions: { parse: [] },
+        components: [buildControlPanelContainer(voiceChannel.id, row.ownerId, { ...before, isLocked: !before.isLocked })],
       });
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",
@@ -137,7 +138,8 @@ export async function handleTempVoiceButton(deps: HandleButtonDeps, interaction:
       }
       await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
-        components: [buildControlPanelContainer(voiceChannel.id, { ...before, isHidden: !before.isHidden })],
+        allowedMentions: { parse: [] },
+        components: [buildControlPanelContainer(voiceChannel.id, row.ownerId, { ...before, isHidden: !before.isHidden })],
       });
       await deps.eventBus.publish({
         type: "temp-voice.event.recorded",

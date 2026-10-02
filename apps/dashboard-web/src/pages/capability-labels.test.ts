@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ALL_CAPABILITIES, CAPABILITIES } from "@management-bot/shared";
-import { CAPABILITY_GROUPS, CAPABILITY_OPTIONS } from "./capability-labels.js";
+import { CAPABILITY_GROUPS, CAPABILITY_OPTIONS, CAPABILITY_PRESETS, presetLabelFor } from "./capability-labels.js";
 
 describe("CAPABILITY_OPTIONS", () => {
   test("CAPABILITIESの全キーを含む", () => {
@@ -25,5 +25,22 @@ describe("CAPABILITY_GROUPS", () => {
 
     expect(new Set(grouped)).toEqual(new Set(Object.keys(CAPABILITIES)));
     expect(grouped).toHaveLength(Object.keys(CAPABILITIES).length);
+  });
+});
+
+describe("presetLabelFor(#505)", () => {
+  test("プリセットと完全一致すればそのプリセット名を返す", () => {
+    for (const preset of CAPABILITY_PRESETS) {
+      expect(presetLabelFor(preset.capabilities)).toBe(preset.label);
+    }
+  });
+
+  test("どのプリセットとも一致しなければカスタムを返す", () => {
+    const moderator = CAPABILITY_PRESETS.find((p) => p.label === "モデレーター")?.capabilities ?? 0;
+    expect(presetLabelFor(moderator | CAPABILITIES.VIEW_LOGS_RAW)).toBe("カスタム");
+  });
+
+  test("権限が1つもなければ権限なしを返す", () => {
+    expect(presetLabelFor(0)).toBe("権限なし");
   });
 });

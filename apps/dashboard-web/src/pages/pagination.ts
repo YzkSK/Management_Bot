@@ -1,26 +1,9 @@
-/** カーソルベースページネーションの状態。cursors[i]はi番目のページを取得する際に使ったカーソル。 */
-export interface PaginationState {
-  cursors: (string | undefined)[];
-  pageIndex: number;
-}
-
-export const INITIAL_PAGINATION: PaginationState = { cursors: [undefined], pageIndex: 0 };
-
-export function currentCursor(state: PaginationState): string | undefined {
-  return state.cursors[state.pageIndex];
-}
-
-export function goNextPage(state: PaginationState, nextCursor: string | null): PaginationState {
-  if (nextCursor === null) {
-    return state;
-  }
-  const nextIndex = state.pageIndex + 1;
-  if (nextIndex < state.cursors.length) {
-    return { ...state, pageIndex: nextIndex };
-  }
-  return { cursors: [...state.cursors, nextCursor], pageIndex: nextIndex };
-}
-
-export function goPrevPage(state: PaginationState): PaginationState {
-  return state.pageIndex === 0 ? state : { ...state, pageIndex: state.pageIndex - 1 };
+/**
+ * 現在ページ(0始まり)を中心に、表示するページ番号(0始まり)を最大maxVisible個返す。
+ * 端に寄った場合は反対側へ詰めて、常に可能な限りmaxVisible個を表示する。
+ */
+export function visiblePages(current: number, totalPages: number, maxVisible = 5): number[] {
+  const count = Math.min(maxVisible, totalPages);
+  const start = Math.max(0, Math.min(current - Math.floor(count / 2), totalPages - count));
+  return Array.from({ length: count }, (_, i) => start + i);
 }

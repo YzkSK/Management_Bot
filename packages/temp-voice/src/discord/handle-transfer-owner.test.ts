@@ -70,6 +70,7 @@ function fakeControlChannel(overrides: Partial<Record<string, unknown>> = {}) {
     id: "ctrl-1",
     type: ChannelType.GuildText,
     permissionOverwrites: { edit: mock(() => Promise.resolve()) },
+    send: mock(() => Promise.resolve()),
     ...overrides,
   };
 }
@@ -168,6 +169,23 @@ describe("handleTempVoiceTransferOwner", () => {
       expect.objectContaining({ action: "ownerTransferred", trigger: "manual", previousOwnerId: "owner-1", newOwnerId: "member-1" }),
     );
     expect(interaction.editReply).toHaveBeenCalled();
+    // 制御パネルは新オーナー表示で再描画し、新オーナーへのメンション付き通知を送る(#531)。
+    expect(JSON.stringify((interaction.editReply as ReturnType<typeof mock>).mock.calls[0])).toContain("オーナー: <@member-1>");
+    expect(JSON.stringify(controlChannel.send.mock.calls[0])).toContain("<@member-1>");
+  });
+
+  test("移譲確定後のパネル再描画(editReply)に失敗しても通知とイベント発行は行う(#531)", async () => {
+    const publish = mock(() => Promise.resolve());
+    const controlChannel = fakeControlChannel();
+    const deps = { db: fakeDb(OWNED_ROW), eventBus: { publish } , withResourceLock: fakeWithResourceLock() } as unknown as HandleTransferOwnerDeps;
+    const interaction = fakeInteraction("owner-1", fakeVoiceChannel(), controlChannel, ["member-1"], {
+      editReply: mock(() => Promise.reject(new Error("Unknown interaction"))),
+    });
+
+    await handleTempVoiceTransferOwner(deps, interaction);
+
+    expect(controlChannel.send).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ action: "ownerTransferred", trigger: "manual" }));
   });
 
   test("自動再割当cronが先にオーナーを変更していた場合(CAS失敗)、権限をロールバックしイベントを発行しない(codexレビュー指摘: 手動移譲とcronの競合防止)", async () => {

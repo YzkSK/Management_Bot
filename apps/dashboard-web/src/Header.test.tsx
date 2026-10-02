@@ -18,12 +18,12 @@ describe("Header", () => {
   test("discordUsernameとユーザーメニューのトリガーを描画する", () => {
     const html = renderHeader();
     expect(html).toContain("yuzuki_nom1");
-    expect(html).toContain("Management Bot Dashboard");
+    expect(html).toContain("Management Bot");
   });
 
   test("タイトルはギルド選択画面(トップ)へのリンクになっている", () => {
     const html = renderHeader();
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot Dashboard<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot<\/a>/);
   });
 
   test("avatarUrlがあればアバター画像を描画する", () => {
@@ -46,5 +46,9 @@ describe("Header", () => {
     const openHtml = renderHeader(null, true);
     expect(closedHtml).toContain('aria-expanded="false"');
     expect(openHtml).toContain('aria-expanded="true"');
+  });
+
+  test("ステータス閲覧者でなければ状態ランプを出さない(issue #507)", () => {
+    expect(renderHeader()).not.toContain("ステータス:");
   });
 });

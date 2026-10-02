@@ -64,7 +64,7 @@ describe("readTempVoiceState", () => {
 
 describe("buildControlPanelContainer", () => {
   test("未ロック・表示中はロック/非表示にするボタンのcustomIdを持つ", () => {
-    const container = buildControlPanelContainer("channel-1", {
+    const container = buildControlPanelContainer("channel-1", "owner-1", {
       userLimit: 0,
       bitrate: 64000,
       isLocked: false,
@@ -87,7 +87,7 @@ describe("buildControlPanelContainer", () => {
   });
 
   test("状態を表す文言(人数制限/音質/ロック/表示)がcontainerのテキストに含まれる", () => {
-    const container = buildControlPanelContainer("channel-1", {
+    const container = buildControlPanelContainer("channel-1", "owner-1", {
       userLimit: 10,
       bitrate: 128000,
       isLocked: true,
@@ -97,6 +97,7 @@ describe("buildControlPanelContainer", () => {
     expect(text).toContain("10人");
     expect(text).toContain("128 kbps");
     expect(text).toContain("ロック中");
+    expect(text).toContain("オーナー: <@owner-1>");
   });
 });
 

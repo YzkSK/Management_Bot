@@ -8,6 +8,17 @@ services:
       POSTGRES_USER: management_bot
       POSTGRES_PASSWORD: management_bot
       POSTGRES_DB: management_bot
+    # ステータス画面のログ表示用(issue #507)。PGDATA/log/配下へ曜日ごとに上書きローテーションで書き、vectorが読む。
+    command:
+      - postgres
+      - -c
+      - logging_collector=on
+      - -c
+      - log_filename=postgresql-%a.log
+      - -c
+      - log_truncate_on_rotation=on
+      - -c
+      - log_rotation_age=1d
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -21,7 +32,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
+    command: redis-server --appendonly yes --logfile /data/redis.log
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -31,6 +43,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  vector:
+    image: timberio/vector:0.46.1-alpine
+    restart: unless-stopped
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+      - postgres-data:/logs/postgres:ro
+      - redis-data:/logs/redis:ro
+    depends_on:
+      redis:
+        condition: service_healthy
 
   migrate:
     build:
@@ -88,6 +111,7 @@ services:
     env_file: .env.dev
     environment:
       DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
     volumes:
       - backup-data:/backups
     depends_on:
@@ -102,6 +126,7 @@ services:
     env_file: .env.dev
     environment:
       DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -114,6 +139,20 @@ services:
     env_file: .env.dev
     environment:
       DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  activity-rollup:
+    build:
+      context: .
+      dockerfile: apps/activity-rollup/Dockerfile
+    restart: unless-stopped
+    env_file: .env.dev
+    environment:
+      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -126,6 +165,7 @@ services:
     env_file: .env.dev
     environment:
       DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      REDIS_URL: redis://redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully

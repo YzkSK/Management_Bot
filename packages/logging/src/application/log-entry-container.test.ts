@@ -196,6 +196,81 @@ describe("buildLogEntryContainers", () => {
     expect(text).toContain("[a.png](https://cdn.example.com/a.png)");
   });
 
+  test("GIFリンクのみの投稿は本文URL・添付リンクを省き、プレビューの下に日時を表示する(#528)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      content: "https://klipy.com/gifs/x",
+      attachments: [
+        {
+          url: "https://media.klipy.com/a.mp4",
+          filename: "a.mp4",
+          contentType: "video/mp4",
+          gifv: true,
+          sourceUrl: "https://klipy.com/gifs/x",
+          previewUrl: "https://media.klipy.com/a.webp",
+        },
+      ],
+    };
+    const containers = buildLogEntryContainers(entry);
+    const text = textOf(containers);
+    expect(text).not.toContain("https://klipy.com/gifs/x");
+    expect(text).not.toContain("添付ファイル");
+    const types = containers[0]!.toJSON().components.map((c) => c.type);
+    expect(types.slice(-2)).toEqual([12, 10]);
+    // mp4ではなくアニメーション画像版を表示し、Discord上で自動ループ再生させる。
+    expect(JSON.stringify(containers[0]!.toJSON())).toContain('"url":"https://media.klipy.com/a.webp"');
+  });
+
+  test("MediaGallery上限を超えたGIFは添付リンクとして残す", () => {
+    const gifs = Array.from({ length: 11 }, (_, i) => ({
+      url: `https://media.klipy.com/${i}.mp4`,
+      filename: `${i}.mp4`,
+      contentType: "video/mp4",
+      gifv: true as const,
+    }));
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      attachments: gifs,
+    };
+    const text = textOf(buildLogEntryContainers(entry));
+    expect(text).toContain("[10.mp4](https://media.klipy.com/10.mp4)");
+    expect(text).not.toContain("[9.mp4]");
+  });
+
+  test("画像・動画の添付はMediaGalleryでプレビュー表示する(#528)", () => {
+    const entry: LogEntry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      action: "create",
+      attachments: [
+        { url: "https://media.tenor.com/abc/cat.mp4", filename: "cat.mp4", contentType: "video/mp4" },
+        { url: "https://cdn.example.com/SPOILER_a.png", filename: "SPOILER_a.png", contentType: "image/png" },
+        { url: "https://cdn.example.com/a.txt", filename: "a.txt", contentType: "text/plain" },
+      ],
+    };
+    const gallery = buildLogEntryContainers(entry)[0]!.toJSON().components.find((c) => c.type === 12);
+    expect(gallery).toEqual({
+      type: 12,
+      items: [
+        { media: { url: "https://media.tenor.com/abc/cat.mp4" }, spoiler: false },
+        { media: { url: "https://cdn.example.com/SPOILER_a.png" }, spoiler: true },
+      ],
+    });
+  });
+
   test("role/updateのpermissions変更は剥奪を−、付与を+で列挙する", () => {
     const entry: LogEntry = {
       category: "role",

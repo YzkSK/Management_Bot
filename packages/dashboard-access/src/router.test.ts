@@ -59,6 +59,7 @@ function buildContext(
     getGuildRoles?: () => Promise<RoleOption[]>;
     /** listRoleOptions等がBot権限不足を判別するための状態(issue #214)。デフォルトは"ok"。 */
     getGuildAccessStatus?: () => Promise<GuildAccessStatus>;
+    getGuildOwnerId?: (guildId: string) => Promise<string | null>;
     /**
      * targetIdの実在検証(verifyGuildRole)。表示用のgetGuildRolesとは独立に指定できる
      * (実装がgetGuildRoles(キャッシュ経由)を誤って検証に使い回す退行を検出するため、
@@ -80,8 +81,10 @@ function buildContext(
     getBotPermissions: async () => 0n,
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
     getGuildAccessStatus: overrides.getGuildAccessStatus ?? (async () => "ok" as const),
+    getGuildOwnerId: overrides.getGuildOwnerId ?? (async () => null),
     verifyGuildRole: overrides.verifyGuildRole ?? (async () => true),
     getGuildMembersPage: membersPageOf(),
+    readRedisHash: async () => ({}),
     isGuildMember: overrides.isGuildMember ?? (async () => true),
     listMyGuilds: async () => [],
   };
@@ -105,6 +108,24 @@ async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
 }
 
 describe("capabilityGrantsRouter.listCapabilityGrants", () => {
+  test("前提の閲覧権限を欠く管理権限のみの付与はBAD_REQUEST(issue #527)", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.MANAGE_TEMP_VOICE | CAPABILITIES.VIEW_TEMP_VOICE);
+    const caller = createCaller(buildContext());
+
+    const error = await captureRejection(
+      caller.grantCapabilities({
+        guildId,
+        targetType: "user",
+        targetId: "u2",
+        capabilities: CAPABILITIES.MANAGE_TEMP_VOICE,
+      }),
+    );
+
+    expect(error).toBeDefined();
+    const rows = await db.select().from(capabilityGrants).where(eq(capabilityGrants.targetId, "u2"));
+    expect(rows).toHaveLength(0);
+  });
+
   test("MANAGE_ACCESSを持たない場合はFORBIDDEN", async () => {
     const caller = createCaller(buildContext());
 
@@ -390,6 +411,19 @@ describe("capabilityGrantsRouter.listRoleOptions / listMemberOptions", () => {
     const result = await caller.listRoleOptions({ guildId });
 
     expect(result).toEqual({ roles: [], accessStatus: "forbidden" });
+  });
+
+  test("getGuildOwnerはctx.getGuildOwnerIdの結果を返す(issue #523)", async () => {
+    await grant("user", "user-1", CAPABILITIES.MANAGE_ACCESS);
+    const caller = createCaller(buildContext({ getGuildOwnerId: async () => "owner-1" }));
+
+    expect(await caller.getGuildOwner({ guildId })).toEqual({ ownerId: "owner-1" });
+  });
+
+  test("getGuildOwnerはMANAGE_ACCESSを要求する(issue #523)", async () => {
+    const caller = createCaller(buildContext());
+
+    await expect(caller.getGuildOwner({ guildId })).rejects.toThrow();
   });
 
   test("listMemberOptionsはMANAGE_ACCESSを要求する", async () => {

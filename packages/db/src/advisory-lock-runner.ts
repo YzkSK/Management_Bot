@@ -14,7 +14,8 @@ export interface AdvisoryLockJobOptions {
   /**
    * pg_try_advisory_xact_lockに渡す、ジョブごとに固定した64bit定数。他のジョブと衝突させないこと。
    * 割り当て済み: 869_412_501 logging-retention / 869_412_502 moderation-decay /
-   * 869_412_503 temp-voice run-grace / 869_412_504 session-cleanup。
+   * 869_412_503 temp-voice run-grace / 869_412_504 session-cleanup /
+   * 869_412_505 activity-rollup。
    */
   lockKey: number;
   /** スキップ時のメッセージに使うジョブ名(例: "logging retention")。 */

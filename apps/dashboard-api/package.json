@@ -23,6 +23,7 @@
     "@management-bot/temp-voice": "workspace:*",
     "@trpc/server": "^11.0.0",
     "hono": "^4.6.0",
+    "ioredis": "^5.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import { type GetChannelId, type WriteLogEntryDeps } from "../../application/ind
 import { createWriteLogEntryDeps, writeLogEntrySafely } from "../write-log-entry-safely.js";
 
 type AnyMessage = OmitPartialGroupDMChannel<Message | PartialMessage>;
-type MessageAttachments = { url: string; filename: string; contentType?: string }[] | undefined;
+type MessageAttachments = { url: string; filename: string; contentType?: string; gifv?: true; sourceUrl?: string; previewUrl?: string }[] | undefined;
 type BulkDeleteMessageLogEntry = LogEntry & {
   category: "message";
   action: "bulkDelete";
@@ -47,13 +47,53 @@ function isThreadStarterMessage(message: AnyMessage): boolean {
 }
 
 /** 添付ファイルの実体は保存せずDiscord CDNのURL・ファイル名・content typeのみ抽出する(ストレージ節約)。 */
-function toAttachments(message: AnyMessage): MessageAttachments {
-  if (message.attachments.size === 0) return undefined;
+function toFileAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
   return message.attachments.map((attachment) => ({
     url: attachment.url,
     filename: attachment.name,
     contentType: attachment.contentType ?? undefined,
   }));
+}
+
+/**
+ * Tenor等のGIFリンクはファイル添付ではなくDiscordが生成するembed(gifv/image)として届くため、
+ * そのメディアURLも添付ファイル扱いで記録し、ログカードで画像表示できるようにする(#528)。
+ * gifvはvideo(mp4)、imageはimage(リンク展開ではthumbnail)に実体のURLが入る。
+ * ponytail: create時点でembed未展開(後追いmessageUpdateで付与)の場合は記録されない。頻発するなら後追い展開を拾う。
+ */
+/**
+ * gifvのアニメーション画像版URLを求める。Klipy等はembedのthumbnailがアニメーションWebP/GIFなのでそれを使う。
+ * Tenorはthumbnailが静止画(png)のため、mp4のURL(`<id>AAAPo/<slug>.mp4`)をGIF版(`<id>AAAAC/<slug>.gif`)に読み替える。
+ * ponytail: TenorのURL規則に依存。規則が変わったらmp4表示(再生ボタン付き)にフォールバックするだけで壊れはしない。
+ */
+function toAnimatedPreviewUrl(videoUrl: string, thumbnailUrl: string | undefined): string | undefined {
+  if (thumbnailUrl && /\.(gif|webp)(\?|$)/i.test(thumbnailUrl)) return thumbnailUrl;
+  const tenor = /^(https:\/\/media\d*\.tenor\.com\/(?:m\/)?[A-Za-z0-9_-]+)AAAPo(\/[^?]+)\.mp4$/.exec(videoUrl);
+  return tenor ? `${tenor[1]}AAAAC${tenor[2]}.gif` : undefined;
+}
+
+function toEmbedMediaAttachments(message: AnyMessage): NonNullable<MessageAttachments> {
+  const media: NonNullable<MessageAttachments> = [];
+  for (const embed of message.embeds) {
+    const isGifv = embed.data.type === "gifv";
+    const url = isGifv ? embed.video?.url : embed.data.type === "image" ? (embed.image?.url ?? embed.thumbnail?.url) : undefined;
+    if (!url) continue;
+    const previewUrl = isGifv ? toAnimatedPreviewUrl(url, embed.thumbnail?.url) : undefined;
+    media.push({
+      url,
+      filename: new URL(url).pathname.split("/").pop() || "embed",
+      contentType: isGifv ? "video/mp4" : "image/*",
+      ...(isGifv ? { gifv: true as const } : {}),
+      ...(embed.url ? { sourceUrl: embed.url } : {}),
+      ...(previewUrl ? { previewUrl } : {}),
+    });
+  }
+  return media;
+}
+
+function toAttachments(message: AnyMessage): MessageAttachments {
+  const attachments = [...toFileAttachments(message), ...toEmbedMediaAttachments(message)];
+  return attachments.length > 0 ? attachments : undefined;
 }
 
 function baseFields(
@@ -111,7 +151,9 @@ export function toMessageUpdateLogEntry(
   if (!base) return undefined;
   if (oldMessage.partial) return undefined;
   const contentChanged = oldMessage.content !== newMessage.content;
-  const attachmentsChanged = JSON.stringify(toAttachments(oldMessage)) !== JSON.stringify(toAttachments(newMessage));
+  // embedの後追い生成(Tenorリンクの展開等)だけのmessageUpdateをログ化しないよう、比較はファイル添付のみで行う。
+  const attachmentsChanged =
+    JSON.stringify(toFileAttachments(oldMessage)) !== JSON.stringify(toFileAttachments(newMessage));
   if (!contentChanged && !attachmentsChanged) return undefined;
   return {
     category: "message",

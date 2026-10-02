@@ -1,3 +1,83 @@
-import { router } from "@management-bot/dashboard-access";
+import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { getMemberDetail, getMemberRanking, getServerSummary, readActiveVoice } from "../application/index.js";
 
-export const activityRouter = router({});
+const PAGE_SIZE = 20;
+/** 集計クエリの負荷を抑えるため、1回に指定できる期間の上限を設ける。 */
+const MAX_RANGE_MS = 366 * 24 * 3_600_000;
+
+const rangeInput = z.object({ guildId: discordIdSchema, from: z.iso.datetime(), to: z.iso.datetime() });
+
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある。
+const activityViewProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
+  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.VIEW_ACTIVITY));
+
+function toRange(input: { from: string; to: string }): { from: Date; to: Date } {
+  const from = new Date(input.from);
+  const to = new Date(input.to);
+  if (to <= from || to.getTime() - from.getTime() > MAX_RANGE_MS) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "invalid range" });
+  }
+  return { from, to };
+}
+
+/**
+ * ランキング用のアバターURL。メンバー一覧の先頭ページ(キャッシュ済み)から引く。アバターは装飾なので、
+ * 取得失敗時は空にしてランキング自体は返す。
+ * ponytail: 先頭ページ(1000人)に含まれないメンバーはアバターなし(頭文字表示)。大規模guildで要るなら個別取得を足す。
+ */
+async function fetchAvatarUrls(
+  getGuildMembersPage: (guildId: string) => Promise<{ members: readonly { id: string; avatarUrl?: string }[] }>,
+  guildId: string,
+): Promise<ReadonlyMap<string, string>> {
+  try {
+    const page = await getGuildMembersPage(guildId);
+    return new Map(page.members.flatMap((m) => (m.avatarUrl ? [[m.id, m.avatarUrl] as const] : [])));
+  } catch {
+    return new Map();
+  }
+}
+
+export const activityRouter = router({
+  serverSummary: activityViewProcedure(rangeInput.extend({ granularity: z.enum(["hour", "day"]) })).query(({ ctx, input }) =>
+    getServerSummary(ctx.db, { guildId: input.guildId, granularity: input.granularity, ...toRange(input) }),
+  ),
+
+  memberRanking: activityViewProcedure(
+    rangeInput.extend({ sort: z.enum(["voice", "messages"]), page: z.number().int().min(0) }),
+  ).query(async ({ ctx, input }) => {
+    const result = await getMemberRanking(ctx.db, {
+      guildId: input.guildId,
+      sort: input.sort,
+      limit: PAGE_SIZE,
+      offset: input.page * PAGE_SIZE,
+      ...toRange(input),
+    });
+    const ids = result.rows.map((r) => r.userId);
+    const [names, avatars] =
+      ids.length > 0
+        ? await Promise.all([ctx.getGuildMemberNames(input.guildId, ids), fetchAvatarUrls(ctx.getGuildMembersPage, input.guildId)])
+        : [new Map<string, string>(), new Map<string, string>()];
+    return {
+      ...result,
+      pageSize: PAGE_SIZE,
+      rows: result.rows.map((r) => ({ ...r, name: names.get(r.userId) ?? null, avatarUrl: avatars.get(r.userId) ?? null })),
+    };
+  }),
+
+  memberDetail: activityViewProcedure(rangeInput.extend({ userId: discordIdSchema })).query(({ ctx, input }) =>
+    getMemberDetail(ctx.db, { guildId: input.guildId, userId: input.userId, ...toRange(input) }),
+  ),
+
+  /** Dashboard UIでのID直接入力を禁止するため、メンバーの選択肢をこのprocedure経由で提供する。 */
+  listMemberOptions: activityViewProcedure(
+    z.object({ guildId: discordIdSchema, after: z.string().min(1).optional() }),
+  ).query(({ ctx, input }) => ctx.getGuildMembersPage(input.guildId, input.after)),
+
+  /** 現在VCにいるメンバー(Discordの現在状態。DBには記録しない)。 */
+  activeVoice: activityViewProcedure(z.object({ guildId: discordIdSchema })).query(({ ctx, input }) =>
+    readActiveVoice(ctx.readRedisHash, input.guildId),
+  ),
+});

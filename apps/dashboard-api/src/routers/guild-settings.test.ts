@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createDb, capabilityGrants, guilds, sessions } from "@management-bot/db";
 import { createCallerFactory, type GuildMembership } from "@management-bot/dashboard-access";
-import { CAPABILITIES } from "@management-bot/shared";
+import { ALL_CAPABILITIES, CAPABILITIES } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { guildSettingsRouter } from "./guild-settings.js";
@@ -54,12 +54,14 @@ function buildContext(overrides: { getGuildMembership: GuildMembershipResolver }
     getBotPermissions: async () => 0n,
     getGuildRoles: async () => [],
     getGuildAccessStatus: async () => "ok" as const,
+    getGuildOwnerId: async () => null,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
+    readRedisHash: async () => ({}),
     isGuildMember: async () => true,
     listMyGuilds: async () => [
-      { id: guildId1, name: "guild-1", isManaged: false },
-      { id: guildId2, name: "guild-2", isManaged: false },
+      { id: guildId1, name: "guild-1", isManaged: false, iconUrl: null },
+      { id: guildId2, name: "guild-2", isManaged: false, iconUrl: null },
     ],
   };
 }
@@ -69,83 +71,58 @@ async function grant(guildId: string, targetType: "user" | "role", targetId: str
 }
 
 describe("guildSettingsRouter.listMyGuilds", () => {
-  test("非在籍(membershipなし)のguildはcanViewLogs: falseになる", async () => {
+  const member = { getGuildMembership: async () => ({ isOwner: false, roleIds: [] }) };
+
+  test("非在籍(membershipなし)のguildはcapabilities: 0になる", async () => {
     const caller = createCaller(buildContext({ getGuildMembership: async () => null }));
 
     const result = await caller.listMyGuilds();
 
     expect(result).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: guildId1, canViewLogs: false }),
-        expect.objectContaining({ id: guildId2, canViewLogs: false }),
+        expect.objectContaining({ id: guildId1, capabilities: 0 }),
+        expect.objectContaining({ id: guildId2, capabilities: 0 }),
       ]),
     );
   });
 
-  test("在籍しているがcapability grantが何もないguildはcanViewLogs: falseになる", async () => {
-    const caller = createCaller(
-      buildContext({ getGuildMembership: async () => ({ isOwner: false, roleIds: [] }) }),
-    );
+  test("在籍しているがcapability grantが何もないguildはcapabilities: 0になる", async () => {
+    const caller = createCaller(buildContext(member));
 
     const result = await caller.listMyGuilds();
 
     expect(result).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: guildId1, canViewLogs: false }),
-        expect.objectContaining({ id: guildId2, canViewLogs: false }),
+        expect.objectContaining({ id: guildId1, capabilities: 0 }),
+        expect.objectContaining({ id: guildId2, capabilities: 0 }),
       ]),
     );
   });
 
-  test("本人へのcapability grantがあるguildのみcanViewLogs: trueになる", async () => {
+  test("本人へのgrantと@everyoneへのgrantを合算した実効capabilitiesをguildごとに返す", async () => {
     await grant(guildId1, "user", "user-1", CAPABILITIES.VIEW_LOGS);
-    const caller = createCaller(
-      buildContext({ getGuildMembership: async () => ({ isOwner: false, roleIds: [] }) }),
-    );
+    await grant(guildId1, "role", guildId1, CAPABILITIES.VIEW_TEMP_VOICE);
+    const caller = createCaller(buildContext(member));
 
     const result = await caller.listMyGuilds();
 
     expect(result).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: guildId1, canViewLogs: true }),
-        expect.objectContaining({ id: guildId2, canViewLogs: false }),
+        expect.objectContaining({ id: guildId1, capabilities: CAPABILITIES.VIEW_LOGS | CAPABILITIES.VIEW_TEMP_VOICE }),
+        expect.objectContaining({ id: guildId2, capabilities: 0 }),
       ]),
     );
   });
 
-  test("@everyoneロール(roleId===guildId)へのgrantでもcanViewLogs: trueになる", async () => {
-    await grant(guildId1, "role", guildId1, CAPABILITIES.VIEW_LOGS);
-    const caller = createCaller(
-      buildContext({ getGuildMembership: async () => ({ isOwner: false, roleIds: [] }) }),
-    );
-
-    const result = await caller.listMyGuilds();
-
-    expect(result).toEqual(expect.arrayContaining([expect.objectContaining({ id: guildId1, canViewLogs: true })]));
-  });
-
-  test("VIEW_LOGSを含まないcapability(MANAGE_ACCESSのみ等)しか持たない場合はcanViewLogs: falseになる(issue #263 codexレビュー対応)", async () => {
-    await grant(guildId1, "user", "user-1", CAPABILITIES.MANAGE_ACCESS);
-    const caller = createCaller(
-      buildContext({ getGuildMembership: async () => ({ isOwner: false, roleIds: [] }) }),
-    );
-
-    const result = await caller.listMyGuilds();
-
-    expect(result).toEqual(expect.arrayContaining([expect.objectContaining({ id: guildId1, canViewLogs: false })]));
-  });
-
-  test("オーナーは常にcanViewLogs: trueになる", async () => {
-    const caller = createCaller(
-      buildContext({ getGuildMembership: async () => ({ isOwner: true, roleIds: [] }) }),
-    );
+  test("オーナーは常に全capabilitiesになる", async () => {
+    const caller = createCaller(buildContext({ getGuildMembership: async () => ({ isOwner: true, roleIds: [] }) }));
 
     const result = await caller.listMyGuilds();
 
     expect(result).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: guildId1, canViewLogs: true }),
-        expect.objectContaining({ id: guildId2, canViewLogs: true }),
+        expect.objectContaining({ id: guildId1, capabilities: ALL_CAPABILITIES }),
+        expect.objectContaining({ id: guildId2, capabilities: ALL_CAPABILITIES }),
       ]),
     );
   });
