@@ -238,4 +238,38 @@ describe("AccessPage", () => {
     expect(roleOptionsState?.fetchStatus).toBe("idle");
     expect(roleOptionsState?.dataUpdatedAt).toBe(0);
   });
+
+  test("オーナーは「オーナー」と表示し、権限の編集を無効化する(issue #523)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS,
+      grants: [{ id: "grant-1", targetType: "user", targetId: "user-1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+    // 初期選択を個別ユーザー(オーナー)にするため、ロール一覧を空にする。
+    queryClient.setQueryData(trpc.access.listRoleOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      roles: [],
+      accessStatus: "ok",
+    });
+    queryClient.setQueryData(trpc.access.getGuildOwner.queryOptions({ guildId: "g1" }).queryKey, { ownerId: "user-1" });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain(">オーナー<");
+    expect(html).toContain("編集・剥奪できません");
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).toContain("disabled");
+  });
+
+  test("オーナー以外のユーザーは従来どおりプリセット名を表示する(issue #523)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS,
+      grants: [{ id: "grant-1", targetType: "user", targetId: "user-1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+    queryClient.setQueryData(trpc.access.getGuildOwner.queryOptions({ guildId: "g1" }).queryKey, { ownerId: "other" });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).not.toContain(">オーナー<");
+    expect(html).not.toContain("編集・剥奪できません");
+  });
 });

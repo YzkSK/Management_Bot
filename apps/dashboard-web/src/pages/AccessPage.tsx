@@ -53,6 +53,9 @@ interface TargetOption {
 
 const FIRST_PAGE_KEY = "__first__";
 
+/** オーナーはgrantに関係なく常に全権限を持つため、プリセット名の代わりにこのラベルを出す(issue #523)。 */
+const OWNER_LABEL = "オーナー";
+
 /**
  * メンバー一覧はページング API(listMemberOptions)なので、取得済みページをカーソル単位で
  * 保持して選択肢にする。キャッシュ済みの先頭ページに戻った場合(react-queryのcacheヒットで
@@ -287,11 +290,14 @@ function TargetEditor({
   target,
   existingCapabilities,
   granterCapabilities,
+  isOwner,
 }: {
   guildId: string;
   target: SidebarTarget;
   existingCapabilities: number;
   granterCapabilities: number;
+  /** サーバーオーナーか。オーナーの実効権限はgrantで変わらないため編集・剥奪させない(issue #523)。 */
+  isOwner: boolean;
 }) {
   const queryClient = useQueryClient();
   const [selectedCapabilities, setSelectedCapabilities] = useState<readonly CapabilityName[]>(
@@ -357,6 +363,7 @@ function TargetEditor({
           プリセットから選択
           <Select
             value={currentPreset}
+            disabled={isOwner}
             onValueChange={(label) => {
               const preset = CAPABILITY_PRESETS.find((p) => p.label === label);
               if (preset) setSelectedCapabilities(capabilitiesToNames(preset.capabilities));
@@ -385,6 +392,13 @@ function TargetEditor({
         </label>
       </div>
 
+      {isOwner && (
+        <Alert>
+          <Lock />
+          <AlertDescription>サーバーオーナーは常にすべての権限を持つため、編集・剥奪できません。</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
         {CAPABILITY_GROUPS.map((group) => (
           <div key={group.title} className="flex flex-col gap-1 border-b pb-3">
@@ -394,7 +408,7 @@ function TargetEditor({
               if (!option) {
                 return null;
               }
-              const grantable = (granterCapabilities & option.bit) === option.bit;
+              const grantable = !isOwner && (granterCapabilities & option.bit) === option.bit;
               return (
                 <label
                   key={option.value}
@@ -403,7 +417,7 @@ function TargetEditor({
                   <input
                     type="checkbox"
                     className="accent-foreground size-4"
-                    checked={selectedCapabilities.includes(option.value)}
+                    checked={isOwner || selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
                     onChange={(e) =>
                       // 管理権限をONにすると前提の閲覧権限もONに、閲覧権限をOFFにすると依存する権限もOFFにする(issue #527)。
@@ -426,7 +440,7 @@ function TargetEditor({
       </div>
 
       <SaveBar
-        dirty={dirty}
+        dirty={!isOwner && dirty}
         saving={isPending}
         onSave={save}
         onDiscard={() => setSelectedCapabilities(capabilitiesToNames(existingCapabilities))}
@@ -462,6 +476,11 @@ export function AccessPage() {
   const targetUserNamesQuery = useQuery({
     ...trpc.access.resolveTargetUserNames.queryOptions({ guildId: guildId ?? "", userIds: userTargetIds }),
     enabled: hasAccess && userTargetIds.length > 0,
+  });
+
+  const ownerQuery = useQuery({
+    ...trpc.access.getGuildOwner.queryOptions({ guildId: guildId ?? "" }),
+    enabled: hasAccess,
   });
 
   if (!guildId) {
@@ -526,7 +545,10 @@ export function AccessPage() {
     selectedTarget ??
     roles[0] ??
     grantedUsers[0];
-  const presetOf = (target: SidebarTarget) => presetLabelFor(grantByKey.get(targetKey(target)) ?? 0);
+  const ownerId = ownerQuery.data?.ownerId;
+  const isOwnerTarget = (target: SidebarTarget) => target.targetType === "user" && target.targetId === ownerId;
+  const presetOf = (target: SidebarTarget) =>
+    isOwnerTarget(target) ? OWNER_LABEL : presetLabelFor(grantByKey.get(targetKey(target)) ?? 0);
   const allTargets = [...roles, ...grantedUsers];
   // 追加直後で一覧(付与済み)にまだ無い個別ユーザーも選択欄に出す
   const selectableTargets =
@@ -575,6 +597,7 @@ export function AccessPage() {
             target={activeTarget}
             existingCapabilities={grantByKey.get(targetKey(activeTarget)) ?? 0}
             granterCapabilities={granterCapabilities}
+            isOwner={isOwnerTarget(activeTarget)}
           />
         ) : (
           <p className="text-muted-foreground text-sm">対象を選択してください。</p>
