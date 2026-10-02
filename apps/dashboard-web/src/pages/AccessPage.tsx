@@ -290,14 +290,17 @@ function TargetEditor({
   target,
   existingCapabilities,
   granterCapabilities,
-  isOwner,
+  lockReason,
 }: {
   guildId: string;
   target: SidebarTarget;
   existingCapabilities: number;
   granterCapabilities: number;
-  /** サーバーオーナーか。オーナーの実効権限はgrantで変わらないため編集・剥奪させない(issue #523)。 */
-  isOwner: boolean;
+  /**
+   * 編集・剥奪させない理由。オーナーの実効権限はgrantで変わらないため編集させない(issue #523)。
+   * オーナー判定が付かない間(取得中・失敗)も、オーナーの付与を誤って剥奪しないよう個別ユーザーは編集させない。
+   */
+  lockReason: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const [selectedCapabilities, setSelectedCapabilities] = useState<readonly CapabilityName[]>(
@@ -332,6 +335,7 @@ function TargetEditor({
     onError,
   });
 
+  const isLocked = lockReason !== undefined;
   const capabilities = namesToCapabilities(selectedCapabilities);
   const dirty = capabilities !== existingCapabilities;
   // 全て外して保存した場合は付与自体を剥奪する。既存付与・新しい付与のどちらも自分の権限の範囲内でなければ保存できない。
@@ -363,7 +367,7 @@ function TargetEditor({
           プリセットから選択
           <Select
             value={currentPreset}
-            disabled={isOwner}
+            disabled={isLocked}
             onValueChange={(label) => {
               const preset = CAPABILITY_PRESETS.find((p) => p.label === label);
               if (preset) setSelectedCapabilities(capabilitiesToNames(preset.capabilities));
@@ -392,10 +396,10 @@ function TargetEditor({
         </label>
       </div>
 
-      {isOwner && (
+      {isLocked && (
         <Alert>
           <Lock />
-          <AlertDescription>サーバーオーナーは常にすべての権限を持つため、編集・剥奪できません。</AlertDescription>
+          <AlertDescription>{lockReason}</AlertDescription>
         </Alert>
       )}
 
@@ -408,7 +412,7 @@ function TargetEditor({
               if (!option) {
                 return null;
               }
-              const grantable = !isOwner && (granterCapabilities & option.bit) === option.bit;
+              const grantable = !isLocked && (granterCapabilities & option.bit) === option.bit;
               return (
                 <label
                   key={option.value}
@@ -417,7 +421,7 @@ function TargetEditor({
                   <input
                     type="checkbox"
                     className="accent-foreground size-4"
-                    checked={isOwner || selectedCapabilities.includes(option.value)}
+                    checked={selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
                     onChange={(e) =>
                       // 管理権限をONにすると前提の閲覧権限もONに、閲覧権限をOFFにすると依存する権限もOFFにする(issue #527)。
@@ -440,7 +444,7 @@ function TargetEditor({
       </div>
 
       <SaveBar
-        dirty={!isOwner && dirty}
+        dirty={!isLocked && dirty}
         saving={isPending}
         onSave={save}
         onDiscard={() => setSelectedCapabilities(capabilitiesToNames(existingCapabilities))}
@@ -547,6 +551,12 @@ export function AccessPage() {
     grantedUsers[0];
   const ownerId = ownerQuery.data?.ownerId;
   const isOwnerTarget = (target: SidebarTarget) => target.targetType === "user" && target.targetId === ownerId;
+  const lockReasonOf = (target: SidebarTarget): string | undefined => {
+    if (target.targetType !== "user") return undefined;
+    if (ownerQuery.isPending) return "オーナー情報を確認中です。";
+    if (ownerQuery.isError) return "オーナー情報の取得に失敗したため、個別ユーザーの権限は編集できません。";
+    return isOwnerTarget(target) ? "サーバーオーナーは常にすべての権限を持つため、編集・剥奪できません。" : undefined;
+  };
   const presetOf = (target: SidebarTarget) =>
     isOwnerTarget(target) ? OWNER_LABEL : presetLabelFor(grantByKey.get(targetKey(target)) ?? 0);
   const allTargets = [...roles, ...grantedUsers];
@@ -597,7 +607,7 @@ export function AccessPage() {
             target={activeTarget}
             existingCapabilities={grantByKey.get(targetKey(activeTarget)) ?? 0}
             granterCapabilities={granterCapabilities}
-            isOwner={isOwnerTarget(activeTarget)}
+            lockReason={lockReasonOf(activeTarget)}
           />
         ) : (
           <p className="text-muted-foreground text-sm">対象を選択してください。</p>

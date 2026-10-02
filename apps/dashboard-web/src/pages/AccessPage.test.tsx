@@ -272,4 +272,21 @@ describe("AccessPage", () => {
     expect(html).not.toContain(">オーナー<");
     expect(html).not.toContain("編集・剥奪できません");
   });
+
+  test("オーナー情報の取得中は個別ユーザーの権限を編集させない(issue #523)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: CAPABILITIES.MANAGE_ACCESS | CAPABILITIES.VIEW_LOGS,
+      grants: [{ id: "grant-1", targetType: "user", targetId: "user-1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+    queryClient.setQueryData(trpc.access.listRoleOptions.queryOptions({ guildId: "g1" }).queryKey, {
+      roles: [],
+      accessStatus: "ok",
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("オーナー情報を確認中です。");
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).toContain("disabled");
+  });
 });
