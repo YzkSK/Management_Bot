@@ -9,11 +9,15 @@ import { trpc } from "../trpc.js";
 import {
   describeItem,
   filterLogs,
+  formatBytes,
   formatDateTime,
+  formatUptime,
   ITEM_META,
   LEVEL_STYLE,
   SERVICE_META,
   STATE_META,
+  toPolylinePoints,
+  usageBarClass,
   type LevelFilter,
   type StatusItem,
 } from "./status-labels.js";
@@ -28,6 +32,7 @@ import { cn } from "@/lib/utils";
 /** ヘッダーの状態ランプと同じクエリ・同じ間隔で更新する(キャッシュを共有する)。 */
 export const STATUS_REFETCH_MS = 30_000;
 const LOG_REFETCH_MS = 5_000;
+const RESOURCE_REFETCH_MS = 60_000;
 
 const isNotFoundError = (error: unknown) => error instanceof TRPCClientError && error.data?.code === "NOT_FOUND";
 
@@ -44,11 +49,11 @@ export function NotFoundPage() {
   );
 }
 
-type StatusTab = "status" | "logs" | "access";
+type StatusTab = "status" | "resources" | "logs" | "access";
 type ServiceFilter = InfraLogService | "all";
 
 const parseTab = (value: string | null, isOwner: boolean): StatusTab =>
-  value === "logs" || (value === "access" && isOwner) ? value : "status";
+  value === "logs" || value === "resources" || (value === "access" && isOwner) ? value : "status";
 const parseService = (value: string | null): ServiceFilter =>
   INFRA_LOG_SERVICES.find((service) => service === value) ?? "all";
 
@@ -81,9 +86,10 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           </div>
           <TabsList
             aria-label="ステータスの表示"
-            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-3" : "grid-cols-2")}
+            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-4" : "grid-cols-3")}
           >
             <TabsTrigger value="status">ステータス</TabsTrigger>
+            <TabsTrigger value="resources">リソース</TabsTrigger>
             <TabsTrigger value="logs">ログ</TabsTrigger>
             {isOwner && <TabsTrigger value="access">閲覧権限</TabsTrigger>}
           </TabsList>
@@ -96,6 +102,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
                 <span className={cn("size-3 shrink-0 rounded-full", STATE_META[overview.data.summary].dot)} aria-hidden="true" />
                 <span className="font-bold">{STATE_META[overview.data.summary].summary}</span>
               </section>
+              <ResourceTiles />
               <div className="grid gap-4 lg:grid-cols-2">
                 <StatusGroup title="基盤" items={overview.data.items.filter((i) => ITEM_META[i.key].group === "infra")} onOpenLogs={(s) => go("logs", s)} />
                 <StatusGroup title="機能" items={overview.data.items.filter((i) => ITEM_META[i.key].group === "feature")} />
@@ -110,6 +117,10 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           )}
         </TabsContent>
 
+        <TabsContent value="resources" className="flex flex-col gap-4">
+          <ResourcesTab />
+        </TabsContent>
+
         <TabsContent value="logs" className="flex flex-col gap-3">
           <LogsTab service={service} onServiceChange={(s) => go("logs", s)} />
         </TabsContent>
@@ -121,6 +132,182 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
         )}
       </Tabs>
     </div>
+  );
+}
+
+const EMPTY_RESOURCES = "リソース情報はまだありません";
+const mbPerSec = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB/s`;
+
+function Sparkline({ values, max }: { values: readonly number[]; max: number }) {
+  return (
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="text-muted-foreground h-6 w-full" aria-hidden="true">
+      <polyline points={toPolylinePoints(values, max, 100, 24)} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function UsageBar({ percent, className }: { percent: number; className?: string }) {
+  return (
+    <div className={cn("bg-muted h-1.5 overflow-hidden rounded-full", className)} role="presentation">
+      <div className={cn("h-full rounded-full", usageBarClass(percent))} style={{ width: `${Math.min(percent, 100)}%` }} />
+    </div>
+  );
+}
+
+const percentOf = (used: number, total: number) => (total > 0 ? (used / total) * 100 : 0);
+
+function ResourceTiles() {
+  const resources = useQuery({ ...trpc.status.resources.queryOptions({ range: "1h" }), refetchInterval: RESOURCE_REFETCH_MS });
+  const samples = resources.data?.samples ?? [];
+  const latest = samples.at(-1);
+  if (!latest) {
+    return resources.isLoading ? null : <p className="text-muted-foreground text-sm">{EMPTY_RESOURCES}</p>;
+  }
+  const { host } = latest;
+  const net = samples.map((s) => s.host.netRxBytesPerSec + s.host.netTxBytesPerSec);
+  const tiles = [
+    { label: "CPU", value: `${host.cpuPercent.toFixed(1)}%`, sub: `${host.cores}コア`, percent: host.cpuPercent, spark: samples.map((s) => s.host.cpuPercent), max: 100 },
+    {
+      label: "メモリ",
+      value: `${percentOf(host.memUsedBytes, host.memTotalBytes).toFixed(1)}%`,
+      sub: `${formatBytes(host.memUsedBytes)} / ${formatBytes(host.memTotalBytes)}`,
+      percent: percentOf(host.memUsedBytes, host.memTotalBytes),
+      spark: samples.map((s) => percentOf(s.host.memUsedBytes, s.host.memTotalBytes)),
+      max: 100,
+    },
+    {
+      label: "ディスク",
+      value: `${percentOf(host.diskUsedBytes, host.diskTotalBytes).toFixed(1)}%`,
+      sub: `${formatBytes(host.diskUsedBytes)} / ${formatBytes(host.diskTotalBytes)}`,
+      percent: percentOf(host.diskUsedBytes, host.diskTotalBytes),
+      spark: samples.map((s) => percentOf(s.host.diskUsedBytes, s.host.diskTotalBytes)),
+      max: 100,
+    },
+    {
+      label: "ネットワーク",
+      value: `↓ ${mbPerSec(host.netRxBytesPerSec)}`,
+      sub: `↑ ${mbPerSec(host.netTxBytesPerSec)}`,
+      percent: null,
+      spark: net,
+      max: Math.max(...net, 1),
+    },
+  ];
+
+  return (
+    <section aria-label="サーバーのリソース" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {tiles.map((tile) => (
+        <div key={tile.label} className="bg-card flex flex-col gap-2 rounded-xl border px-4 py-3">
+          <span className="text-muted-foreground text-xs font-bold">{tile.label}</span>
+          <span className="text-xl font-bold">{tile.value}</span>
+          <span className="text-muted-foreground text-xs">{tile.sub}</span>
+          {tile.percent !== null && <UsageBar percent={tile.percent} />}
+          <Sparkline values={tile.spark} max={tile.max} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
+const RANGE_OPTIONS = [
+  { key: "1h", label: "1時間" },
+  { key: "24h", label: "24時間" },
+  { key: "7d", label: "7日" },
+] as const;
+
+function ResourcesTab() {
+  const [range, setRange] = useState<(typeof RANGE_OPTIONS)[number]["key"]>("1h");
+  const resources = useQuery({ ...trpc.status.resources.queryOptions({ range }), refetchInterval: RESOURCE_REFETCH_MS });
+  const samples = resources.data?.samples ?? [];
+  const latest = samples.at(-1);
+  const series = [
+    { label: "CPU", stroke: "stroke-primary", bg: "bg-primary", values: samples.map((s) => s.host.cpuPercent) },
+    { label: "メモリ", stroke: "stroke-warning", bg: "bg-warning", values: samples.map((s) => percentOf(s.host.memUsedBytes, s.host.memTotalBytes)) },
+  ];
+
+  return (
+    <>
+      <div role="radiogroup" aria-label="期間" className="bg-muted grid w-full grid-cols-3 gap-0.5 rounded-lg p-0.5 md:w-fit">
+        {RANGE_OPTIONS.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            role="radio"
+            aria-checked={range === option.key}
+            onClick={() => setRange(option.key)}
+            className={cn("flex h-[34px] items-center justify-center rounded-md px-3 text-[13px] whitespace-nowrap", range === option.key && "bg-background shadow-xs")}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {!latest ? (
+        resources.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>リソース情報の取得に失敗しました。</AlertDescription>
+          </Alert>
+        ) : resources.isLoading ? (
+          <Loading />
+        ) : (
+          <p className="text-muted-foreground text-sm">{EMPTY_RESOURCES}</p>
+        )
+      ) : (
+        <>
+          <section className="bg-card flex flex-col gap-3 rounded-xl border px-4 py-3">
+            <h2 className="text-muted-foreground text-sm font-bold">ホストのCPU・メモリ使用率</h2>
+            <svg viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="CPUとメモリの使用率の推移" className="h-48 w-full">
+              {[25, 50, 75].map((p) => (
+                <line key={p} x1="0" x2="600" y1={200 - p * 2} y2={200 - p * 2} className="stroke-border" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+              ))}
+              {series.map((s) => (
+                <polyline key={s.label} points={toPolylinePoints(s.values, 100, 600, 200)} fill="none" strokeWidth="2" className={s.stroke} vectorEffect="non-scaling-stroke" />
+              ))}
+            </svg>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {series.map((s) => (
+                <span key={s.label} className="flex items-center gap-1.5">
+                  <span className={cn("h-0.5 w-4 rounded", s.bg)} aria-hidden="true" />
+                  {s.label}
+                </span>
+              ))}
+              <span>点線は25 / 50 / 75%</span>
+            </div>
+          </section>
+
+          <section className="bg-card overflow-x-auto rounded-xl border">
+            <h2 className="text-muted-foreground border-b px-4 py-3 text-sm font-bold">コンテナ別</h2>
+            <table className="w-full text-sm">
+              <thead className="text-muted-foreground text-left text-xs">
+                <tr>
+                  <th className="px-4 py-2 font-medium">コンテナ名</th>
+                  <th className="px-4 py-2 font-medium">CPU</th>
+                  <th className="px-4 py-2 font-medium">メモリ使用量</th>
+                  <th className="px-4 py-2 font-medium">稼働時間</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...latest.containers]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((container) => (
+                    <tr key={container.name} className="border-t">
+                      <td className="px-4 py-2 font-medium">{container.name}</td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <UsageBar percent={container.cpuPercent} className="w-20" />
+                          <span className="tabular-nums">{container.cpuPercent.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 tabular-nums">{formatBytes(container.memUsedBytes)}</td>
+                      <td className="px-4 py-2">{formatUptime(Date.parse(latest.at) - Date.parse(container.startedAt))}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
+      <p className="text-muted-foreground text-xs">1分ごとに採取し、直近7日分を保持します。</p>
+    </>
   );
 }
 
