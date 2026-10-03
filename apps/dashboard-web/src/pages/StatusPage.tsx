@@ -262,23 +262,34 @@ function ResourcesTab() {
         <>
           <section className="bg-card flex flex-col gap-3 rounded-xl border px-4 py-3">
             <h2 className="text-muted-foreground text-sm font-bold">ホストのCPU・メモリ使用率</h2>
-            <svg viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="CPUとメモリの使用率の推移" className="h-48 w-full">
-              {[25, 50, 75].map((p) => (
-                <line key={p} x1="0" x2="600" y1={200 - p * 2} y2={200 - p * 2} className="stroke-border" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+            {/* SVGは横に引き伸ばすため、目盛りの数字は歪まないようHTMLで重ねる。 */}
+            <div className="relative h-48 pl-10">
+              {[0, 25, 50, 75, 100].map((p) => (
+                <span
+                  key={p}
+                  className="text-muted-foreground absolute left-0 w-8 -translate-y-1/2 text-right text-[11px] tabular-nums"
+                  style={{ top: `${100 - p}%` }}
+                  aria-hidden="true"
+                >
+                  {p}%
+                </span>
               ))}
-              {series.map((s) => (
-                <polyline key={s.label} points={toPolylinePoints(s.values, 100, 600, 200)} fill="none" strokeWidth="2" className={s.stroke} vectorEffect="non-scaling-stroke" />
-              ))}
-            </svg>
+              <svg viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="CPUとメモリの使用率の推移" className="h-full w-full">
+                {[25, 50, 75].map((p) => (
+                  <line key={p} x1="0" x2="600" y1={200 - p * 2} y2={200 - p * 2} className="stroke-border" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+                ))}
+                {series.map((s) => (
+                  <polyline key={s.label} points={toPolylinePoints(s.values, 100, 600, 200)} fill="none" strokeWidth="2" className={s.stroke} vectorEffect="non-scaling-stroke" />
+                ))}
+              </svg>
+            </div>
             <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
               {series.map((s) => (
                 <span key={s.label} className="flex items-center gap-1.5">
                   <span className={cn("h-0.5 w-4 rounded", s.bg)} aria-hidden="true" />
                   {s.label}
                 </span>
-              ))}
-              <span>点線は25 / 50 / 75%</span>
-            </div>
+              ))}            </div>
           </section>
 
           <section className="bg-card overflow-x-auto rounded-xl border">
