@@ -9,7 +9,7 @@ import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
 import { readInfraLogs, subscribeInfraLogIngest } from "./status/infra-logs.js";
-import { readResourceSamples, startResourceSampler } from "./status/resources.js";
+import { fetchResourceSample, readResourceSamples, startResourceSampler } from "./status/resources.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
@@ -40,6 +40,7 @@ const appRouter = createAppRouter({
   collectStatus: () => collectStatus(db, redis),
   readLogs: (service) => readInfraLogs(redis, service),
   readResources: (range) => readResourceSamples(redis, range),
+  readCurrentResources: async () => (env.CADVISOR_URL ? fetchResourceSample(env.CADVISOR_URL) : null),
 });
 // cAdvisorが無い環境(ローカル等)ではリソースのサンプリングを起動しない(issue #548)。
 if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL);

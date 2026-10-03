@@ -19,6 +19,8 @@ export interface StatusDeps {
   collectStatus: () => Promise<StatusOverview>;
   readLogs: (service: (typeof INFRA_LOG_SERVICES)[number] | undefined) => Promise<InfraLogEntry[]>;
   readResources: (range: ResourceRange) => Promise<ResourceSample[]>;
+  /** cAdvisorから今の値を直接取得する。cAdvisor未設定ならnull。 */
+  readCurrentResources: () => Promise<ResourceSample | null>;
 }
 
 export type StatusAccess = "owner" | "viewer" | null;
@@ -62,6 +64,8 @@ export function createStatusRouter(deps: StatusDeps) {
     resources: viewerProcedure
       .input(z.object({ range: z.enum(["1h", "24h", "7d"]) }))
       .query(async ({ input }) => ({ samples: await deps.readResources(input.range) })),
+
+    resourcesNow: viewerProcedure.query(async () => ({ sample: await deps.readCurrentResources() })),
 
     viewers: ownerProcedure.query(async ({ ctx }) => {
       const [owners, viewers] = await Promise.all([

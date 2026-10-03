@@ -102,7 +102,12 @@ export interface ResourceRedis {
 
 type FetchFn = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
-async function sampleOnce(redis: ResourceRedis, base: string, fetchFn: FetchFn, now: () => Date): Promise<void> {
+/** cAdvisorの3エンドポイントを取得して1サンプルにする。応答が想定外ならnull、通信失敗は例外。 */
+export async function fetchResourceSample(
+  cadvisorUrl: string,
+  { fetch: fetchFn = globalThis.fetch, now = () => new Date() }: { fetch?: FetchFn; now?: () => Date } = {},
+): Promise<ResourceSample | null> {
+  const base = cadvisorUrl.replace(/\/$/, "");
   const get = async (path: string): Promise<unknown> => {
     const res = await fetchFn(`${base}${path}`, { signal: AbortSignal.timeout(5_000) });
     if (!res.ok) throw new Error(`cAdvisor ${path} responded not ok`);
@@ -113,7 +118,11 @@ async function sampleOnce(redis: ResourceRedis, base: string, fetchFn: FetchFn, 
     get("/api/v1.3/containers/"),
     get("/api/v1.3/docker/"),
   ]);
-  const sample = parseCadvisor(machine, root, docker, now());
+  return parseCadvisor(machine, root, docker, now());
+}
+
+async function sampleOnce(redis: ResourceRedis, cadvisorUrl: string, options: Parameters<typeof fetchResourceSample>[1]): Promise<void> {
+  const sample = await fetchResourceSample(cadvisorUrl, options);
   if (!sample) throw new Error("unexpected cAdvisor response");
   await redis.lpush(INFRA_RESOURCES_KEY, JSON.stringify(sample));
   await redis.ltrim(INFRA_RESOURCES_KEY, 0, RESOURCE_SAMPLE_MAXLEN - 1);
@@ -123,11 +132,10 @@ async function sampleOnce(redis: ResourceRedis, base: string, fetchFn: FetchFn, 
 export function startResourceSampler(
   redis: ResourceRedis,
   cadvisorUrl: string,
-  { fetch: fetchFn = globalThis.fetch, now = () => new Date() }: { fetch?: FetchFn; now?: () => Date } = {},
+  options: { fetch?: FetchFn; now?: () => Date } = {},
 ): () => void {
-  const base = cadvisorUrl.replace(/\/$/, "");
   const run = () =>
-    sampleOnce(redis, base, fetchFn, now).catch((error: unknown) => {
+    sampleOnce(redis, cadvisorUrl, options).catch((error: unknown) => {
       console.warn("Failed to sample resources from cAdvisor", error);
     });
   void run();
