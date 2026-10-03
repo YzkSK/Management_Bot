@@ -41,14 +41,34 @@ const { db, close } = createDb(env.DATABASE_URL);
 const client = new BotClient();
 // ステータス画面(issue #507)向け。ready=0ならGateway未接続として停止扱いにする。
 // 起動直後とready時にも即座に反映し、接続前の状態を稼働中と誤表示しない。
+// client.isReady()は一度readyになると切断後もtrueのままなので、shardイベントで接続状態を追う。
+// ponytail: 単一shard前提。複数shard化したらshard IDごとに状態を持つ。
+let gatewayUp = false;
+client.on("shardReady", () => (gatewayUp = true));
+client.on("shardResume", () => (gatewayUp = true));
+client.on("shardDisconnect", () => (gatewayUp = false));
+client.on("shardReconnecting", () => (gatewayUp = false));
 const reportBotDetail = () =>
   infraReporter.setDetail({
-    ready: client.isReady() ? 1 : 0,
+    ready: client.isReady() && gatewayUp ? 1 : 0,
     pingMs: client.ws.ping,
     guilds: client.guilds.cache.size,
   });
 reportBotDetail();
-const botDetailTimer = setInterval(reportBotDetail, HEARTBEAT_INTERVAL_MS);
+// Gateway未接続が続く場合はプロセスを終了し、restart: unless-stoppedで再起動させる(issue #571)。
+// discord.jsの自動再接続で戻らない詰まりへの保険。起動直後のlogin待ちも同じ猶予で扱う。
+const GATEWAY_DOWN_LIMIT_MS = 5 * 60_000;
+let lastReadyAt = Date.now();
+const botDetailTimer = setInterval(() => {
+  reportBotDetail();
+  if (client.isReady() && gatewayUp) {
+    lastReadyAt = Date.now();
+  } else if (Date.now() - lastReadyAt > GATEWAY_DOWN_LIMIT_MS) {
+    console.error(`Gateway disconnected for over ${GATEWAY_DOWN_LIMIT_MS / 1000}s, exiting to restart`);
+    clearInterval(botDetailTimer);
+    void shutdown().finally(() => process.exit(1));
+  }
+}, HEARTBEAT_INTERVAL_MS);
 botDetailTimer.unref();
 const pendingOnboardings = new Set<Promise<void>>();
 // consumerGroupは機能ごとに一意にする(DomainEventBus参照)。同一typeを複数機能が
