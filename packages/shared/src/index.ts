@@ -83,7 +83,7 @@ export {
   type LogEntryFieldChange,
   type LogEntryAttachment,
 } from "./log-entry-summary.js";
-export { formatLogMessage } from "./format-log-message.js";
+export { formatLogMessage, NAME_MARKUP } from "./format-log-message.js";
 export {
   CHANGE_FIELD_LABELS,
   CHANNEL_REFERENCE_CHANGE_FIELDS,

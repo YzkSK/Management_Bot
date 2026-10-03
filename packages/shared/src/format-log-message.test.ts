@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatLogMessage } from "./format-log-message.js";
+import { formatLogMessage, NAME_MARKUP } from "./format-log-message.js";
 import { summarizeLogEntry } from "./log-entry-summary.js";
 import type { LogEntry } from "./log-entry.js";
 
@@ -205,6 +205,30 @@ describe("formatLogMessage", () => {
     const message = formatLogMessage(entry, summary, { users: { u1: "Yuzuki" }, channels: {} });
 
     expect(message).toBe("#c1 で Yuzuki がメッセージを投稿しました");
+  });
+
+  test("markup=trueではユーザー名・チャンネル名(スナップショット含む)を目印で囲む", () => {
+    const entry = {
+      category: "message",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      authorId: "u1",
+      authorName: "Yzk",
+      executorId: "u2",
+      executorName: "mod",
+      action: "delete",
+      content: "x",
+    } as unknown as LogEntry;
+    const { user, channel, end } = NAME_MARKUP;
+
+    const message = formatLogMessage(entry, summarizeLogEntry(entry), {
+      users: {},
+      channels: { c1: "雑談" },
+      markup: true,
+    });
+
+    expect(message).toBe(`${channel}#雑談${end} で ${user}mod${end} が ${user}Yzk${end} のメッセージを削除しました`);
   });
 
   test("メッセージ編集", () => {
