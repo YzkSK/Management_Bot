@@ -15,6 +15,30 @@ export const HEARTBEAT_INTERVAL_MS = 30_000;
 /** ハートビートがこれより古ければ停止とみなす(書き込み間隔の3倍)。 */
 export const HEARTBEAT_STALE_MS = HEARTBEAT_INTERVAL_MS * 3;
 
+/** サーバーのリソース使用状況(issue #548)。dashboard-apiがcAdvisorから採取してListへ積む。 */
+export const INFRA_RESOURCES_KEY = "infra:resources";
+export const RESOURCE_SAMPLE_INTERVAL_MS = 60_000;
+/** 1分間隔で7日分。 */
+export const RESOURCE_SAMPLE_MAXLEN = 10_080;
+
+export const resourceSampleSchema = z.object({
+  at: z.string(),
+  host: z.object({
+    cpuPercent: z.number(),
+    memUsedBytes: z.number(),
+    memTotalBytes: z.number(),
+    diskUsedBytes: z.number(),
+    diskTotalBytes: z.number(),
+    netRxBytesPerSec: z.number(),
+    netTxBytesPerSec: z.number(),
+    cores: z.number(),
+  }),
+  containers: z.array(
+    z.object({ name: z.string(), cpuPercent: z.number(), memUsedBytes: z.number(), startedAt: z.string() }),
+  ),
+});
+export type ResourceSample = z.infer<typeof resourceSampleSchema>;
+
 export const INFRA_LOG_SERVICES = ["bot", "api", "worker", "postgres", "redis"] as const;
 export type InfraLogService = (typeof INFRA_LOG_SERVICES)[number];
 export const INFRA_LOG_LEVELS = ["DEBUG", "INFO", "LOG", "WARN", "ERROR"] as const;
