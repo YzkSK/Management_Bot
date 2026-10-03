@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 export const STATUS_REFETCH_MS = 30_000;
 const LOG_REFETCH_MS = 5_000;
 const RESOURCE_REFETCH_MS = 60_000;
+const RESOURCE_NOW_REFETCH_MS = 5_000;
 
 const isNotFoundError = (error: unknown) => error instanceof TRPCClientError && error.data?.code === "NOT_FOUND";
 
@@ -156,10 +157,16 @@ function UsageBar({ percent, className }: { percent: number; className?: string 
 
 const percentOf = (used: number, total: number) => (total > 0 ? (used / total) * 100 : 0);
 
+/** 現在値は5秒ごとにcAdvisorから直接取る。取れない(未設定・失敗)ときは履歴の最新サンプルで代用する。 */
+function useCurrentSample<T>(fallback: T | undefined) {
+  const now = useQuery({ ...trpc.status.resourcesNow.queryOptions(), refetchInterval: RESOURCE_NOW_REFETCH_MS });
+  return now.data?.sample ?? fallback;
+}
+
 function ResourceTiles() {
   const resources = useQuery({ ...trpc.status.resources.queryOptions({ range: "1h" }), refetchInterval: RESOURCE_REFETCH_MS });
   const samples = resources.data?.samples ?? [];
-  const latest = samples.at(-1);
+  const latest = useCurrentSample(samples.at(-1));
   if (!latest) {
     return resources.isLoading ? null : <p className="text-muted-foreground text-sm">{EMPTY_RESOURCES}</p>;
   }
@@ -218,7 +225,7 @@ function ResourcesTab() {
   const [range, setRange] = useState<(typeof RANGE_OPTIONS)[number]["key"]>("1h");
   const resources = useQuery({ ...trpc.status.resources.queryOptions({ range }), refetchInterval: RESOURCE_REFETCH_MS });
   const samples = resources.data?.samples ?? [];
-  const latest = samples.at(-1);
+  const latest = useCurrentSample(samples.at(-1));
   const series = [
     { label: "CPU", stroke: "stroke-primary", bg: "bg-primary", values: samples.map((s) => s.host.cpuPercent) },
     { label: "メモリ", stroke: "stroke-warning", bg: "bg-warning", values: samples.map((s) => percentOf(s.host.memUsedBytes, s.host.memTotalBytes)) },
@@ -306,7 +313,7 @@ function ResourcesTab() {
           </section>
         </>
       )}
-      <p className="text-muted-foreground text-xs">1分ごとに採取し、直近7日分を保持します。</p>
+      <p className="text-muted-foreground text-xs">現在値とコンテナ別の表は5秒ごとに更新します。グラフは1分ごとに採取し、直近7日分を保持します。</p>
     </>
   );
 }
