@@ -24,7 +24,8 @@ sinks:
   dashboard:
     type: redis
     inputs: [tagged]
-    endpoint: redis://redis:6379/0
+    # 認証情報を含むため各composeのenvironmentから渡す(issue #551)。
+    endpoint: "${VECTOR_REDIS_ENDPOINT}"
     key: infra:logs:ingest
     data_type: channel
     encoding:
