@@ -4,7 +4,7 @@ import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { Redis } from "ioredis";
 import { cors } from "hono/cors";
-import { createTtlCache, startInfraReporter } from "@management-bot/shared";
+import { createTtlCache, startInfraReporter, type ResourceSample } from "@management-bot/shared";
 import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
@@ -35,12 +35,17 @@ const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
 startInfraReporter(redis, { name: "api", service: "api" });
 // オーナーはDeveloper Portalでしか変わらないため数分キャッシュする(issue #507)。
 const botOwnersCache = createTtlCache<readonly BotOwner[]>(5 * 60_000);
+// 閲覧者ごとの5秒ポーリングをまとめ、cAdvisorへの問い合わせを閲覧者数に比例させない(issue #548)。
+const currentResourcesCache = createTtlCache<ResourceSample | null>(4_000);
 const appRouter = createAppRouter({
   getBotOwners: () => botOwnersCache("owners", () => fetchBotOwners(env.DISCORD_TOKEN)),
   collectStatus: () => collectStatus(db, redis),
   readLogs: (service) => readInfraLogs(redis, service),
   readResources: (range) => readResourceSamples(redis, range),
-  readCurrentResources: async () => (env.CADVISOR_URL ? fetchResourceSample(env.CADVISOR_URL) : null),
+  readCurrentResources: async () => {
+    const url = env.CADVISOR_URL;
+    return url ? currentResourcesCache("now", () => fetchResourceSample(url)) : null;
+  },
 });
 // cAdvisorが無い環境(ローカル等)ではリソースのサンプリングを起動しない(issue #548)。
 if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL);
