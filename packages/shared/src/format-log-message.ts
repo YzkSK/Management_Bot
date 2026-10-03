@@ -71,12 +71,15 @@ interface NameResolvers {
 /** markup=true時に名前を囲む目印(私用領域文字、ログ本文に現れない前提)。 */
 export const NAME_MARKUP = { user: "", channel: "", end: "" } as const;
 
+// 表示名に目印文字が紛れていても描画側の分割が崩れないよう、囲む前に取り除く。
+const NAME_MARKUP_CHARS = /[-]/g;
+
 function markUser(text: string, names: NameResolvers): string {
-  return names.markup ? `${NAME_MARKUP.user}${text}${NAME_MARKUP.end}` : text;
+  return names.markup ? `${NAME_MARKUP.user}${text.replace(NAME_MARKUP_CHARS, "")}${NAME_MARKUP.end}` : text;
 }
 
 function markChannel(text: string, names: NameResolvers): string {
-  return names.markup ? `${NAME_MARKUP.channel}${text}${NAME_MARKUP.end}` : text;
+  return names.markup ? `${NAME_MARKUP.channel}${text.replace(NAME_MARKUP_CHARS, "")}${NAME_MARKUP.end}` : text;
 }
 
 /**
@@ -96,7 +99,7 @@ function userName(id: string, names: NameResolvers, snapshot?: string): string {
 function channelName(id: string, names: NameResolvers, snapshot?: string): string {
   if (snapshot) return markChannel(`#${snapshot}`, names);
   if (names.mention) return `<#${id}>`;
-  return markChannel(`#${names.channels[id] ?? id}`, names);
+  return markChannel(`#${names.channels[id] || id}`, names);
 }
 
 /** summarizeLogEntryの出力(カテゴリ横断の共通形式)を、一覧カード見出し用の日本語1文に変換する。 */
