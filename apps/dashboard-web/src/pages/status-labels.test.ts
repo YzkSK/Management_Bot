@@ -1,6 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import type { InfraLogEntry } from "@management-bot/shared";
-import { describeItem, filterLogs } from "./status-labels.js";
+import { describeItem, filterLogs, formatBytes, formatUptime, toPolylinePoints, usageBarClass } from "./status-labels.js";
+
+describe("リソース表示の整形", () => {
+  test("formatBytesは1024進数で単位を付ける", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(20.6 * 1024 ** 3)).toBe("20.6 GB");
+  });
+  test("formatUptimeは日・時間・分の上位2単位まで", () => {
+    expect(formatUptime(((3 * 24 + 4) * 60 + 7) * 60_000)).toBe("3日 4時間");
+    expect(formatUptime((4 * 60 + 5) * 60_000)).toBe("4時間 5分");
+    expect(formatUptime(5 * 60_000)).toBe("5分");
+  });
+  test("usageBarClassは80%と90%で色を変える", () => {
+    expect(usageBarClass(79.9)).toBe("bg-success");
+    expect(usageBarClass(80)).toBe("bg-warning");
+    expect(usageBarClass(90)).toBe("bg-destructive");
+  });
+  test("toPolylinePointsは下端を0として写し、範囲外は丸める", () => {
+    expect(toPolylinePoints([0, 50, 200], 100, 100, 10)).toBe("0.0,10.0 50.0,5.0 100.0,0.0");
+    expect(toPolylinePoints([50], 100, 100, 10)).toBe("0.0,5.0");
+  });
+});
 
 const entry = (level: InfraLogEntry["level"], msg: string): InfraLogEntry => ({
   at: "2026-09-30T00:00:00.000Z",
