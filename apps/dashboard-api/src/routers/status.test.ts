@@ -18,6 +18,8 @@ const deps: StatusDeps = {
   getBotOwners: async () => [{ id: OWNER, name: "owner" }],
   collectStatus: async () => ({ checkedAt: "2026-09-30T00:00:00.000Z", summary: "ok", items: [] }),
   readLogs: async () => [],
+  readResources: async () => [],
+  readCurrentResources: async () => null,
 };
 
 async function cleanup() {
@@ -59,6 +61,13 @@ describe("status router", () => {
   test("オーナーでも許可ユーザーでもない人にはNOT_FOUNDを返す", async () => {
     expect(await errorCode(callerFor(STRANGER).overview())).toBe("NOT_FOUND");
     expect(await errorCode(callerFor(STRANGER).logs({}))).toBe("NOT_FOUND");
+    expect(await errorCode(callerFor(STRANGER).resources({ range: "1h" }))).toBe("NOT_FOUND");
+    expect(await errorCode(callerFor(STRANGER).resourcesNow())).toBe("NOT_FOUND");
+  });
+
+  test("閲覧できる人にはリソースのサンプルを返す", async () => {
+    expect(await callerFor(OWNER).resources({ range: "24h" })).toEqual({ samples: [] });
+    expect(await callerFor(OWNER).resourcesNow()).toEqual({ sample: null });
   });
 
   test("オーナーが追加したユーザーは閲覧できるが、閲覧権限の管理はできない", async () => {

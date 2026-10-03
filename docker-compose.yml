@@ -49,6 +49,28 @@ services:
       redis:
         condition: service_healthy
 
+  # ステータス画面のリソース表示用(issue #548)。ホスト全体の値だけを取る(コンテナ別はcontainerdイメージストアで認識できないためdocker-proxy経由)。
+  # portsは公開せず、dashboard-apiがcompose内部から参照する。
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.53.0
+    restart: unless-stopped
+    command:
+      - --housekeeping_interval=5s
+      - --disable_metrics=percpu,sched,tcp,udp,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl,process
+    volumes:
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /dev/disk/:/dev/disk:ro
+
+  # ステータス画面のコンテナ別リソース表示用(issue #548)。コンテナ情報の読み取りだけを許可する。
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.1
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   migrate:
     build:
       context: .
@@ -88,6 +110,8 @@ services:
       REDIS_URL: redis://redis:6379
       DASHBOARD_WEB_URL: ${DASHBOARD_WEB_URL}
       DISCORD_OAUTH_REDIRECT_URI: ${DISCORD_OAUTH_REDIRECT_URI}
+      CADVISOR_URL: http://cadvisor:8080
+      DOCKER_API_URL: http://docker-proxy:2375
     depends_on:
       redis:
         condition: service_healthy

@@ -61,6 +61,25 @@ interface NameResolvers {
    * 不自然な平文表示のため、省略時(undefined)は従来通り表示名を返す。
    */
   mention?: boolean;
+  /**
+   * trueの場合、ユーザー名・チャンネル名をNAME_MARKUPの私用領域文字で囲んで返す。
+   * dashboard-webの一覧でピル表示するための目印(#546)。mention=trueと併用しない。
+   */
+  markup?: boolean;
+}
+
+/** markup=true時に名前を囲む目印(私用領域文字、ログ本文に現れない前提)。 */
+export const NAME_MARKUP = { user: "", channel: "", end: "" } as const;
+
+// 表示名に目印文字が紛れていても描画側の分割が崩れないよう、囲む前に取り除く。
+const NAME_MARKUP_CHARS = /[-]/g;
+
+function markUser(text: string, names: NameResolvers): string {
+  return names.markup ? `${NAME_MARKUP.user}${text.replace(NAME_MARKUP_CHARS, "")}${NAME_MARKUP.end}` : text;
+}
+
+function markChannel(text: string, names: NameResolvers): string {
+  return names.markup ? `${NAME_MARKUP.channel}${text.replace(NAME_MARKUP_CHARS, "")}${NAME_MARKUP.end}` : text;
 }
 
 /**
@@ -70,7 +89,7 @@ interface NameResolvers {
  */
 function userName(id: string, names: NameResolvers, snapshot?: string): string {
   if (names.mention) return `<@${id}>`;
-  return snapshot ?? names.users[id] ?? id;
+  return markUser(snapshot ?? names.users[id] ?? id, names);
 }
 
 /**
@@ -78,10 +97,9 @@ function userName(id: string, names: NameResolvers, snapshot?: string): string {
  * (<#id>はチャンネル削除後にDiscordクライアント上で「不明」表示になるため)。
  */
 function channelName(id: string, names: NameResolvers, snapshot?: string): string {
-  if (snapshot) return `#${snapshot}`;
+  if (snapshot) return markChannel(`#${snapshot}`, names);
   if (names.mention) return `<#${id}>`;
-  const name = names.channels[id];
-  return name ? `#${name}` : `#${id}`;
+  return markChannel(`#${names.channels[id] || id}`, names);
 }
 
 /** summarizeLogEntryの出力(カテゴリ横断の共通形式)を、一覧カード見出し用の日本語1文に変換する。 */
@@ -89,7 +107,9 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
   // executorNameはログ作成後の監査ログ相関時点のスナップショット(常にresolveDisplayNamesより新鮮)を優先し、
   // 未設定(スナップショット導入前の既存ログ、または相関自体が未発生)の場合のみ名前解決結果にフォールバックする。
   const executorName = entry.executorId
-    ? (entry.executorName ?? userName(entry.executorId, names))
+    ? entry.executorName != null
+      ? markUser(entry.executorName, names)
+      : userName(entry.executorId, names)
     : summary.subjectId
       ? userName(summary.subjectId, names)
       : "不明なユーザー";
@@ -214,7 +234,8 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
         case "timeoutRemove":
           return `${executorName} が ${targetName} のタイムアウトを解除しました`;
         case "nicknameChange": {
-          const previousName = entry.changes?.nickname.before ?? entry.previousUserName ?? targetName;
+          const previousSnapshot = entry.changes?.nickname.before ?? entry.previousUserName;
+          const previousName = previousSnapshot != null ? markUser(previousSnapshot, names) : targetName;
           const isSelfChange = entry.executorId === undefined || entry.executorId === entry.userId;
           if (isSelfChange) {
             return `${previousName} がニックネームを変更しました`;
@@ -268,7 +289,7 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     case "thread": {
       // threadNameはログ作成時点のスナップショット(常に存在)を優先し、
       // 移行前の既存ログ(threadName未設定)のみDiscord REST APIの名前解決にフォールバックする。
-      const threadLabel = entry.threadName ? `#${entry.threadName}` : channelName(entry.threadId, names);
+      const threadLabel = entry.threadName ? markChannel(`#${entry.threadName}`, names) : channelName(entry.threadId, names);
       switch (entry.action) {
         case "create":
           return `${executorName} が ${threadLabel} を作成しました`;
@@ -330,7 +351,9 @@ export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, name
     }
     case "autoMod": {
       const ruleExecutorName = entry.executorId
-        ? (entry.executorName ?? userName(entry.executorId, names))
+        ? entry.executorName != null
+          ? markUser(entry.executorName, names)
+          : userName(entry.executorId, names)
         : "不明なユーザー";
       switch (entry.action) {
         case "ruleCreate":

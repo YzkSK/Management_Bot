@@ -1,16 +1,26 @@
 import { protectedProcedure, router } from "@management-bot/dashboard-access";
 import { sessions, statusViewers, type Db } from "@management-bot/db";
-import { discordIdSchema, INFRA_LOG_MAXLEN, INFRA_LOG_SERVICES, type InfraLogEntry } from "@management-bot/shared";
+import {
+  discordIdSchema,
+  INFRA_LOG_MAXLEN,
+  INFRA_LOG_SERVICES,
+  type InfraLogEntry,
+  type ResourceSample,
+} from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { BotOwner } from "../discord/bot-client.js";
 import type { StatusOverview } from "../status/collect-status.js";
+import type { ResourceRange } from "../status/resources.js";
 
 export interface StatusDeps {
   getBotOwners: () => Promise<readonly BotOwner[]>;
   collectStatus: () => Promise<StatusOverview>;
   readLogs: (service: (typeof INFRA_LOG_SERVICES)[number] | undefined) => Promise<InfraLogEntry[]>;
+  readResources: (range: ResourceRange) => Promise<ResourceSample[]>;
+  /** cAdvisorから今の値を直接取得する。cAdvisor未設定ならnull。 */
+  readCurrentResources: () => Promise<ResourceSample | null>;
 }
 
 export type StatusAccess = "owner" | "viewer" | null;
@@ -50,6 +60,12 @@ export function createStatusRouter(deps: StatusDeps) {
     logs: viewerProcedure
       .input(z.object({ service: z.enum(INFRA_LOG_SERVICES).optional() }))
       .query(async ({ input }) => ({ entries: await deps.readLogs(input.service), retained: INFRA_LOG_MAXLEN })),
+
+    resources: viewerProcedure
+      .input(z.object({ range: z.enum(["1h", "24h", "7d"]) }))
+      .query(async ({ input }) => ({ samples: await deps.readResources(input.range) })),
+
+    resourcesNow: viewerProcedure.query(async () => ({ sample: await deps.readCurrentResources() })),
 
     viewers: ownerProcedure.query(async ({ ctx }) => {
       const [owners, viewers] = await Promise.all([

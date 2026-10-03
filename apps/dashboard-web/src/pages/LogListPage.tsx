@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry, type MessageAttachment, contentWithoutGifLinks } from "@management-bot/shared";
 import {
@@ -10,6 +10,7 @@ import {
   diffPermissions,
   formatChangeValue,
   formatLogMessage,
+  NAME_MARKUP,
   isBulkDeleteLogEntry,
   summarizeLogEntry,
 } from "@management-bot/shared";
@@ -146,6 +147,30 @@ function withNameSkeletons(message: string): ReactNode {
         part
       ),
     );
+}
+
+const NAME_PILL_PATTERN = new RegExp(`([${NAME_MARKUP.user}${NAME_MARKUP.channel}][^${NAME_MARKUP.end}]*${NAME_MARKUP.end})`);
+
+/** NAME_MARKUPで囲まれたユーザー名・チャンネル名をピル表示にする(#546)。ピル内の名前解決中IDはスケルトンにする。 */
+function renderLogMessage(message: string): ReactNode {
+  return message.split(NAME_PILL_PATTERN).map((part, i) => {
+    const isUser = part.startsWith(NAME_MARKUP.user);
+    if (!isUser && !part.startsWith(NAME_MARKUP.channel)) return <Fragment key={i}>{withNameSkeletons(part)}</Fragment>;
+    const name = part.slice(1, -1);
+    return (
+      <span
+        key={i}
+        className={
+          isUser
+            ? "rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200"
+            : "rounded bg-emerald-100 px-1.5 font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+        }
+      >
+        {isUser && "@"}
+        {withNameSkeletons(name)}
+      </span>
+    );
+  });
 }
 
 /**
@@ -385,7 +410,7 @@ export function LogListPage() {
                 const names = namesQuery.isLoading
                   ? { users: pendingNames(subjectIds), channels: pendingNames(channelIds) }
                   : { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
-                const message = formatLogMessage(entry, summary, names);
+                const message = formatLogMessage(entry, summary, { ...names, markup: true });
                 const isExpanded = expandedIds.has(id);
                 const detailId = `log-detail-${id}`;
                 const collapsedDetailId = `collapsed-log-detail-${id}`;
@@ -418,7 +443,7 @@ export function LogListPage() {
                             {CATEGORY_LABELS[entry.category]}
                           </span>
                         </span>
-                        <span className="min-w-0 flex-1 text-sm">{withNameSkeletons(message)}</span>
+                        <span className="min-w-0 flex-1 text-sm">{renderLogMessage(message)}</span>
                       </span>
                     </button>
 
@@ -582,10 +607,10 @@ export function LogListPage() {
                           <div id={collapsedDetailId} className="flex flex-col gap-2 border-t bg-muted/40 p-3">
                             {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
                               const collapsedSummary = summarizeLogEntry(collapsedEntry);
-                              const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, names);
+                              const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, { ...names, markup: true });
                               return (
                                 <article key={collapsedId} className="flex flex-col gap-2 rounded-md border bg-card p-3">
-                                  <p className="text-sm">{collapsedMessage}</p>
+                                  <p className="text-sm">{renderLogMessage(collapsedMessage)}</p>
                                   {collapsedSummary.content !== null &&
                                     contentWithoutGifLinks(collapsedSummary.content, collapsedSummary.attachments) !== null && (
                                     <p className="text-sm whitespace-pre-wrap">
@@ -609,7 +634,7 @@ export function LogListPage() {
                                           const nestedSummary = summarizeLogEntry(nestedEntry);
                                           return (
                                             <article key={nestedId} className="rounded-md border bg-card p-2">
-                                              <p className="text-sm">{formatLogMessage(nestedEntry, nestedSummary, names)}</p>
+                                              <p className="text-sm">{renderLogMessage(formatLogMessage(nestedEntry, nestedSummary, { ...names, markup: true }))}</p>
                                               {nestedSummary.content !== null &&
                                                 contentWithoutGifLinks(nestedSummary.content, nestedSummary.attachments) !== null && (
                                                 <p className="mt-1 text-sm whitespace-pre-wrap">

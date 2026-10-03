@@ -83,7 +83,7 @@ export {
   type LogEntryFieldChange,
   type LogEntryAttachment,
 } from "./log-entry-summary.js";
-export { formatLogMessage } from "./format-log-message.js";
+export { formatLogMessage, NAME_MARKUP } from "./format-log-message.js";
 export {
   CHANGE_FIELD_LABELS,
   CHANNEL_REFERENCE_CHANGE_FIELDS,
@@ -118,6 +118,11 @@ export {
   INFRA_LOG_INGEST_CHANNEL,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_STALE_MS,
+  INFRA_RESOURCES_KEY,
+  RESOURCE_SAMPLE_INTERVAL_MS,
+  RESOURCE_SAMPLE_MAXLEN,
+  resourceSampleSchema,
+  type ResourceSample,
   INFRA_LOG_SERVICES,
   INFRA_LOG_LEVELS,
   infraLogEntrySchema,

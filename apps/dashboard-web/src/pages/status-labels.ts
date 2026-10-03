@@ -82,6 +82,40 @@ export function describeItem(item: StatusItem): string {
   }
 }
 
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+/** 1024進数で「20.6 GB」形式にする。 */
+export function formatBytes(bytes: number): string {
+  let value = Math.max(0, bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${unit === 0 ? Math.round(value) : value.toFixed(1)} ${BYTE_UNITS[unit]}`;
+}
+
+/** 経過時間を「3日 4時間」「4時間 5分」「5分」にする。 */
+export function formatUptime(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `${days}日 ${hours}時間`;
+  if (hours > 0) return `${hours}時間 ${minutes % 60}分`;
+  return `${minutes}分`;
+}
+
+/** 使用率に応じたバーの色。80%以上で警告、90%以上で危険。 */
+export const usageBarClass = (percent: number) =>
+  percent >= 90 ? "bg-destructive" : percent >= 80 ? "bg-warning" : "bg-success";
+
+/** 値の列をSVGのpolyline用`x,y`列にする。yは0〜max(はみ出しは丸める)を高さheightへ反転して写す。 */
+export function toPolylinePoints(values: readonly number[], max: number, width: number, height: number): string {
+  const last = Math.max(values.length - 1, 1);
+  return values
+    .map((v, i) => `${((i / last) * width).toFixed(1)},${(height - (Math.min(Math.max(v, 0), max) / max) * height).toFixed(1)}`)
+    .join(" ");
+}
+
 /** 総合ログのサービス名ラベル(暗いログ背景上の色)。 */
 export const SERVICE_META: Record<InfraLogService, { label: string; text: string; bar: string }> = {
   bot: { label: "Bot", text: "text-blue-400", bar: "bg-blue-400" },
