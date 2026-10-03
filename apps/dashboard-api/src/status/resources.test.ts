@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { INFRA_RESOURCES_KEY, RESOURCE_SAMPLE_MAXLEN, resourceSampleSchema, type ResourceSample } from "@management-bot/shared";
-import { parseCadvisor, readResourceSamples, startResourceSampler, type ResourceRedis } from "./resources.js";
+import {
+  fetchContainers,
+  fetchResourceSample,
+  parseCadvisorHost,
+  readResourceSamples,
+  startResourceSampler,
+  type ResourceRedis,
+} from "./resources.js";
+
+type FetchFn = NonNullable<Parameters<typeof fetchContainers>[1]>["fetch"] & {};
 
 const GB = 1024 ** 3;
 const AT = new Date("2026-10-03T00:00:00.000Z");
@@ -19,45 +28,91 @@ const stat = (seconds: number, cpuNs: number, mem: number, rx = 0, tx = 0) => ({
 const machine = { num_cores: 4, memory_capacity: 8 * GB };
 // 30秒で2コア分(= 4コア中50%)を使用、NICは2本合計で1秒あたり rx 2000B / tx 1000B
 const root = { stats: [stat(0, 0, 1 * GB, 0, 0), stat(30, 60e9, 2 * GB, 30_000, 15_000)] };
-const docker = {
-  abc: {
-    spec: { creation_time: "2026-10-01T00:00:00Z", labels: { "com.docker.compose.service": "bot" } },
-    stats: [stat(0, 0, 100), stat(30, 12e9, 200)],
-  },
-  nolabel: { spec: { creation_time: "2026-10-01T00:00:00Z" }, stats: [stat(0, 0, 1), stat(30, 1, 1)] },
-  single: {
-    spec: { creation_time: "2026-10-01T00:00:00Z", labels: { "com.docker.compose.service": "redis" } },
-    stats: [stat(30, 1, 1)],
-  },
-};
 
-describe("parseCadvisor", () => {
-  test("ホストとコンテナの使用状況を取り出す", () => {
-    const sample = parseCadvisor(machine, root, docker, AT);
-    expect(sample).not.toBeNull();
-    expect(sample?.host.cpuPercent).toBeCloseTo(50);
-    expect(sample?.host.memUsedBytes).toBe(2 * GB);
-    expect(sample?.host.memTotalBytes).toBe(8 * GB);
-    expect(sample?.host.diskUsedBytes).toBe(40 * GB);
-    expect(sample?.host.diskTotalBytes).toBe(100 * GB);
-    expect(sample?.host.netRxBytesPerSec).toBeCloseTo(2000);
-    expect(sample?.host.netTxBytesPerSec).toBeCloseTo(1000);
-    expect(sample?.host.cores).toBe(4);
-    // ラベル無し・stats1点のコンテナは除外される
-    expect(sample?.containers).toEqual([
-      { name: "bot", cpuPercent: expect.closeTo(10), memUsedBytes: 200, startedAt: "2026-10-01T00:00:00Z" },
-    ]);
-    expect(resourceSampleSchema.safeParse(sample).success).toBe(true);
+describe("parseCadvisorHost", () => {
+  test("ホスト全体の使用状況を取り出す", () => {
+    const host = parseCadvisorHost(machine, root);
+    expect(host?.cpuPercent).toBeCloseTo(50);
+    expect(host?.memUsedBytes).toBe(2 * GB);
+    expect(host?.memTotalBytes).toBe(8 * GB);
+    expect(host?.diskUsedBytes).toBe(40 * GB);
+    expect(host?.diskTotalBytes).toBe(100 * GB);
+    expect(host?.netRxBytesPerSec).toBeCloseTo(2000);
+    expect(host?.netTxBytesPerSec).toBeCloseTo(1000);
+    expect(host?.cores).toBe(4);
   });
 
   test("ルートのstatsが1点ならnull", () => {
-    expect(parseCadvisor(machine, { stats: [stat(0, 0, 1)] }, docker, AT)).toBeNull();
+    expect(parseCadvisorHost(machine, { stats: [stat(0, 0, 1)] })).toBeNull();
   });
 
   test("不正な入力はnull", () => {
-    expect(parseCadvisor(null, root, docker, AT)).toBeNull();
-    expect(parseCadvisor(machine, "x", docker, AT)).toBeNull();
-    expect(parseCadvisor(machine, root, { a: 1 }, AT)).toBeNull();
+    expect(parseCadvisorHost(null, root)).toBeNull();
+    expect(parseCadvisorHost(machine, "x")).toBeNull();
+  });
+});
+
+// Docker Engine APIのフィクスチャ。botはホスト全体のCPU差分(1000)のうち100 = 10%、メモリは usage 300 - inactive_file 100 = 200。
+const dockerStats = (cpu: number, preCpu: number | undefined, system: number, preSystem: number | undefined, usage: number, inactive?: number) => ({
+  cpu_stats: { cpu_usage: { total_usage: cpu }, system_cpu_usage: system },
+  precpu_stats: preCpu === undefined ? {} : { cpu_usage: { total_usage: preCpu }, system_cpu_usage: preSystem },
+  memory_stats: { usage, stats: inactive === undefined ? {} : { inactive_file: inactive } },
+});
+const dockerApi: Record<string, unknown> = {
+  "/containers/json": [
+    { Id: "bot1", Labels: { "com.docker.compose.service": "bot" } },
+    { Id: "nolabel", Labels: {} },
+    { Id: "fresh", Labels: { "com.docker.compose.service": "redis" } },
+    { Id: "broken", Labels: { "com.docker.compose.service": "postgres" } },
+  ],
+  "/containers/bot1/stats?stream=false": dockerStats(1100, 1000, 11_000, 10_000, 300, 100),
+  "/containers/bot1/json": { State: { StartedAt: "2026-10-01T00:00:00Z" } },
+  // precpu欠落は0%、メモリがinactive_fileより小さくても負にしない
+  "/containers/fresh/stats?stream=false": dockerStats(1100, undefined, 11_000, undefined, 50, 100),
+  "/containers/fresh/json": { State: { StartedAt: "2026-10-02T00:00:00Z" } },
+};
+const dockerFetch: FetchFn = async (url) => {
+  const path = url.replace("http://docker-proxy:2375", "");
+  if (!(path in dockerApi)) return { ok: false, json: async () => ({}) };
+  return { ok: true, json: async () => dockerApi[path] };
+};
+
+describe("fetchContainers", () => {
+  test("composeのサービスだけを対象に、CPU%・メモリ(inactive_file除外)・起動時刻を取る。個別の失敗はスキップ", async () => {
+    expect(await fetchContainers("http://docker-proxy:2375/", { fetch: dockerFetch })).toEqual([
+      { name: "bot", cpuPercent: expect.closeTo(10), memUsedBytes: 200, startedAt: "2026-10-01T00:00:00Z" },
+      { name: "redis", cpuPercent: 0, memUsedBytes: 0, startedAt: "2026-10-02T00:00:00Z" },
+    ]);
+  });
+});
+
+describe("fetchResourceSample", () => {
+  const cadvisorPayloads: Record<string, unknown> = { "/api/v1.3/machine": machine, "/api/v1.3/containers/": root };
+  const route: FetchFn = (url, init) =>
+    url.startsWith("http://cadvisor:8080")
+      ? Promise.resolve({ ok: true, json: async () => cadvisorPayloads[url.replace("http://cadvisor:8080", "")] })
+      : dockerFetch(url, init);
+
+  test("ホストとコンテナを合わせて返す", async () => {
+    const result = await fetchResourceSample("http://cadvisor:8080", "http://docker-proxy:2375", { fetch: route, now: () => AT });
+    expect(result?.at).toBe(AT.toISOString());
+    expect(result?.containers.map((c) => c.name)).toEqual(["bot", "redis"]);
+    expect(resourceSampleSchema.safeParse(result).success).toBe(true);
+  });
+
+  test("Docker APIが失敗・未設定でもホストは返る", async () => {
+    const down: FetchFn = (url, init) =>
+      url.startsWith("http://cadvisor:8080") ? route(url, init) : Promise.reject(new Error("proxy down"));
+    for (const dockerUrl of ["http://docker-proxy:2375", undefined]) {
+      const result = await fetchResourceSample("http://cadvisor:8080", dockerUrl, { fetch: down, now: () => AT });
+      expect(result?.host.cores).toBe(4);
+      expect(result?.containers).toEqual([]);
+    }
+  });
+
+  test("ホストが想定外の応答ならnull", async () => {
+    const bad: FetchFn = async () => ({ ok: true, json: async () => ({}) });
+    expect(await fetchResourceSample("http://cadvisor:8080", undefined, { fetch: bad })).toBeNull();
   });
 });
 
@@ -109,9 +164,8 @@ describe("startResourceSampler", () => {
     const payloads: Record<string, unknown> = {
       "/api/v1.3/machine": machine,
       "/api/v1.3/containers/": root,
-      "/api/v1.3/docker/": docker,
     };
-    const stop = startResourceSampler(redis, "http://cadvisor:8080/", {
+    const stop = startResourceSampler(redis, "http://cadvisor:8080/", undefined, {
       fetch: async (url) => ({ ok: true, json: async () => payloads[url.replace("http://cadvisor:8080", "")] }),
       now: () => AT,
     });
@@ -120,7 +174,7 @@ describe("startResourceSampler", () => {
     expect(redis.calls).toEqual([`lpush ${INFRA_RESOURCES_KEY} true`, `ltrim ${INFRA_RESOURCES_KEY} 0 ${RESOURCE_SAMPLE_MAXLEN - 1}`]);
 
     const failing = fakeRedis([]);
-    const stop2 = startResourceSampler(failing, "http://cadvisor:8080", { fetch: async () => Promise.reject(new Error("down")) });
+    const stop2 = startResourceSampler(failing, "http://cadvisor:8080", undefined, { fetch: async () => Promise.reject(new Error("down")) });
     await Bun.sleep(20);
     stop2();
     expect(failing.calls).toEqual([]);

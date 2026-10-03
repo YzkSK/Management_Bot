@@ -21,13 +21,6 @@ const statSchema = z.object({
 type Stat = z.infer<typeof statSchema>;
 
 const rootSchema = z.object({ stats: z.array(statSchema) });
-const dockerSchema = z.record(
-  z.string(),
-  z.object({
-    spec: z.object({ creation_time: z.string(), labels: z.record(z.string(), z.string()).optional() }),
-    stats: z.array(statSchema),
-  }),
-);
 
 const SERVICE_LABEL = "com.docker.compose.service";
 
@@ -43,12 +36,11 @@ const netTotals = (stat: Stat) => {
   return { rx: ifaces.reduce((sum, i) => sum + i.rx_bytes, 0), tx: ifaces.reduce((sum, i) => sum + i.tx_bytes, 0) };
 };
 
-/** cAdvisorの3エンドポイントの応答を1サンプルにまとめる。必要な値が揃わなければnull。 */
-export function parseCadvisor(machine: unknown, root: unknown, docker: unknown, at: Date): ResourceSample | null {
+/** cAdvisorのmachine/ルートコンテナの応答からホスト全体の使用状況を取り出す。必要な値が揃わなければnull。 */
+export function parseCadvisorHost(machine: unknown, root: unknown): ResourceSample["host"] | null {
   const m = machineSchema.safeParse(machine);
   const r = rootSchema.safeParse(root);
-  const d = dockerSchema.safeParse(docker);
-  if (!m.success || !r.success || !d.success) return null;
+  if (!m.success || !r.success) return null;
   const cores = m.data.num_cores;
   const [prev, last] = r.data.stats.slice(-2);
   if (!prev || !last || cores <= 0) return null;
@@ -62,35 +54,67 @@ export function parseCadvisor(machine: unknown, root: unknown, docker: unknown, 
     null,
   );
 
-  const containers: ResourceSample["containers"] = [];
-  for (const container of Object.values(d.data)) {
-    const name = container.spec.labels?.[SERVICE_LABEL];
-    const [cPrev, cLast] = container.stats.slice(-2);
-    if (!name || !cPrev || !cLast) continue;
-    const percent = cpuPercent(cPrev, cLast, cores);
-    if (percent === null) continue;
-    containers.push({
-      name,
-      cpuPercent: percent,
-      memUsedBytes: cLast.memory.working_set,
-      startedAt: container.spec.creation_time,
-    });
-  }
-
   return {
-    at: at.toISOString(),
-    host: {
-      cpuPercent: cpu,
-      memUsedBytes: last.memory.working_set,
-      memTotalBytes: m.data.memory_capacity,
-      diskUsedBytes: disk?.usage ?? 0,
-      diskTotalBytes: disk?.capacity ?? 0,
-      netRxBytesPerSec: Math.max(0, (after.rx - before.rx) / elapsedSec),
-      netTxBytesPerSec: Math.max(0, (after.tx - before.tx) / elapsedSec),
-      cores,
-    },
-    containers,
+    cpuPercent: cpu,
+    memUsedBytes: last.memory.working_set,
+    memTotalBytes: m.data.memory_capacity,
+    diskUsedBytes: disk?.usage ?? 0,
+    diskTotalBytes: disk?.capacity ?? 0,
+    netRxBytesPerSec: Math.max(0, (after.rx - before.rx) / elapsedSec),
+    netTxBytesPerSec: Math.max(0, (after.tx - before.tx) / elapsedSec),
+    cores,
   };
+}
+
+const containerListSchema = z.array(z.object({ Id: z.string(), Labels: z.record(z.string(), z.string()).nullish() }));
+const containerStatsSchema = z.object({
+  cpu_stats: z.object({ cpu_usage: z.object({ total_usage: z.number() }), system_cpu_usage: z.number().optional() }),
+  precpu_stats: z
+    .object({ cpu_usage: z.object({ total_usage: z.number() }).optional(), system_cpu_usage: z.number().optional() })
+    .optional(),
+  memory_stats: z.object({ usage: z.number(), stats: z.object({ inactive_file: z.number().optional() }).optional() }),
+});
+const containerInspectSchema = z.object({ State: z.object({ StartedAt: z.string() }) });
+
+/** Docker Engine APIの1コンテナ分のstatsから、ホスト全コア合計に対するCPU%とメモリ使用量(キャッシュ除く)を出す。 */
+export function parseContainerStats(stats: unknown): { cpuPercent: number; memUsedBytes: number } | null {
+  const s = containerStatsSchema.safeParse(stats);
+  if (!s.success) return null;
+  const { cpu_stats: cpu, precpu_stats: pre, memory_stats: mem } = s.data;
+  const cpuDelta = cpu.cpu_usage.total_usage - (pre?.cpu_usage?.total_usage ?? Number.NaN);
+  const systemDelta = (cpu.system_cpu_usage ?? Number.NaN) - (pre?.system_cpu_usage ?? Number.NaN);
+  // precpu欠落(NaN)や分母0以下は0%とする。
+  const percent = systemDelta > 0 && Number.isFinite(cpuDelta) ? Math.max(0, (cpuDelta / systemDelta) * 100) : 0;
+  return { cpuPercent: percent, memUsedBytes: Math.max(0, mem.usage - (mem.stats?.inactive_file ?? 0)) };
+}
+
+/** docker-socket-proxy経由でcompose管理下のコンテナの使用状況を取る。個別コンテナの失敗はスキップ、一覧が取れなければ例外。 */
+export async function fetchContainers(
+  dockerApiUrl: string,
+  { fetch: fetchFn = globalThis.fetch }: { fetch?: FetchFn } = {},
+): Promise<ResourceSample["containers"]> {
+  const base = dockerApiUrl.replace(/\/$/, "");
+  const get = async (path: string): Promise<unknown> => {
+    const res = await fetchFn(`${base}${path}`, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) throw new Error(`Docker API ${path} responded not ok`);
+    return res.json();
+  };
+  const list = containerListSchema.parse(await get("/containers/json"));
+  const results = await Promise.all(
+    list.map(async ({ Id, Labels }) => {
+      const name = Labels?.[SERVICE_LABEL];
+      if (!name) return null;
+      try {
+        const [stats, inspect] = await Promise.all([get(`/containers/${Id}/stats?stream=false`), get(`/containers/${Id}/json`)]);
+        const parsed = parseContainerStats(stats);
+        const info = containerInspectSchema.safeParse(inspect);
+        return parsed && info.success ? { name, ...parsed, startedAt: info.data.State.StartedAt } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((c): c is NonNullable<typeof c> => c !== null);
 }
 
 /** ioredisのRedisが構造的に満たす最小インターフェース。 */
@@ -102,9 +126,13 @@ export interface ResourceRedis {
 
 type FetchFn = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
-/** cAdvisorの3エンドポイントを取得して1サンプルにする。応答が想定外ならnull、通信失敗は例外。 */
+/**
+ * ホスト(cAdvisor)とコンテナ別(Docker API)を並列に取得して1サンプルにする。
+ * ホストが想定外の応答ならnull、cAdvisorの通信失敗は例外。コンテナ側の失敗・未設定は containers: [] で返す。
+ */
 export async function fetchResourceSample(
   cadvisorUrl: string,
+  dockerApiUrl: string | undefined,
   { fetch: fetchFn = globalThis.fetch, now = () => new Date() }: { fetch?: FetchFn; now?: () => Date } = {},
 ): Promise<ResourceSample | null> {
   const base = cadvisorUrl.replace(/\/$/, "");
@@ -113,16 +141,21 @@ export async function fetchResourceSample(
     if (!res.ok) throw new Error(`cAdvisor ${path} responded not ok`);
     return res.json();
   };
-  const [machine, root, docker] = await Promise.all([
-    get("/api/v1.3/machine"),
-    get("/api/v1.3/containers/"),
-    get("/api/v1.3/docker/"),
+  const [[machine, root], containers] = await Promise.all([
+    Promise.all([get("/api/v1.3/machine"), get("/api/v1.3/containers/")]),
+    dockerApiUrl ? fetchContainers(dockerApiUrl, { fetch: fetchFn }).catch(() => []) : [],
   ]);
-  return parseCadvisor(machine, root, docker, now());
+  const host = parseCadvisorHost(machine, root);
+  return host ? { at: now().toISOString(), host, containers } : null;
 }
 
-async function sampleOnce(redis: ResourceRedis, cadvisorUrl: string, options: Parameters<typeof fetchResourceSample>[1]): Promise<void> {
-  const sample = await fetchResourceSample(cadvisorUrl, options);
+async function sampleOnce(
+  redis: ResourceRedis,
+  cadvisorUrl: string,
+  dockerApiUrl: string | undefined,
+  options: Parameters<typeof fetchResourceSample>[2],
+): Promise<void> {
+  const sample = await fetchResourceSample(cadvisorUrl, dockerApiUrl, options);
   if (!sample) throw new Error("unexpected cAdvisor response");
   await redis.lpush(INFRA_RESOURCES_KEY, JSON.stringify(sample));
   await redis.ltrim(INFRA_RESOURCES_KEY, 0, RESOURCE_SAMPLE_MAXLEN - 1);
@@ -132,10 +165,11 @@ async function sampleOnce(redis: ResourceRedis, cadvisorUrl: string, options: Pa
 export function startResourceSampler(
   redis: ResourceRedis,
   cadvisorUrl: string,
+  dockerApiUrl: string | undefined,
   options: { fetch?: FetchFn; now?: () => Date } = {},
 ): () => void {
   const run = () =>
-    sampleOnce(redis, cadvisorUrl, options).catch((error: unknown) => {
+    sampleOnce(redis, cadvisorUrl, dockerApiUrl, options).catch((error: unknown) => {
       console.warn("Failed to sample resources from cAdvisor", error);
     });
   void run();

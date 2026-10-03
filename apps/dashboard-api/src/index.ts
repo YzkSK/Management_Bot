@@ -26,6 +26,7 @@ const dashboardEnvSchema = envSchema.pick({
   DISCORD_TOKEN: true,
   REDIS_URL: true,
   CADVISOR_URL: true,
+  DOCKER_API_URL: true,
 });
 
 const env = parseEnv(dashboardEnvSchema);
@@ -44,11 +45,11 @@ const appRouter = createAppRouter({
   readResources: (range) => readResourceSamples(redis, range),
   readCurrentResources: async () => {
     const url = env.CADVISOR_URL;
-    return url ? currentResourcesCache("now", () => fetchResourceSample(url)) : null;
+    return url ? currentResourcesCache("now", () => fetchResourceSample(url, env.DOCKER_API_URL)) : null;
   },
 });
 // cAdvisorが無い環境(ローカル等)ではリソースのサンプリングを起動しない(issue #548)。
-if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL);
+if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL, env.DOCKER_API_URL);
 const isProduction = process.env.NODE_ENV === "production";
 
 const app = new Hono();
