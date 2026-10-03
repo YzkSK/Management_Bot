@@ -9,6 +9,7 @@ import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
 import { readInfraLogs, subscribeInfraLogIngest } from "./status/infra-logs.js";
+import { readResourceSamples, startResourceSampler } from "./status/resources.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
@@ -24,6 +25,7 @@ const dashboardEnvSchema = envSchema.pick({
   SESSION_SECRET: true,
   DISCORD_TOKEN: true,
   REDIS_URL: true,
+  CADVISOR_URL: true,
 });
 
 const env = parseEnv(dashboardEnvSchema);
@@ -37,7 +39,10 @@ const appRouter = createAppRouter({
   getBotOwners: () => botOwnersCache("owners", () => fetchBotOwners(env.DISCORD_TOKEN)),
   collectStatus: () => collectStatus(db, redis),
   readLogs: (service) => readInfraLogs(redis, service),
+  readResources: (range) => readResourceSamples(redis, range),
 });
+// cAdvisorが無い環境(ローカル等)ではリソースのサンプリングを起動しない(issue #548)。
+if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL);
 const isProduction = process.env.NODE_ENV === "production";
 
 const app = new Hono();

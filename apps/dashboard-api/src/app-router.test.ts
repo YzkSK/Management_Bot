@@ -5,6 +5,7 @@ const appRouter = createAppRouter({
   getBotOwners: async () => [],
   collectStatus: async () => ({ checkedAt: "", summary: "ok", items: [] }),
   readLogs: async () => [],
+  readResources: async () => [],
 });
 
 describe("appRouter", () => {
