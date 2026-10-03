@@ -28,6 +28,8 @@ export const envSchema = z.object({
 
   // ステータス画面のリソース表示(issue #548)。未設定ならサンプリングしない。
   CADVISOR_URL: z.string().url().optional(),
+  // コンテナ別表示用のdocker-socket-proxy。未設定ならコンテナ別は空になる。
+  DOCKER_API_URL: z.string().url().optional(),
 
   // セッション
   SESSION_SECRET: z.string().min(32),
