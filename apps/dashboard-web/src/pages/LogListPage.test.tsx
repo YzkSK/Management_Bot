@@ -257,7 +257,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("a1 がメッセージを投稿しました");
+    expect(html).toContain(">@a1</span> がメッセージを投稿しました");
   });
 
   test("実行者列にsubjectIdの表示名(resolveDisplayNamesの結果)が表示される", () => {
@@ -336,7 +336,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("u1 が自分のメッセージを削除しました");
+    expect(html).toContain(">@u1</span> が自分のメッセージを削除しました");
   });
 
   test("第三者によるメッセージ削除では実行者・投稿者の両方の名前を解決する", () => {
@@ -378,7 +378,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("Admin が Yuzuki のメッセージを削除しました");
+    expect(html).toContain(">@Admin</span> が <span class=\"rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200\">@Yuzuki</span> のメッセージを削除しました");
   });
 
   test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
@@ -461,7 +461,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain("Admin が #質問スレ を作成しました");
+    expect(html).toContain(">#質問スレ</span> を作成しました");
   });
   test("展開したメンバーのニックネーム変更では差分を日本語ラベルで表示する", () => {
     const expandedIds = new Set(["log-1"]);
