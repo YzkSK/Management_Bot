@@ -2,7 +2,13 @@ import { createRequire } from "node:module";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { BotClient, DomainEventBus } from "@management-bot/core";
 import { createDb, onboardGuild, syncFeatureMetadata } from "@management-bot/db";
-import { buildInviteUrl, HEARTBEAT_INTERVAL_MS, mapWithConcurrency, startInfraReporter } from "@management-bot/shared";
+import {
+  buildInviteUrl,
+  HEARTBEAT_INTERVAL_MS,
+  installFatalErrorHandlers,
+  mapWithConcurrency,
+  startInfraReporter,
+} from "@management-bot/shared";
 import { Redis } from "ioredis";
 import { FEATURES } from "./features.js";
 import { applyAppEmojis, syncAppEmojis } from "./sync-app-emojis.js";
@@ -32,6 +38,7 @@ const botEnvSchema = envSchema.pick({
   TEMP_VOICE_GRACE_CRON: true,
 });
 
+installFatalErrorHandlers("bot");
 const env = parseEnv(botEnvSchema);
 const infraReporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "bot", service: "bot" });
 

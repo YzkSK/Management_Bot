@@ -1,6 +1,6 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
-import { startInfraReporter } from "@management-bot/shared";
+import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createDecayRunner } from "./run-decay.js";
@@ -11,6 +11,7 @@ const decayEnvSchema = envSchema.pick({
   MODERATION_DECAY_CRON: true,
 });
 
+installFatalErrorHandlers("moderation-decay");
 const env = parseEnv(decayEnvSchema);
 const TIMEZONE = "Asia/Tokyo";
 

@@ -137,3 +137,4 @@ export {
   type InfraRedisClient,
   type InfraReporter,
 } from "./infra-status.js";
+export { installFatalErrorHandlers } from "./fatal-error-handlers.js";

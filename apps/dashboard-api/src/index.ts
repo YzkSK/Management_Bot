@@ -4,7 +4,7 @@ import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { Redis } from "ioredis";
 import { cors } from "hono/cors";
-import { createTtlCache, startInfraReporter, type ResourceSample } from "@management-bot/shared";
+import { createTtlCache, installFatalErrorHandlers, startInfraReporter, type ResourceSample } from "@management-bot/shared";
 import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
@@ -29,6 +29,7 @@ const dashboardEnvSchema = envSchema.pick({
   DOCKER_API_URL: true,
 });
 
+installFatalErrorHandlers("dashboard-api");
 const env = parseEnv(dashboardEnvSchema);
 const { db } = createDb(env.DATABASE_URL);
 // lazyConnect: 最初の利用(アクティブVC取得・変更通知の購読)まで接続しない。
