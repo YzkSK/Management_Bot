@@ -26,6 +26,9 @@ export const envSchema = z.object({
   // Dashboard
   DASHBOARD_WEB_URL: z.string().url(),
 
+  // ステータス画面のリソース表示(issue #548)。未設定ならサンプリングしない。
+  CADVISOR_URL: z.string().url().optional(),
+
   // セッション
   SESSION_SECRET: z.string().min(32),
 

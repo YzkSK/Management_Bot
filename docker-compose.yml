@@ -49,6 +49,23 @@ services:
       redis:
         condition: service_healthy
 
+  # ステータス画面のリソース表示用(issue #548)。portsは公開せず、dashboard-apiがcompose内部から参照する。
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.service
+      - --disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl,process
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
   migrate:
     build:
       context: .
@@ -88,6 +105,7 @@ services:
       REDIS_URL: redis://redis:6379
       DASHBOARD_WEB_URL: ${DASHBOARD_WEB_URL}
       DISCORD_OAUTH_REDIRECT_URI: ${DISCORD_OAUTH_REDIRECT_URI}
+      CADVISOR_URL: http://cadvisor:8080
     depends_on:
       redis:
         condition: service_healthy
