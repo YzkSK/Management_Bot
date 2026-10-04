@@ -33,12 +33,50 @@ services:
       - -c
       - log_rotation_age=1d
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # PG18以降はメジャーバージョン別サブディレクトリ(18/docker)に書くため親ディレクトリをマウントする(issue #608)。
+      # 旧PG17のpostgres-dataボリュームはロールバック用に残す。
+      - postgres18-data:/var/lib/postgresql
+      # postgres-upgradeが置いたPG17のdump。PG18はデータディレクトリが空の初回起動時だけここの*.sqlを流す。
+      - postgres-upgrade-dump:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      postgres-upgrade:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U management_bot -d management_bot"]
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # PG17→18の自動データ移行(issue #608)。新ボリューム未初期化かつ旧ボリュームにPG17データがある場合だけ、
+  # 旧クラスタを一時起動してdumpし、postgresのinitdb.dへ置く。dump失敗時は非0終了しpostgresを起動させない(空DB起動を防ぐ)。
+  # ponytail: 全環境の移行完了後はこのサービスとpostgres-data/postgres-upgrade-dumpボリュームを削除する。
+  postgres-upgrade:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: "no"
+    volumes:
+      - postgres-data:/old
+      - postgres18-data:/new:ro
+      - postgres-upgrade-dump:/dump
+    command:
+      - sh
+      - -euc
+      - |
+        if [ ! -s /old/PG_VERSION ]; then echo "postgres-upgrade: skip (no PG17 data)"; exit 0; fi
+        if [ -s /new/18/docker/PG_VERSION ]; then
+          # 復元完了マーカーが無い=restoreが途中で失敗した。部分的なDBで起動させない。
+          if [ ! -e /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG18 exists but PG17 restore did not complete; recreate postgres18-data volume" >&2; exit 1; fi
+          # 移行後にPG17が起動された(ロールバック中の書き込みの可能性)。古いPG18で起動させない。
+          if [ /old/global/pg_control -nt /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG17 data changed after migration (rollback?); migrate manually" >&2; exit 1; fi
+          echo "postgres-upgrade: skip (already migrated)"; exit 0
+        fi
+        chown postgres /dump
+        # initdb.dは辞書順に実行され、失敗時はそこで止まるため、SQLが全て成功した場合だけマーカーが作られる。
+        echo 'touch "$$PGDATA/.pg17-restored"' > /dump/20-mark-restored.sh
+        gosu postgres pg_ctl -D /old -w start -o "-c listen_addresses=''"
+        gosu postgres pg_dump -U management_bot -d management_bot -f /dump/restore.tmp
+        gosu postgres pg_ctl -D /old -w stop
+        mv /dump/restore.tmp /dump/10-restore-pg17.sql
+        echo "postgres-upgrade: dumped"
 
   redis:
     image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
@@ -61,7 +99,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
-      - postgres-data:/logs/postgres:ro
+      - postgres18-data:/logs/postgres:ro
       - redis-data:/logs/redis:ro
     environment:
       VECTOR_REDIS_ENDPOINT: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -261,6 +299,8 @@ services:
 
 volumes:
   postgres-data:
+  postgres18-data:
+  postgres-upgrade-dump:
   redis-data:
   backup-data:
   caddy-data:
