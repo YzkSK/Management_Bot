@@ -2,6 +2,15 @@
 # 各コンテナのデータボリュームに書かれたログファイルを読み取り専用で読み、Redis Pub/Subへ流す
 # (VectorのredisシンクはStreams非対応のため、dashboard-apiが購読して上限付きStreamへ積み直す)。
 # Docker socketは渡さない。
+secret:
+  # exec backend(protocol v1): stdinの要求は読み捨て、環境変数をJSONで返す。値はURLセーフ前提(REDIS_PASSWORDの制約)。
+  env:
+    type: exec
+    command:
+      - sh
+      - -c
+      - 'cat >/dev/null; printf ''{"redis_endpoint":{"value":"%s","error":null}}'' "$VECTOR_REDIS_ENDPOINT"'
+
 sources:
   postgres:
     type: file
@@ -26,7 +35,8 @@ sinks:
     type: redis
     inputs: [tagged]
     # 認証情報を含むため各composeのenvironmentから渡す(issue #551)。
-    endpoint: "${VECTOR_REDIS_ENDPOINT}"
+    # vector 0.57以降は${VAR}展開が無効のため、secrets backend経由で読む(issue #608)。
+    endpoint: "SECRET[env.redis_endpoint]"
     key: infra:logs:ingest
     data_type: channel
     encoding:
