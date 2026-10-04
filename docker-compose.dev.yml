@@ -9,10 +9,14 @@ services:
       POSTGRES_PASSWORD: management_bot
       POSTGRES_DB: management_bot
     # ステータス画面のログ表示用(issue #507)。PGDATA/log/配下へ曜日ごとに上書きローテーションで書き、vectorが読む。
+    # jsonlogは1エントリ1行(改行はエスケープ)のため、入力値の改行で偽のログ行を作られない(issue #568)。
+    # ファイル名の拡張子は.logが.jsonに置き換わる。
     command:
       - postgres
       - -c
       - logging_collector=on
+      - -c
+      - log_destination=jsonlog
       - -c
       - log_filename=postgresql-%a.log
       - -c

@@ -22,13 +22,24 @@ const PG_LEVELS: Record<string, InfraLogLevel> = {
   NOTICE: "INFO",
 };
 
-/** 既定のlog_line_prefix(`%m [%p] `)の行。複数行にまたがる続き行はそのままLOGとして扱う。 */
+const pgJsonLogSchema = z.object({ error_severity: z.string(), message: z.string() });
+
+/**
+ * log_destination=jsonlogの1行(1エントリ)。テキスト形式は値の改行で偽の行を作れるためJSONのみ受け付け、
+ * 解釈できない行はそのまま本文として扱う(issue #568)。
+ */
 export function parsePostgresLine(line: string): ParsedLine {
-  const match = /^\S+ \S+ \S+ \[\d+\] ([A-Z0-9]+):\s+(.*)$/.exec(line);
-  if (!match) return { level: "LOG", scope: "postgres", msg: line };
-  const [, severity = "", msg = ""] = match;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(line);
+  } catch {
+    return { level: "LOG", scope: "postgres", msg: line };
+  }
+  const parsed = pgJsonLogSchema.safeParse(raw);
+  if (!parsed.success) return { level: "LOG", scope: "postgres", msg: line };
+  const { error_severity: severity, message } = parsed.data;
   const level = PG_LEVELS[severity] ?? (severity.startsWith("DEBUG") ? "DEBUG" : "LOG");
-  return { level, scope: "postgres", msg };
+  return { level, scope: "postgres", msg: message };
 }
 
 /** `pid:role 30 Sep 2026 10:00:00.123 * message`形式。`#`が警告、`.`がデバッグ。 */
