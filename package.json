@@ -17,10 +17,10 @@
     "dev": "turbo run dev"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^9.0.0",
-    "turbo": "^2.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
+    "eslint": "^10.11.0",
+    "turbo": "^2.11.6",
     "typescript": "^6.0.3"
   },
   "overrides": {

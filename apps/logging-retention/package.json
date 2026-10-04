@@ -15,13 +15,13 @@
     "@management-bot/db": "workspace:*",
     "@management-bot/logging": "workspace:*",
     "@management-bot/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "ioredis": "^5.4.0",
+    "drizzle-orm": "^0.45.3",
+    "ioredis": "^6.0.0",
     "node-cron": "^4.6.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.0",
-    "@types/node": "^26.4.0",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.3",
     "typescript": "^6.0.3"
   }
 }

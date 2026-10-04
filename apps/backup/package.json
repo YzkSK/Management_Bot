@@ -13,12 +13,12 @@
   "dependencies": {
     "@management-bot/config": "workspace:*",
     "@management-bot/shared": "workspace:*",
-    "ioredis": "^5.4.0",
+    "ioredis": "^6.0.0",
     "node-cron": "^4.6.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.0",
-    "@types/node": "^26.4.0",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.3",
     "typescript": "^6.0.3"
   }
 }
