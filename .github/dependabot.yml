@@ -1,8 +1,10 @@
 # 依存の脆弱性・更新を自動検知する(issue #554)。PR数を抑えるためエコシステムごとにまとめる。
+# mainへのマージごとにリリースされるため、PRはdevelopに集約する(issue #605)。
 version: 2
 updates:
   - package-ecosystem: bun
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
@@ -15,6 +17,7 @@ updates:
   - package-ecosystem: docker
     directories:
       - /apps/*
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
@@ -22,6 +25,7 @@ updates:
         patterns: ["*"]
   - package-ecosystem: docker-compose
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
@@ -29,6 +33,7 @@ updates:
         patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:

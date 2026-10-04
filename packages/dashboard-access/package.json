@@ -14,13 +14,13 @@
   "dependencies": {
     "@management-bot/db": "workspace:*",
     "@management-bot/shared": "workspace:*",
-    "@trpc/server": "^11.0.0",
-    "drizzle-orm": "^0.45.2"
+    "@trpc/server": "^11.19.0",
+    "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.0",
-    "@types/node": "^26.4.0",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.3",
     "typescript": "^6.0.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   }
 }

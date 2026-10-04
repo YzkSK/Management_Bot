@@ -2,7 +2,7 @@ name: management-bot-dev
 
 services:
   postgres:
-    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     restart: unless-stopped
     environment:
       POSTGRES_USER: management_bot
@@ -26,15 +26,52 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # PG18以降はメジャーバージョン別サブディレクトリ(18/docker)に書くため親ディレクトリをマウントする(issue #608)。
+      # 旧PG17のpostgres-dataボリュームはロールバック用に残す。
+      - postgres18-data:/var/lib/postgresql
+      # postgres-upgradeが置いたPG17のdump。PG18はデータディレクトリが空の初回起動時だけここの*.sqlを流す。
+      - postgres-upgrade-dump:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      postgres-upgrade:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U management_bot -d management_bot"]
       interval: 5s
       timeout: 3s
       retries: 20
 
+  # PG17→18の自動データ移行(issue #608)。詳細はdocker-compose.ymlの同名サービスを参照。
+  # ponytail: 全環境の移行完了後はこのサービスとpostgres-data/postgres-upgrade-dumpボリュームを削除する。
+  postgres-upgrade:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: "no"
+    volumes:
+      - postgres-data:/old
+      - postgres18-data:/new:ro
+      - postgres-upgrade-dump:/dump
+    command:
+      - sh
+      - -euc
+      - |
+        if [ ! -s /old/PG_VERSION ]; then echo "postgres-upgrade: skip (no PG17 data)"; exit 0; fi
+        if [ -s /new/18/docker/PG_VERSION ]; then
+          # 復元完了マーカーが無い=restoreが途中で失敗した。部分的なDBで起動させない。
+          if [ ! -e /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG18 exists but PG17 restore did not complete; recreate postgres18-data volume" >&2; exit 1; fi
+          # 移行後にPG17が起動された(ロールバック中の書き込みの可能性)。古いPG18で起動させない。
+          if [ /old/global/pg_control -nt /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG17 data changed after migration (rollback?); migrate manually" >&2; exit 1; fi
+          echo "postgres-upgrade: skip (already migrated)"; exit 0
+        fi
+        chown postgres /dump
+        # initdb.dは辞書順に実行され、失敗時はそこで止まるため、SQLが全て成功した場合だけマーカーが作られる。
+        echo 'touch "$$PGDATA/.pg17-restored"' > /dump/20-mark-restored.sh
+        gosu postgres pg_ctl -D /old -w start -o "-c listen_addresses=''"
+        gosu postgres pg_dump -U management_bot -d management_bot -f /dump/restore.tmp
+        gosu postgres pg_ctl -D /old -w stop
+        mv /dump/restore.tmp /dump/10-restore-pg17.sql
+        echo "postgres-upgrade: dumped"
+
   redis:
-    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     restart: unless-stopped
     # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
     command: redis-server --appendonly yes --logfile /data/redis.log
@@ -49,11 +86,11 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.46.1-alpine@sha256:ca248fb6b6839d8a02b487a3abe3f612c8f97fe164b7a7ccbf8f795eda0d935d
+    image: timberio/vector:0.58.0-alpine@sha256:5dcf67db0ee378caa87f3395cb9484ebe3e97bb0334d119f2ac33116e00c5773
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
-      - postgres-data:/logs/postgres:ro
+      - postgres18-data:/logs/postgres:ro
       - redis-data:/logs/redis:ro
     environment:
       VECTOR_REDIS_ENDPOINT: redis://redis:6379/0
@@ -64,7 +101,7 @@ services:
   # ステータス画面のリソース表示用(issue #548)。ホスト全体の値だけを取る(コンテナ別はcontainerdイメージストアで認識できないためdocker-proxy経由)。
   # portsは公開せず、dashboard-apiがcompose内部から参照する。
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.53.0@sha256:c3770bd6fc6c6a9cb2b47143e6b3cc3fdd9d20a8453dffbb7e09a145e7e0c4e4
+    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
     restart: unless-stopped
     command:
       - --housekeeping_interval=5s
@@ -76,7 +113,7 @@ services:
 
   # ステータス画面のコンテナ別リソース表示用(issue #548)。コンテナ情報の読み取りだけを許可する。
   docker-proxy:
-    image: tecnativa/docker-socket-proxy:v0.4.1@sha256:3400c429c5f9e1b21d62130fb93b16e2e772d4fb7695bd52fc2b743800b9fe9e
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     restart: unless-stopped
     environment:
       CONTAINERS: 1
@@ -227,5 +264,7 @@ services:
 
 volumes:
   postgres-data:
+  postgres18-data:
+  postgres-upgrade-dump:
   redis-data:
   backup-data:
