@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Db } from "@management-bot/db";
 
@@ -9,6 +10,7 @@ mock.module("@management-bot/dashboard-access", () => ({
 }));
 
 const { createOAuthRoutes } = await import("./routes.js");
+const { signState } = await import("./state.js");
 
 const baseConfig = {
   db: {} as Db,
@@ -32,6 +34,21 @@ describe("GET /login", () => {
     expect(setCookie).toContain("SameSite=Lax");
     expect(res.headers.get("location")).toContain("discord.com/api/v10/oauth2/authorize");
   });
+
+  test("PKCE: verifierをCookieに保存し、そのS256 challengeを認可URLに付ける", async () => {
+    const app = createOAuthRoutes(baseConfig);
+    const res = await app.request("/login");
+
+    const verifier = /oauth_pkce_verifier=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
+    expect(verifier).toBeDefined();
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(location.searchParams.get("code_challenge")).toBe(
+      createHash("sha256")
+        .update(verifier ?? "")
+        .digest("base64url"),
+    );
+  });
 });
 
 describe("GET /callback", () => {
@@ -54,6 +71,43 @@ describe("GET /callback", () => {
 
     expect(res.status).toBe(400);
     expect(fetchCalled).toBe(false);
+  });
+
+  test("PKCE: verifierのCookieが無ければDiscordを呼ばずに拒否する", async () => {
+    let fetchCalled = false;
+    global.fetch = (() => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called");
+    }) as typeof fetch;
+    const state = signState(baseConfig.sessionSecret);
+
+    const app = createOAuthRoutes(baseConfig);
+    const res = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+      headers: { cookie: `oauth_state=${state}` },
+    });
+
+    expect(res.status).toBe(400);
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("PKCE: トークン交換でCookieのverifierを送る", async () => {
+    let tokenBody: URLSearchParams | undefined;
+    global.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith("/oauth2/token")) {
+        tokenBody = new URLSearchParams(String(init?.body));
+        return Response.json({ access_token: "at", refresh_token: "rt", expires_in: 3600 });
+      }
+      return Response.json({ id: "1", username: "user", avatar: null });
+    }) as typeof fetch;
+    const state = signState(baseConfig.sessionSecret);
+
+    const app = createOAuthRoutes(baseConfig);
+    const res = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+      headers: { cookie: `oauth_state=${state}; oauth_pkce_verifier=my-verifier` },
+    });
+
+    expect(res.status).toBe(302);
+    expect(tokenBody?.get("code_verifier")).toBe("my-verifier");
   });
 
   test("rejects when the state cookie is missing", async () => {

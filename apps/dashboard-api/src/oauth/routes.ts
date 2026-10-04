@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { Db } from "@management-bot/db";
 import { createSession, deleteSession } from "@management-bot/dashboard-access";
 import { Hono } from "hono";
@@ -6,6 +7,7 @@ import { buildAuthorizeUrl, exchangeCodeForToken, fetchDiscordUser } from "./dis
 import { signState, verifyState } from "./state.js";
 
 const STATE_COOKIE = "oauth_state";
+const PKCE_COOKIE = "oauth_pkce_verifier";
 const SESSION_COOKIE = "session_id";
 
 export interface OAuthRoutesConfig {
@@ -25,18 +27,24 @@ export function createOAuthRoutes(config: OAuthRoutesConfig): Hono {
 
   app.get("/login", (c) => {
     const state = signState(config.sessionSecret);
-    setCookie(c, STATE_COOKIE, state, {
+    // PKCE(S256、issue #563)。認可コードの横取り・注入に対する多層防御。
+    const codeVerifier = randomBytes(32).toString("base64url");
+    const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    const cookieOptions = {
       httpOnly: true,
       secure: config.secureCookies,
       sameSite: "Lax",
       maxAge: 600,
       path: "/",
-    });
+    } as const;
+    setCookie(c, STATE_COOKIE, state, cookieOptions);
+    setCookie(c, PKCE_COOKIE, codeVerifier, cookieOptions);
     return c.redirect(
       buildAuthorizeUrl({
         clientId: config.discordClientId,
         redirectUri: config.discordRedirectUri,
         state,
+        codeChallenge,
       }),
     );
   });
@@ -45,9 +53,11 @@ export function createOAuthRoutes(config: OAuthRoutesConfig): Hono {
     const code = c.req.query("code");
     const state = c.req.query("state");
     const stateCookie = getCookie(c, STATE_COOKIE);
+    const codeVerifier = getCookie(c, PKCE_COOKIE);
     deleteCookie(c, STATE_COOKIE, { path: "/" });
+    deleteCookie(c, PKCE_COOKIE, { path: "/" });
 
-    if (!code || !verifyState(state, stateCookie, config.sessionSecret)) {
+    if (!code || !codeVerifier || !verifyState(state, stateCookie, config.sessionSecret)) {
       return c.text("Invalid OAuth2 state", 400);
     }
 
@@ -56,6 +66,7 @@ export function createOAuthRoutes(config: OAuthRoutesConfig): Hono {
       clientId: config.discordClientId,
       clientSecret: config.discordClientSecret,
       redirectUri: config.discordRedirectUri,
+      codeVerifier,
     });
     const discordUser = await fetchDiscordUser(token.access_token);
 
