@@ -11,6 +11,8 @@ export type LogNotificationConnectionStatus = "connecting" | "open" | "reconnect
 
 /** dashboard-api側(ws/routes.ts)がセッション失効時に使うclose code。 */
 const SESSION_EXPIRED_CLOSE_CODE = 4001;
+/** 接続後にcapability剥奪・guild退出が判明したときのclose code(再接続しても拒否されるため諦める)。 */
+const ACCESS_REVOKED_CLOSE_CODE = 4003;
 /** この回数連続で接続に失敗したら諦める(無期限リトライで401/403を叩き続けるのを防ぐ)。 */
 const MAX_RECONNECT_ATTEMPTS = 6;
 
@@ -54,7 +56,7 @@ export function useGuildWs(
       };
       socket.onclose = (event) => {
         if (cancelled) return;
-        if (event.code === SESSION_EXPIRED_CLOSE_CODE) {
+        if (event.code === SESSION_EXPIRED_CLOSE_CODE || event.code === ACCESS_REVOKED_CLOSE_CODE) {
           setStatus("stopped");
           return;
         }
