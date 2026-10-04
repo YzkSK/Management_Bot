@@ -1,6 +1,16 @@
+# bun製アプリ共通のハードニング(issue #553)。ルートFSを読み取り専用にし、権限昇格・Linux capabilityを全て禁止する。
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     restart: unless-stopped
     environment:
       POSTGRES_USER: management_bot
@@ -31,7 +41,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     restart: unless-stopped
     # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
     # requirepassで認証必須にする(issue #551)。REDIS_URLにも埋め込むためURLセーフな値にする。
@@ -47,7 +57,7 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.46.1-alpine
+    image: timberio/vector:0.46.1-alpine@sha256:ca248fb6b6839d8a02b487a3abe3f612c8f97fe164b7a7ccbf8f795eda0d935d
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
@@ -62,7 +72,7 @@ services:
   # ステータス画面のリソース表示用(issue #548)。ホスト全体の値だけを取る(コンテナ別はcontainerdイメージストアで認識できないためdocker-proxy経由)。
   # portsは公開せず、dashboard-apiがcompose内部から参照する。
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.53.0
+    image: ghcr.io/google/cadvisor:v0.53.0@sha256:c3770bd6fc6c6a9cb2b47143e6b3cc3fdd9d20a8453dffbb7e09a145e7e0c4e4
     restart: unless-stopped
     command:
       - --housekeeping_interval=5s
@@ -74,7 +84,7 @@ services:
 
   # ステータス画面のコンテナ別リソース表示用(issue #548)。コンテナ情報の読み取りだけを許可する。
   docker-proxy:
-    image: tecnativa/docker-socket-proxy:v0.4.1
+    image: tecnativa/docker-socket-proxy:v0.4.1@sha256:3400c429c5f9e1b21d62130fb93b16e2e772d4fb7695bd52fc2b743800b9fe9e
     restart: unless-stopped
     environment:
       CONTAINERS: 1
@@ -82,6 +92,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   migrate:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/dashboard-api/Dockerfile
@@ -95,6 +106,7 @@ services:
     restart: "no"
 
   bot:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/bot/Dockerfile
@@ -110,6 +122,7 @@ services:
         condition: service_completed_successfully
 
   dashboard-api:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/dashboard-api/Dockerfile
@@ -128,7 +141,27 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # 非root化(issue #553)前にrootで作られた既存のbackup-dataはroot所有のため、起動前にbunへ所有者を揃える。
+  # 新規ボリュームでは何も変わらない。CHOWN以外のcapabilityは持たせない。
+  backup-volume-init:
+    build:
+      context: .
+      dockerfile: apps/backup/Dockerfile
+    user: "0"
+    command: ["chown", "-R", "bun:bun", "/backups"]
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - backup-data:/backups
+    restart: "no"
+
   backup:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/backup/Dockerfile
@@ -142,8 +175,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      backup-volume-init:
+        condition: service_completed_successfully
 
   logging-retention:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/logging-retention/Dockerfile
@@ -157,6 +193,7 @@ services:
         condition: service_completed_successfully
 
   moderation-decay:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/moderation-decay/Dockerfile
@@ -170,6 +207,7 @@ services:
         condition: service_completed_successfully
 
   activity-rollup:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/activity-rollup/Dockerfile
@@ -183,6 +221,7 @@ services:
         condition: service_completed_successfully
 
   session-cleanup:
+    <<: *hardened
     build:
       context: .
       dockerfile: apps/session-cleanup/Dockerfile
@@ -206,7 +245,7 @@ services:
       - dashboard-api
 
   caddy:
-   image: caddy:2-alpine
+   image: caddy:2-alpine@sha256:881bbc60f9986d5ab8e7cfd6cf7e4ef3c9c0439fef2429d035d065577882f028
    restart: unless-stopped
    ports:
      - "80:80"
