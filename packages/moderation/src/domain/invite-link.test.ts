@@ -18,6 +18,10 @@ describe("extractInviteCodes", () => {
     expect(extractInviteCodes("discord.gg/aaa111 and discord.com/invite/bbb222")).toEqual(["aaa111", "bbb222"]);
   });
 
+  test("ホモグリフで偽装した招待URLからも大文字小文字を保ったままコードを抽出する(#556)", () => {
+    expect(extractInviteCodes("dіscord.gg/AbC")).toEqual(["AbC"]);
+  });
+
   test("同一コードの重複は除去する", () => {
     expect(extractInviteCodes("discord.gg/abc123 discord.gg/abc123")).toEqual(["abc123"]);
   });

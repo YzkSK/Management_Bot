@@ -21,6 +21,17 @@ describe("matchesNgword", () => {
     expect(matchesNgword("ＢＡＤＷＯＲＤ", { matchType: "contains", pattern: "badword" })).toBe(true);
   });
 
+  test("キリル文字などのホモグリフによる回避はヒットする(#556)", () => {
+    expect(matchesNgword("bаdwоrd", { matchType: "contains", pattern: "badword" })).toBe(true);
+    expect(matchesNgword("bаdwоrd", { matchType: "exact", pattern: "badword" })).toBe(true);
+  });
+
+  test("日本語NGワードは英字にマッチしない(#556)", () => {
+    expect(matchesNgword("IO", { matchType: "contains", pattern: "エロ" })).toBe(false);
+    expect(matchesNgword("io", { matchType: "contains", pattern: "エロ" })).toBe(false);
+    expect(matchesNgword("エロ", { matchType: "contains", pattern: "エロ" })).toBe(true);
+  });
+
   test("ゼロ幅文字を挿入した回避はヒットする", () => {
     expect(matchesNgword("b​a‌d‍w﻿ord", { matchType: "contains", pattern: "badword" })).toBe(true);
   });

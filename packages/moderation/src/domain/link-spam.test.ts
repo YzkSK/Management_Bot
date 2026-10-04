@@ -49,6 +49,10 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://discord.com/invite/abc123" }))).toBe(0);
   });
 
+  test("ホモグリフ入りのDiscord招待リンクとの併用も加点されない(invite_linkとの二重違反防止、#556)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> dіscord.gg/abc123" }))).toBe(0);
+  });
+
   test("www.付きのDiscord招待リンクとの併用も加点されない(#370: invite-link.tsとの扱い統一の回帰テスト)", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://www.discord.gg/abc123" }))).toBe(0);
   });

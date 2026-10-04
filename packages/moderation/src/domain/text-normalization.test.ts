@@ -19,6 +19,15 @@ describe("toCompact", () => {
     expect(toCompact("hello123")).toBe("hello123");
   });
 
+  test("ホモグリフはラテン文字へ畳み込まれ、LEET記号は保持される", () => {
+    expect(toCompact("bаdwоrd")).toBe("badword");
+    expect(toCompact("b@d$!+|")).toBe("b@d$!+|");
+  });
+
+  test("日本語の仮名はラテン文字へ変換されない", () => {
+    expect(toCompact("エロ")).toBe("エロ");
+  });
+
   test("タブ・改行は除去される", () => {
     expect(toCompact("b\ta\rd\nword")).toBe("badword");
   });

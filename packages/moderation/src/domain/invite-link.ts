@@ -1,3 +1,5 @@
+import { foldConfusables } from "./confusables.js";
+
 /**
  * Discord招待URL(discord.gg/<code>, discord.com/invite/<code>, discordapp.com/invite/<code>、
  * および"www."付き)から招待コードを抽出する。ホスト名直前に英数字・ドット・ハイフンが続く場合は
@@ -13,7 +15,8 @@ const INVITE_LINK_PATTERN = /(?<![\w.-])(?:www\.)?(?:discord\.gg|discord(?:app)?
 
 /** メッセージ本文に含まれるDiscord招待コードを重複除去して抽出する(マッチしなければ空配列)。 */
 export function extractInviteCodes(content: string): string[] {
-  const codes = [...content.matchAll(INVITE_LINK_PATTERN)]
+  // ホモグリフ(`dіscord.gg`等)による回避を防ぐため、NFKC後にラテン文字へ畳み込んでから照合する(#556)。
+  const codes = [...foldConfusables(content.normalize("NFKC")).matchAll(INVITE_LINK_PATTERN)]
     .map((m) => m[1])
     .filter((code) => code !== undefined);
   return [...new Set(codes)];

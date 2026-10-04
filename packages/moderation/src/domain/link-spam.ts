@@ -1,3 +1,4 @@
+import { foldConfusables } from "./confusables.js";
 import { countMentions } from "./mention-spam.js";
 import { isDuplicateContent } from "./duplicate-content.js";
 
@@ -13,9 +14,13 @@ import { isDuplicateContent } from "./duplicate-content.js";
 const DISCORD_INVITE_URL_PATTERN =
   /(?<![\w.-])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-zA-Z0-9-]+/gi;
 
-/** メンション併用等の判定の前に、Discord招待リンク部分を本文から取り除く。 */
+/**
+ * メンション併用等の判定の前に、Discord招待リンク部分を本文から取り除く。
+ * invite-link.tsのextractInviteCodesと同じ正規化(NFKC+ホモグリフ畳み込み)を先にかけ、
+ * `dіscord.gg`のような招待がinvite_linkとlink_spamの両方で二重に違反扱いされないようにする(#556)。
+ */
 function stripDiscordInviteUrls(content: string): string {
-  return content.replace(DISCORD_INVITE_URL_PATTERN, "");
+  return foldConfusables(content.normalize("NFKC")).replace(DISCORD_INVITE_URL_PATTERN, "");
 }
 
 /**
