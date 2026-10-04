@@ -85,15 +85,17 @@ async function detectRaidHit(
     deps.redis,
     member.guildId,
     { userId: member.userId, joinedAt: member.joinedAt, isNewAccount },
-    config.window.windowSeconds,
+    // 長期window分の入室を保持するため、短期/長期の長い方をTTLにする(#566)。
+    Math.max(config.window.windowSeconds, config.longWindow.windowSeconds),
   );
 
   const result = detectRaid(buffer, member.joinedAt, config);
   if (!result.hit) return null;
 
-  // 閾値到達後も入室が続く限り毎回ヒットし続けるため、windowSecondsに1回だけ新規インシデントとして
-  // 扱う(このロックを通過した呼び出しのみが実際にインシデントを作る、Codexレビュー指摘対応)。
-  const isNewIncident = await markRaidHitAndCheckNewIncident(deps.redis, member.guildId, config.window.windowSeconds);
+  // 閾値到達後も入室が続く限り毎回ヒットし続けるため、ヒットしたウィンドウのwindowSecondsに1回だけ
+  // 新規インシデントとして扱う(長期windowヒットで30秒ごとに再作成しないため。#566、
+  // このロックを通過した呼び出しのみが実際にインシデントを作る、Codexレビュー指摘対応)。
+  const isNewIncident = await markRaidHitAndCheckNewIncident(deps.redis, member.guildId, result.windowSeconds);
   if (!isNewIncident) return null;
 
   const priorState = await getRaidState(deps.db, member.guildId);
