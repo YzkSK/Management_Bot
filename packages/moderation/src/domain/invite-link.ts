@@ -13,10 +13,30 @@ import { foldConfusables } from "./confusables.js";
  */
 const INVITE_LINK_PATTERN = /(?<![\w.-])(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-zA-Z0-9-]+)/gi;
 
+/**
+ * 招待リンク検知用の照合ビュー。link-spam.tsの招待除去も同じビューを使い、扱いを揃える。
+ * - NFKC + ホモグリフ畳み込み(`dіscord.gg`等、#556)
+ * - 書式文字(ゼロ幅文字等)の除去
+ * - URLエンコードされた印字可能ASCIIの復号(`discord.gg%2Fabc`)
+ * - バックスラッシュをスラッシュへ(`discord.gg\abc`。ブラウザは`\`を`/`として扱う)
+ * - `(.)` `[.]` `{.}`をドットへ、ドット・スラッシュ前後の空白を除去(`discord . gg / abc`) (#557)
+ * 照合専用のビューであり、表示・保存には使わない(安全側に倒し過剰検知を許容する方針)。
+ */
+export function toInviteMatchingView(content: string): string {
+  return foldConfusables(content.normalize("NFKC"))
+    .replace(/\p{Cf}/gu, "")
+    .replace(/%([0-9a-f]{2})/gi, (match, hex: string) => {
+      const code = parseInt(hex, 16);
+      return code >= 0x20 && code <= 0x7e ? String.fromCharCode(code) : match;
+    })
+    .replace(/\\/g, "/")
+    .replace(/[([{]\.[)\]}]/g, ".")
+    .replace(/\s*([./])\s*/g, "$1");
+}
+
 /** メッセージ本文に含まれるDiscord招待コードを重複除去して抽出する(マッチしなければ空配列)。 */
 export function extractInviteCodes(content: string): string[] {
-  // ホモグリフ(`dіscord.gg`等)による回避を防ぐため、NFKC後にラテン文字へ畳み込んでから照合する(#556)。
-  const codes = [...foldConfusables(content.normalize("NFKC")).matchAll(INVITE_LINK_PATTERN)]
+  const codes = [...toInviteMatchingView(content).matchAll(INVITE_LINK_PATTERN)]
     .map((m) => m[1])
     .filter((code) => code !== undefined);
   return [...new Set(codes)];

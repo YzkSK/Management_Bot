@@ -47,6 +47,24 @@ describe("extractInviteCodes", () => {
     expect(extractInviteCodes("www.discord.com/invite/abc123")).toEqual(["abc123"]);
     expect(extractInviteCodes("https://www.discordapp.com/invite/abc123")).toEqual(["abc123"]);
   });
+
+  test.each([
+    ["URLエンコードしたスラッシュ", "discord.gg%2FAbC123"],
+    ["バックスラッシュ", "discord.gg\\AbC123"],
+    ["ドット・スラッシュ前後の空白", "discord . gg / AbC123"],
+    ["(.)によるドット表記", "discord(.)gg/AbC123"],
+    ["[.]によるドット表記", "discord[.]gg/AbC123"],
+    ["ゼロ幅文字の挿入", "disc​ord.gg/AbC123"],
+    ["Markdownリンク", "[無料Nitro](https://discord.gg/AbC123)"],
+    ["山括弧で埋め込み抑止", "<https://discord.gg/AbC123>"],
+  ])("難読化した招待URLからも抽出する: %s(#557)", (_label, content) => {
+    expect(extractInviteCodes(content)).toEqual(["AbC123"]);
+  });
+
+  test("難読化の正規化で通常の文章を招待と誤認しない(#557)", () => {
+    expect(extractInviteCodes("discordはいいぞ。 gg / またね")).toEqual([]);
+    expect(extractInviteCodes("100%20 達成")).toEqual([]);
+  });
 });
 
 describe("hasInviteLinkHit", () => {

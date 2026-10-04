@@ -1,26 +1,23 @@
-import { foldConfusables } from "./confusables.js";
+import { toInviteMatchingView } from "./invite-link.js";
 import { countMentions } from "./mention-spam.js";
 import { isDuplicateContent } from "./duplicate-content.js";
 
 /**
- * Discord招待リンクのURL部分(https?://含む)を検出して除去するための正規表現。
- * invite-link.tsのINVITE_LINK_PATTERNとホスト部分は同じだが、こちらはプロトコル・
- * 招待コード自体も含めて丸ごとマッチさせ、メンション併用判定のURL検出対象から
- * 除外するために使う(招待リンクの検知はinvite_link専用とする、Codexレビュー指摘)。
- * 左端に"(?<![\w.-])"を付け、invite-link.tsのINVITE_LINK_PATTERNと同様
- * "spamdiscord.gg/fake"のような別ドメインへの部分一致(Codexレビュー再指摘: 境界なしだと
- * "discord.gg"部分だけ誤って除去され、外部URLとの併用加点を回避できてしまう)を防ぐ。
+ * 素の招待URL(https?://含む)を丸ごとマッチさせる正規表現。左端の"(?<![\w.-])"で
+ * "spamdiscord.gg/fake"のような別ドメインへの部分一致を除外する(Codexレビュー再指摘)。
  */
 const DISCORD_INVITE_URL_PATTERN =
   /(?<![\w.-])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-zA-Z0-9-]+/gi;
 
 /**
- * メンション併用等の判定の前に、Discord招待リンク部分を本文から取り除く。
- * invite-link.tsのextractInviteCodesと同じ正規化(NFKC+ホモグリフ畳み込み)を先にかけ、
- * `dіscord.gg`のような招待がinvite_linkとlink_spamの両方で二重に違反扱いされないようにする(#556)。
+ * URL併用判定用に、招待リンクの照合ビュー(ホモグリフ・全角・難読化を正規化、invite-link.ts)から
+ * Discord招待リンクの範囲だけを取り除く(招待リンクの検知はinvite_link専用とし、二重にstrikeが
+ * 加算されないようにする、Codexレビュー指摘・#556・#557)。範囲除去なので同じ語に続く外部URLは残り、
+ * 正規化によりホモグリフ・全角の外部URLも検出できる。
+ * 照合ビューは復号でメンションを作り出しうるため、メンションは呼び出し側で元の本文から数えること。
  */
 function stripDiscordInviteUrls(content: string): string {
-  return foldConfusables(content.normalize("NFKC")).replace(DISCORD_INVITE_URL_PATTERN, "");
+  return toInviteMatchingView(content).replace(DISCORD_INVITE_URL_PATTERN, "");
 }
 
 /**
@@ -110,8 +107,8 @@ export function scoreLinkSpam(input: LinkSpamScoreInput): number {
   if (hasPromotionalPhrase(input.content)) score += 15;
   // メンション併用のURL判定はDiscord招待リンク部分を除いた本文で行う(招待リンクの検知は
   // invite_link専用とし、link_spam側で間接的にヒットさせて二重にstrikeが加算されるのを防ぐ)。
-  const contentWithoutInviteUrls = stripDiscordInviteUrls(input.content);
-  if (countMentions(contentWithoutInviteUrls) > 0 && URL_PATTERN.test(contentWithoutInviteUrls)) score += 20;
+  // メンションは元の本文から数える(招待除去後の本文は難読化の復号を含みうるため、#557)。
+  if (countMentions(input.content) > 0 && URL_PATTERN.test(stripDiscordInviteUrls(input.content))) score += 20;
   if (SHORTENED_URL_PATTERN.test(input.content)) score += 10;
 
   return score;
