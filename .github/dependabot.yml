@@ -8,6 +8,10 @@ updates:
     groups:
       dependencies:
         patterns: ["*"]
+    # typescript-eslintがTS 7未対応のため除外(issue #602)。対応版が出たら外す。
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directories:
       - /apps/*
