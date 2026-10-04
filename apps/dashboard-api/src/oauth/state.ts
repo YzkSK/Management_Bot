@@ -1,10 +1,18 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
+
+/**
+ * state署名にはトークン暗号化(dashboard-accessのderiveSubkey "token-encryption")と別の、
+ * HKDFで導出した専用鍵を使う(issue #561)。
+ */
+const sign = (value: string, sessionSecret: string): string =>
+  createHmac("sha256", Buffer.from(hkdfSync("sha256", sessionSecret, "", "management-bot:oauth-state", 32)))
+    .update(value)
+    .digest("base64url");
 
 /** `value.signature`形式のstateトークンを発行する。CSRF対策として認可URLへの遷移前にCookieへ保存する。 */
 export function signState(sessionSecret: string): string {
   const value = randomBytes(16).toString("base64url");
-  const signature = createHmac("sha256", sessionSecret).update(value).digest("base64url");
-  return `${value}.${signature}`;
+  return `${value}.${sign(value, sessionSecret)}`;
 }
 
 export function verifyState(
@@ -18,8 +26,7 @@ export function verifyState(
   const [value, signature] = stateFromCookie.split(".");
   if (!value || !signature) return false;
 
-  const expected = createHmac("sha256", sessionSecret).update(value).digest("base64url");
-  const expectedBuf = Buffer.from(expected);
+  const expectedBuf = Buffer.from(sign(value, sessionSecret));
   const actualBuf = Buffer.from(signature);
   return expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
 }
