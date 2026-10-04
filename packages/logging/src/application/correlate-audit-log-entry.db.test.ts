@@ -620,9 +620,9 @@ describe("correlateAuditLogEntry (実DB)", () => {
     expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
-  test("候補action群のうち、監査ログ時刻に近い方の行にのみ相関する(取り違え防止)", async () => {
-    // 同一ユーザーへnicknameChange→timeoutが連続した場合を想定。timeoutの監査ログ(t=10s)は
-    // 直近のtimeout行(t=9s)に相関すべきで、より新しいだけの無関係行を選んではいけない。
+  test("候補action群の行が複数あり曖昧な場合は、近い方も含めどちらにも相関しない(取り違え防止、#565)", async () => {
+    // 同一ユーザーへnicknameChange→timeoutが連続した場合を想定。どちらの行の監査ログか確定できないため、
+    // 「近い方」を推測せず実行者は不明のままにする。
     const nicknameLogId = await insertMemberLogEntry("u1", "nicknameChange", new Date("2026-08-31T00:00:00.000Z"));
     const timeoutLogId = await insertMemberLogEntry("u1", "timeout", new Date("2026-08-31T00:00:09.000Z"));
     const entry: AuditLogEntryInfo = {
@@ -638,8 +638,101 @@ describe("correlateAuditLogEntry (実DB)", () => {
 
     const [nicknameRow] = await db.select().from(logEntries).where(eq(logEntries.id, nicknameLogId));
     const [timeoutRow] = await db.select().from(logEntries).where(eq(logEntries.id, timeoutLogId));
-    expect(timeoutRow?.payload).toMatchObject({ executorId: "mod-1" });
-    expect(nicknameRow?.payload).not.toMatchObject({ executorId: "mod-1" });
+    expect(timeoutRow?.payload).not.toHaveProperty("executorId");
+    expect(nicknameRow?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("GuildUpdateは時間窓内に未相関のguild更新行が2件あれば、どちらにも相関しない(#565)", async () => {
+    const insertGuildUpdate = async (createdAt: Date): Promise<string> => {
+      const id = randomUUID();
+      await db.insert(logEntries).values({
+        id,
+        guildId,
+        category: "guild",
+        payload: { category: "guild", guildId, createdAt: createdAt.toISOString(), action: "update" },
+        createdAt,
+      });
+      return id;
+    };
+    const logId1 = await insertGuildUpdate(new Date("2026-08-31T00:00:00.000Z"));
+    const logId2 = await insertGuildUpdate(new Date("2026-08-31T00:00:10.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "GuildUpdate",
+      executorId: "mod-1",
+      targetId: null,
+      createdAt: "2026-08-31T00:00:11.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row1] = await db.select().from(logEntries).where(eq(logEntries.id, logId1));
+    const [row2] = await db.select().from(logEntries).where(eq(logEntries.id, logId2));
+    expect(row1?.payload).not.toHaveProperty("executorId");
+    expect(row2?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("同じチャンネルの未相関update行が2件あれば、別々のモデレーターの監査ログでもどちらにも相関しない(#565)", async () => {
+    const logId1 = await insertChannelLogEntry("c-ambiguous", new Date("2026-08-31T00:00:00.000Z"), { action: "update" });
+    const logId2 = await insertChannelLogEntry("c-ambiguous", new Date("2026-08-31T00:00:10.000Z"), { action: "update" });
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "ChannelUpdate",
+      executorId: "mod-1",
+      targetId: "c-ambiguous",
+      createdAt: "2026-08-31T00:00:11.000Z",
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const [row1] = await db.select().from(logEntries).where(eq(logEntries.id, logId1));
+    const [row2] = await db.select().from(logEntries).where(eq(logEntries.id, logId2));
+    expect(row1?.payload).not.toHaveProperty("executorId");
+    expect(row2?.payload).not.toHaveProperty("executorId");
+  });
+
+  test("nickname補完: 未相関のnicknameChange行が2件あり曖昧な場合、補完行(重複)を新規に書かない(#565)", async () => {
+    const insertNickname = async (createdAt: Date): Promise<string> => {
+      const id = randomUUID();
+      await db.insert(logEntries).values({
+        id,
+        guildId,
+        category: "member",
+        payload: {
+          category: "member",
+          guildId,
+          createdAt: createdAt.toISOString(),
+          userId: "u1",
+          action: "nicknameChange",
+          changes: { nickname: { before: null, after: "new" } },
+        },
+        createdAt,
+      });
+      return id;
+    };
+    const logId1 = await insertNickname(new Date("2026-08-31T00:00:00.000Z"));
+    const logId2 = await insertNickname(new Date("2026-08-31T00:00:01.000Z"));
+    const entry: AuditLogEntryInfo = {
+      id: randomUUID(),
+      guildId,
+      action: "MemberUpdate",
+      executorId: "mod-1",
+      targetId: "u1",
+      createdAt: "2026-08-31T00:00:05.000Z",
+      memberNicknameChange: { before: null, after: "new" },
+    };
+
+    await correlateAuditLogEntry({ db, sendToChannel: noopSendToChannel }, entry, NO_RETRY_DELAY);
+
+    const rows = await db
+      .select()
+      .from(logEntries)
+      .where(and(eq(logEntries.category, "member"), eq(logEntries.guildId, guildId)));
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.id).sort()).toEqual([logId1, logId2].sort());
+    for (const row of rows) expect(row.payload).not.toHaveProperty("executorId");
   });
 
   test("タイムアウト解除(timeoutRemove)にも実行者を相関する", async () => {
@@ -659,7 +752,7 @@ describe("correlateAuditLogEntry (実DB)", () => {
     expect(row?.payload).toMatchObject({ executorId: "mod-1" });
   });
 
-  test("同じチャンネルへの2つの操作の監査ログが並行して届いても、それぞれ別の行に相関する(競合時の取り違え防止)", async () => {
+  test("同じチャンネルへの2つの操作の監査ログが並行して届いた場合、曖昧なためどちらの行にも相関しない(取り違え防止、#565)", async () => {
     const firstLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:00.000Z"));
     const secondLogId = await insertChannelLogEntry("c-concurrent", new Date("2026-08-31T00:00:01.000Z"));
     const firstEntry: AuditLogEntryInfo = {
@@ -686,12 +779,9 @@ describe("correlateAuditLogEntry (実DB)", () => {
 
     const [firstRow] = await db.select().from(logEntries).where(eq(logEntries.id, firstLogId));
     const [secondRow] = await db.select().from(logEntries).where(eq(logEntries.id, secondLogId));
-    const executorIds = [firstRow?.payload, secondRow?.payload].map(
-      (payload) => (payload as { executorId?: string }).executorId,
-    );
-    // どちらの行にも実行者が付き、同じ実行者が両方の行を奪うことはない(競り負けた側は別候補にリトライする)。
-    expect(executorIds).toContain("mod-1");
-    expect(executorIds).toContain("mod-2");
+    // 各監査ログから見て候補が2件(曖昧)のため、どちらの行にも実行者を付けない。
+    expect(firstRow?.payload).not.toHaveProperty("executorId");
+    expect(secondRow?.payload).not.toHaveProperty("executorId");
   });
 
   test("MemberRoleUpdateで複数roleIdが遅延挿入されても、イベント全体で1回のリトライにまとまる", async () => {
