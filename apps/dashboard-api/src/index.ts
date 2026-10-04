@@ -15,7 +15,7 @@ import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
 import { subscribeActivityChanges } from "./ws/activity-broadcaster.js";
-import { createWsRoutes } from "./ws/routes.js";
+import { createWsRoutes, WS_MAX_PAYLOAD_LENGTH } from "./ws/routes.js";
 
 const dashboardEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -112,4 +112,9 @@ subscribeInfraLogIngest(redis).catch((error: unknown) => {
   console.error("Failed to subscribe infra log ingest (PostgreSQL/Redis logs disabled)", error);
 });
 
-export default { fetch: app.fetch, websocket };
+const websocketHandler: typeof websocket & { maxPayloadLength: number } = {
+  ...websocket,
+  maxPayloadLength: WS_MAX_PAYLOAD_LENGTH,
+};
+
+export default { fetch: app.fetch, websocket: websocketHandler };

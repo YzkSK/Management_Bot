@@ -8,6 +8,7 @@ import { getCookie } from "hono/cookie";
 import { resolveGuildMembership } from "../context.js";
 import { SESSION_COOKIE } from "../oauth/routes.js";
 import { activityClients } from "./activity-broadcaster.js";
+import { createConnectionLimiter } from "./connection-limiter.js";
 import { registerLogClient, unregisterLogClient } from "./log-broadcaster.js";
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -26,7 +27,15 @@ const SESSION_EXPIRED_CLOSE_CODE = 4001;
  */
 interface WsVariables {
   sessionExpiresAt: Date;
+  discordUserId: string;
 }
+
+// 複数タブ×2エンドポイント(logs/activity)を想定したユーザー単位の上限と、プロセス全体の上限(issue #559)。
+const MAX_CONNECTIONS_PER_USER = 10;
+const MAX_CONNECTIONS_TOTAL = 1000;
+const TRY_AGAIN_LATER_CLOSE_CODE = 1013;
+/** クライアントからの受信は使わないため、受信サイズの上限を小さくする(Bun既定は16MB)。 */
+export const WS_MAX_PAYLOAD_LENGTH = 1024;
 
 export function createWsRoutes(
   db: Db,
@@ -36,6 +45,10 @@ export function createWsRoutes(
 ): { app: Hono<{ Variables: WsVariables }>; websocket: typeof websocket } {
   const app = new Hono<{ Variables: WsVariables }>();
   const expectedOrigin = new URL(dashboardWebUrl).origin;
+  const connectionLimiter = createConnectionLimiter({
+    perUser: MAX_CONNECTIONS_PER_USER,
+    total: MAX_CONNECTIONS_TOTAL,
+  });
 
   const authorize =
     (capability: number): MiddlewareHandler<{ Variables: WsVariables }> =>
@@ -78,6 +91,7 @@ export function createWsRoutes(
         return c.text("Forbidden", 403);
       }
       c.set("sessionExpiresAt", session.expiresAt);
+      c.set("discordUserId", session.discordUserId);
       return next();
     };
 
@@ -85,11 +99,18 @@ export function createWsRoutes(
     upgradeWebSocket((c) => {
       const guildId = c.req.param("guildId");
       const sessionExpiresAt = c.get("sessionExpiresAt");
+      const discordUserId = c.get("discordUserId");
       let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+      let acquired = false;
 
       return {
         onOpen(_event, ws) {
           if (!guildId) return;
+          if (!connectionLimiter.tryAcquire(discordUserId)) {
+            ws.close(TRY_AGAIN_LATER_CLOSE_CODE, "too many connections");
+            return;
+          }
+          acquired = true;
           register(guildId, ws);
           // セッション失効後もWebSocket自体は生き続けてしまうため、有効期限で強制切断する。
           expiryTimer = setTimeout(
@@ -99,6 +120,8 @@ export function createWsRoutes(
         },
         onClose(_event, ws) {
           if (expiryTimer) clearTimeout(expiryTimer);
+          if (!acquired) return;
+          connectionLimiter.release(discordUserId);
           if (guildId) unregister(guildId, ws);
         },
       };
