@@ -64,7 +64,8 @@ interface CorrelationRule {
    * 複数操作(例: 同じチャンネルへのChannelUpdate直後のChannelDelete)で新しい行に誤って
    * 古い監査ログの実行者を付けてしまう(codexレビュー指摘)。
    * ThreadUpdate/MemberUpdate/GuildScheduledEventUpdateのように1つの監査ログイベントが
-   * 複数のpayload.actionに対応し得るものは、候補を複数列挙することでカバーする
+   * 複数のpayload.actionに対応し得るものは、候補を複数列挙することでカバーする。
+   * 時間窓内の一致行が複数ある曖昧なケースは相関せず実行者は不明のままにする(#565)
    * (誤り: 対象自体を相関から外していたが、時間窓+対象ID一致で十分絞り込めるため候補群方式に変更)。
    */
   logActions: readonly string[];
@@ -155,17 +156,11 @@ function delay(ms: number): Promise<void> {
 interface MatchCriteria {
   guildId: string;
   category: LogCategory;
-  /** 監査ログの発生時刻。時間窓の中心であり、複数候補がある場合はこれに最も近い行を選ぶ基準にもなる。 */
+  /** 監査ログの発生時刻。時間窓の中心(候補の並び順の基準でもあるが、複数候補なら相関しない、#565)。 */
   auditAt: Date;
   windowStart: Date;
   windowEnd: Date;
   extraConditions: SQL[];
-  /**
-   * trueの場合、時間窓・条件に一致する未相関行が複数あれば相関せずundefinedを返す
-   * (「最も近い1件」を選ばない)。対象ユーザーIDで絞り込めないMemberDisconnect/MemberMove用。
-   * 対象IDで一意に絞れる通常のルールでは、同時刻に無関係な複数行が並ぶことは想定しないためfalse(デフォルト)のままでよい。
-   */
-  requireUnique?: boolean;
 }
 
 interface CorrelationJob {
@@ -185,16 +180,14 @@ function actionIn(candidates: readonly string[]): SQL {
   )})`;
 }
 
-/**
- * 候補action(logActions)を複数許容するルール(ThreadUpdate等)では、時間窓内に同一対象への
- * 異なる操作が複数存在し得る(例: 同じユーザーへnicknameChange直後にtimeout)。
- * 単純に「最新の行」を選ぶと、後から届いた別操作の監査ログが先の行に誤って実行者を付けてしまうため、
- * 監査ログの発生時刻(auditAt)に最も近い行を優先する(codexレビュー指摘)。
- * excludeIdsは、選んだ候補行への注釈(annotateRow)が他の並行イベントに競り負けた場合の
- * リトライで、同じ行を選び直さないために使う(coderabbitレビュー指摘)。
- */
-async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: readonly string[]): Promise<{ id: string } | undefined> {
-  const matches = await db
+/** 時間窓・条件に一致する未相関行をauditAtに近い順に最大limit件返す。 */
+async function selectUnannotatedRows(
+  db: Db,
+  criteria: MatchCriteria,
+  excludeIds: readonly string[],
+  limit: number,
+): Promise<{ id: string }[]> {
+  return db
     .select({ id: logEntries.id })
     .from(logEntries)
     .where(
@@ -209,9 +202,19 @@ async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: r
       ),
     )
     .orderBy(sql`abs(extract(epoch from (${logEntries.createdAt} - ${criteria.auditAt.toISOString()}::timestamptz)))`)
-    .limit(criteria.requireUnique ? 2 : 1);
-  if (criteria.requireUnique) return matches.length === 1 ? matches[0] : undefined;
-  return matches[0];
+    .limit(limit);
+}
+
+/**
+ * 時間窓内に同一対象への別操作の行が複数あり得る(例: 同じチャンネルを短時間に別々のモデレーターが更新、
+ * 同じユーザーへnicknameChange直後にtimeout)。「最も近い行」を選ぶと実行者を取り違えるため、
+ * 曖昧(候補が複数)なら相関せず実行者は不明のままにする(#565)。候補がちょうど1件のときのみ返す。
+ * excludeIdsは、選んだ候補行への注釈(annotateRow)が他の並行イベントに競り負けた場合の
+ * リトライで、同じ行を選び直さないために使う(coderabbitレビュー指摘)。
+ */
+async function findUnannotatedRow(db: Db, criteria: MatchCriteria, excludeIds: readonly string[]): Promise<{ id: string } | undefined> {
+  const matches = await selectUnannotatedRows(db, criteria, excludeIds, 2);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /**
@@ -385,10 +388,10 @@ export async function correlateAuditLogEntry(
   /**
    * auditAt/windowStart/windowEndをクロージャで閉じ込め、category+extraConditionsのみで
    * CorrelationJobを組み立てるヘルパー(issue #226)。5つ目以降の特殊ケースを追加する際も
-   * この関数を呼ぶだけでよく、window値の使い回しミスやrequireUniqueの付け忘れを防ぐ。
+   * この関数を呼ぶだけでよく、window値の使い回しミスを防ぐ。
    */
-  const makeJob = (category: LogCategory, extraConditions: SQL[], opts?: { requireUnique?: boolean }): CorrelationJob => ({
-    criteria: { guildId: entry.guildId, category, auditAt, windowStart, windowEnd, extraConditions, ...opts },
+  const makeJob = (category: LogCategory, extraConditions: SQL[]): CorrelationJob => ({
+    criteria: { guildId: entry.guildId, category, auditAt, windowStart, windowEnd, extraConditions },
   });
 
   if (entry.action === "MemberRoleUpdate") {
@@ -456,18 +459,14 @@ export async function correlateAuditLogEntry(
       entry.executorId,
       entry.executorName,
       [
-        makeJob(
-          "voice",
-          [
-            sql`${logEntries.payload} ->> 'action' = ${logAction}`,
-            ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
-          ],
-          /**
-           * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
-           * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する。
-           */
-          { requireUnique: true },
-        ),
+        /**
+         * 対象ユーザーIDで絞り込めない(target_idが常にnull)ため、同時刻に無関係な別ユーザーの
+         * leave/moveが混在すると誤って実行者を付けかねない。候補がちょうど1件のときのみ相関する(#565)。
+         */
+        makeJob("voice", [
+          sql`${logEntries.payload} ->> 'action' = ${logAction}`,
+          ...(moveChannelId ? [sql`${logEntries.payload} ->> 'channelId' = ${moveChannelId}`] : []),
+        ]),
       ],
       retryDelayMs,
     );
@@ -510,21 +509,15 @@ export async function correlateAuditLogEntry(
       nicknameChange.after === null
         ? sql`${logEntries.payload} -> 'changes' -> 'nickname' -> 'after' = 'null'::jsonb`
         : sql`${logEntries.payload} -> 'changes' -> 'nickname' ->> 'after' = ${nicknameChange.after}`;
-    const [matched] = await correlateJobs(
-      deps.db,
-      entry.executorId,
-      entry.executorName,
-      [
-        makeJob("member", [
-          sql`${logEntries.payload} ->> 'action' = 'nicknameChange'`,
-          sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
-          afterCondition,
-        ]),
-      ],
-      retryDelayMs,
-    );
+    const nicknameJob = makeJob("member", [
+      sql`${logEntries.payload} ->> 'action' = 'nicknameChange'`,
+      sql`${logEntries.payload} ->> 'userId' = ${entry.targetId}`,
+      afterCondition,
+    ]);
+    const [matched] = await correlateJobs(deps.db, entry.executorId, entry.executorName, [nicknameJob], retryDelayMs);
 
-    if (!matched) {
+    // 未相関の候補が残っている(=曖昧で相関しなかった)場合、補完行を書くと重複行になるため何も書かない(#565)。
+    if (!matched && (await selectUnannotatedRows(deps.db, nicknameJob.criteria, [], 1)).length === 0) {
       await writeLogEntry(
         deps,
         {

@@ -40,4 +40,18 @@ describe("checkRegexSafety", () => {
   test("曖昧な選択の繰り返し(a|a)*はsafe: falseを返す", () => {
     expect(checkRegexSafety("(a|a)*").safe).toBe(false);
   });
+
+  test.each(["((a+))+", "((a|b))*", "(.*a){25}", "(?:a+)+", "(a+){2}", "[](a+)+", "[^](a+)+"])(
+    "二重括弧・{n}形式・非捕捉グループを含む危険パターン%sはsafe: falseを返す",
+    (pattern) => {
+      expect(checkRegexSafety(pattern).safe).toBe(false);
+    },
+  );
+
+  test.each(["(abc){3}", "(?:foo)+", "colou?r", "(ab)?", "[(a+)]+", "\\(a+\\)+", "a{2,5}b", "foo|bar|baz", "(foo|bar)?"])(
+    "安全なパターン%sはsafe: trueを返す",
+    (pattern) => {
+      expect(checkRegexSafety(pattern)).toEqual({ safe: true });
+    },
+  );
 });

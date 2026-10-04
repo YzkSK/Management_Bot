@@ -1,4 +1,14 @@
 yzk-management-bot.duckdns.org {
+    # セキュリティヘッダー(issue #549)。ログの添付・埋め込みは任意ホスト(Tenor等)の画像・動画のためimg/mediaはhttps:を許可。
+    # style-srcのunsafe-inlineはsonner/recharts等がインラインstyleを使うため。WSは同一オリジンなのでconnect-src 'self'で足りる。
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' https:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Strict-Transport-Security "max-age=31536000"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
     @api path /auth/* /trpc/* /ws/*
 
     handle @api {

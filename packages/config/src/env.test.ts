@@ -10,6 +10,7 @@ const validEnv = {
   DISCORD_OAUTH_REDIRECT_URI: "https://example.com/auth/callback",
   DASHBOARD_WEB_URL: "https://example.com",
   SESSION_SECRET: "a".repeat(32),
+  BACKUP_AGE_RECIPIENT: "age1efsxjfvmrr3ve2cn8r6saj4cuyazvavx945n6jhw3zfa3hnpedzsu9ae2k",
 };
 
 describe("parseEnv", () => {

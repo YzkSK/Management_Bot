@@ -2,17 +2,21 @@ name: management-bot-dev
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     restart: unless-stopped
     environment:
       POSTGRES_USER: management_bot
       POSTGRES_PASSWORD: management_bot
       POSTGRES_DB: management_bot
     # ステータス画面のログ表示用(issue #507)。PGDATA/log/配下へ曜日ごとに上書きローテーションで書き、vectorが読む。
+    # jsonlogは1エントリ1行(改行はエスケープ)のため、入力値の改行で偽のログ行を作られない(issue #568)。
+    # ファイル名の拡張子は.logが.jsonに置き換わる。
     command:
       - postgres
       - -c
       - logging_collector=on
+      - -c
+      - log_destination=jsonlog
       - -c
       - log_filename=postgresql-%a.log
       - -c
@@ -30,7 +34,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     restart: unless-stopped
     # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
     command: redis-server --appendonly yes --logfile /data/redis.log
@@ -45,7 +49,7 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.46.1-alpine
+    image: timberio/vector:0.46.1-alpine@sha256:ca248fb6b6839d8a02b487a3abe3f612c8f97fe164b7a7ccbf8f795eda0d935d
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
@@ -60,7 +64,7 @@ services:
   # ステータス画面のリソース表示用(issue #548)。ホスト全体の値だけを取る(コンテナ別はcontainerdイメージストアで認識できないためdocker-proxy経由)。
   # portsは公開せず、dashboard-apiがcompose内部から参照する。
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.53.0
+    image: ghcr.io/google/cadvisor:v0.53.0@sha256:c3770bd6fc6c6a9cb2b47143e6b3cc3fdd9d20a8453dffbb7e09a145e7e0c4e4
     restart: unless-stopped
     command:
       - --housekeeping_interval=5s
@@ -72,7 +76,7 @@ services:
 
   # ステータス画面のコンテナ別リソース表示用(issue #548)。コンテナ情報の読み取りだけを許可する。
   docker-proxy:
-    image: tecnativa/docker-socket-proxy:v0.4.1
+    image: tecnativa/docker-socket-proxy:v0.4.1@sha256:3400c429c5f9e1b21d62130fb93b16e2e772d4fb7695bd52fc2b743800b9fe9e
     restart: unless-stopped
     environment:
       CONTAINERS: 1
@@ -129,6 +133,17 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # backupイメージの非root化(issue #553)前に作られた既存ボリュームはroot所有のため、起動前に所有者を揃える。
+  backup-volume-init:
+    build:
+      context: .
+      dockerfile: apps/backup/Dockerfile
+    user: "0"
+    command: ["chown", "-R", "bun:bun", "/backups"]
+    volumes:
+      - backup-data:/backups
+    restart: "no"
+
   backup:
     build:
       context: .
@@ -143,6 +158,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      backup-volume-init:
+        condition: service_completed_successfully
 
   logging-retention:
     build:

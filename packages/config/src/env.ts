@@ -38,6 +38,11 @@ export const envSchema = z.object({
   BACKUP_CRON: z.string().min(1).default("0 3 * * *"),
   BACKUP_DIR: z.string().min(1).default("/backups"),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
+  // ageの公開鍵(受信者)。必須(デフォルトなし)にして、未設定なら平文のダンプを書かず起動を失敗させる。
+  // age公開鍵はbech32("age1"+58文字)。起動時に形式を検証し、不正な鍵でバックアップ時に初めて失敗するのを防ぐ。
+  BACKUP_AGE_RECIPIENT: z
+    .string()
+    .regex(/^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$/, "BACKUP_AGE_RECIPIENT must be an age public key (age1...)"),
 
   // ログ保持期限ジョブ
   LOGGING_RETENTION_CRON: z.string().min(1).default("0 4 * * *"),

@@ -41,6 +41,8 @@ export interface ExchangeCodeInput {
   clientId: string;
   clientSecret: string;
   redirectUri: string;
+  /** PKCE(RFC 7636)のcode_verifier。/loginで生成しCookieに保存したもの。 */
+  codeVerifier: string;
 }
 
 export async function exchangeCodeForToken(input: ExchangeCodeInput): Promise<DiscordTokenResponse> {
@@ -50,6 +52,7 @@ export async function exchangeCodeForToken(input: ExchangeCodeInput): Promise<Di
     grant_type: "authorization_code",
     code: input.code,
     redirect_uri: input.redirectUri,
+    code_verifier: input.codeVerifier,
   });
 
   const response = await fetch(`${DISCORD_API_BASE}/oauth2/token`, {
@@ -106,6 +109,7 @@ export function buildAuthorizeUrl(input: {
   clientId: string;
   redirectUri: string;
   state: string;
+  codeChallenge: string;
 }): string {
   const params = new URLSearchParams({
     client_id: input.clientId,
@@ -113,6 +117,8 @@ export function buildAuthorizeUrl(input: {
     response_type: "code",
     scope: "identify guilds",
     state: input.state,
+    code_challenge: input.codeChallenge,
+    code_challenge_method: "S256",
   });
   return `${DISCORD_API_BASE}/oauth2/authorize?${params.toString()}`;
 }

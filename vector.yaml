@@ -5,7 +5,7 @@
 sources:
   postgres:
     type: file
-    include: ["/logs/postgres/log/*.log"]
+    include: ["/logs/postgres/log/*.json"]
     read_from: end
   redis:
     type: file

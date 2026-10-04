@@ -67,6 +67,12 @@ export const LINK_SPAM_PRESETS: Readonly<Record<ModerationPreset, LinkSpamPreset
 export interface RaidPresetConfig {
   /** 直近windowSeconds秒間にmemberThreshold人以上入室でヒット。 */
   window: { windowSeconds: number; memberThreshold: number };
+  /**
+   * 多段スライディングウィンドウの長期側。短期windowのしきい値直下(threshold-1人)で
+   * 分散参加する回避を、より長い時間幅・低い人数比率で捕捉する(#566)。
+   * windowSecondsはwindowより長くする。短期windowで未ヒットの場合のみ評価される。
+   */
+  longWindow: { windowSeconds: number; memberThreshold: number };
   /** 入室から起算してこの日数以内のアカウントを「新規アカウント」とみなす。 */
   newAccountMaxAgeDays: number;
   /** ウィンドウ内入室者に占める新規アカウント比率(0〜1)がこの値以上なら重い危険度とする。 */
@@ -86,18 +92,21 @@ export interface RaidPresetConfig {
 export const RAID_PRESETS: Readonly<Record<ModerationPreset, RaidPresetConfig>> = {
   weak: {
     window: { windowSeconds: 30, memberThreshold: 15 },
+    longWindow: { windowSeconds: 300, memberThreshold: 40 },
     newAccountMaxAgeDays: 3,
     newAccountRatioThreshold: 0.8,
     timeoutMinutes: { normal: 10, high: 30 },
   },
   medium: {
     window: { windowSeconds: 30, memberThreshold: 10 },
+    longWindow: { windowSeconds: 300, memberThreshold: 30 },
     newAccountMaxAgeDays: 7,
     newAccountRatioThreshold: 0.6,
     timeoutMinutes: { normal: 30, high: 60 },
   },
   strong: {
     window: { windowSeconds: 30, memberThreshold: 6 },
+    longWindow: { windowSeconds: 300, memberThreshold: 18 },
     newAccountMaxAgeDays: 14,
     newAccountRatioThreshold: 0.4,
     timeoutMinutes: { normal: 60, high: 1440 },

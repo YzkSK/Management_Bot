@@ -49,6 +49,29 @@ describe("scoreLinkSpam", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://discord.com/invite/abc123" }))).toBe(0);
   });
 
+  test("ホモグリフ入りのDiscord招待リンクとの併用も加点されない(invite_linkとの二重違反防止、#556)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> dіscord.gg/abc123" }))).toBe(0);
+  });
+
+  test("難読化したDiscord招待リンクとの併用も加点されない(#557)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg%2Fabc123" }))).toBe(0);
+    expect(scoreLinkSpam(baseInput({ content: "<@123> [nitro](https://discord.gg/abc123)" }))).toBe(0);
+  });
+
+  test("招待URLと同じ語に連結した外部URLは除去されず加点される(Codexレビュー指摘、#557)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg/abc,https://example.com" }))).toBe(20);
+    expect(scoreLinkSpam(baseInput({ content: "<@123> discord.gg%2Fabc,https://example.com" }))).toBe(20);
+  });
+
+  test("ホモグリフ・全角の外部URLとメンションの併用は加点される(Codexレビュー指摘、#557)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "<@123> еxample.com/x" }))).toBe(20);
+    expect(scoreLinkSpam(baseInput({ content: "<@123> ｅｘａｍｐｌｅ．ｃｏｍ／ｘ" }))).toBe(20);
+  });
+
+  test("URLエンコードされた文字列からメンションを捏造して加点しない(Codexレビュー指摘、#557)", () => {
+    expect(scoreLinkSpam(baseInput({ content: "%3C@123%3E https://example.com/x" }))).toBe(0);
+  });
+
   test("www.付きのDiscord招待リンクとの併用も加点されない(#370: invite-link.tsとの扱い統一の回帰テスト)", () => {
     expect(scoreLinkSpam(baseInput({ content: "<@123> https://www.discord.gg/abc123" }))).toBe(0);
   });

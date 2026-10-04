@@ -7,7 +7,7 @@ import { pruneOldDumps, timestampedFilename } from "./dump.js";
 describe("timestampedFilename", () => {
   test("日時を含むファイル名を生成する", () => {
     const name = timestampedFilename(new Date("2026-01-02T03:04:05.000Z"));
-    expect(name).toBe("management_bot-2026-01-02T03-04-05-000Z.sql.gz");
+    expect(name).toBe("management_bot-2026-01-02T03-04-05-000Z.sql.gz.age");
   });
 });
 
@@ -15,22 +15,28 @@ describe("pruneOldDumps", () => {
   test("保持期間を過ぎたダンプファイルのみ削除する", async () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-test-"));
     try {
-      const oldFile = join(dir, "management_bot-old.sql.gz");
-      const newFile = join(dir, "management_bot-new.sql.gz");
+      const oldFile = join(dir, "management_bot-old.sql.gz.age");
+      const oldLegacyFile = join(dir, "management_bot-old-legacy.sql.gz");
+      const newFile = join(dir, "management_bot-new.sql.gz.age");
+      const newLegacyFile = join(dir, "management_bot-new-legacy.sql.gz");
       await writeFile(oldFile, "old");
+      await writeFile(oldLegacyFile, "old");
       await writeFile(newFile, "new");
+      await writeFile(newLegacyFile, "new");
 
       const now = new Date("2026-01-10T00:00:00.000Z");
       const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
       await utimes(oldFile, eightDaysAgo, eightDaysAgo);
+      await utimes(oldLegacyFile, eightDaysAgo, eightDaysAgo);
       await utimes(newFile, now, now);
+      await utimes(newLegacyFile, now, now);
 
       await pruneOldDumps(dir, 7, now);
 
-      const remaining = await Bun.file(newFile).exists();
-      const removed = await Bun.file(oldFile).exists();
-      expect(remaining).toBe(true);
-      expect(removed).toBe(false);
+      expect(await Bun.file(newFile).exists()).toBe(true);
+      expect(await Bun.file(newLegacyFile).exists()).toBe(true);
+      expect(await Bun.file(oldFile).exists()).toBe(false);
+      expect(await Bun.file(oldLegacyFile).exists()).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

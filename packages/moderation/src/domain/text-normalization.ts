@@ -1,3 +1,5 @@
+import { foldConfusables } from "./confusables.js";
+
 /** LEET対応表(leet-pattern.ts)が使う記号。区切り文字除去では保持し、文字クラス展開に委ねる。 */
 const LEET_RESERVED_CHARS = new Set(["@", "$", "!", "+", "|"]);
 
@@ -10,14 +12,13 @@ const SEPARATOR_CHARS = /[\p{Z}\p{P}\p{S}\p{Cc}\p{Cf}]/gu;
 
 /**
  * NGワード照合用の正規化ビュー(compact)を生成する純粋関数。
- * NFKC正規化(全角→半角等)→小文字化→空白/記号/制御文字除去の順に適用する。
+ * NFKC正規化(全角→半角等)→ホモグリフ畳み込み(#556)→小文字化→空白/記号/制御文字除去の順に適用する。
  * duplicate-content.tsのnormalize()と同じNFKC+小文字化のアプローチを踏襲し、
  * NGワード回避で使われやすい不可視文字挿入・記号分割にも対応する。
  * LEET対応表が使う記号(@ $ ! + |)は除去せず残し、leet-pattern.tsでの文字クラス展開に委ねる。
  */
 export function toCompact(content: string): string {
-  return content
-    .normalize("NFKC")
+  return foldConfusables(content.normalize("NFKC"))
     .toLowerCase()
     .replace(SEPARATOR_CHARS, (char) => (LEET_RESERVED_CHARS.has(char) ? char : ""));
 }

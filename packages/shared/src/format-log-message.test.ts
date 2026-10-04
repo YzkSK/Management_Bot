@@ -231,6 +231,68 @@ describe("formatLogMessage", () => {
     expect(message).toBe(`${channel}#雑談${end} で ${user}mod${end} が ${user}Yzk${end} のメッセージを削除しました`);
   });
 
+  test("markup=trueでは自由入力(絵文字等)に目印文字を混ぜても偽のピルを作れない(#564)", () => {
+    const { user, end } = NAME_MARKUP;
+    const entry = {
+      category: "reaction",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      messageId: "m1",
+      userId: "u1",
+      emoji: `${user}admin${end}`,
+      action: "add",
+    } as unknown as LogEntry;
+
+    const message = formatLogMessage(entry, summarizeLogEntry(entry), {
+      users: { u1: `Yu${end}zuki` },
+      channels: {},
+      markup: true,
+    });
+
+    expect(message).toBe(`${user}Yuzuki${end} が admin でリアクションしました`);
+  });
+
+  test("markup=trueで除去後に検証が通らない入力でも、出力に目印文字を残さない(#564)", () => {
+    const { user, end } = NAME_MARKUP;
+    const entry = {
+      category: "reaction",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      messageId: "m1",
+      userId: "u1",
+      emoji: `${user}${end}`,
+      action: "add",
+    } as unknown as LogEntry;
+
+    const message = formatLogMessage(entry, summarizeLogEntry(entry), { users: {}, channels: {}, markup: true });
+
+    expect(Object.values(NAME_MARKUP).some((marker) => message.includes(marker))).toBe(false);
+  });
+
+  test("markup=trueでも、未知のactionに混ぜた目印文字は除去する(#564)", () => {
+    const { channel, end } = NAME_MARKUP;
+    const entry = {
+      category: "reaction",
+      guildId: "g1",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      channelId: "c1",
+      messageId: "m1",
+      userId: "u1",
+      emoji: "👍",
+      action: "add",
+    } as unknown as LogEntry;
+
+    const message = formatLogMessage(
+      entry,
+      { ...summarizeLogEntry(entry), action: `${channel}#fake${end}` },
+      { users: {}, channels: {}, markup: true },
+    );
+
+    expect(message).not.toContain(channel);
+  });
+
   test("メッセージ編集", () => {
     const entry = {
       category: "message",

@@ -60,19 +60,26 @@ export interface RaidDetectionResult {
   /** hit=trueの場合のみ意味を持つ。一括アクション対象となる入室者一覧。 */
   targetUserIds: readonly string[];
   severity: RaidSeverity;
+  /** ヒットしたウィンドウの秒数(hit=falseの場合は短期windowの秒数)。インシデントロックの期間に使う。 */
+  windowSeconds: number;
 }
 
-/** 入室バッファからウィンドウ抽出・人数判定・新規アカウント比率判定までを一括で行う。 */
+/**
+ * 入室バッファからウィンドウ抽出・人数判定・新規アカウント比率判定までを一括で行う。
+ * 多段スライディングウィンドウ: 短期windowを先に評価し、未ヒットなら長期longWindowを評価する
+ * (しきい値直下の分散参加対策、#566)。対象者・危険度はヒットしたウィンドウの入室者から算出する。
+ */
 export function detectRaid(
   buffer: readonly RaidBufferEntry[],
   now: Date,
   config: RaidPresetConfig,
 ): RaidDetectionResult {
-  const windowEntries = entriesInWindow(buffer, now, config.window.windowSeconds);
-  const hit = hasRaidHit(windowEntries, config.window.memberThreshold);
-  if (!hit) return { hit: false, targetUserIds: [], severity: "normal" };
-
-  const ratio = newAccountRatio(windowEntries);
-  const severity = decideRaidSeverity(ratio, config.newAccountRatioThreshold);
-  return { hit: true, targetUserIds: windowEntries.map((e) => e.userId), severity };
+  for (const w of [config.window, config.longWindow]) {
+    const windowEntries = entriesInWindow(buffer, now, w.windowSeconds);
+    if (!hasRaidHit(windowEntries, w.memberThreshold)) continue;
+    const ratio = newAccountRatio(windowEntries);
+    const severity = decideRaidSeverity(ratio, config.newAccountRatioThreshold);
+    return { hit: true, targetUserIds: windowEntries.map((e) => e.userId), severity, windowSeconds: w.windowSeconds };
+  }
+  return { hit: false, targetUserIds: [], severity: "normal", windowSeconds: config.window.windowSeconds };
 }
