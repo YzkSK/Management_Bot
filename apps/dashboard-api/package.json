@@ -21,15 +21,15 @@
     "@management-bot/moderation": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@management-bot/temp-voice": "workspace:*",
-    "@trpc/server": "^11.0.0",
-    "hono": "^4.6.0",
-    "ioredis": "^5.4.0",
-    "zod": "^4.4.3"
+    "@trpc/server": "^11.19.0",
+    "hono": "^4.13.12",
+    "ioredis": "^6.0.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.0",
-    "@types/node": "^26.4.0",
-    "drizzle-orm": "^0.45.2",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.3",
+    "drizzle-orm": "^0.45.3",
     "typescript": "^6.0.3"
   }
 }
