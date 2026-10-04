@@ -1,4 +1,4 @@
-import { isBulkDeleteLogEntry, type LogEntry, type VoiceStateFlagName } from "./log-entry.js";
+import { isBulkDeleteLogEntry, logEntrySchema, type LogEntry, type VoiceStateFlagName } from "./log-entry.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
 
@@ -102,8 +102,31 @@ function channelName(id: string, names: NameResolvers, snapshot?: string): strin
   return markChannel(`#${names.channels[id] || id}`, names);
 }
 
+const stripMarkup = (text: string): string => text.replace(NAME_MARKUP_CHARS, "");
+const stripMarkupNullable = (text: string | null): string | null => (text === null ? null : stripMarkup(text));
+const stripMarkupValues = (record: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(record).map(([key, value]) => [key, stripMarkup(value)]));
+
 /** summarizeLogEntryの出力(カテゴリ横断の共通形式)を、一覧カード見出し用の日本語1文に変換する。 */
 export function formatLogMessage(entry: LogEntry, summary: LogEntrySummary, names: NameResolvers): string {
+  if (!names.markup) return formatLogMessageUnsafe(entry, summary, names);
+  // 理由・ロール名・本文等の自由入力に目印文字を混ぜて偽のピル表示を作られないよう、
+  // 出力に入りうる外部由来の文字列すべてから目印文字を除去してから整形する(#564)。
+  const sanitized = logEntrySchema.safeParse(
+    JSON.parse(JSON.stringify(entry, (_key, value: unknown) => (typeof value === "string" ? stripMarkup(value) : value))),
+  );
+  // 除去で検証が通らなくなった場合(必須文字列が目印文字のみ等)は、ピル表示を諦めて目印なしで整形し、
+  // 出力に残った外部由来の目印文字も取り除く。
+  if (!sanitized.success) return stripMarkup(formatLogMessageUnsafe(entry, summary, { ...names, markup: false }));
+  return formatLogMessageUnsafe(
+    sanitized.data,
+    { ...summary, subjectId: stripMarkupNullable(summary.subjectId), action: stripMarkupNullable(summary.action) },
+    { ...names, users: stripMarkupValues(names.users), channels: stripMarkupValues(names.channels) },
+  );
+}
+
+/** markup時の入力の無害化を経ない本体。formatLogMessage経由でのみ呼ぶ。 */
+function formatLogMessageUnsafe(entry: LogEntry, summary: LogEntrySummary, names: NameResolvers): string {
   // executorNameはログ作成後の監査ログ相関時点のスナップショット(常にresolveDisplayNamesより新鮮)を優先し、
   // 未設定(スナップショット導入前の既存ログ、または相関自体が未発生)の場合のみ名前解決結果にフォールバックする。
   const executorName = entry.executorId
