@@ -61,8 +61,17 @@ services:
       - sh
       - -euc
       - |
-        if [ -s /new/18/docker/PG_VERSION ] || [ ! -s /old/PG_VERSION ]; then echo "postgres-upgrade: skip"; exit 0; fi
+        if [ ! -s /old/PG_VERSION ]; then echo "postgres-upgrade: skip (no PG17 data)"; exit 0; fi
+        if [ -s /new/18/docker/PG_VERSION ]; then
+          # 復元完了マーカーが無い=restoreが途中で失敗した。部分的なDBで起動させない。
+          if [ ! -e /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG18 exists but PG17 restore did not complete; recreate postgres18-data volume" >&2; exit 1; fi
+          # 移行後にPG17が起動された(ロールバック中の書き込みの可能性)。古いPG18で起動させない。
+          if [ /old/global/pg_control -nt /new/18/docker/.pg17-restored ]; then echo "postgres-upgrade: ERROR PG17 data changed after migration (rollback?); migrate manually" >&2; exit 1; fi
+          echo "postgres-upgrade: skip (already migrated)"; exit 0
+        fi
         chown postgres /dump
+        # initdb.dは辞書順に実行され、失敗時はそこで止まるため、SQLが全て成功した場合だけマーカーが作られる。
+        echo 'touch "$$PGDATA/.pg17-restored"' > /dump/20-mark-restored.sh
         gosu postgres pg_ctl -D /old -w start -o "-c listen_addresses=''"
         gosu postgres pg_dump -U management_bot -d management_bot -f /dump/restore.tmp
         gosu postgres pg_ctl -D /old -w stop
