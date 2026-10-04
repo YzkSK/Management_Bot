@@ -5,7 +5,8 @@
 sources:
   postgres:
     type: file
-    include: ["/logs/postgres/log/*.json"]
+    # PGDATAはメジャーバージョン別(例: 18/docker)のためワイルドカードで追従する(issue #608)。
+    include: ["/logs/postgres/*/docker/log/*.json"]
     read_from: end
   redis:
     type: file

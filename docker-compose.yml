@@ -33,7 +33,9 @@ services:
       - -c
       - log_rotation_age=1d
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # PG18以降はメジャーバージョン別サブディレクトリ(18/docker)に書くため親ディレクトリをマウントする(issue #608)。
+      # 旧PG17のpostgres-dataボリュームはロールバック用に残す。
+      - postgres18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U management_bot -d management_bot"]
       interval: 5s
@@ -61,7 +63,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
-      - postgres-data:/logs/postgres:ro
+      - postgres18-data:/logs/postgres:ro
       - redis-data:/logs/redis:ro
     environment:
       VECTOR_REDIS_ENDPOINT: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -261,6 +263,7 @@ services:
 
 volumes:
   postgres-data:
+  postgres18-data:
   redis-data:
   backup-data:
   caddy-data:
