@@ -16,6 +16,7 @@ import { createOAuthRoutes } from "./oauth/routes.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
 import { subscribeActivityChanges } from "./ws/activity-broadcaster.js";
 import { createWsRoutes, WS_MAX_PAYLOAD_LENGTH } from "./ws/routes.js";
+import { createRateLimiter, rateLimit } from "./rate-limit.js";
 
 const dashboardEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -64,6 +65,15 @@ app.onError((error, c) => {
 
 app.use("/trpc/*", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
 app.use("/auth/logout", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
+
+// レート制限(issue #550)。CORSの後に置き、429にもCORSヘッダーを付ける。
+// 全体はポーリング(数秒間隔)を含む通常利用で当たらない値、Discord APIを直接叩き得るmutation(tRPCではPOST)と
+// OAuth(トークン交換でDiscordを叩く)はより厳しくする。
+const generalLimit = rateLimit(createRateLimiter({ limit: 600, windowMs: 60_000 }));
+app.use("/trpc/*", generalLimit);
+app.use("/ws/*", generalLimit);
+app.use("/trpc/*", rateLimit(createRateLimiter({ limit: 60, windowMs: 60_000 }), (method) => method === "POST"));
+app.use("/auth/*", rateLimit(createRateLimiter({ limit: 30, windowMs: 60_000 })));
 
 app.route(
   "/auth",
