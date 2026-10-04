@@ -4,7 +4,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: management_bot
-      POSTGRES_PASSWORD: management_bot
+      # .envから読む(issue #552)。DATABASE_URLに埋め込むためURLセーフな値(例: openssl rand -hex 32)にする。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: management_bot
     # ステータス画面のログ表示用(issue #507)。PGDATA/log/配下へ曜日ごとに上書きローテーションで書き、vectorが読む。
     command:
@@ -29,11 +30,14 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
-    command: redis-server --appendonly yes --logfile /data/redis.log
+    # requirepassで認証必須にする(issue #551)。REDIS_URLにも埋め込むためURLセーフな値にする。
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    command: sh -c 'exec redis-server --appendonly yes --logfile /data/redis.log --requirepass "$$REDIS_PASSWORD"'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -45,6 +49,8 @@ services:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
       - postgres-data:/logs/postgres:ro
       - redis-data:/logs/redis:ro
+    environment:
+      VECTOR_REDIS_ENDPOINT: redis://:${REDIS_PASSWORD}@redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
@@ -78,7 +84,7 @@ services:
     command: ["bun", "run", "--cwd", "/repo/packages/db", "db:migrate"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,8 +97,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       redis:
         condition: service_healthy
@@ -106,8 +112,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       DASHBOARD_WEB_URL: ${DASHBOARD_WEB_URL}
       DISCORD_OAUTH_REDIRECT_URI: ${DISCORD_OAUTH_REDIRECT_URI}
       CADVISOR_URL: http://cadvisor:8080
@@ -125,8 +131,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     volumes:
       - backup-data:/backups
     depends_on:
@@ -140,8 +146,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -153,8 +159,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -166,8 +172,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -179,8 +185,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://management_bot:management_bot@postgres:5432/management_bot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://management_bot:${POSTGRES_PASSWORD}@postgres:5432/management_bot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       migrate:
         condition: service_completed_successfully

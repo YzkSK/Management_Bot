@@ -1,6 +1,6 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
-import { startInfraReporter } from "@management-bot/shared";
+import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createPurgeRunner } from "./run-purge.js";
@@ -11,6 +11,7 @@ const retentionEnvSchema = envSchema.pick({
   LOGGING_RETENTION_CRON: true,
 });
 
+installFatalErrorHandlers("logging-retention");
 const env = parseEnv(retentionEnvSchema);
 const TIMEZONE = "Asia/Tokyo";
 

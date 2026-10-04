@@ -177,7 +177,14 @@ export interface DashboardAccessContext {
   resolveEffectiveCapabilities?: (input: ResolveEffectiveCapabilitiesInput) => Promise<number>;
 }
 
-const t = initTRPC.context<DashboardAccessContext>().create();
+// 本番では想定外の例外(INTERNAL_SERVER_ERROR)のmessageを汎用文言に置き換え、DBエラー文等の内部情報を
+// レスポンスに出さない(issue #562)。stackはtRPCが本番では元々付けない。詳細はサーバーログのみに出す。
+const t = initTRPC.context<DashboardAccessContext>().create({
+  errorFormatter: ({ shape, error }) =>
+    error.code === "INTERNAL_SERVER_ERROR" && process.env.NODE_ENV === "production"
+      ? { ...shape, message: "Internal server error" }
+      : shape,
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

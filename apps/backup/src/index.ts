@@ -1,5 +1,5 @@
 import { parseEnv, envSchema } from "@management-bot/config";
-import { startInfraReporter } from "@management-bot/shared";
+import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { backupOnce } from "./dump.js";
@@ -12,6 +12,7 @@ const backupEnvSchema = envSchema.pick({
   BACKUP_RETENTION_DAYS: true,
 });
 
+installFatalErrorHandlers("backup");
 const env = parseEnv(backupEnvSchema);
 const TIMEZONE = "Asia/Tokyo";
 

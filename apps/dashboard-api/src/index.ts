@@ -2,9 +2,10 @@ import { trpcServer } from "@hono/trpc-server";
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { Redis } from "ioredis";
 import { cors } from "hono/cors";
-import { createTtlCache, startInfraReporter, type ResourceSample } from "@management-bot/shared";
+import { createTtlCache, installFatalErrorHandlers, startInfraReporter, type ResourceSample } from "@management-bot/shared";
 import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
@@ -29,6 +30,7 @@ const dashboardEnvSchema = envSchema.pick({
   DOCKER_API_URL: true,
 });
 
+installFatalErrorHandlers("dashboard-api");
 const env = parseEnv(dashboardEnvSchema);
 const { db } = createDb(env.DATABASE_URL);
 // lazyConnect: 最初の利用(アクティブVC取得・変更通知の購読)まで接続しない。
@@ -53,6 +55,12 @@ if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL, env.DOCKER_A
 const isProduction = process.env.NODE_ENV === "production";
 
 const app = new Hono();
+// 想定外の例外は詳細をサーバーログにのみ出し、レスポンスは汎用文言にする(issue #562)。
+app.onError((error, c) => {
+  if (error instanceof HTTPException) return error.getResponse();
+  console.error(`Unhandled error on ${c.req.method} ${c.req.path}:`, error);
+  return c.text("Internal Server Error", 500);
+});
 
 app.use("/trpc/*", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
 app.use("/auth/logout", cors({ origin: env.DASHBOARD_WEB_URL, credentials: true }));
@@ -75,6 +83,9 @@ app.use(
   trpcServer({
     router: appRouter,
     createContext: createContext(db, env.SESSION_SECRET, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID, redis),
+    onError: ({ error, path }) => {
+      if (error.code === "INTERNAL_SERVER_ERROR") console.error(`tRPC error on ${path ?? "<unknown>"}:`, error);
+    },
   }),
 );
 

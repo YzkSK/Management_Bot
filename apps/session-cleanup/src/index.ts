@@ -1,6 +1,6 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
-import { startInfraReporter } from "@management-bot/shared";
+import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createCleanupRunner } from "./run-cleanup.js";
@@ -11,6 +11,7 @@ const cleanupEnvSchema = envSchema.pick({
   SESSION_CLEANUP_CRON: true,
 });
 
+installFatalErrorHandlers("session-cleanup");
 const env = parseEnv(cleanupEnvSchema);
 const TIMEZONE = "Asia/Tokyo";
 

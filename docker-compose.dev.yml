@@ -51,6 +51,8 @@ services:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
       - postgres-data:/logs/postgres:ro
       - redis-data:/logs/redis:ro
+    environment:
+      VECTOR_REDIS_ENDPOINT: redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy

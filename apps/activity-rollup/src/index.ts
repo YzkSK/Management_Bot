@@ -1,6 +1,6 @@
 import { parseEnv, envSchema } from "@management-bot/config";
 import { createDb, stopJobOnSignal } from "@management-bot/db";
-import { startInfraReporter } from "@management-bot/shared";
+import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { createRollupRunner } from "./run-rollup.js";
@@ -11,6 +11,7 @@ const rollupEnvSchema = envSchema.pick({
   ACTIVITY_ROLLUP_CRON: true,
 });
 
+installFatalErrorHandlers("activity-rollup");
 const env = parseEnv(rollupEnvSchema);
 const TIMEZONE = "Asia/Tokyo";
 
