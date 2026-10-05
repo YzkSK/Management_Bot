@@ -4,7 +4,7 @@ import type { Db } from "@management-bot/db";
 import { createSendToChannel, registerDiscordHandlers } from "./index.js";
 
 describe("registerDiscordHandlers", () => {
-  test("moderation.action.recorded/temp-voice.event.recordedをlogging自身のeventBusで購読する", async () => {
+  test("moderation.action.recorded/temp-voice.event.recorded/scheduled-post.event.recordedをlogging自身のeventBusで購読する", async () => {
     const subscribe = mock(() => Promise.resolve());
     const eventBus = { subscribe } as unknown as DomainEventBus;
     const on = mock(() => undefined);
@@ -13,10 +13,10 @@ describe("registerDiscordHandlers", () => {
 
     await registerDiscordHandlers(ctx);
 
-    expect(subscribe).toHaveBeenCalledTimes(2);
+    expect(subscribe).toHaveBeenCalledTimes(3);
     const subscribedTypes = subscribe.mock.calls.map((call) => call[0]);
     expect(subscribedTypes).toEqual(
-      expect.arrayContaining(["moderation.action.recorded", "temp-voice.event.recorded"]),
+      expect.arrayContaining(["moderation.action.recorded", "temp-voice.event.recorded", "scheduled-post.event.recorded"]),
     );
   });
 
