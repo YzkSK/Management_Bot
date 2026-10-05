@@ -29,4 +29,9 @@ export {
   type TempVoiceAutoSetupNotification,
   type TempVoiceForceDeleteNotification,
 } from "./temp-voice-action-notifications.js";
+export {
+  listenForScheduledPostAdminCancel,
+  SCHEDULED_POST_ADMIN_CANCEL_CHANNEL,
+  type ScheduledPostAdminCancelNotification,
+} from "./scheduled-post-action-notifications.js";
 export * from "./schema/index.js";
