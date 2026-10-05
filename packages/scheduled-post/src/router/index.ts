@@ -6,17 +6,14 @@ import { z } from "zod";
 import {
   cancelScheduledPost,
   getAllowedRoleIds,
-  isScheduledPostEnabled,
   listGuildPosts,
   notifyScheduledPostAdminCancel,
   setAllowedRoleIds,
-  setScheduledPostEnabled,
 } from "../application/index.js";
 import { SCHEDULED_POST_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 const cancelInput = z.object({ guildId: discordIdSchema, id: z.uuid() });
-const setEnabledInput = z.object({ guildId: discordIdSchema, enabled: z.boolean() });
 const updateSettingsInput = z.object({ guildId: discordIdSchema, roleIds: z.array(discordIdSchema).max(250) });
 
 // requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する(temp-voiceと同じ)。
@@ -67,11 +64,6 @@ export const scheduledPostRouter = router({
     });
   }),
 
-  /** 機能のON/OFF。OFFでも予約は消えず、投稿のみ止まる。 */
-  setEnabled: manageProcedure(setEnabledInput).mutation(async ({ ctx, input }) => {
-    await setScheduledPostEnabled(ctx.db, input.guildId, input.enabled);
-  }),
-
   getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => ({
     allowedRoleIds: await getAllowedRoleIds(ctx.db, input.guildId),
   })),
@@ -95,12 +87,11 @@ export const scheduledPostRouter = router({
   }),
 
   /**
-   * 機能の有効状態と、Botが予約投稿に必要な権限(投稿先の閲覧・送信)を持っているか。
-   * 不足時は必要権限のみを含む再認可URLを返す(最小権限方針、機能有効時のみ要求)。
+   * Botが予約投稿に必要な権限(投稿先の閲覧・送信)を持っているか。
+   * 不足時は必要権限のみを含む再認可URLを返す(最小権限方針)。
    */
   getRequiredPermissionStatus: viewProcedure(guildIdInput).query(async ({ ctx, input }) => {
-    const [enabled, permissions, accessStatus] = await Promise.all([
-      isScheduledPostEnabled(ctx.db, input.guildId),
+    const [permissions, accessStatus] = await Promise.all([
       ctx.getBotPermissions(input.guildId),
       ctx.getGuildAccessStatus(input.guildId),
     ]);
@@ -108,7 +99,6 @@ export const scheduledPostRouter = router({
       (permissions & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator ||
       (permissions & SCHEDULED_POST_REQUIRED_PERMISSIONS) === SCHEDULED_POST_REQUIRED_PERMISSIONS;
     return {
-      enabled,
       hasRequiredPermissions,
       reauthorizeUrl: hasRequiredPermissions
         ? null

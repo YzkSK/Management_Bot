@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { createDb, guildFeatureToggles, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
+import { createDb, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
 import type { ScheduledPostEventRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
-import { cancelScheduledPost, setAllowedRoleIds, setScheduledPostEnabled } from "../application/index.js";
+import { cancelScheduledPost, setAllowedRoleIds } from "../application/index.js";
 import type { AllowedMentionsSpec, PostFacts } from "../domain/index.js";
 import { handleAdminCancelNotification } from "./dashboard-action-listener.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
@@ -34,7 +34,6 @@ beforeEach(async () => {
   await syncFeatureMetadata(db);
   await db.delete(guilds).where(eq(guilds.id, guildId));
   await db.insert(guilds).values({ id: guildId, name: "test" });
-  await db.insert(guildFeatureToggles).values({ guildId, featureKey: "scheduled-post", enabled: true });
 });
 
 const okFacts: PostFacts = {
@@ -264,21 +263,6 @@ describe("予約投稿の複合シナリオ", () => {
     expect(h.dms).toHaveLength(1);
     const last = h.events.at(-1);
     expect(last?.action === "failed" && last.reason).toBe("unknown_result");
-  });
-
-  test("機能OFFの間は投稿せず予約も消えず、ONに戻すと再開する", async () => {
-    const h = createHarness();
-    const post = await reserve(h, 5);
-    await setScheduledPostEnabled(db, guildId, false);
-
-    h.clock.now = new Date(T0.getTime() + minutes(10));
-    await runSchedulerTick(h.deps);
-    expect(h.sends).toHaveLength(0);
-    expect((await statusOf(post.id))?.status).toBe("pending");
-
-    await setScheduledPostEnabled(db, guildId, true);
-    await runSchedulerTick(h.deps);
-    expect((await statusOf(post.id))?.status).toBe("posted");
   });
 
   test.each([

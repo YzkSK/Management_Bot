@@ -19,7 +19,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/ui/skeleton";
 
@@ -202,7 +201,6 @@ function AllowedRolesSection({ guildId }: { guildId: string }) {
 
 export function ScheduledPostPage() {
   const { guildId } = useParams<{ guildId: string }>();
-  const queryClient = useQueryClient();
   const [tab, setTab] = useState<PageTab>("pending");
   const capabilities = useGuildCapabilities(guildId);
   const canManage = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_SCHEDULED_POSTS);
@@ -210,14 +208,6 @@ export function ScheduledPostPage() {
   const statusQuery = useQuery({
     ...trpc.scheduledPost.getRequiredPermissionStatus.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
-  });
-  const setEnabled = useMutation({
-    ...trpc.scheduledPost.setEnabled.mutationOptions(),
-    onError: () => toast.error("機能の切り替えに失敗しました。"),
-    onSettled: () =>
-      queryClient.invalidateQueries({
-        queryKey: trpc.scheduledPost.getRequiredPermissionStatus.queryOptions({ guildId: guildId ?? "" }).queryKey,
-      }),
   });
 
   if (!guildId) {
@@ -239,7 +229,7 @@ export function ScheduledPostPage() {
           <AlertDescription>このサーバーにBotが参加していません。</AlertDescription>
         </Alert>
       )}
-      {status && status.enabled && !status.hasRequiredPermissions && (
+      {status && !status.hasRequiredPermissions && (
         <Alert variant="destructive">
           <AlertDescription>
             Botの権限(チャンネルを見る・メッセージを送信・スレッドでメッセージを送信)が不足しています。
@@ -253,23 +243,6 @@ export function ScheduledPostPage() {
             )}
           </AlertDescription>
         </Alert>
-      )}
-
-      {canManage && (
-        <section className="bg-card flex items-center justify-between gap-3 rounded-xl border p-4">
-          <div className="min-w-0">
-            <p className="text-sm font-bold">予約投稿機能: {status?.enabled ? "有効" : "無効"}</p>
-            <p className="text-muted-foreground text-xs">
-              無効にしても予約は消えず、投稿だけが止まります。有効に戻すと再開します(予定時刻を1時間以上過ぎた予約は時間切れになります)。
-            </p>
-          </div>
-          <Switch
-            checked={status?.enabled ?? false}
-            disabled={!status || setEnabled.isPending}
-            aria-label="予約投稿機能を有効にする"
-            onCheckedChange={(enabled) => setEnabled.mutate({ guildId, enabled })}
-          />
-        </section>
       )}
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as PageTab)}>
