@@ -131,6 +131,13 @@ const PRESENTATION: {
     ownerTransferred: { accent: "warning", title: "一時VCのオーナーが移譲されました", icon: "👑" },
     memberPermissionChanged: { accent: "warning", title: "一時VCの個別メンバー権限が変更されました", icon: "🔑" },
   },
+  scheduledPost: {
+    created: { accent: "positive", title: "予約投稿が登録されました", icon: "📅" },
+    edited: { accent: "warning", title: "予約投稿が編集されました", icon: "✏️" },
+    cancelled: { accent: "negative", title: "予約投稿が取り消されました", icon: "🚫" },
+    posted: { accent: "positive", title: "予約投稿が投稿されました", icon: "📨" },
+    failed: { accent: "negative", title: "予約投稿に失敗しました", icon: "⚠️" },
+  },
 };
 
 const FALLBACK = { accent: "neutral" as const, title: "ログイベント", icon: "ℹ️" };

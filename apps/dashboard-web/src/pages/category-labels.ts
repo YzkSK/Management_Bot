@@ -1,6 +1,7 @@
 import {
   AlignLeft,
   Bot,
+  CalendarClock,
   CalendarDays,
   ChartColumn,
   FileText,
@@ -53,6 +54,7 @@ export const CATEGORY_ACCENT: Record<LogCategory, string> = {
   moderationCase: "#dc2626",
   voice: "#9333ea",
   tempVoice: "#a855f7",
+  scheduledPost: "#0284c7",
 };
 
 /** カテゴリフィルターと、アプリ絵文字画像がない種別のログ行で使うアイコン。 */
@@ -76,4 +78,5 @@ export const CATEGORY_ICON: Record<LogCategory, LucideIcon> = {
   moderationCase: ShieldAlert,
   voice: Mic,
   tempVoice: Headphones,
+  scheduledPost: CalendarClock,
 };
