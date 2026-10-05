@@ -30,7 +30,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   ctx.onShutdown(dashboardActionListener.close);
 
   // 予約の投稿はDiscord接続が必要なためBotプロセス内で15秒ごとに実行する。
-  // 起動時のリカバリ(posting残留の失敗化)はクライアントがready後に1回だけ行う。
+  // posting残留の失敗化も各tickで行う(STUCK_POSTING_MS経過したもののみ)。
   const scheduler = createScheduler({ db: ctx.db, gateway: createDiscordGateway(ctx.client), publish });
   const start = () => {
     scheduler.start().catch((error: unknown) => {

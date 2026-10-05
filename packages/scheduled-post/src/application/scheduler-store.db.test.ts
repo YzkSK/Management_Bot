@@ -94,13 +94,17 @@ describe("markPosted / markFailed", () => {
 });
 
 describe("recoverStuckPosting", () => {
-  test("postingのまま残った予約はfailed/unknown_resultになる(再送しない)", async () => {
-    const stuck = await insertPost({ status: "posting" });
+  test("一定時間postingのまま残った予約はfailed/unknown_resultになる(再送しない)", async () => {
+    const stuck = await insertPost({ status: "posting", updatedAt: at(-10) });
+    // 別プロセスが処理中の可能性がある直近のpostingは触らない(ローリングデプロイ時の誤判定防止)。
+    const inFlight = await insertPost({ status: "posting", updatedAt: at(-1) });
     const pending = await insertPost({ scheduledAt: at(10) });
 
     const recovered = await recoverStuckPosting(db, NOW);
 
     expect(recovered).toHaveLength(1);
+    const [inFlightRow] = await db.select().from(scheduledPosts).where(eq(scheduledPosts.id, inFlight.id));
+    expect(inFlightRow?.status).toBe("posting");
     expect(recovered[0]).toMatchObject({ id: stuck.id, status: "failed", failureReason: "unknown_result" });
     const [pendingRow] = await db.select().from(scheduledPosts).where(eq(scheduledPosts.id, pending.id));
     expect(pendingRow?.status).toBe("pending");

@@ -142,7 +142,7 @@ export async function processClaimedPost(deps: SchedulerDeps, post: ScheduledPos
     return;
   }
 
-  // 送信後にDB更新が失敗した場合はpostingのまま残り、次回起動時にunknown_result(再送しない)として扱われる。
+  // 送信後にDB更新が失敗した場合はpostingのまま残り、STUCK_POSTING_MS経過後にunknown_result(再送しない)として扱われる。
   const finishedAt = (deps.now ?? (() => new Date()))();
   const posted = await markPosted(deps.db, post.id, messageId, finishedAt);
   if (!posted) return;
@@ -155,7 +155,7 @@ export async function processClaimedPost(deps: SchedulerDeps, post: ScheduledPos
 }
 
 /**
- * Bot起動時に1回だけ実行する。postingのまま残った予約(投稿途中でBotが落ちた)は
+ * 毎tick実行する。一定時間以上postingのまま残った予約(投稿途中でBotが落ちた)は
  * 送れたか分からないため再送せず、failed/unknown_resultにして通知する。
  */
 export async function recoverInterruptedPosts(deps: SchedulerDeps): Promise<void> {
@@ -199,7 +199,7 @@ export async function runSchedulerTick(deps: SchedulerDeps): Promise<void> {
 }
 
 export interface Scheduler {
-  /** 起動時リカバリを1回行ってから定期実行を始める。 */
+  /** 定期実行を始める(posting残留の回復も各tickで行う)。 */
   start: () => Promise<void>;
   /** 定期実行を止め、実行中の処理の完了を待つ。 */
   stop: () => Promise<void>;
@@ -219,6 +219,8 @@ export function createScheduler(deps: SchedulerDeps, intervalMs: number = SCHEDU
     if (running) return;
     running = (async () => {
       try {
+        // 起動直後だけでなく毎tick確認する(経過時間で判定するため、起動時点ではまだ対象外の行もある)。
+        await recoverInterruptedPosts(deps);
         await runSchedulerTick(deps);
         const now = clock();
         if (now.getTime() - lastPurgeAt >= PURGE_INTERVAL_MS) {
@@ -236,11 +238,6 @@ export function createScheduler(deps: SchedulerDeps, intervalMs: number = SCHEDU
 
   return {
     start: async () => {
-      try {
-        await recoverInterruptedPosts(deps);
-      } catch (error) {
-        console.error("scheduled-post: failed to recover interrupted posts", error);
-      }
       tick();
       timer = setInterval(tick, intervalMs);
     },

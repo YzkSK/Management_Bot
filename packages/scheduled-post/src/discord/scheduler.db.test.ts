@@ -248,12 +248,12 @@ describe("予約投稿の複合シナリオ", () => {
     expect(h.dms.some((d) => d.text.includes("時間切れ"))).toBe(true);
   });
 
-  test("投稿処理中(posting)のまま残った予約は、起動時にunknown_resultで失敗とし、再送しない", async () => {
+  test("投稿処理中(posting)のまま残った予約は、unknown_resultで失敗とし、再送しない", async () => {
     const h = createHarness();
     const post = await reserve(h, 1);
-    await db.update(scheduledPosts).set({ status: "posting" }).where(eq(scheduledPosts.id, post.id));
+    await db.update(scheduledPosts).set({ status: "posting", updatedAt: T0 }).where(eq(scheduledPosts.id, post.id));
 
-    h.clock.now = new Date(T0.getTime() + minutes(2));
+    h.clock.now = new Date(T0.getTime() + minutes(10));
     await recoverInterruptedPosts(h.deps);
     await runSchedulerTick(h.deps);
 
@@ -384,9 +384,9 @@ describe("予約投稿の複合シナリオ", () => {
     const h = createHarness();
     const stuck = await reserve(h, 1, "残留");
     const due = await reserve(h, 2, "期限到来");
-    await db.update(scheduledPosts).set({ status: "posting" }).where(eq(scheduledPosts.id, stuck.id));
+    await db.update(scheduledPosts).set({ status: "posting", updatedAt: T0 }).where(eq(scheduledPosts.id, stuck.id));
 
-    h.clock.now = new Date(T0.getTime() + minutes(3));
+    h.clock.now = new Date(T0.getTime() + minutes(10));
     const scheduler = createScheduler(h.deps, 20);
     await scheduler.start();
     await new Promise((resolve) => setTimeout(resolve, 100));
