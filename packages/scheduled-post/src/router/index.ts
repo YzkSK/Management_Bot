@@ -10,11 +10,13 @@ import {
   listGuildPosts,
   notifyScheduledPostAdminCancel,
   setAllowedRoleIds,
+  setScheduledPostEnabled,
 } from "../application/index.js";
 import { SCHEDULED_POST_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 const cancelInput = z.object({ guildId: discordIdSchema, id: z.uuid() });
+const setEnabledInput = z.object({ guildId: discordIdSchema, enabled: z.boolean() });
 const updateSettingsInput = z.object({ guildId: discordIdSchema, roleIds: z.array(discordIdSchema).max(250) });
 
 // requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する(temp-voiceと同じ)。
@@ -63,6 +65,11 @@ export const scheduledPostRouter = router({
       executorId: ctx.discordUserId,
       executorName: ctx.discordUsername,
     });
+  }),
+
+  /** 機能のON/OFF。OFFでも予約は消えず、投稿のみ止まる。 */
+  setEnabled: manageProcedure(setEnabledInput).mutation(async ({ ctx, input }) => {
+    await setScheduledPostEnabled(ctx.db, input.guildId, input.enabled);
   }),
 
   getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => ({

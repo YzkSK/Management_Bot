@@ -19,6 +19,7 @@ export {
   getAllowedRoleIds,
   isScheduledPostEnabled,
   setAllowedRoleIds,
+  setScheduledPostEnabled,
 } from "./settings.js";
 export {
   RETENTION_DAYS,

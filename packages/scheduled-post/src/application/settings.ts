@@ -18,6 +18,17 @@ export async function isScheduledPostEnabled(db: Db, guildId: string): Promise<b
   return row?.enabled ?? false;
 }
 
+/** 機能のON/OFF。OFFにしても予約は消えず、投稿のみ止まる(ONに戻すと再開)。 */
+export async function setScheduledPostEnabled(db: Db, guildId: string, enabled: boolean): Promise<void> {
+  await db
+    .insert(guildFeatureToggles)
+    .values({ guildId, featureKey: SCHEDULED_POST_FEATURE_KEY, enabled })
+    .onConflictDoUpdate({
+      target: [guildFeatureToggles.guildId, guildFeatureToggles.featureKey],
+      set: { enabled },
+    });
+}
+
 /** 「使えるロール」。空配列=メンバー全員が使える。 */
 export async function getAllowedRoleIds(db: Db, guildId: string): Promise<string[]> {
   const [row] = await db
