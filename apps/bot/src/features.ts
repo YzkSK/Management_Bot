@@ -3,6 +3,7 @@ import { activityFeatureModule } from "@management-bot/activity";
 import { loggingFeatureModule } from "@management-bot/logging";
 import { tempVoiceFeatureModule } from "@management-bot/temp-voice";
 import { moderationFeatureModule } from "@management-bot/moderation";
+import { scheduledPostFeatureModule } from "@management-bot/scheduled-post";
 
 /**
  * 機能配線点。新機能追加時はここに1行importして配列に追記するだけでよい
@@ -13,4 +14,5 @@ export const FEATURES: FeatureModule[] = [
   loggingFeatureModule,
   tempVoiceFeatureModule,
   moderationFeatureModule,
+  scheduledPostFeatureModule,
 ];
