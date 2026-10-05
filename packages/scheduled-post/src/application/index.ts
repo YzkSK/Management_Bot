@@ -14,13 +14,7 @@ export {
   type EditScheduledPostResult,
   type ScheduledPostRow,
 } from "./posts.js";
-export {
-  SCHEDULED_POST_FEATURE_KEY,
-  getAllowedRoleIds,
-  isScheduledPostEnabled,
-  setAllowedRoleIds,
-  setScheduledPostEnabled,
-} from "./settings.js";
+export { getAllowedRoleIds, setAllowedRoleIds } from "./settings.js";
 export {
   RETENTION_DAYS,
   claimDuePosts,

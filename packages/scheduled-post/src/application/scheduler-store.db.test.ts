@@ -1,36 +1,27 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { createDb, guildFeatureToggles, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
+import { createDb, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { claimDuePosts, markFailed, markPosted, purgeFinishedPosts, recoverStuckPosting } from "./scheduler-store.js";
-import { getAllowedRoleIds, isScheduledPostEnabled, setAllowedRoleIds } from "./settings.js";
+import { getAllowedRoleIds, setAllowedRoleIds } from "./settings.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
 
 const { db, close } = createDb(databaseUrl);
 const guildId = `test-guild-${randomUUID()}`;
-const disabledGuildId = `test-guild-${randomUUID()}`;
 const NOW = new Date("2026-10-05T03:00:00.000Z");
 const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
 
 afterAll(async () => {
   await db.delete(guilds).where(eq(guilds.id, guildId));
-  await db.delete(guilds).where(eq(guilds.id, disabledGuildId));
   await close();
 });
 
 beforeEach(async () => {
   await syncFeatureMetadata(db);
-  for (const id of [guildId, disabledGuildId]) await db.delete(guilds).where(eq(guilds.id, id));
-  await db.insert(guilds).values([
-    { id: guildId, name: "enabled" },
-    { id: disabledGuildId, name: "disabled" },
-  ]);
-  await db.insert(guildFeatureToggles).values([
-    { guildId, featureKey: "scheduled-post", enabled: true },
-    { guildId: disabledGuildId, featureKey: "scheduled-post", enabled: false },
-  ]);
+  await db.delete(guilds).where(eq(guilds.id, guildId));
+  await db.insert(guilds).values({ id: guildId, name: "test" });
 });
 
 async function insertPost(values: Partial<typeof scheduledPosts.$inferInsert> = {}) {
@@ -61,18 +52,6 @@ describe("claimDuePosts", () => {
     const results = await Promise.all([claimDuePosts(db, NOW), claimDuePosts(db, NOW), claimDuePosts(db, NOW)]);
 
     expect(results.flat()).toHaveLength(1);
-  });
-
-  test("機能が無効なギルドの予約はclaimせず残し、有効に戻せば再開する", async () => {
-    const post = await insertPost({ guildId: disabledGuildId });
-    expect(await claimDuePosts(db, NOW)).toHaveLength(0);
-
-    await db
-      .update(guildFeatureToggles)
-      .set({ enabled: true })
-      .where(eq(guildFeatureToggles.guildId, disabledGuildId));
-
-    expect((await claimDuePosts(db, NOW)).map((p) => p.id)).toEqual([post.id]);
   });
 });
 
@@ -130,12 +109,6 @@ describe("purgeFinishedPosts", () => {
 });
 
 describe("settings", () => {
-  test("機能の有効判定は行が無ければ無効", async () => {
-    expect(await isScheduledPostEnabled(db, guildId)).toBe(true);
-    expect(await isScheduledPostEnabled(db, disabledGuildId)).toBe(false);
-    expect(await isScheduledPostEnabled(db, "unknown-guild")).toBe(false);
-  });
-
   test("使えるロールは未設定なら空、設定・上書きできる", async () => {
     expect(await getAllowedRoleIds(db, guildId)).toEqual([]);
     await setAllowedRoleIds(db, guildId, ["r1", "r2", "r1"]);

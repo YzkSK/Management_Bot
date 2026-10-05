@@ -15,7 +15,6 @@ function renderPage(capabilities: number): string {
     { id: guildId, name: "サーバー", isManaged: false, iconUrl: null, capabilities },
   ]);
   queryClient.setQueryData(trpc.scheduledPost.getRequiredPermissionStatus.queryOptions({ guildId }).queryKey, {
-    enabled: true,
     hasRequiredPermissions: true,
     reauthorizeUrl: null,
     accessStatus: "ok",
@@ -61,7 +60,6 @@ describe("ScheduledPostPage", () => {
 
     expect(html).toContain("明日の集合は20時です");
     expect(html).not.toContain("使えるロール");
-    expect(html).not.toContain("予約投稿機能:");
     // 「取り消し」タブ名はあるが、行の取り消しボタン(size sm)は出ない。
     expect(html).not.toContain("text-destructive border-destructive/40");
   });

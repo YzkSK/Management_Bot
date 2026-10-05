@@ -22,7 +22,6 @@ import {
 import {
   getAllowedRoleIds,
   getScheduledPost,
-  isScheduledPostEnabled,
   listMyPendingPosts,
   type ScheduledPostRow,
 } from "../application/index.js";
@@ -67,7 +66,6 @@ export const SCHEDULE_COMMAND: RESTPostAPIChatInputApplicationCommandsJSONBody =
   ],
 };
 
-const DISABLED_MESSAGE = "このサーバーでは予約投稿機能が有効になっていません。";
 const NOT_PENDING_MESSAGE = "この予約はすでに投稿処理が始まったか、取り消されています。";
 const CONTENT_INVALID_MESSAGE = `本文は1〜${SCHEDULED_POST_CONTENT_MAX}文字で入力してください。`;
 const NO_MENTIONS = { parse: [] } as const;
@@ -91,12 +89,11 @@ function channelNameOf(interaction: { channel: CreateCheckInteraction["channel"]
 }
 
 /**
- * 予約を登録してよいか確認する。機能が有効・投稿先が対象のチャンネル種別・実行者に送信権限・
+ * 予約を登録してよいか確認する。投稿先が対象のチャンネル種別・実行者に送信権限・
  * 「使えるロール」を満たす、を順に確認し、満たさなければ利用者向けのエラー文言を返す。
  */
 async function checkCanCreate(deps: ScheduleCommandDeps, interaction: CreateCheckInteraction): Promise<string | null> {
   if (!interaction.guildId) return "サーバー内でのみ使えます。";
-  if (!(await isScheduledPostEnabled(deps.ctx.db, interaction.guildId))) return DISABLED_MESSAGE;
 
   const channel = interaction.channel;
   if (!channel) return "チャンネル情報を取得できませんでした。";
@@ -213,7 +210,6 @@ async function handleListCommand(
   deps: ScheduleCommandDeps,
   interaction: ChatInputCommandInteraction<"cached" | "raw">,
 ): Promise<void> {
-  if (!(await isScheduledPostEnabled(deps.ctx.db, interaction.guildId))) return ephemeral(interaction, DISABLED_MESSAGE);
   const posts = await listMyPendingPosts(deps.ctx.db, interaction.guildId, interaction.user.id);
   await interaction.reply({
     ...buildListReply(posts, new Date()),

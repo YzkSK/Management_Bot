@@ -1,8 +1,7 @@
 import type { Db } from "@management-bot/db";
-import { guildFeatureToggles, scheduledPosts } from "@management-bot/db";
+import { scheduledPosts } from "@management-bot/db";
 import type { ScheduledPostFailureReason } from "@management-bot/shared";
 import { and, eq, inArray, lt, lte, asc } from "drizzle-orm";
-import { SCHEDULED_POST_FEATURE_KEY } from "./settings.js";
 import type { ScheduledPostRow } from "./posts.js";
 
 /** 終了済み(posted/failed/cancelled)の予約を残す日数。記録はlogging機能側に残る。 */
@@ -11,22 +10,13 @@ const DAY_MS = 86_400_000;
 const CLAIM_BATCH = 50;
 
 /**
- * 時刻が来た予約を投稿処理中(posting)にclaimして返す。機能が有効なギルドのpendingのみが対象
- * (OFFのギルドの予約は消さずに残し、ONに戻したら再開する)。pending→postingは条件付きUPDATE
+ * 時刻が来た予約を投稿処理中(posting)にclaimして返す。対象はpendingのみ。pending→postingは条件付きUPDATE
  * (`WHERE id=? AND status='pending'` RETURNING)で行い、同じ予約を2回claimしない。
  */
 export async function claimDuePosts(db: Db, now: Date, limit = CLAIM_BATCH): Promise<ScheduledPostRow[]> {
   const candidates = await db
     .select({ id: scheduledPosts.id })
     .from(scheduledPosts)
-    .innerJoin(
-      guildFeatureToggles,
-      and(
-        eq(guildFeatureToggles.guildId, scheduledPosts.guildId),
-        eq(guildFeatureToggles.featureKey, SCHEDULED_POST_FEATURE_KEY),
-        eq(guildFeatureToggles.enabled, true),
-      ),
-    )
     .where(and(eq(scheduledPosts.status, "pending"), lte(scheduledPosts.scheduledAt, now)))
     .orderBy(asc(scheduledPosts.scheduledAt))
     .limit(limit);

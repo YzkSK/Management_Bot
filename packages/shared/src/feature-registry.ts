@@ -48,7 +48,7 @@ const FEATURE_METADATA_LIST = [
     description: "指定した日時にメッセージを自動投稿する(/schedule)",
     icon: "calendar-clock",
     viewCapability: CAPABILITIES.VIEW_SCHEDULED_POSTS,
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
 ] as const satisfies readonly FeatureMetadata[];
 
