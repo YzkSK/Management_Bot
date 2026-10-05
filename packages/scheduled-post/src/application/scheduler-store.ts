@@ -69,12 +69,20 @@ export async function markFailed(
   return row ?? null;
 }
 
+/** posting状態がこれより長く続いたら投稿途中で落ちたとみなす(1件の投稿処理は通常数秒で終わる)。 */
+export const STUCK_POSTING_MS = 5 * 60 * 1000;
+
 /**
- * 起動時に1回だけ呼ぶ。postingのまま残った予約(投稿途中でBotが落ちた)は、送れたか分からないため
+ * postingのまま STUCK_POSTING_MS 以上残った予約(投稿途中でBotが落ちた)は、送れたか分からないため
  * 再送せず failed/unknown_result にして返す(重複投稿より投稿漏れを選ぶ)。
+ * 経過時間で絞るのは、デプロイ時に旧プロセスが処理中の予約を新プロセスが誤って失敗扱いにしないため。
  */
 export async function recoverStuckPosting(db: Db, now: Date): Promise<ScheduledPostRow[]> {
-  const stuck = await db.select({ id: scheduledPosts.id }).from(scheduledPosts).where(eq(scheduledPosts.status, "posting"));
+  const threshold = new Date(now.getTime() - STUCK_POSTING_MS);
+  const stuck = await db
+    .select({ id: scheduledPosts.id })
+    .from(scheduledPosts)
+    .where(and(eq(scheduledPosts.status, "posting"), lt(scheduledPosts.updatedAt, threshold)));
   const recovered: ScheduledPostRow[] = [];
   for (const { id } of stuck) {
     const row = await markFailed(db, id, "unknown_result", now);
