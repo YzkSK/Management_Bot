@@ -17,6 +17,7 @@
     "@management-bot/db": "workspace:*",
     "@management-bot/logging": "workspace:*",
     "@management-bot/moderation": "workspace:*",
+    "@management-bot/scheduled-post": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@management-bot/temp-voice": "workspace:*",
     "discord.js": "^14.16.0",
