@@ -7,6 +7,7 @@ const FEATURE_PATHS: Record<string, string> = {
   activity: "activity",
   logging: "logs",
   moderation: "moderation",
+  "scheduled-post": "scheduled-post",
   "temp-voice": "temp-voice",
 };
 
