@@ -1,6 +1,7 @@
 import { isBulkDeleteLogEntry, logEntrySchema, type LogEntry, type VoiceStateFlagName } from "./log-entry.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import type { LogEntrySummary } from "./log-entry-summary.js";
+import { SCHEDULED_POST_FAILURE_LABELS } from "./scheduled-post.js";
 
 /** フォールバック文言専用のaction日本語ラベル。未知のactionはそのまま表示する。 */
 const ACTION_LABELS: Record<string, string> = {
@@ -484,6 +485,25 @@ function formatLogMessageUnsafe(entry: LogEntry, summary: LogEntrySummary, names
               return `${executorName} が ${targetLabel} の一時VC個別設定を解除しました`;
           }
         }
+      }
+      break;
+    }
+    case "scheduledPost": {
+      const channel = channelName(entry.channelId, names, entry.channelName);
+      const author = userName(entry.authorId, names, entry.authorName);
+      switch (entry.action) {
+        case "created":
+          return `${author} が ${channel} への予約投稿を登録しました`;
+        case "edited":
+          return `${author} が ${channel} への予約投稿を編集しました`;
+        case "cancelled":
+          return entry.by === "admin"
+            ? `${executorName} が ${author} の ${channel} への予約投稿を取り消しました`
+            : `${author} が ${channel} への予約投稿を取り消しました`;
+        case "posted":
+          return `${author} の予約投稿を ${channel} に投稿しました`;
+        case "failed":
+          return `${author} の ${channel} への予約投稿に失敗しました(${SCHEDULED_POST_FAILURE_LABELS[entry.reason]})`;
       }
       break;
     }

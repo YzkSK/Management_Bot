@@ -31,6 +31,8 @@ export function getLogEntrySubjectId(entry: LogEntry): string | undefined {
       return entry.userId;
     case "moderationCase":
       return entry.targetUserId;
+    case "scheduledPost":
+      return entry.authorId;
     case "tempVoice":
       switch (entry.action) {
         case "created":
@@ -84,6 +86,8 @@ export function getLogEntrySubjectField(entry: LogEntry): string | undefined {
       return "userId";
     case "moderationCase":
       return "targetUserId";
+    case "scheduledPost":
+      return "authorId";
     case "tempVoice":
       switch (entry.action) {
         case "created":

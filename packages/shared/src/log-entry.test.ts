@@ -163,6 +163,17 @@ const validByCategory = {
     ownerId: "3",
     controlChannelId: "4",
   },
+  scheduledPost: {
+    category: "scheduledPost",
+    guildId: "1",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    postId: "p1",
+    channelId: "2",
+    authorId: "3",
+    action: "created",
+    content: "こんにちは",
+    scheduledAt: "2026-09-01T00:00:00.000Z",
+  },
 } satisfies Record<LogCategory, unknown>;
 
 describe("logEntrySchema", () => {
