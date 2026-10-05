@@ -75,6 +75,14 @@ describe("capabilityの前提関係(issue #527)", () => {
     expect(hasCapabilityPrerequisites(ALL_CAPABILITIES)).toBe(true);
   });
 
+  test("予約投稿の管理は閲覧を前提とし、BASELINEには含まれない", () => {
+    const { VIEW_SCHEDULED_POSTS, MANAGE_SCHEDULED_POSTS } = CAPABILITIES;
+    expect(hasCapabilityPrerequisites(MANAGE_SCHEDULED_POSTS)).toBe(false);
+    expect(hasCapabilityPrerequisites(MANAGE_SCHEDULED_POSTS | VIEW_SCHEDULED_POSTS)).toBe(true);
+    expect(addCapabilityPrerequisites(MANAGE_SCHEDULED_POSTS)).toBe(MANAGE_SCHEDULED_POSTS | VIEW_SCHEDULED_POSTS);
+    expect(BASELINE_EVERYONE_CAPABILITIES & (VIEW_SCHEDULED_POSTS | MANAGE_SCHEDULED_POSTS)).toBe(0);
+  });
+
   test("addCapabilityPrerequisitesは前提の閲覧権限を補う", () => {
     expect(addCapabilityPrerequisites(MANAGE_LOGGING_SETTINGS | MANAGE_TEMP_VOICE)).toBe(
       MANAGE_LOGGING_SETTINGS | VIEW_LOGS | MANAGE_TEMP_VOICE | VIEW_TEMP_VOICE,

@@ -42,6 +42,14 @@ const FEATURE_METADATA_LIST = [
     viewCapability: CAPABILITIES.MANAGE_MODERATION,
     defaultEnabled: false,
   },
+  {
+    key: "scheduled-post",
+    name: "予約投稿",
+    description: "指定した日時にメッセージを自動投稿する(/schedule)",
+    icon: "calendar-clock",
+    viewCapability: CAPABILITIES.VIEW_SCHEDULED_POSTS,
+    defaultEnabled: false,
+  },
 ] as const satisfies readonly FeatureMetadata[];
 
 export const FEATURE_METADATA: readonly FeatureMetadata[] = FEATURE_METADATA_LIST;

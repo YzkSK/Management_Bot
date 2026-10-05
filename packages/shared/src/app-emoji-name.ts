@@ -20,6 +20,21 @@ export function appEmojiNameFor(entry: LogEntry): string {
       const flags = Object.keys(entry.changes).filter((flag) => !(flag === "selfMute" && "selfDeaf" in entry.changes));
       return flags.length === 1 ? `voice_${snake(flags[0]!)}` : "voice_update";
     }
+    case "scheduledPost":
+      // 専用画像は未作成のため、意味の近い既存のアプリ絵文字を流用する。
+      switch (entry.action) {
+        case "created":
+          return "scheduled_event_create";
+        case "edited":
+          return "scheduled_event_update";
+        case "cancelled":
+          return "scheduled_event_cancel";
+        case "posted":
+          return "message_create";
+        case "failed":
+          return "status_failed";
+      }
+      break;
     case "tempVoice":
       switch (entry.action) {
         case "permissionChanged":

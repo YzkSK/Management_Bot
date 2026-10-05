@@ -18,6 +18,7 @@ export const LOG_CATEGORIES = [
   "moderationCase",
   "voice",
   "tempVoice",
+  "scheduledPost",
 ] as const;
 
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
