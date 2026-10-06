@@ -1,7 +1,7 @@
 import type { Db } from "@management-bot/db";
 import { scheduledPosts } from "@management-bot/db";
 import type { ScheduledPostFailureReason } from "@management-bot/shared";
-import { and, eq, inArray, lt, lte, asc } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, lte, asc } from "drizzle-orm";
 import type { ScheduledPostRow } from "./posts.js";
 
 /** 終了済み(posted/failed/cancelled)の予約を残す日数。記録はlogging機能側に残る。 */
@@ -79,6 +79,58 @@ export async function recoverStuckPosting(db: Db, now: Date): Promise<ScheduledP
     if (row) recovered.push(row);
   }
   return recovered;
+}
+
+/**
+ * 管理者取り消しの後処理(DM・ログ発行)を1件claimする。`cancel_notified_at IS NULL`の条件付きUPDATEで、
+ * 複数Botプロセス・pg_notifyとtick回収が競合しても行を得るのは1プロセスだけ。claim後のクラッシュでは
+ * 再送しない(重複より取りこぼしを選ぶ)。
+ */
+export async function claimAdminCancelNotice(
+  db: Db,
+  id: string,
+  now: Date,
+  guildId?: string,
+): Promise<ScheduledPostRow | null> {
+  const conditions = [
+    eq(scheduledPosts.id, id),
+    eq(scheduledPosts.status, "cancelled"),
+    eq(scheduledPosts.cancelledBy, "admin"),
+    isNull(scheduledPosts.cancelNotifiedAt),
+  ];
+  if (guildId !== undefined) conditions.push(eq(scheduledPosts.guildId, guildId));
+  const [row] = await db
+    .update(scheduledPosts)
+    .set({ cancelNotifiedAt: now })
+    .where(and(...conditions))
+    .returning();
+  return row ?? null;
+}
+
+/** 未処理の管理者取り消し(通知の取りこぼし・Bot停止中の取り消し)を最大limit件claimして返す。 */
+export async function claimPendingAdminCancelNotices(
+  db: Db,
+  now: Date,
+  limit = CLAIM_BATCH,
+): Promise<ScheduledPostRow[]> {
+  const candidates = await db
+    .select({ id: scheduledPosts.id })
+    .from(scheduledPosts)
+    .where(
+      and(
+        eq(scheduledPosts.status, "cancelled"),
+        eq(scheduledPosts.cancelledBy, "admin"),
+        isNull(scheduledPosts.cancelNotifiedAt),
+      ),
+    )
+    .orderBy(asc(scheduledPosts.finishedAt))
+    .limit(limit);
+  const claimed: ScheduledPostRow[] = [];
+  for (const { id } of candidates) {
+    const row = await claimAdminCancelNotice(db, id, now);
+    if (row) claimed.push(row);
+  }
+  return claimed;
 }
 
 /** 終了後RETENTION_DAYS日を過ぎた予約を削除する。削除件数を返す。 */

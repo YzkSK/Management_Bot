@@ -5,7 +5,7 @@ import type { ScheduledPostEventRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { cancelScheduledPost, setAllowedRoleIds } from "../application/index.js";
 import type { AllowedMentionsSpec, PostFacts } from "../domain/index.js";
-import { handleAdminCancelNotification } from "./dashboard-action-listener.js";
+import { handleAdminCancelNotification, processPendingAdminCancels } from "./dashboard-action-listener.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
 import {
   createScheduler,
@@ -319,7 +319,13 @@ describe("予約投稿の複合シナリオ", () => {
   test("管理者のDashboard取り消しは、cancelledイベント(by=admin、実行者付き)を発行し予約者へDMする", async () => {
     const h = createHarness();
     const post = await reserve(h, 30);
-    const row = await cancelScheduledPost(db, { id: post.id, by: "admin", guildId, now: T0 });
+    const row = await cancelScheduledPost(db, {
+      id: post.id,
+      by: "admin",
+      guildId,
+      executor: { id: "admin-1", name: "管理者" },
+      now: T0,
+    });
     expect(row?.cancelledBy).toBe("admin");
 
     const sentDms: { userId: string; text: string }[] = [];
@@ -334,7 +340,7 @@ describe("予約投稿の複合シナリオ", () => {
           },
         },
       },
-      { guildId, postId: post.id, executorId: "admin-1", executorName: "管理者" },
+      { guildId, postId: post.id },
     );
 
     const last = h.events.at(-1);
@@ -342,8 +348,108 @@ describe("予約投稿の複合シナリオ", () => {
     if (last?.action !== "cancelled") throw new Error("expected cancelled event");
     expect(last.by).toBe("admin");
     expect(last.executorId).toBe("admin-1");
+    expect(last.executorName).toBe("管理者");
     expect(sentDms.map((d) => d.userId)).toEqual(["u1"]);
     expect(sentDms[0]?.text).toContain("管理者によって取り消されました");
+  });
+
+  test("同じ管理者取り消しを並行で2回handleしても、DM・ログイベントは1回だけ", async () => {
+    const h = createHarness();
+    const post = await reserve(h, 30);
+    await cancelScheduledPost(db, { id: post.id, by: "admin", guildId, executor: { id: "admin-1" }, now: T0 });
+    const sentDms: string[] = [];
+    const deps = {
+      ...h.deps,
+      discord: {
+        channelName: () => "general",
+        authorName: () => "ゆずき",
+        sendDm: async (userId: string) => {
+          sentDms.push(userId);
+        },
+      },
+    };
+    const before = h.events.length;
+
+    await Promise.all([
+      handleAdminCancelNotification(deps, { guildId, postId: post.id }),
+      handleAdminCancelNotification(deps, { guildId, postId: post.id }),
+    ]);
+
+    expect(sentDms).toEqual(["u1"]);
+    expect(h.events).toHaveLength(before + 1);
+  });
+
+  test("pg_notifyを受け取れなかった管理者取り消しは、tickの回収で1回だけ処理される", async () => {
+    const h = createHarness();
+    const post = await reserve(h, 30);
+    await cancelScheduledPost(db, { id: post.id, by: "admin", guildId, executor: { id: "admin-1", name: "管理者" }, now: T0 });
+    const sentDms: string[] = [];
+    const adminCancel = {
+      channelName: () => "general",
+      authorName: () => "ゆずき",
+      sendDm: async (userId: string) => {
+        sentDms.push(userId);
+      },
+    };
+    const before = h.events.length;
+
+    await processPendingAdminCancels({ ...h.deps, discord: adminCancel });
+    await processPendingAdminCancels({ ...h.deps, discord: adminCancel });
+
+    expect(sentDms).toEqual(["u1"]);
+    expect(h.events).toHaveLength(before + 1);
+    const last = h.events.at(-1);
+    if (last?.action !== "cancelled") throw new Error("expected cancelled event");
+    expect(last.executorId).toBe("admin-1");
+    expect((await statusOf(post.id))?.cancelNotifiedAt).not.toBeNull();
+  });
+
+  test("createSchedulerのtickは未処理の管理者取り消しを回収する", async () => {
+    const h = createHarness();
+    const post = await reserve(h, 30);
+    await cancelScheduledPost(db, { id: post.id, by: "admin", guildId, executor: { id: "admin-1" }, now: T0 });
+    const sentDms: string[] = [];
+    const scheduler = createScheduler(
+      {
+        ...h.deps,
+        adminCancel: {
+          channelName: () => undefined,
+          authorName: () => undefined,
+          sendDm: async (userId) => {
+            sentDms.push(userId);
+          },
+        },
+      },
+      20,
+    );
+    await scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await scheduler.stop();
+
+    expect(sentDms).toEqual(["u1"]);
+  });
+
+  test("本人取り消し(by=author)は管理者取り消しの回収対象にならない", async () => {
+    const h = createHarness();
+    const post = await reserve(h, 30);
+    await cancelScheduledPost(db, { id: post.id, by: "author", guildId, authorId: "u1", now: T0 });
+    const sentDms: string[] = [];
+    const before = h.events.length;
+
+    await processPendingAdminCancels({
+      ...h.deps,
+      discord: {
+        channelName: () => undefined,
+        authorName: () => undefined,
+        sendDm: async (userId) => {
+          sentDms.push(userId);
+        },
+      },
+    });
+
+    expect(sentDms).toEqual([]);
+    expect(h.events).toHaveLength(before);
+    expect((await statusOf(post.id))?.cancelNotifiedAt).toBeNull();
   });
 
   test("管理者取り消しの通知は、DMが届かなくても例外にならず、別ギルドの予約は処理しない", async () => {
@@ -358,9 +464,9 @@ describe("予約投稿の複合シナリオ", () => {
       },
     };
 
-    await handleAdminCancelNotification({ ...h.deps, discord }, { guildId, postId: post.id, executorId: "admin-1" });
+    await handleAdminCancelNotification({ ...h.deps, discord }, { guildId, postId: post.id });
     const before = h.events.length;
-    await handleAdminCancelNotification({ ...h.deps, discord }, { guildId: "other-guild", postId: post.id, executorId: "admin-1" });
+    await handleAdminCancelNotification({ ...h.deps, discord }, { guildId: "other-guild", postId: post.id });
     expect(h.events).toHaveLength(before);
   });
 

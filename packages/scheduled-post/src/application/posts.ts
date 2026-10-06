@@ -127,6 +127,8 @@ export interface CancelScheduledPostInput {
   guildId: string;
   /** by="author"のとき必須。 */
   authorId?: string;
+  /** by="admin"のとき、取り消した管理者(DBに保存し、Botの後処理のログイベントで使う)。 */
+  executor?: { id: string; name?: string };
   now: Date;
 }
 
@@ -143,7 +145,14 @@ export async function cancelScheduledPost(db: Db, input: CancelScheduledPostInpu
   }
   const [row] = await db
     .update(scheduledPosts)
-    .set({ status: "cancelled", cancelledBy: input.by, finishedAt: input.now, updatedAt: input.now })
+    .set({
+      status: "cancelled",
+      cancelledBy: input.by,
+      cancelledByUserId: input.by === "admin" ? (input.executor?.id ?? null) : null,
+      cancelledByUserName: input.by === "admin" ? (input.executor?.name ?? null) : null,
+      finishedAt: input.now,
+      updatedAt: input.now,
+    })
     .where(and(...conditions))
     .returning();
   return row ?? null;

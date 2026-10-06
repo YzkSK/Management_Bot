@@ -172,9 +172,14 @@ describe("cancelScheduledPost", () => {
 
     expect(await cancelScheduledPost(db, { id, by: "author", guildId, authorId: "u2", now: NOW })).toBeNull();
     expect(await cancelScheduledPost(db, { id, by: "admin", guildId: "other-guild", now: NOW })).toBeNull();
-    expect(await cancelScheduledPost(db, { id, by: "admin", guildId, now: NOW })).toMatchObject({
+    expect(
+      await cancelScheduledPost(db, { id, by: "admin", guildId, executor: { id: "admin-1", name: "管理者" }, now: NOW }),
+    ).toMatchObject({
       status: "cancelled",
       cancelledBy: "admin",
+      cancelledByUserId: "admin-1",
+      cancelledByUserName: "管理者",
+      cancelNotifiedAt: null,
     });
   });
 

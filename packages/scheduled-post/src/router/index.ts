@@ -52,16 +52,17 @@ export const scheduledPostRouter = router({
    * ログイベント発行をBotにpg_notifyで依頼する(取り消し自体はここでDB上完了している)。
    */
   cancel: manageProcedure(cancelInput).mutation(async ({ ctx, input }) => {
-    const row = await cancelScheduledPost(ctx.db, { id: input.id, by: "admin", guildId: input.guildId, now: new Date() });
+    const row = await cancelScheduledPost(ctx.db, {
+      id: input.id,
+      by: "admin",
+      guildId: input.guildId,
+      executor: { id: ctx.discordUserId, name: ctx.discordUsername },
+      now: new Date(),
+    });
     if (!row) {
       throw new TRPCError({ code: "CONFLICT", message: "この予約はすでに投稿処理が始まったか、取り消されています。" });
     }
-    await notifyScheduledPostAdminCancel(ctx.db, {
-      guildId: input.guildId,
-      postId: row.id,
-      executorId: ctx.discordUserId,
-      executorName: ctx.discordUsername,
-    });
+    await notifyScheduledPostAdminCancel(ctx.db, { guildId: input.guildId, postId: row.id });
   }),
 
   getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => ({
