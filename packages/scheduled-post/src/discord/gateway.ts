@@ -92,8 +92,12 @@ async function inspectPost(client: Client, post: { guildId: string; channelId: s
   };
   return {
     facts,
+    // 投稿者はBotのため、予約者とBotの両方がMentionEveryoneを持つ場合のみ@everyone/@here・メンション不可ロールを通知する。
     canMentionEveryone:
-      usable && member !== null && (channel.permissionsFor(member)?.has(PermissionFlagsBits.MentionEveryone) ?? false),
+      usable &&
+      member !== null &&
+      (channel.permissionsFor(member)?.has(PermissionFlagsBits.MentionEveryone) ?? false) &&
+      (channel.permissionsFor(me)?.has(PermissionFlagsBits.MentionEveryone) ?? false),
     isRoleMentionable: (roleId) => guild.roles.cache.get(roleId)?.mentionable ?? false,
     channelName: channel?.name,
     authorName: member?.displayName,

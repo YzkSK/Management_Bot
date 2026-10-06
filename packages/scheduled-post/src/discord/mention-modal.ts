@@ -106,6 +106,25 @@ export function buildScheduleModal(
   return modal;
 }
 
+/**
+ * 投稿先チャンネル(編集時は/schedule listを実行したチャンネルではなく予約の投稿先)で、予約者とBotの両方が
+ * MentionEveryoneを持つか。投稿者はBotのため、Botが持たなければ@everyone/@hereは通知されない。
+ */
+export async function canMentionEveryoneIn(interaction: ModalSubmitInteraction, channelId: string): Promise<boolean> {
+  const guild = interaction.guild;
+  if (!guild) return false;
+  const [channel, member, me] = await Promise.all([
+    guild.channels.fetch(channelId).catch(() => null),
+    guild.members.fetch(interaction.user.id).catch(() => null),
+    guild.members.fetchMe().catch(() => null),
+  ]);
+  if (!channel || !member || !me) return false;
+  return (
+    (channel.permissionsFor(member)?.has(PermissionFlagsBits.MentionEveryone) ?? false) &&
+    (channel.permissionsFor(me)?.has(PermissionFlagsBits.MentionEveryone) ?? false)
+  );
+}
+
 export type ReadMentionsResult = { ok: true; mentions: MentionSelection } | { ok: false; message: string };
 
 /**
@@ -115,6 +134,8 @@ export type ReadMentionsResult = { ok: true; mentions: MentionSelection } | { ok
 export function readMentions(
   interaction: ModalSubmitInteraction,
   settings: Pick<ScheduledPostSettings, "allowEveryone" | "allowHere">,
+  /** 投稿先チャンネルで予約者とBotの両方がMentionEveryoneを持つか(canMentionEveryoneIn)。 */
+  canMentionEveryone: boolean,
 ): ReadMentionsResult {
   const fields = interaction.fields;
   const invalid = { ok: false, message: "メンションの選択内容を処理できませんでした。もう一度お試しください。" } as const;
@@ -137,7 +158,7 @@ export function readMentions(
   const error = validateMentionSelection(selection, {
     allowEveryone: settings.allowEveryone,
     allowHere: settings.allowHere,
-    canMentionEveryone: interaction.memberPermissions?.has(PermissionFlagsBits.MentionEveryone) ?? false,
+    canMentionEveryone,
     isRoleMentionable: (id) => roles?.get(id)?.mentionable ?? false,
   });
   return error ? { ok: false, message: MENTION_ERROR_MESSAGES[error] } : { ok: true, mentions: selection };

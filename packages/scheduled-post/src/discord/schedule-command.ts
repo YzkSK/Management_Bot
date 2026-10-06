@@ -44,7 +44,7 @@ import {
   parseSelectedPostId,
 } from "./custom-ids.js";
 import type { PublishScheduledPostEvent } from "./events.js";
-import { NO_MENTIONS_SELECTED, buildScheduleModal, readMentions } from "./mention-modal.js";
+import { NO_MENTIONS_SELECTED, buildScheduleModal, canMentionEveryoneIn, readMentions } from "./mention-modal.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
 
 export const SCHEDULE_COMMAND: RESTPostAPIChatInputApplicationCommandsJSONBody = {
@@ -213,7 +213,11 @@ async function handleCreateModal(deps: ScheduleCommandDeps, interaction: ModalSu
   if (!resolved.ok) return ephemeral(interaction, resolved.message);
   const scheduledAt = resolved.date;
 
-  const mentionResult = readMentions(interaction, await getSettings(deps.ctx.db, interaction.guildId));
+  const mentionResult = readMentions(
+    interaction,
+    await getSettings(deps.ctx.db, interaction.guildId),
+    await canMentionEveryoneIn(interaction, interaction.channelId),
+  );
   if (!mentionResult.ok) return ephemeral(interaction, mentionResult.message);
 
   const result = await createPostAction(
@@ -281,7 +285,11 @@ async function handleEditModal(deps: ScheduleCommandDeps, interaction: ModalSubm
   if (!existing || existing.authorId !== interaction.user.id || existing.status !== "pending") {
     return ephemeral(interaction, NOT_PENDING_MESSAGE);
   }
-  const mentionResult = readMentions(interaction, await getSettings(deps.ctx.db, existing.guildId));
+  const mentionResult = readMentions(
+    interaction,
+    await getSettings(deps.ctx.db, existing.guildId),
+    await canMentionEveryoneIn(interaction, existing.channelId),
+  );
   if (!mentionResult.ok) return ephemeral(interaction, mentionResult.message);
 
   const result = await editPostAction(
