@@ -17,7 +17,9 @@ export {
 export { getAllowedRoleIds, setAllowedRoleIds } from "./settings.js";
 export {
   RETENTION_DAYS,
+  claimAdminCancelNotice,
   claimDuePosts,
+  claimPendingAdminCancelNotices,
   markFailed,
   markPosted,
   purgeFinishedPosts,
