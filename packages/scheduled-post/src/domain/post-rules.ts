@@ -68,25 +68,75 @@ export function classifySendErrorCode(code: unknown): ScheduledPostFailureReason
   }
 }
 
+/** 予約者が選んだメンション指定。 */
+export interface MentionSelection {
+  everyone: boolean;
+  here: boolean;
+  roleIds: readonly string[];
+  userIds: readonly string[];
+}
+
+/** メンションの可否を決める事実。設定(allow*)・実行者のMentionEveryone権限・ロールのmentionable。 */
+export interface MentionPolicy {
+  allowEveryone: boolean;
+  allowHere: boolean;
+  canMentionEveryone: boolean;
+  isRoleMentionable: (roleId: string) => boolean;
+}
+
+export type MentionError = "everyone_not_allowed" | "here_not_allowed" | "no_mention_everyone_permission" | "role_not_mentionable";
+
+export const MENTION_ERROR_MESSAGES: Record<MentionError, string> = {
+  everyone_not_allowed: "このサーバーの設定では、予約投稿で @everyone は使えません。",
+  here_not_allowed: "このサーバーの設定では、予約投稿で @here は使えません。",
+  no_mention_everyone_permission: "このチャンネルで「@everyone、@here、すべてのロールにメンション」権限がないため、@everyone / @here は使えません。",
+  role_not_mentionable: "メンションできないロールが選ばれています(「@everyone、@here、すべてのロールにメンション」権限がある場合のみ、メンション不可のロールを指定できます)。",
+};
+
+/** 予約の登録・編集時の検証。許されない指定があれば最初のエラーを返す。 */
+export function validateMentionSelection(selection: MentionSelection, policy: MentionPolicy): MentionError | null {
+  if (selection.everyone && !policy.allowEveryone) return "everyone_not_allowed";
+  if (selection.here && !policy.allowHere) return "here_not_allowed";
+  if ((selection.everyone || selection.here) && !policy.canMentionEveryone) return "no_mention_everyone_permission";
+  if (!policy.canMentionEveryone && !selection.roleIds.every(policy.isRoleMentionable)) return "role_not_mentionable";
+  return null;
+}
+
 export interface AllowedMentionsSpec {
-  parse: ("users" | "roles" | "everyone")[];
-  roles?: string[];
+  parse: "everyone"[];
+  roles: string[];
+  users: string[];
+}
+
+export interface MentionMessage {
+  /** メンション行。メンションが無ければundefined。 */
+  content: string | undefined;
+  allowedMentions: AllowedMentionsSpec;
 }
 
 /**
- * 本文のメンション制御。ユーザーメンションは常に通知する。@everyone/@hereと全ロールのメンションは
- * 実行者がMentionEveryone権限を持つ場合のみ。持たない場合、ロールはmentionable(誰でもメンション可)なものだけ通知する。
- * (parseにrolesを含めるとrolesの個別指定はできないため、片方のみを使う)
+ * 投稿時のメンション行とallowedMentionsを作る。登録後に設定・権限が変わっていても、
+ * 今許されないもの(everyone/here・メンション不可のロール)は除外して続行する(投稿は失敗にしない)。
+ * @everyoneと@hereは同じフラグなので、片方のみ選択時もcontentに含めたものだけが通知される。
  */
-export function buildAllowedMentions(
-  content: string,
-  canMentionEveryone: boolean,
-  isRoleMentionable: (roleId: string) => boolean,
-): AllowedMentionsSpec {
-  if (canMentionEveryone) return { parse: ["users", "roles", "everyone"] };
-  const mentionedRoleIds = [...content.matchAll(/<@&(\d+)>/g)].flatMap((match) => (match[1] ? [match[1]] : []));
-  const roles = [...new Set(mentionedRoleIds)].filter(isRoleMentionable);
-  return { parse: ["users"], roles };
+export function buildMentionMessage(selection: MentionSelection, policy: MentionPolicy): MentionMessage {
+  const everyone = selection.everyone && policy.allowEveryone && policy.canMentionEveryone;
+  const here = selection.here && policy.allowHere && policy.canMentionEveryone;
+  const roleIds = selection.roleIds.filter((id) => policy.canMentionEveryone || policy.isRoleMentionable(id));
+  const tokens = [
+    ...(everyone ? ["@everyone"] : []),
+    ...(here ? ["@here"] : []),
+    ...roleIds.map((id) => `<@&${id}>`),
+    ...selection.userIds.map((id) => `<@${id}>`),
+  ];
+  return {
+    content: tokens.length > 0 ? tokens.join(" ") : undefined,
+    allowedMentions: {
+      parse: everyone || here ? ["everyone"] : [],
+      roles: [...roleIds],
+      users: [...selection.userIds],
+    },
+  };
 }
 
 const DM_CONTENT_PREVIEW_MAX = 1000;

@@ -8,7 +8,7 @@ import {
   type GuildMember,
 } from "discord.js";
 import type { PostChannelKind, PostFacts } from "../domain/index.js";
-import { buildPostEmbed } from "./post-message.js";
+import { buildPostMessage } from "./post-message.js";
 import type { PostInspection, SchedulerGateway } from "./scheduler.js";
 
 /** Unknown Channel / Unknown Member(RESTJSONErrorCodes)。 */
@@ -104,12 +104,12 @@ async function inspectPost(client: Client, post: { guildId: string; channelId: s
 export function createDiscordGateway(client: Client): SchedulerGateway {
   return {
     inspect: (post) => inspectPost(client, post),
-    send: async (post, view, allowedMentions) => {
+    send: async (post, view, mention) => {
       const channel = await client.channels.fetch(post.channelId);
       if (!channel || !channel.isSendable()) {
         throw Object.assign(new Error(`channel ${post.channelId} is not sendable`), { code: UNKNOWN_CHANNEL });
       }
-      const message = await channel.send({ embeds: [buildPostEmbed(post.content, view)], allowedMentions });
+      const message = await channel.send(buildPostMessage(post.content, view, mention));
       return { messageId: message.id };
     },
     sendDm: async (userId, text) => {

@@ -6,8 +6,10 @@ import {
   cancelScheduledPost,
   createScheduledPost,
   editScheduledPost,
+  getScheduledPost,
   listGuildPosts,
   listMyPendingPosts,
+  mentionSelectionOf,
 } from "./posts.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -150,6 +152,39 @@ describe("editScheduledPost", () => {
     expect(
       await editScheduledPost(db, { id: post.id, authorId: "u1", content: "e", scheduledAt: at(300), now: NOW }),
     ).toEqual({ ok: false, error: "not_found" });
+  });
+});
+
+describe("メンション指定の保存", () => {
+  const mentions = { everyone: true, here: false, roleIds: ["r1", "r2"], userIds: ["u9"] };
+
+  test("指定なしで登録するとメンションなし(既定値)になる", async () => {
+    const result = await createScheduledPost(db, input());
+    if (!result.ok) throw new Error("create failed");
+    expect(mentionSelectionOf(result.post)).toEqual({ everyone: false, here: false, roleIds: [], userIds: [] });
+  });
+
+  test("登録・編集でメンション指定が保存・置換され、編集で省略すれば保持される", async () => {
+    const created = await createScheduledPost(db, input({ mentions }));
+    if (!created.ok) throw new Error("create failed");
+    expect(mentionSelectionOf((await getScheduledPost(db, created.post.id))!)).toEqual(mentions);
+
+    const kept = await editScheduledPost(db, { id: created.post.id, authorId: "u1", content: "e", scheduledAt: at(300), now: NOW });
+    if (!kept.ok) throw new Error("edit failed");
+    expect(mentionSelectionOf(kept.after)).toEqual(mentions);
+
+    const next = { everyone: false, here: true, roleIds: [], userIds: ["u1", "u2"] };
+    const replaced = await editScheduledPost(db, {
+      id: created.post.id,
+      authorId: "u1",
+      content: "e",
+      scheduledAt: at(300),
+      mentions: next,
+      now: NOW,
+    });
+    if (!replaced.ok) throw new Error("edit failed");
+    expect(mentionSelectionOf(replaced.before)).toEqual(mentions);
+    expect(mentionSelectionOf(replaced.after)).toEqual(next);
   });
 });
 

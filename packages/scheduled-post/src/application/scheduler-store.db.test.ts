@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createDb, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
 import { eq } from "drizzle-orm";
 import { claimDuePosts, markFailed, markPosted, purgeFinishedPosts, recoverStuckPosting } from "./scheduler-store.js";
-import { getAllowedRoleIds, setAllowedRoleIds } from "./settings.js";
+import { getAllowedRoleIds, getSettings, saveSettings } from "./settings.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -111,9 +111,17 @@ describe("purgeFinishedPosts", () => {
 describe("settings", () => {
   test("使えるロールは未設定なら空、設定・上書きできる", async () => {
     expect(await getAllowedRoleIds(db, guildId)).toEqual([]);
-    await setAllowedRoleIds(db, guildId, ["r1", "r2", "r1"]);
+    await saveSettings(db, guildId, { allowedRoleIds: ["r1", "r2", "r1"], allowEveryone: false, allowHere: false });
     expect(await getAllowedRoleIds(db, guildId)).toEqual(["r1", "r2"]);
-    await setAllowedRoleIds(db, guildId, []);
+    await saveSettings(db, guildId, { allowedRoleIds: [], allowEveryone: false, allowHere: false });
     expect(await getAllowedRoleIds(db, guildId)).toEqual([]);
+  });
+
+  test("@everyone・@hereの許可は未設定なら両方OFFで、独立して保存・上書きできる", async () => {
+    expect(await getSettings(db, guildId)).toEqual({ allowedRoleIds: [], allowEveryone: false, allowHere: false });
+    await saveSettings(db, guildId, { allowedRoleIds: ["r1"], allowEveryone: true, allowHere: false });
+    expect(await getSettings(db, guildId)).toEqual({ allowedRoleIds: ["r1"], allowEveryone: true, allowHere: false });
+    await saveSettings(db, guildId, { allowedRoleIds: ["r1"], allowEveryone: false, allowHere: true });
+    expect(await getSettings(db, guildId)).toEqual({ allowedRoleIds: ["r1"], allowEveryone: false, allowHere: true });
   });
 });
