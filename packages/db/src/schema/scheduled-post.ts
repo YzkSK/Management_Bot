@@ -1,4 +1,4 @@
-import { check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { type Column, type SQL, sql } from "drizzle-orm";
 import {
   SCHEDULED_POST_CANCELLED_BY,
@@ -43,6 +43,17 @@ export const scheduledPosts = pgTable(
     cancelledByUserName: text("cancelled_by_user_name"),
     /** 管理者取り消しの後処理(予約者へのDM・ログ発行)を誰かがclaimした時刻。NULLなら未処理。 */
     cancelNotifiedAt: timestamp("cancel_notified_at", { withTimezone: true }),
+    /** 投稿時にcontentへ入れるメンション指定(予約者がモーダルで選んだもの)。 */
+    mentionEveryone: boolean("mention_everyone").notNull().default(false),
+    mentionHere: boolean("mention_here").notNull().default(false),
+    mentionRoleIds: text("mention_role_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    mentionUserIds: text("mention_user_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -79,5 +90,8 @@ export const scheduledPostSettings = pgTable("scheduled_post_settings", {
     .array()
     .notNull()
     .default(sql`'{}'::text[]`),
+  /** 予約でメンションに指定できるか。既定は不許可。 */
+  allowEveryone: boolean("allow_everyone").notNull().default(false),
+  allowHere: boolean("allow_here").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
