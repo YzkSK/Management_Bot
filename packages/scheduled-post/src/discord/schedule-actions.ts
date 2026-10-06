@@ -8,6 +8,7 @@ import {
   type EditScheduledPostResult,
   type ScheduledPostRow,
 } from "../application/index.js";
+import type { MentionSelection } from "../domain/index.js";
 import type { PublishScheduledPostEvent } from "./events.js";
 
 export interface ActionDeps {
@@ -39,7 +40,14 @@ const clock = (deps: ActionDeps): Date => (deps.now ?? (() => new Date()))();
 /** 登録して、成功時はログイベント(created)を発行する。 */
 export async function createPostAction(
   deps: ActionDeps,
-  input: { guildId: string; channelId: string; authorId: string; content: string; scheduledAt: Date } & Names,
+  input: {
+    guildId: string;
+    channelId: string;
+    authorId: string;
+    content: string;
+    scheduledAt: Date;
+    mentions?: MentionSelection;
+  } & Names,
 ): Promise<CreateScheduledPostResult> {
   const now = clock(deps);
   const result = await createScheduledPost(deps.db, { ...input, now });
@@ -57,7 +65,7 @@ export async function createPostAction(
 /** 編集して、成功時はログイベント(edited、変更前後の本文・日時)を発行する。 */
 export async function editPostAction(
   deps: ActionDeps,
-  input: { id: string; authorId: string; content: string; scheduledAt: Date } & Names,
+  input: { id: string; authorId: string; content: string; scheduledAt: Date; mentions?: MentionSelection } & Names,
 ): Promise<EditScheduledPostResult> {
   const now = clock(deps);
   const result = await editScheduledPost(deps.db, { ...input, now });

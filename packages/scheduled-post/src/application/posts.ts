@@ -2,7 +2,7 @@ import type { Db } from "@management-bot/db";
 import { scheduledPosts, withResourceLock } from "@management-bot/db";
 import { SCHEDULED_POST_CONTENT_MAX } from "@management-bot/shared";
 import { and, count, desc, eq, gt, asc } from "drizzle-orm";
-import { MIN_LEAD_MS, checkLimits, type LimitError } from "../domain/index.js";
+import { MIN_LEAD_MS, checkLimits, type LimitError, type MentionSelection } from "../domain/index.js";
 
 export type ScheduledPostRow = typeof scheduledPosts.$inferSelect;
 
@@ -21,7 +21,26 @@ export interface CreateScheduledPostInput {
   authorId: string;
   content: string;
   scheduledAt: Date;
+  /** メンション指定。省略時はメンションなし。 */
+  mentions?: MentionSelection;
   now: Date;
+}
+
+const toMentionColumns = (mentions: MentionSelection) => ({
+  mentionEveryone: mentions.everyone,
+  mentionHere: mentions.here,
+  mentionRoleIds: [...mentions.roleIds],
+  mentionUserIds: [...mentions.userIds],
+});
+
+/** 予約行から投稿時のメンション指定を取り出す。 */
+export function mentionSelectionOf(post: ScheduledPostRow): MentionSelection {
+  return {
+    everyone: post.mentionEveryone,
+    here: post.mentionHere,
+    roleIds: post.mentionRoleIds,
+    userIds: post.mentionUserIds,
+  };
 }
 
 export type CreateScheduledPostResult =
@@ -65,6 +84,7 @@ export async function createScheduledPost(
         authorId: input.authorId,
         content: input.content,
         scheduledAt: input.scheduledAt,
+        ...(input.mentions ? toMentionColumns(input.mentions) : {}),
         createdAt: input.now,
         updatedAt: input.now,
       })
@@ -79,6 +99,8 @@ export interface EditScheduledPostInput {
   authorId: string;
   content: string;
   scheduledAt: Date;
+  /** 指定時はメンション指定を置き換える。省略時は変更しない。 */
+  mentions?: MentionSelection;
   now: Date;
 }
 
@@ -106,7 +128,12 @@ export async function editScheduledPost(db: Db, input: EditScheduledPostInput): 
 
   const [after] = await db
     .update(scheduledPosts)
-    .set({ content: input.content, scheduledAt: input.scheduledAt, updatedAt: input.now })
+    .set({
+      content: input.content,
+      scheduledAt: input.scheduledAt,
+      ...(input.mentions ? toMentionColumns(input.mentions) : {}),
+      updatedAt: input.now,
+    })
     .where(
       and(
         eq(scheduledPosts.id, input.id),

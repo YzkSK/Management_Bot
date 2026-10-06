@@ -7,11 +7,8 @@ import {
   ButtonStyle,
   ChannelType,
   MessageFlags,
-  ModalBuilder,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
@@ -20,9 +17,10 @@ import {
   type StringSelectMenuInteraction,
 } from "discord.js";
 import {
-  getAllowedRoleIds,
   getScheduledPost,
+  getSettings,
   listMyPendingPosts,
+  mentionSelectionOf,
   type ScheduledPostRow,
 } from "../application/index.js";
 import {
@@ -46,6 +44,7 @@ import {
   parseSelectedPostId,
 } from "./custom-ids.js";
 import type { PublishScheduledPostEvent } from "./events.js";
+import { NO_MENTIONS_SELECTED, buildScheduleModal, readMentions } from "./mention-modal.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
 
 export const SCHEDULE_COMMAND: RESTPostAPIChatInputApplicationCommandsJSONBody = {
@@ -111,7 +110,7 @@ async function checkCanCreate(deps: ScheduleCommandDeps, interaction: CreateChec
     return "このチャンネルにメッセージを送信する権限がないため、予約できません。";
   }
 
-  const allowedRoleIds = await getAllowedRoleIds(deps.ctx.db, interaction.guildId);
+  const { allowedRoleIds } = await getSettings(deps.ctx.db, interaction.guildId);
   if (allowedRoleIds.length > 0) {
     const roleIds = memberRoleIds(interaction);
     if (!allowedRoleIds.some((roleId) => roleIds.includes(roleId))) {
@@ -182,27 +181,9 @@ async function handleCreateCommand(
   const error = await checkCanCreate(deps, interaction);
   if (error) return ephemeral(interaction, error);
 
-  const datetime = new TextInputBuilder()
-    .setCustomId("datetime")
-    .setLabel("日時(日本時間)")
-    .setPlaceholder("10/10 20:00 / 30分後 / 2時間後 / 3日後")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true);
-  const content = new TextInputBuilder()
-    .setCustomId("content")
-    .setLabel("投稿する本文(改行可)")
-    .setStyle(TextInputStyle.Paragraph)
-    .setMinLength(1)
-    .setMaxLength(SCHEDULED_POST_CONTENT_MAX)
-    .setRequired(true);
+  const settings = await getSettings(deps.ctx.db, interaction.guildId);
   await interaction.showModal(
-    new ModalBuilder()
-      .setCustomId(CREATE_MODAL_CUSTOM_ID)
-      .setTitle("予約投稿")
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(datetime),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(content),
-      ),
+    buildScheduleModal(CREATE_MODAL_CUSTOM_ID, "予約投稿", settings, { mentions: NO_MENTIONS_SELECTED }),
   );
 }
 
@@ -232,6 +213,9 @@ async function handleCreateModal(deps: ScheduleCommandDeps, interaction: ModalSu
   if (!resolved.ok) return ephemeral(interaction, resolved.message);
   const scheduledAt = resolved.date;
 
+  const mentionResult = readMentions(interaction, await getSettings(deps.ctx.db, interaction.guildId));
+  if (!mentionResult.ok) return ephemeral(interaction, mentionResult.message);
+
   const result = await createPostAction(
     { db: deps.ctx.db, publish: deps.publish },
     {
@@ -242,6 +226,7 @@ async function handleCreateModal(deps: ScheduleCommandDeps, interaction: ModalSu
       authorName: interaction.user.displayName,
       content: interaction.fields.getTextInputValue("content"),
       scheduledAt,
+      mentions: mentionResult.mentions,
     },
   );
   if (!result.ok) {
@@ -275,29 +260,13 @@ async function handleEditButton(deps: ScheduleCommandDeps, interaction: ButtonIn
     return ephemeral(interaction, "投稿予定時刻の1分前を過ぎたため、編集できません。");
   }
 
-  const datetime = new TextInputBuilder()
-    .setCustomId("datetime")
-    .setLabel("日時(日本時間)")
-    .setPlaceholder("10/10 20:00 / 30分後 / 2時間後 / 3日後")
-    .setStyle(TextInputStyle.Short)
-    .setValue(formatScheduleInput(post.scheduledAt))
-    .setRequired(true);
-  const content = new TextInputBuilder()
-    .setCustomId("content")
-    .setLabel("投稿する本文(改行可)")
-    .setStyle(TextInputStyle.Paragraph)
-    .setMinLength(1)
-    .setMaxLength(SCHEDULED_POST_CONTENT_MAX)
-    .setValue(post.content)
-    .setRequired(true);
+  const settings = await getSettings(deps.ctx.db, post.guildId);
   await interaction.showModal(
-    new ModalBuilder()
-      .setCustomId(editModalCustomId(post.id))
-      .setTitle("予約の編集")
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(datetime),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(content),
-      ),
+    buildScheduleModal(editModalCustomId(post.id), "予約の編集", settings, {
+      datetime: formatScheduleInput(post.scheduledAt),
+      content: post.content,
+      mentions: mentionSelectionOf(post),
+    }),
   );
 }
 
@@ -308,6 +277,13 @@ async function handleEditModal(deps: ScheduleCommandDeps, interaction: ModalSubm
   const resolved = resolveScheduledAt(interaction.fields.getTextInputValue("datetime"), new Date());
   if (!resolved.ok) return ephemeral(interaction, resolved.message);
 
+  const existing = await getScheduledPost(deps.ctx.db, postId);
+  if (!existing || existing.authorId !== interaction.user.id || existing.status !== "pending") {
+    return ephemeral(interaction, NOT_PENDING_MESSAGE);
+  }
+  const mentionResult = readMentions(interaction, await getSettings(deps.ctx.db, existing.guildId));
+  if (!mentionResult.ok) return ephemeral(interaction, mentionResult.message);
+
   const result = await editPostAction(
     { db: deps.ctx.db, publish: deps.publish },
     {
@@ -316,6 +292,7 @@ async function handleEditModal(deps: ScheduleCommandDeps, interaction: ModalSubm
       authorName: interaction.user.displayName,
       content: interaction.fields.getTextInputValue("content"),
       scheduledAt: resolved.date,
+      mentions: mentionResult.mentions,
     },
   );
   if (!result.ok) {

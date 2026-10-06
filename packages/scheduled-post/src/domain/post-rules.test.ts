@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildAdminCancelDm,
-  buildAllowedMentions,
   buildFailureDm,
+  buildMentionMessage,
   checkLimits,
   classifySendErrorCode,
   decidePostability,
+  validateMentionSelection,
+  type MentionPolicy,
+  type MentionSelection,
   type PostFacts,
 } from "./post-rules.js";
 
@@ -62,18 +65,63 @@ describe("classifySendErrorCode", () => {
   });
 });
 
-describe("buildAllowedMentions", () => {
-  const content = "<@&100> <@&200> <@&100> @everyone <@123>";
+describe("メンション", () => {
+  const all: MentionSelection = { everyone: true, here: true, roleIds: ["100", "200"], userIds: ["123"] };
+  const policy = (patch: Partial<MentionPolicy> = {}): MentionPolicy => ({
+    allowEveryone: true,
+    allowHere: true,
+    canMentionEveryone: true,
+    isRoleMentionable: () => false,
+    ...patch,
+  });
 
-  test("MentionEveryone保持者はユーザー・ロール・everyoneすべて有効", () => {
-    expect(buildAllowedMentions(content, true, () => false)).toEqual({
-      parse: ["users", "roles", "everyone"],
+  test("メンション行は@everyone @here ロール ユーザーの順で、allowedMentionsを明示指定する", () => {
+    expect(buildMentionMessage(all, policy())).toEqual({
+      content: "@everyone @here <@&100> <@&200> <@123>",
+      allowedMentions: { parse: ["everyone"], roles: ["100", "200"], users: ["123"] },
     });
   });
 
-  test("権限なしはユーザーのみ常に有効、ロールはmentionableなものだけ、everyoneは無効", () => {
-    expect(buildAllowedMentions(content, false, (id) => id === "200")).toEqual({ parse: ["users"], roles: ["200"] });
-    expect(buildAllowedMentions("@everyone @here", false, () => true)).toEqual({ parse: ["users"], roles: [] });
+  test("選択が空ならcontentなし・何も通知しない", () => {
+    expect(buildMentionMessage({ everyone: false, here: false, roleIds: [], userIds: [] }, policy())).toEqual({
+      content: undefined,
+      allowedMentions: { parse: [], roles: [], users: [] },
+    });
+  });
+
+  test("@hereのみ選択なら本文に@hereだけを含める", () => {
+    const message = buildMentionMessage({ ...all, everyone: false, roleIds: [], userIds: [] }, policy());
+    expect(message.content).toBe("@here");
+    expect(message.allowedMentions.parse).toEqual(["everyone"]);
+  });
+
+  test("投稿時に許されないeveryone/here・メンション不可ロールは除外し、ユーザーは残す", () => {
+    expect(buildMentionMessage(all, policy({ allowEveryone: false }))).toMatchObject({
+      content: "@here <@&100> <@&200> <@123>",
+    });
+    expect(buildMentionMessage(all, policy({ allowEveryone: false, allowHere: false })).allowedMentions.parse).toEqual([]);
+    expect(buildMentionMessage(all, policy({ canMentionEveryone: false, isRoleMentionable: (id) => id === "200" }))).toEqual({
+      content: "<@&200> <@123>",
+      allowedMentions: { parse: [], roles: ["200"], users: ["123"] },
+    });
+  });
+
+  test("登録時の検証: 設定で不許可・権限なし・メンション不可ロールはエラー", () => {
+    expect(validateMentionSelection(all, policy())).toBeNull();
+    expect(validateMentionSelection(all, policy({ allowEveryone: false }))).toBe("everyone_not_allowed");
+    expect(validateMentionSelection({ ...all, everyone: false }, policy({ allowHere: false }))).toBe("here_not_allowed");
+    expect(validateMentionSelection({ ...all, roleIds: [] }, policy({ canMentionEveryone: false }))).toBe(
+      "no_mention_everyone_permission",
+    );
+    expect(
+      validateMentionSelection({ ...all, everyone: false, here: false }, policy({ canMentionEveryone: false })),
+    ).toBe("role_not_mentionable");
+    expect(
+      validateMentionSelection(
+        { ...all, everyone: false, here: false },
+        policy({ canMentionEveryone: false, isRoleMentionable: () => true }),
+      ),
+    ).toBeNull();
   });
 });
 

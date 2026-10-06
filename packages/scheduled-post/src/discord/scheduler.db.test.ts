@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { createDb, guilds, scheduledPosts, syncFeatureMetadata } from "@management-bot/db";
 import type { ScheduledPostEventRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
-import { cancelScheduledPost, setAllowedRoleIds } from "../application/index.js";
-import type { AllowedMentionsSpec, PostFacts } from "../domain/index.js";
+import { cancelScheduledPost, getSettings, saveSettings } from "../application/index.js";
+import type { MentionMessage, MentionSelection, PostFacts } from "../domain/index.js";
 import { handleAdminCancelNotification, processPendingAdminCancels } from "./dashboard-action-listener.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
 import {
@@ -48,7 +48,7 @@ const okFacts: PostFacts = {
 interface Harness {
   deps: SchedulerDeps;
   events: ScheduledPostEventRecordedEvent[];
-  sends: { channelId: string; content: string; view: PostView; mentions: AllowedMentionsSpec }[];
+  sends: { channelId: string; content: string; view: PostView; mention: MentionMessage }[];
   dms: { userId: string; text: string }[];
   clock: { now: Date };
   setFacts: (facts: Partial<PostFacts>) => void;
@@ -76,9 +76,9 @@ function createHarness(): Harness {
       authorAvatarUrl: "https://cdn.example/a.png",
       ...inspection,
     }),
-    send: async (post, view, mentions) => {
+    send: async (post, view, mention) => {
       if (sendError) throw sendError;
-      sends.push({ channelId: post.channelId, content: post.content, view, mentions });
+      sends.push({ channelId: post.channelId, content: post.content, view, mention });
       return { messageId: `m-${sends.length}` };
     },
     sendDm: async (userId, text) => {
@@ -118,7 +118,7 @@ async function statusOf(id: string) {
   return row;
 }
 
-async function reserve(h: Harness, scheduledAtOffsetMin: number, content = "こんにちは") {
+async function reserve(h: Harness, scheduledAtOffsetMin: number, content = "こんにちは", mentions?: MentionSelection) {
   const result = await createPostAction(h.deps, {
     guildId,
     channelId: "c1",
@@ -127,6 +127,7 @@ async function reserve(h: Harness, scheduledAtOffsetMin: number, content = "こ�
     authorName: "ゆずき",
     content,
     scheduledAt: new Date(T0.getTime() + minutes(scheduledAtOffsetMin)),
+    mentions,
   });
   if (!result.ok) throw new Error(`create failed: ${result.error}`);
   return result.post;
@@ -209,7 +210,7 @@ describe("予約投稿の複合シナリオ", () => {
   test("使えるロールが設定され、予約者がそのロールを失っていたらno_roleで失敗する", async () => {
     const h = createHarness();
     const post = await reserve(h, 5);
-    await setAllowedRoleIds(db, guildId, ["role-b"]);
+    await saveSettings(db, guildId, { ...(await getSettings(db, guildId)), allowedRoleIds: ["role-b"] });
 
     h.clock.now = new Date(T0.getTime() + minutes(5));
     await runSchedulerTick(h.deps);
@@ -221,7 +222,7 @@ describe("予約投稿の複合シナリオ", () => {
   test("使えるロールを予約者が持っていれば投稿できる", async () => {
     const h = createHarness();
     const post = await reserve(h, 5);
-    await setAllowedRoleIds(db, guildId, ["role-a"]);
+    await saveSettings(db, guildId, { ...(await getSettings(db, guildId)), allowedRoleIds: ["role-a"] });
 
     h.clock.now = new Date(T0.getTime() + minutes(5));
     await runSchedulerTick(h.deps);
@@ -294,26 +295,50 @@ describe("予約投稿の複合シナリオ", () => {
     expect(h.events.at(-1)?.action).toBe("failed");
   });
 
-  test("メンションは実行者の権限に応じたallowedMentionsで送られる", async () => {
+  const allMentions: MentionSelection = { everyone: true, here: true, roleIds: ["111", "222"], userIds: ["123"] };
+
+  test("メンション付き予約は、contentにメンション行・allowedMentionsを明示して投稿される", async () => {
     const h = createHarness();
-    await reserve(h, 5, "<@&111> <@&222> <@123> @everyone");
-    h.inspection.isRoleMentionable = (roleId) => roleId === "111";
-
-    h.clock.now = new Date(T0.getTime() + minutes(5));
-    await runSchedulerTick(h.deps);
-
-    expect(h.sends[0]?.mentions).toEqual({ parse: ["users"], roles: ["111"] });
-  });
-
-  test("MentionEveryone権限を持つ実行者の投稿はeveryone・ロールを許可する", async () => {
-    const h = createHarness();
-    await reserve(h, 5, "@everyone");
+    await saveSettings(db, guildId, { allowedRoleIds: [], allowEveryone: true, allowHere: true });
+    await reserve(h, 5, "本文", allMentions);
     h.inspection.canMentionEveryone = true;
 
     h.clock.now = new Date(T0.getTime() + minutes(5));
     await runSchedulerTick(h.deps);
 
-    expect(h.sends[0]?.mentions.parse).toEqual(["users", "roles", "everyone"]);
+    expect(h.sends[0]?.mention).toEqual({
+      content: "@everyone @here <@&111> <@&222> <@123>",
+      allowedMentions: { parse: ["everyone"], roles: ["111", "222"], users: ["123"] },
+    });
+  });
+
+  test("投稿時に権限・設定を失っていたら、許されない分だけ除外して投稿を続行する", async () => {
+    const h = createHarness();
+    await saveSettings(db, guildId, { allowedRoleIds: [], allowEveryone: true, allowHere: true });
+    const post = await reserve(h, 5, "本文", allMentions);
+    // 登録後に@hereが不許可になり、実行者もMentionEveryoneを失った(111のみmentionable)。
+    await saveSettings(db, guildId, { allowedRoleIds: [], allowEveryone: true, allowHere: false });
+    h.inspection.canMentionEveryone = false;
+    h.inspection.isRoleMentionable = (roleId) => roleId === "111";
+
+    h.clock.now = new Date(T0.getTime() + minutes(5));
+    await runSchedulerTick(h.deps);
+
+    expect((await statusOf(post.id))?.status).toBe("posted");
+    expect(h.sends[0]?.mention).toEqual({
+      content: "<@&111> <@123>",
+      allowedMentions: { parse: [], roles: ["111"], users: ["123"] },
+    });
+  });
+
+  test("メンション指定がない予約はcontentなしで投稿される", async () => {
+    const h = createHarness();
+    await reserve(h, 5);
+
+    h.clock.now = new Date(T0.getTime() + minutes(5));
+    await runSchedulerTick(h.deps);
+
+    expect(h.sends[0]?.mention).toEqual({ content: undefined, allowedMentions: { parse: [], roles: [], users: [] } });
   });
 
   test("管理者のDashboard取り消しは、cancelledイベント(by=admin、実行者付き)を発行し予約者へDMする", async () => {

@@ -7,6 +7,7 @@ export {
   isValidContent,
   listGuildPosts,
   listMyPendingPosts,
+  mentionSelectionOf,
   type CancelScheduledPostInput,
   type CreateScheduledPostInput,
   type CreateScheduledPostResult,
@@ -14,7 +15,7 @@ export {
   type EditScheduledPostResult,
   type ScheduledPostRow,
 } from "./posts.js";
-export { getAllowedRoleIds, setAllowedRoleIds } from "./settings.js";
+export { getAllowedRoleIds, getSettings, saveSettings, type ScheduledPostSettings } from "./settings.js";
 export {
   RETENTION_DAYS,
   claimAdminCancelNotice,

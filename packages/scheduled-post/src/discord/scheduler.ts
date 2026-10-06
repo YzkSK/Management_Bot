@@ -3,8 +3,9 @@ import type { ScheduledPostFailureReason } from "@management-bot/shared";
 import {
   RETENTION_DAYS,
   claimDuePosts,
-  getAllowedRoleIds,
+  getSettings,
   markFailed,
+  mentionSelectionOf,
   markPosted,
   purgeFinishedPosts,
   recoverStuckPosting,
@@ -12,11 +13,11 @@ import {
 } from "../application/index.js";
 import {
   EXPIRY_MS,
-  buildAllowedMentions,
   buildFailureDm,
+  buildMentionMessage,
   classifySendErrorCode,
   decidePostability,
-  type AllowedMentionsSpec,
+  type MentionMessage,
   type PostFacts,
 } from "../domain/index.js";
 import { processPendingAdminCancels, type AdminCancelDiscord } from "./dashboard-action-listener.js";
@@ -45,7 +46,7 @@ export interface SchedulerGateway {
   send: (
     post: { channelId: string; content: string },
     view: PostView,
-    allowedMentions: AllowedMentionsSpec,
+    mention: MentionMessage,
   ) => Promise<{ messageId: string }>;
   /** 予約者へDMする。届かない場合は例外を投げる(呼び出し側がログのみに落とす)。 */
   sendDm: (userId: string, text: string) => Promise<void>;
@@ -121,8 +122,8 @@ export async function processClaimedPost(deps: SchedulerDeps, post: ScheduledPos
   }
   const names = { channelName: inspection.channelName, authorName: inspection.authorName };
 
-  const allowedRoleIds = await getAllowedRoleIds(deps.db, post.guildId);
-  const decision = decidePostability(inspection.facts, allowedRoleIds);
+  const settings = await getSettings(deps.db, post.guildId);
+  const decision = decidePostability(inspection.facts, settings.allowedRoleIds);
   if (!decision.ok) {
     await finishFailed(deps, post, decision.reason, names);
     return;
@@ -136,7 +137,13 @@ export async function processClaimedPost(deps: SchedulerDeps, post: ScheduledPos
         authorName: inspection.authorName ?? "予約者",
         authorAvatarUrl: inspection.authorAvatarUrl ?? "",
       },
-      buildAllowedMentions(post.content, inspection.canMentionEveryone, inspection.isRoleMentionable),
+      // 登録後に設定・権限が変わっていても、許されない分だけ除外して投稿は続行する。
+      buildMentionMessage(mentionSelectionOf(post), {
+        allowEveryone: settings.allowEveryone,
+        allowHere: settings.allowHere,
+        canMentionEveryone: inspection.canMentionEveryone,
+        isRoleMentionable: inspection.isRoleMentionable,
+      }),
     );
     messageId = sent.messageId;
   } catch (error) {

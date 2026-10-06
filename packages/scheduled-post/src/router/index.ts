@@ -5,16 +5,21 @@ import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
   cancelScheduledPost,
-  getAllowedRoleIds,
+  getSettings,
   listGuildPosts,
   notifyScheduledPostAdminCancel,
-  setAllowedRoleIds,
+  saveSettings,
 } from "../application/index.js";
 import { SCHEDULED_POST_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 const cancelInput = z.object({ guildId: discordIdSchema, id: z.uuid() });
-const updateSettingsInput = z.object({ guildId: discordIdSchema, roleIds: z.array(discordIdSchema).max(250) });
+const updateSettingsInput = z.object({
+  guildId: discordIdSchema,
+  roleIds: z.array(discordIdSchema).max(250),
+  allowEveryone: z.boolean(),
+  allowHere: z.boolean(),
+});
 
 // requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する(temp-voiceと同じ)。
 const viewProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
@@ -65,11 +70,12 @@ export const scheduledPostRouter = router({
     await notifyScheduledPostAdminCancel(ctx.db, { guildId: input.guildId, postId: row.id });
   }),
 
-  getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => ({
-    allowedRoleIds: await getAllowedRoleIds(ctx.db, input.guildId),
-  })),
+  getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => {
+    const { allowedRoleIds, allowEveryone, allowHere } = await getSettings(ctx.db, input.guildId);
+    return { allowedRoleIds, allowEveryone, allowHere };
+  }),
 
-  /** 「使えるロール」を置き換える。空配列=メンバー全員が使える。ロールは実在するもののみ(@everyone除く)。 */
+  /** 設定を置き換える。roleIds空配列=メンバー全員が使える。ロールは実在するもののみ(@everyone除く)。 */
   updateSettings: manageProcedure(updateSettingsInput).mutation(async ({ ctx, input }) => {
     const roles = await ctx.getGuildRoles(input.guildId);
     const validRoleIds = new Set(roles.filter((role) => role.id !== input.guildId).map((role) => role.id));
@@ -78,7 +84,11 @@ export const scheduledPostRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `roleId ${roleId} is not a role of this guild` });
       }
     }
-    await setAllowedRoleIds(ctx.db, input.guildId, input.roleIds);
+    await saveSettings(ctx.db, input.guildId, {
+      allowedRoleIds: input.roleIds,
+      allowEveryone: input.allowEveryone,
+      allowHere: input.allowHere,
+    });
   }),
 
   /** Dashboard UIでのID直接入力を禁止するため、選択肢(実在ロール、@everyone除く)をこのprocedure経由で提供する。 */
