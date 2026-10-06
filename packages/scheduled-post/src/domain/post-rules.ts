@@ -89,8 +89,8 @@ export type MentionError = "everyone_not_allowed" | "here_not_allowed" | "no_men
 export const MENTION_ERROR_MESSAGES: Record<MentionError, string> = {
   everyone_not_allowed: "このサーバーの設定では、予約投稿で @everyone は使えません。",
   here_not_allowed: "このサーバーの設定では、予約投稿で @here は使えません。",
-  no_mention_everyone_permission: "このチャンネルで「@everyone、@here、すべてのロールにメンション」権限がないため、@everyone / @here は使えません。",
-  role_not_mentionable: "メンションできないロールが選ばれています(「@everyone、@here、すべてのロールにメンション」権限がある場合のみ、メンション不可のロールを指定できます)。",
+  no_mention_everyone_permission: "投稿先チャンネルで、あなたまたはBotに「@everyone、@here、すべてのロールにメンション」権限がないため、@everyone / @here は使えません。",
+  role_not_mentionable: "メンションできないロールが選ばれています(あなたとBotの両方に「@everyone、@here、すべてのロールにメンション」権限がある場合のみ、メンション不可のロールを指定できます)。",
 };
 
 /** 予約の登録・編集時の検証。許されない指定があれば最初のエラーを返す。 */
