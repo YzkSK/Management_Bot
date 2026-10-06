@@ -32,7 +32,7 @@ export interface PostInspection {
   isRoleMentionable: (roleId: string) => boolean;
   channelName?: string;
   authorName?: string;
-  /** 予約者のギルドアバター(なければユーザーアバター)。投稿表示のThumbnailに使う。 */
+  /** 予約者のギルドアバター(なければユーザーアバター)。投稿Embedのauthorアイコンに使う。 */
   authorAvatarUrl?: string;
 }
 

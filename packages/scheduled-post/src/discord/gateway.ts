@@ -1,7 +1,6 @@
 import {
   ChannelType,
   DiscordAPIError,
-  MessageFlags,
   PermissionFlagsBits,
   type Client,
   type Guild,
@@ -9,7 +8,7 @@ import {
   type GuildMember,
 } from "discord.js";
 import type { PostChannelKind, PostFacts } from "../domain/index.js";
-import { buildPostContainer } from "./post-message.js";
+import { buildPostEmbed } from "./post-message.js";
 import type { PostInspection, SchedulerGateway } from "./scheduler.js";
 
 /** Unknown Channel / Unknown Member(RESTJSONErrorCodes)。 */
@@ -110,11 +109,7 @@ export function createDiscordGateway(client: Client): SchedulerGateway {
       if (!channel || !channel.isSendable()) {
         throw Object.assign(new Error(`channel ${post.channelId} is not sendable`), { code: UNKNOWN_CHANNEL });
       }
-      const message = await channel.send({
-        components: [buildPostContainer(post.content, view)],
-        flags: MessageFlags.IsComponentsV2,
-        allowedMentions,
-      });
+      const message = await channel.send({ embeds: [buildPostEmbed(post.content, view)], allowedMentions });
       return { messageId: message.id };
     },
     sendDm: async (userId, text) => {
