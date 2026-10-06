@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/ui/skeleton";
 
@@ -116,7 +117,7 @@ function PostsTab({ guildId, tab, canManage }: { guildId: string; tab: Scheduled
 }
 
 /** 「使えるロール」。空ならメンバー全員が使える。ロールはセレクターから選ぶ(ID直接入力は不可)。 */
-function AllowedRolesSection({ guildId }: { guildId: string }) {
+export function AllowedRolesSection({ guildId }: { guildId: string }) {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery(trpc.scheduledPost.getSettings.queryOptions({ guildId }));
   const roleOptionsQuery = useQuery(trpc.scheduledPost.listRoleOptions.queryOptions({ guildId }));
@@ -136,7 +137,9 @@ function AllowedRolesSection({ guildId }: { guildId: string }) {
     );
   }
 
-  const allowedRoleIds = settingsQuery.data.allowedRoleIds;
+  const { allowedRoleIds, allowEveryone, allowHere } = settingsQuery.data;
+  const save = (patch: Partial<{ roleIds: string[]; allowEveryone: boolean; allowHere: boolean }>) =>
+    mutation.mutate({ guildId, roleIds: allowedRoleIds, allowEveryone, allowHere, ...patch });
   const roleNameById = new Map(roleOptionsQuery.data.map((role) => [role.id, role.name]));
   const availableOptions = roleOptionsQuery.data.filter((role) => !allowedRoleIds.includes(role.id));
 
@@ -167,7 +170,7 @@ function AllowedRolesSection({ guildId }: { guildId: string }) {
           className="w-full sm:w-auto"
           disabled={selected === "" || mutation.isPending}
           onClick={() => {
-            mutation.mutate({ guildId, roleIds: [...allowedRoleIds, selected] });
+            save({ roleIds: [...allowedRoleIds, selected] });
             setSelected("");
           }}
         >
@@ -187,7 +190,7 @@ function AllowedRolesSection({ guildId }: { guildId: string }) {
                 size="sm"
                 aria-label={`${roleNameById.get(roleId) ?? roleId}を削除`}
                 disabled={mutation.isPending}
-                onClick={() => mutation.mutate({ guildId, roleIds: allowedRoleIds.filter((id) => id !== roleId) })}
+                onClick={() => save({ roleIds: allowedRoleIds.filter((id) => id !== roleId) })}
               >
                 削除
               </Button>
@@ -195,6 +198,28 @@ function AllowedRolesSection({ guildId }: { guildId: string }) {
           ))}
         </ul>
       )}
+      <h3 className="mt-2 font-bold">メンション</h3>
+      <p className="text-muted-foreground text-sm">
+        予約時に @everyone / @here をメンションに指定できるようにします(予約者に「@everyone、@here、すべてのロールにメンション」権限がある場合のみ有効)。
+      </p>
+      <label className="flex items-center justify-between gap-2 text-sm">
+        @everyone を許可
+        <Switch
+          checked={allowEveryone}
+          disabled={mutation.isPending}
+          aria-label="@everyone を許可"
+          onCheckedChange={(checked) => save({ allowEveryone: checked })}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-2 text-sm">
+        @here を許可
+        <Switch
+          checked={allowHere}
+          disabled={mutation.isPending}
+          aria-label="@here を許可"
+          onCheckedChange={(checked) => save({ allowHere: checked })}
+        />
+      </label>
     </section>
   );
 }
