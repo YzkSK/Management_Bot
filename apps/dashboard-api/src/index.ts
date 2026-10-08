@@ -5,7 +5,15 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { Redis } from "ioredis";
 import { cors } from "hono/cors";
-import { createTtlCache, installFatalErrorHandlers, startInfraReporter, type ResourceSample } from "@management-bot/shared";
+import {
+  BACKUP_FILES_KEY,
+  BACKUP_REQUEST_KEY,
+  backupFilesSchema,
+  createTtlCache,
+  installFatalErrorHandlers,
+  startInfraReporter,
+  type ResourceSample,
+} from "@management-bot/shared";
 import { createAppRouter } from "./app-router.js";
 import { fetchBotOwners, type BotOwner } from "./discord/bot-client.js";
 import { collectStatus } from "./status/collect-status.js";
@@ -50,6 +58,12 @@ const appRouter = createAppRouter({
     const url = env.CADVISOR_URL;
     return url ? currentResourcesCache("now", () => fetchResourceSample(url, env.DOCKER_API_URL)) : null;
   },
+  readBackups: async () => {
+    const raw = await redis.get(BACKUP_FILES_KEY);
+    return raw === null ? null : backupFilesSchema.parse(JSON.parse(raw));
+  },
+  // NXで連打を1件にまとめる。backup側が10秒ごとに拾って消すので、TTLは取りこぼし防止の保険。
+  requestBackup: async () => (await redis.set(BACKUP_REQUEST_KEY, new Date().toISOString(), "EX", 600, "NX")) === "OK",
 });
 // cAdvisorが無い環境(ローカル等)ではリソースのサンプリングを起動しない(issue #548)。
 if (env.CADVISOR_URL) startResourceSampler(redis, env.CADVISOR_URL, env.DOCKER_API_URL);

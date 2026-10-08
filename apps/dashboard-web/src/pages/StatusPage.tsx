@@ -50,11 +50,11 @@ export function NotFoundPage() {
   );
 }
 
-type StatusTab = "status" | "resources" | "logs" | "access";
+type StatusTab = "status" | "resources" | "logs" | "backup" | "access";
 type ServiceFilter = InfraLogService | "all";
 
 const parseTab = (value: string | null, isOwner: boolean): StatusTab =>
-  value === "logs" || value === "resources" || (value === "access" && isOwner) ? value : "status";
+  value === "logs" || value === "resources" || value === "backup" || (value === "access" && isOwner) ? value : "status";
 const parseService = (value: string | null): ServiceFilter =>
   INFRA_LOG_SERVICES.find((service) => service === value) ?? "all";
 
@@ -87,11 +87,12 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           </div>
           <TabsList
             aria-label="ステータスの表示"
-            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-4" : "grid-cols-3")}
+            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
           >
             <TabsTrigger value="status">ステータス</TabsTrigger>
             <TabsTrigger value="resources">リソース</TabsTrigger>
             <TabsTrigger value="logs">ログ</TabsTrigger>
+            <TabsTrigger value="backup">バックアップ</TabsTrigger>
             {isOwner && <TabsTrigger value="access">閲覧権限</TabsTrigger>}
           </TabsList>
         </div>
@@ -124,6 +125,10 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
 
         <TabsContent value="logs" className="flex flex-col gap-3">
           <LogsTab service={service} onServiceChange={(s) => go("logs", s)} />
+        </TabsContent>
+
+        <TabsContent value="backup" className="flex flex-col gap-4">
+          <BackupTab isOwner={isOwner} />
         </TabsContent>
 
         {isOwner && (
@@ -490,6 +495,66 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
       ) : (
         <Loading />
       )}
+    </>
+  );
+}
+
+function BackupTab({ isOwner }: { isOwner: boolean }) {
+  const queryClient = useQueryClient();
+  const backups = useQuery({ ...trpc.status.backups.queryOptions(), refetchInterval: STATUS_REFETCH_MS });
+  const request = useMutation(
+    trpc.status.requestBackup.mutationOptions({
+      onSuccess: async ({ queued }) => {
+        if (queued) toast.success("バックアップを要求しました。数十秒後に一覧へ反映されます");
+        else toast.info("既にバックアップを要求中です");
+        await queryClient.invalidateQueries({ queryKey: trpc.status.backups.queryKey() });
+      },
+      onError: () => toast.error("バックアップの要求に失敗しました"),
+    }),
+  );
+  const files = backups.data?.backups?.files;
+
+  return (
+    <>
+      {isOwner && (
+        <div>
+          <Button className="h-10" disabled={request.isPending} onClick={() => request.mutate()}>
+            今すぐバックアップ
+          </Button>
+        </div>
+      )}
+
+      {backups.isError ? (
+        <Alert variant="destructive">
+          <AlertDescription>バックアップ情報の取得に失敗しました。</AlertDescription>
+        </Alert>
+      ) : !backups.data ? (
+        <Loading />
+      ) : !files?.length ? (
+        <p className="text-muted-foreground text-sm">バックアップはまだありません</p>
+      ) : (
+        <section className="bg-card overflow-x-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="text-muted-foreground text-left text-xs">
+              <tr>
+                <th className="px-4 py-2 font-medium">ファイル名</th>
+                <th className="px-4 py-2 font-medium">サイズ</th>
+                <th className="px-4 py-2 font-medium">作成日時</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((file) => (
+                <tr key={file.name} className="border-t">
+                  <td className="px-4 py-2 font-medium">{file.name}</td>
+                  <td className="px-4 py-2 tabular-nums">{formatBytes(file.sizeBytes)}</td>
+                  <td className="px-4 py-2">{formatDateTime(file.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+      <p className="text-muted-foreground text-xs">保持期間を過ぎたバックアップは自動で削除されます。</p>
     </>
   );
 }

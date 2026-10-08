@@ -1,8 +1,14 @@
 import { parseEnv, envSchema } from "@management-bot/config";
-import { installFatalErrorHandlers, startInfraReporter } from "@management-bot/shared";
+import {
+  BACKUP_FILES_KEY,
+  BACKUP_REQUEST_KEY,
+  BACKUP_REQUEST_POLL_MS,
+  installFatalErrorHandlers,
+  startInfraReporter,
+} from "@management-bot/shared";
 import { Redis } from "ioredis";
 import cron from "node-cron";
-import { backupOnce } from "./dump.js";
+import { backupOnce, listDumps } from "./dump.js";
 
 const backupEnvSchema = envSchema.pick({
   DATABASE_URL: true,
@@ -28,8 +34,19 @@ if (ageCheck.exitCode !== 0) {
   throw new Error(`Invalid BACKUP_AGE_RECIPIENT: ${ageCheck.stderr.toString().trim()}`);
 }
 
-const reporter = startInfraReporter(new Redis(env.REDIS_URL), { name: "backup", service: "worker" });
+const redis = new Redis(env.REDIS_URL);
+const reporter = startInfraReporter(redis, { name: "backup", service: "worker" });
 let running = false;
+
+// ダッシュボードに出すバックアップ一覧をRedisへ書く(ボリュームを共有しないため, issue #629)。
+async function publishFiles() {
+  try {
+    const files = await listDumps(env.BACKUP_DIR);
+    await redis.set(BACKUP_FILES_KEY, JSON.stringify({ updatedAt: new Date().toISOString(), files }));
+  } catch (error) {
+    console.error("Failed to publish backup files:", error);
+  }
+}
 
 async function runBackup() {
   if (running) {
@@ -51,10 +68,21 @@ async function runBackup() {
     reporter.recordRun(false);
   } finally {
     running = false;
+    await publishFiles();
   }
 }
 
 cron.schedule(env.BACKUP_CRON, () => void runBackup(), { timezone: TIMEZONE });
+void publishFiles();
+// ダッシュボードの「今すぐバックアップ」要求を拾う(issue #629)。実行中なら runBackup 側でスキップされる。
+setInterval(() => {
+  redis
+    .getdel(BACKUP_REQUEST_KEY)
+    .then((requested) => {
+      if (requested) void runBackup();
+    })
+    .catch((error: unknown) => console.error("Failed to poll backup request:", error));
+}, BACKUP_REQUEST_POLL_MS);
 console.log(
   `Backup cron scheduled: ${env.BACKUP_CRON} (${TIMEZONE}, dir: ${env.BACKUP_DIR}, retention: ${env.BACKUP_RETENTION_DAYS}d)`,
 );
