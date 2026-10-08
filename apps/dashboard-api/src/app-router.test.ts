@@ -7,6 +7,8 @@ const appRouter = createAppRouter({
   readLogs: async () => [],
   readResources: async () => [],
   readCurrentResources: async () => null,
+  readBackups: async () => null,
+  requestBackup: async () => true,
 });
 
 describe("appRouter", () => {
