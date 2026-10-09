@@ -20,6 +20,8 @@ const deps: StatusDeps = {
   readLogs: async () => [],
   readResources: async () => [],
   readCurrentResources: async () => null,
+  readBackups: async () => ({ updatedAt: "2026-09-30T00:00:00.000Z", files: [] }),
+  requestBackup: async () => true,
 };
 
 async function cleanup() {
@@ -88,6 +90,14 @@ describe("status router", () => {
 
     await owner.removeViewer({ discordUserId: VIEWER });
     expect(await errorCode(viewer.overview())).toBe("NOT_FOUND");
+  });
+
+  test("バックアップ一覧は閲覧者が取れ、手動バックアップの要求はオーナーだけができる", async () => {
+    await callerFor(OWNER).addViewer({ discordUserId: VIEWER });
+    const viewer = callerFor(VIEWER);
+    expect(await viewer.backups()).toEqual({ backups: { updatedAt: "2026-09-30T00:00:00.000Z", files: [] } });
+    expect(await errorCode(viewer.requestBackup())).toBe("NOT_FOUND");
+    expect(await callerFor(OWNER).requestBackup()).toEqual({ queued: true });
   });
 
   test("ログインしたことのないユーザーは追加できない", async () => {

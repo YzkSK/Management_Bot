@@ -2,7 +2,30 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, stat, writeFile, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pruneOldDumps, timestampedFilename } from "./dump.js";
+import { listDumps, pruneOldDumps, timestampedFilename } from "./dump.js";
+
+describe("listDumps", () => {
+  test("ダンプファイルのみを新しい順に返す", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "backup-test-"));
+    try {
+      const older = join(dir, "management_bot-a.sql.gz.age");
+      const newer = join(dir, "management_bot-b.sql.gz");
+      await writeFile(older, "12345");
+      await writeFile(newer, "123");
+      await writeFile(join(dir, "other.sql.gz"), "x");
+      await mkdir(join(dir, "management_bot-dir.sql.gz"));
+      await utimes(older, new Date("2026-01-01T00:00:00.000Z"), new Date("2026-01-01T00:00:00.000Z"));
+      await utimes(newer, new Date("2026-01-02T00:00:00.000Z"), new Date("2026-01-02T00:00:00.000Z"));
+
+      expect(await listDumps(dir)).toEqual([
+        { name: "management_bot-b.sql.gz", sizeBytes: 3, createdAt: "2026-01-02T00:00:00.000Z" },
+        { name: "management_bot-a.sql.gz.age", sizeBytes: 5, createdAt: "2026-01-01T00:00:00.000Z" },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("timestampedFilename", () => {
   test("日時を含むファイル名を生成する", () => {

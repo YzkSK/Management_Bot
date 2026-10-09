@@ -2,6 +2,7 @@ import { protectedProcedure, router } from "@management-bot/dashboard-access";
 import { sessions, statusViewers, type Db } from "@management-bot/db";
 import {
   discordIdSchema,
+  type BackupFiles,
   INFRA_LOG_MAXLEN,
   INFRA_LOG_SERVICES,
   type InfraLogEntry,
@@ -21,6 +22,10 @@ export interface StatusDeps {
   readResources: (range: ResourceRange) => Promise<ResourceSample[]>;
   /** cAdvisorから今の値を直接取得する。cAdvisor未設定ならnull。 */
   readCurrentResources: () => Promise<ResourceSample | null>;
+  /** backupコンテナがRedisへ書いたバックアップ一覧(issue #629)。未書き込みならnull。 */
+  readBackups: () => Promise<BackupFiles | null>;
+  /** 手動バックアップを要求する。新規に要求したらtrue、既に要求中ならfalse。 */
+  requestBackup: () => Promise<boolean>;
 }
 
 export type StatusAccess = "owner" | "viewer" | null;
@@ -66,6 +71,10 @@ export function createStatusRouter(deps: StatusDeps) {
       .query(async ({ input }) => ({ samples: await deps.readResources(input.range) })),
 
     resourcesNow: viewerProcedure.query(async () => ({ sample: await deps.readCurrentResources() })),
+
+    backups: viewerProcedure.query(async () => ({ backups: await deps.readBackups() })),
+
+    requestBackup: ownerProcedure.mutation(async () => ({ queued: await deps.requestBackup() })),
 
     viewers: ownerProcedure.query(async ({ ctx }) => {
       const [owners, viewers] = await Promise.all([
