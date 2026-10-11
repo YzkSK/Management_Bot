@@ -1419,6 +1419,48 @@ describe("formatLogMessage", () => {
   });
 });
 
+describe("formatLogMessage: scheduledPost", () => {
+  const names = { users: { u1: "alice", u9: "admin" }, channels: { c1: "general" } };
+  const base = {
+    guildId: "g1",
+    createdAt: "2026-09-26T00:00:00.000Z",
+    category: "scheduledPost" as const,
+    postId: "p1",
+    channelId: "c1",
+    authorId: "u1",
+    scheduledAt: "2026-10-01T00:00:00.000Z",
+  };
+
+  test("登録・編集・投稿成功", () => {
+    const created: LogEntry = { ...base, action: "created", content: "hi" };
+    const edited: LogEntry = {
+      ...base,
+      action: "edited",
+      content: "after",
+      previousContent: "before",
+      previousScheduledAt: "2026-09-30T00:00:00.000Z",
+    };
+    const posted: LogEntry = { ...base, action: "posted", messageId: "m1" };
+    expect(formatLogMessage(created, summarizeLogEntry(created), names)).toBe("alice が #general への予約投稿を登録しました");
+    expect(formatLogMessage(edited, summarizeLogEntry(edited), names)).toBe("alice が #general への予約投稿を編集しました");
+    expect(formatLogMessage(posted, summarizeLogEntry(posted), names)).toBe("alice の予約投稿を #general に投稿しました");
+  });
+
+  test("取り消しは本人/管理者で主語が変わる", () => {
+    const byAuthor: LogEntry = { ...base, action: "cancelled", by: "author" };
+    const byAdmin: LogEntry = { ...base, action: "cancelled", by: "admin", executorId: "u9" };
+    expect(formatLogMessage(byAuthor, summarizeLogEntry(byAuthor), names)).toBe("alice が #general への予約投稿を取り消しました");
+    expect(formatLogMessage(byAdmin, summarizeLogEntry(byAdmin), names)).toBe(
+      "admin が alice の #general への予約投稿を取り消しました",
+    );
+  });
+
+  test("失敗は原因を含む", () => {
+    const failed: LogEntry = { ...base, action: "failed", reason: "author_left" };
+    expect(formatLogMessage(failed, summarizeLogEntry(failed), names)).toContain("予約者がサーバーを退出していた");
+  });
+});
+
 describe("formatLogMessage: チャンネル名スナップショット", () => {
   const mentionNames = { users: {}, channels: {}, mention: true };
 

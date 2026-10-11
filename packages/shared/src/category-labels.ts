@@ -20,4 +20,5 @@ export const CATEGORY_LABELS: Record<LogCategory, string> = {
   moderationCase: "モデレーション",
   voice: "ボイスチャンネル",
   tempVoice: "一時VC",
+  scheduledPost: "予約投稿",
 };

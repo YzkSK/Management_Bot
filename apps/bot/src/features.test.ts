@@ -16,16 +16,17 @@ const testDeps = {
 };
 
 describe("FEATURES registry", () => {
-  test("Phase0で予定された4機能がすべて登録されている", () => {
+  test("予定された5機能がすべて登録されている", () => {
     expect(FEATURES.map((feature) => feature.key)).toEqual([
       "activity",
       "logging",
       "temp-voice",
       "moderation",
+      "scheduled-post",
     ]);
   });
 
-  test("登録済みの4機能をBotClientに登録できる", async () => {
+  test("登録済みの5機能をBotClientに登録できる", async () => {
     const client = new BotClient();
     await expect(client.registerFeatures(FEATURES, testDeps)).resolves.toBeUndefined();
   });

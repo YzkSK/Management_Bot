@@ -1,5 +1,6 @@
 import { mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { BackupFile } from "@management-bot/shared";
 
 // 暗号化導入前の平文`.sql.gz`も保持期限で削除できるよう、両方を対象にする。
 const DUMP_FILENAME_PATTERN = /^management_bot-.*\.sql\.gz(\.age)?$/;
@@ -45,6 +46,18 @@ export async function pruneOldDumps(dir: string, retentionDays: number, now = ne
       await unlink(path);
     }
   }
+}
+
+/** バックアップファイルを新しい順に返す(ダッシュボードの一覧表示用, issue #629)。 */
+export async function listDumps(dir: string): Promise<BackupFile[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files: BackupFile[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !DUMP_FILENAME_PATTERN.test(entry.name)) continue;
+    const info = await stat(join(dir, entry.name));
+    files.push({ name: entry.name, sizeBytes: info.size, createdAt: info.mtime.toISOString() });
+  }
+  return files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function backupOnce(
