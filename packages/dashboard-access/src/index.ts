@@ -23,11 +23,13 @@ export {
   type RevokeCapabilityGrantInput,
 } from "./capability-grants.js";
 export { capabilityGrantsRouter } from "./router.js";
+export { auditLogRouter } from "./audit-log.js";
 export {
   router,
   publicProcedure,
   protectedProcedure,
   requireCapability,
+  captureAuditBefore,
   createCallerFactory,
   type DashboardAccessContext,
   type GuildMembership,

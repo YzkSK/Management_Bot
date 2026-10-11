@@ -1,4 +1,4 @@
-import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
 import { CAPABILITIES, buildInviteUrl, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
@@ -84,6 +84,7 @@ export const scheduledPostRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `roleId ${roleId} is not a role of this guild` });
       }
     }
+    await captureAuditBefore(ctx, () => getSettings(ctx.db, input.guildId));
     await saveSettings(ctx.db, input.guildId, {
       allowedRoleIds: input.roleIds,
       allowEveryone: input.allowEveryone,

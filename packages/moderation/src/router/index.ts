@@ -1,4 +1,4 @@
-import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
 import {
   buildInviteUrl,
   CAPABILITIES,
@@ -111,9 +111,10 @@ export const moderationRouter = router({
     .query(({ ctx, input }) => listThresholds(ctx.db, input.guildId)),
 
   setThreshold: moderationProcedure(setThresholdInput)
-    .mutation(({ ctx, input }) =>
-      setThreshold(ctx.db, input.guildId, input.violationType, input.preset, input.enabled),
-    ),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => listThresholds(ctx.db, input.guildId));
+      return setThreshold(ctx.db, input.guildId, input.violationType, input.preset, input.enabled);
+    }),
 
   listWhitelist: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => listWhitelist(ctx.db, input.guildId)),
@@ -139,11 +140,15 @@ export const moderationRouter = router({
   addToWhitelist: moderationProcedure(whitelistTargetInput)
     .mutation(async ({ ctx, input }) => {
       await assertWhitelistTargetExists(ctx, input.guildId, input.targetType, input.targetId);
+      await captureAuditBefore(ctx, () => listWhitelist(ctx.db, input.guildId));
       await addToWhitelist(ctx.db, input);
     }),
 
   removeFromWhitelist: moderationProcedure(whitelistTargetInput)
-    .mutation(({ ctx, input }) => removeFromWhitelist(ctx.db, input)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => listWhitelist(ctx.db, input.guildId));
+      return removeFromWhitelist(ctx.db, input);
+    }),
 
   /**
    * ユーザーIDをそのまま見せず名前表示するため、logging.resolveDisplayNamesと同様に
@@ -168,16 +173,25 @@ export const moderationRouter = router({
     .query(({ ctx, input }) => getEscalationPreset(ctx.db, input.guildId)),
 
   setEscalationPreset: moderationProcedure(setEscalationPresetInput)
-    .mutation(({ ctx, input }) => setEscalationPreset(ctx.db, input.guildId, input.preset)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => getEscalationPreset(ctx.db, input.guildId));
+      return setEscalationPreset(ctx.db, input.guildId, input.preset);
+    }),
 
   getLockdownSettings: moderationProcedure(guildIdInput)
     .query(({ ctx, input }) => getLockdownSettings(ctx.db, input.guildId)),
 
   setAutoLockdownOnRaid: moderationProcedure(setAutoLockdownOnRaidInput)
-    .mutation(({ ctx, input }) => setAutoLockdownOnRaid(ctx.db, input.guildId, input.enabled)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => getLockdownSettings(ctx.db, input.guildId));
+      return setAutoLockdownOnRaid(ctx.db, input.guildId, input.enabled);
+    }),
 
   setLockdownRequested: moderationProcedure(setLockdownRequestedInput)
-    .mutation(({ ctx, input }) => setLockdownRequested(ctx.db, input.guildId, input.requestedLocked)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => getLockdownSettings(ctx.db, input.guildId));
+      return setLockdownRequested(ctx.db, input.guildId, input.requestedLocked);
+    }),
 
   resetAllStrikes: moderationProcedure(resetAllStrikesInput)
     .mutation(({ ctx, input }) => resetAllStrikes(ctx.db, input.guildId, input.userId)),
@@ -203,7 +217,10 @@ export const moderationRouter = router({
     }),
 
   removeNgword: moderationProcedure(removeNgwordInput)
-    .mutation(({ ctx, input }) => removeNgword(ctx.db, input.guildId, input.id)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => listNgwords(ctx.db, input.guildId));
+      return removeNgword(ctx.db, input.guildId, input.id);
+    }),
 
   /**
    * メッセージ削除・タイムアウト・キック/BANの実行に必要な権限をBotが持っているかを返す。

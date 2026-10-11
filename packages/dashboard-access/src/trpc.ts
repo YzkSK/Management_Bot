@@ -1,4 +1,4 @@
-import type { Db } from "@management-bot/db";
+import { completeAuditLog, recordAuditLog, type Db } from "@management-bot/db";
 import { isKnownCapabilityMask } from "@management-bot/shared";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { validateSession } from "./session.js";
@@ -190,9 +190,19 @@ export const router = t.router;
 export const publicProcedure = t.procedure;
 export const createCallerFactory = t.createCallerFactory;
 
-interface AuthenticatedContext extends DashboardAccessContext {
+export interface AuthenticatedContext extends DashboardAccessContext {
   discordUserId: string;
   discordUsername: string;
+}
+
+/** 操作者の表示名(サーバーニックネーム優先)。解決できなければセッションのDiscordユーザー名。 */
+export async function resolveActorName(ctx: AuthenticatedContext, guildId: string): Promise<string> {
+  try {
+    const names = await ctx.getGuildMemberNames(guildId, [ctx.discordUserId]);
+    return names.get(ctx.discordUserId) ?? ctx.discordUsername;
+  } catch {
+    return ctx.discordUsername;
+  }
 }
 
 export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
@@ -218,7 +228,7 @@ export function requireCapability(cap: number) {
     throw new Error("requireCapability requires a non-zero known capability mask");
   }
 
-  return t.middleware(async ({ ctx, input, next }) => {
+  return t.middleware(async ({ ctx, input, next, type, path }) => {
     const { db, discordUserId } = ctx as AuthenticatedContext;
     const parsed = input as { guildId?: unknown };
     if (typeof parsed?.guildId !== "string") {
@@ -244,10 +254,89 @@ export function requireCapability(cap: number) {
       roleIds: membership.roleIds,
     });
 
+    // 変更を伴う操作(mutation)のみ操作履歴に記録する(issue #618)。queryは記録しない。
+    const isMutation = type === "mutation";
+    const [feature, ...actionParts] = path.split(".");
+    const auditBase = {
+      guildId,
+      kind: "action" as const,
+      actorId: discordUserId,
+      feature: feature ?? path,
+      action: actionParts.join(".") || path,
+    };
+
     if ((capabilities & cap) !== cap) {
+      if (isMutation) {
+        // 権限不足の試行も記録する(乗っ取り調査用)。記録に失敗してもFORBIDDENは必ず投げる。
+        try {
+          await recordAuditLog(db, {
+            ...auditBase,
+            actorName: await resolveActorName(ctx as AuthenticatedContext, guildId),
+            outcome: "denied",
+            after: input,
+          });
+        } catch (error) {
+          console.error("Failed to record denied audit log:", error);
+        }
+      }
       throw new TRPCError({ code: "FORBIDDEN" });
     }
 
-    return next({ ctx: { ...ctx, capabilities } });
+    let before: unknown;
+    const setAuditBefore = (value: unknown): void => {
+      before = value;
+    };
+    const downstreamCtx = { ...ctx, capabilities, isOwner: membership.isOwner, setAuditBefore };
+
+    if (!isMutation) {
+      return next({ ctx: downstreamCtx });
+    }
+
+    // write-ahead: 実行前にpendingで記録し、記録できなければ操作を実行しない。
+    let auditId: string;
+    try {
+      auditId = await recordAuditLog(db, {
+        ...auditBase,
+        actorName: await resolveActorName(ctx as AuthenticatedContext, guildId),
+        outcome: "pending",
+        after: input,
+      });
+    } catch (error) {
+      console.error("Failed to record audit log; aborting the operation:", error);
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to record audit log" });
+    }
+
+    const complete = async (outcome: "success" | "failure"): Promise<void> => {
+      try {
+        await completeAuditLog(db, auditId, outcome, before);
+      } catch (error) {
+        // 操作は既に実行済みのため、記録の確定失敗はログに残すのみ(行はpendingのまま残る)。
+        console.error("Failed to complete audit log:", error);
+      }
+    };
+
+    let result: Awaited<ReturnType<typeof next>>;
+    try {
+      result = await next({ ctx: downstreamCtx });
+    } catch (error) {
+      await complete("failure");
+      throw error;
+    }
+    await complete(result.ok ? "success" : "failure");
+    return result;
   });
+}
+
+/**
+ * mutationが変更前の値を操作履歴へ渡す。読み取りに失敗しても本来の操作は妨げない(beforeはNULLのまま)。
+ */
+export async function captureAuditBefore(
+  ctx: { setAuditBefore: (value: unknown) => void },
+  read: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    ctx.setAuditBefore(await read());
+  } catch (error) {
+    console.error("Failed to capture audit log before-value:", error);
+  }
 }
