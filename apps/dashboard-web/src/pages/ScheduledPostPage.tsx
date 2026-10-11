@@ -1,11 +1,21 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Settings } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { SCHEDULED_POST_TABS, describeOutcome, tabOfStatus, type ScheduledPostTab } from "./scheduled-post-view.js";
+import { formatTime, groupByDay } from "./day-groups.js";
+import {
+  SCHEDULED_POST_TABS,
+  countByTab,
+  describeOutcome,
+  describeRelativeTime,
+  tabOfStatus,
+  type ScheduledPostTab,
+} from "./scheduled-post-view.js";
+import { InitialAvatar } from "@/components/initial-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,28 +28,38 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
-type PageTab = ScheduledPostTab | "settings";
-
-const CONTENT_PREVIEW_MAX = 80;
-
-function preview(content: string): string {
-  const text = content.replace(/\s+/g, " ").trim();
-  return text.length > CONTENT_PREVIEW_MAX ? `${text.slice(0, CONTENT_PREVIEW_MAX)}…` : text;
+interface PostRow {
+  id: string;
+  channelId: string;
+  channelName?: string | undefined;
+  authorId: string;
+  authorName?: string | undefined;
+  mentions?: readonly string[];
+  content: string;
+  scheduledAt: string;
+  status: string;
+  failureReason: string | null;
+  cancelledBy: string | null;
 }
 
-const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString("ja-JP");
+/** 状態バッジ。投稿待ちは日時が主役のためバッジを出さない。 */
+const STATUS_BADGES: Record<string, { label: string; tone: string }> = {
+  posting: { label: "投稿処理中", tone: "bg-muted text-muted-foreground" },
+  posted: { label: "投稿しました", tone: "bg-success/10 text-success" },
+  failed: { label: "投稿できませんでした", tone: "bg-destructive/10 text-destructive" },
+  cancelled: { label: "取り消し", tone: "bg-muted text-muted-foreground" },
+};
 
 function CancelButton({ onConfirm, disabled }: { onConfirm: () => void; disabled: boolean }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
-          取り消し
+          取り消す
         </Button>
       </DialogTrigger>
       <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
@@ -62,177 +82,117 @@ function CancelButton({ onConfirm, disabled }: { onConfirm: () => void; disabled
   );
 }
 
-function PostsTab({ guildId, tab, canManage }: { guildId: string; tab: ScheduledPostTab; canManage: boolean }) {
-  const queryClient = useQueryClient();
-  const listQuery = useQuery({ ...trpc.scheduledPost.list.queryOptions({ guildId }), refetchInterval: 15_000 });
-  const cancelMutation = useMutation({
-    ...trpc.scheduledPost.cancel.mutationOptions(),
-    onSuccess: () => toast.success("予約を取り消しました。"),
-    onError: () => toast.error("取り消しに失敗しました。すでに投稿処理が始まった可能性があります。"),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: trpc.scheduledPost.list.queryOptions({ guildId }).queryKey }),
-  });
-
-  if (listQuery.isPending) return <Loading />;
-  if (listQuery.isError || !listQuery.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>予約一覧の取得に失敗しました。</AlertDescription>
-      </Alert>
-    );
-  }
-
-  const rows = listQuery.data.filter((row) => tabOfStatus(row.status) === tab);
-  if (rows.length === 0) {
-    return <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">該当する予約はありません。</p>;
-  }
-
-  const showCancel = canManage && tab === "pending";
+function PostCard({ row, canCancel, cancelling, onCancel }: { row: PostRow; canCancel: boolean; cancelling: boolean; onCancel: () => void }) {
+  const relative = describeRelativeTime(row.scheduledAt, row.status);
+  const badge = STATUS_BADGES[row.status];
+  const outcome = describeOutcome(row);
+  const author = row.authorName ?? row.authorId;
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-muted-foreground text-sm">投稿済み・失敗・取り消しの予約は30日後に自動で削除されます。</p>
-      <div className="bg-card overflow-hidden rounded-xl border">
-        <ul className="divide-y">
-          {rows.map((row) => {
-            const outcome = describeOutcome(row);
-            return (
-              <li key={row.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-sm font-medium">
-                    {formatDateTime(row.scheduledAt)} ・ #{row.channelName ?? row.channelId}
-                  </span>
-                  <span className="text-muted-foreground text-xs">予約者 {row.authorName ?? row.authorId}</span>
-                  <span className="text-sm break-words">{preview(row.content)}</span>
-                  {outcome && <span className="text-muted-foreground text-xs">{outcome}</span>}
-                </div>
-                {showCancel && row.status === "pending" && (
-                  <CancelButton disabled={cancelMutation.isPending} onConfirm={() => cancelMutation.mutate({ guildId, id: row.id })} />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+    <article className="bg-card grid grid-cols-1 items-start gap-2 rounded-xl border px-4 py-3.5 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:gap-4">
+      <div className="flex items-baseline gap-2.5 sm:block sm:border-r sm:pr-3">
+        <div className="text-[22px] leading-tight font-bold tabular-nums">{formatTime(row.scheduledAt)}</div>
+        <div className={cn("text-xs sm:mt-1", relative.upcoming ? "font-medium text-sky-600 dark:text-sky-400" : "text-muted-foreground")}>
+          {relative.text}
+        </div>
       </div>
-    </div>
+      <div className="min-w-0">
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]">
+          <span className="text-foreground font-semibold">#{row.channelName ?? row.channelId}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <InitialAvatar name={author} className="size-5 text-[10px]" />
+            {author}
+          </span>
+          {row.mentions?.map((mention) => (
+            <span key={mention} className="rounded bg-sky-600/10 px-1.5 text-xs text-sky-600 dark:text-sky-400">
+              {mention}
+            </span>
+          ))}
+        </div>
+        <p className="mt-1.5 line-clamp-3 text-sm break-words whitespace-pre-line [overflow-wrap:anywhere]">{row.content}</p>
+        {badge && (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
+            <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs whitespace-nowrap", badge.tone)}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              {badge.label}
+            </span>
+            {outcome && row.status !== "posting" && <span className="text-muted-foreground">{outcome}</span>}
+          </p>
+        )}
+      </div>
+      {canCancel && <CancelButton disabled={cancelling} onConfirm={onCancel} />}
+    </article>
   );
 }
 
-/** 「使えるロール」。空ならメンバー全員が使える。ロールはセレクターから選ぶ(ID直接入力は不可)。 */
-export function AllowedRolesSection({ guildId }: { guildId: string }) {
-  const queryClient = useQueryClient();
-  const settingsQuery = useQuery(trpc.scheduledPost.getSettings.queryOptions({ guildId }));
-  const roleOptionsQuery = useQuery(trpc.scheduledPost.listRoleOptions.queryOptions({ guildId }));
-  const [selected, setSelected] = useState("");
-  const mutation = useMutation({
-    ...trpc.scheduledPost.updateSettings.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: trpc.scheduledPost.getSettings.queryOptions({ guildId }).queryKey }),
-    onError: () => toast.error("使えるロールの更新に失敗しました。"),
-  });
-
-  if (settingsQuery.isPending || roleOptionsQuery.isPending) return <Loading />;
-  if (settingsQuery.isError || !settingsQuery.data || roleOptionsQuery.isError || !roleOptionsQuery.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>使えるロールの取得に失敗しました。</AlertDescription>
-      </Alert>
-    );
+function PostsList({
+  rows,
+  tab,
+  canManage,
+  cancelling,
+  onCancel,
+}: {
+  rows: readonly PostRow[];
+  tab: ScheduledPostTab;
+  canManage: boolean;
+  cancelling: boolean;
+  onCancel: (id: string) => void;
+}) {
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">該当する予約はありません。</p>;
   }
-
-  const { allowedRoleIds, allowEveryone, allowHere } = settingsQuery.data;
-  const save = (patch: Partial<{ roleIds: string[]; allowEveryone: boolean; allowHere: boolean }>) =>
-    mutation.mutate({ guildId, roleIds: allowedRoleIds, allowEveryone, allowHere, ...patch });
-  const roleNameById = new Map(roleOptionsQuery.data.map((role) => [role.id, role.name]));
-  const availableOptions = roleOptionsQuery.data.filter((role) => !allowedRoleIds.includes(role.id));
-
+  // 投稿待ちは近い順、それ以外は新しい順。
+  const sorted = [...rows].sort((a, b) => {
+    const diff = new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
+    return tab === "pending" ? diff : -diff;
+  });
   return (
-    <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
-      <h2 className="font-bold">使えるロール</h2>
-      <p className="text-muted-foreground text-sm">
-        ロールを追加すると、そのロールを持つメンバーだけが予約投稿を使えます。1つも追加しない場合はメンバー全員が使えます。
-      </p>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm">
-          追加するロール
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger className="w-full sm:w-64" aria-label="追加するロール">
-              <SelectValue placeholder="ロールを選択..." />
-            </SelectTrigger>
-            <SelectContent>
-              {availableOptions.map((role) => (
-                <SelectItem key={role.id} value={role.id}>
-                  {role.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <Button
-          type="button"
-          className="w-full sm:w-auto"
-          disabled={selected === "" || mutation.isPending}
-          onClick={() => {
-            save({ roleIds: [...allowedRoleIds, selected] });
-            setSelected("");
-          }}
-        >
-          追加
-        </Button>
-      </div>
-      {allowedRoleIds.length === 0 ? (
-        <p className="text-muted-foreground text-sm">現在はメンバー全員が使えます。</p>
-      ) : (
-        <ul className="divide-y rounded-xl border">
-          {allowedRoleIds.map((roleId) => (
-            <li key={roleId} className="flex items-center gap-3 px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1 truncate">{roleNameById.get(roleId) ?? roleId}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                aria-label={`${roleNameById.get(roleId) ?? roleId}を削除`}
-                disabled={mutation.isPending}
-                onClick={() => save({ roleIds: allowedRoleIds.filter((id) => id !== roleId) })}
-              >
-                削除
-              </Button>
-            </li>
-          ))}
-        </ul>
+    <div className="flex flex-col gap-3">
+      {tab !== "pending" && (
+        <p className="text-muted-foreground text-[13px]">投稿済み・失敗・取り消しの予約は30日後に自動で削除されます。</p>
       )}
-      <h3 className="mt-2 font-bold">メンション</h3>
-      <p className="text-muted-foreground text-sm">
-        予約時に @everyone / @here をメンションに指定できるようにします(予約者に「@everyone、@here、すべてのロールにメンション」権限がある場合のみ有効)。
-      </p>
-      <label className="flex items-center justify-between gap-2 text-sm">
-        @everyone を許可
-        <Switch
-          checked={allowEveryone}
-          disabled={mutation.isPending}
-          aria-label="@everyone を許可"
-          onCheckedChange={(checked) => save({ allowEveryone: checked })}
-        />
-      </label>
-      <label className="flex items-center justify-between gap-2 text-sm">
-        @here を許可
-        <Switch
-          checked={allowHere}
-          disabled={mutation.isPending}
-          aria-label="@here を許可"
-          onCheckedChange={(checked) => save({ allowHere: checked })}
-        />
-      </label>
-    </section>
+      {groupByDay(sorted, (row) => row.scheduledAt).map((group) => (
+        <section key={group.key} className="flex flex-col gap-2.5">
+          <h2 className="after:bg-border flex items-center gap-2.5 text-[13px] font-semibold after:h-px after:flex-1">
+            {group.relative}
+            <small className={cn("font-normal", group.relative ? "text-muted-foreground" : "text-foreground font-semibold")}>{group.date}</small>
+          </h2>
+          {group.items.map((row) => (
+            <PostCard
+              key={row.id}
+              row={row}
+              canCancel={canManage && tab === "pending" && row.status === "pending"}
+              cancelling={cancelling}
+              onCancel={() => onCancel(row.id)}
+            />
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 
 export function ScheduledPostPage() {
   const { guildId } = useParams<{ guildId: string }>();
-  const [tab, setTab] = useState<PageTab>("pending");
+  const [tab, setTab] = useState<ScheduledPostTab>("pending");
+  const queryClient = useQueryClient();
   const capabilities = useGuildCapabilities(guildId);
   const canManage = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_SCHEDULED_POSTS);
 
   const statusQuery = useQuery({
     ...trpc.scheduledPost.getRequiredPermissionStatus.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
+  });
+  const listQuery = useQuery({
+    ...trpc.scheduledPost.list.queryOptions({ guildId: guildId ?? "" }),
+    enabled: Boolean(guildId),
+    refetchInterval: 15_000,
+  });
+  const cancelMutation = useMutation({
+    ...trpc.scheduledPost.cancel.mutationOptions(),
+    onSuccess: () => toast.success("予約を取り消しました。"),
+    onError: () => toast.error("取り消しに失敗しました。すでに投稿処理が始まった可能性があります。"),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.scheduledPost.list.queryOptions({ guildId: guildId ?? "" }).queryKey }),
   });
 
   if (!guildId) {
@@ -245,9 +205,25 @@ export function ScheduledPostPage() {
   if (capabilities === undefined) return <Loading />;
 
   const status = statusQuery.data;
+  const counts = listQuery.data ? countByTab(listQuery.data) : null;
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">予約投稿</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">予約投稿</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            メンバーが <code>/schedule</code> で予約した投稿の一覧です。
+          </p>
+        </div>
+        {canManage && (
+          <Button asChild variant="outline">
+            <Link to={`/guilds/${guildId}/scheduled-post/settings`}>
+              <Settings aria-hidden="true" />
+              予約投稿の設定
+            </Link>
+          </Button>
+        )}
+      </div>
 
       {status?.accessStatus === "not_found" && (
         <Alert variant="destructive">
@@ -270,25 +246,36 @@ export function ScheduledPostPage() {
         </Alert>
       )}
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as PageTab)}>
-        <TabsList aria-label="予約投稿" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
+      <Tabs value={tab} onValueChange={(value) => setTab(SCHEDULED_POST_TABS.find((t) => t.value === value)?.value ?? "pending")}>
+        <TabsList aria-label="予約投稿" className="overflow-x-auto">
           {SCHEDULED_POST_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
+              {counts && (
+                <span className="bg-muted text-muted-foreground ml-1.5 rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
+              )}
             </TabsTrigger>
           ))}
-          {canManage && <TabsTrigger value="settings">設定</TabsTrigger>}
         </TabsList>
         {SCHEDULED_POST_TABS.map((t) => (
           <TabsContent key={t.value} value={t.value}>
-            <PostsTab guildId={guildId} tab={t.value} canManage={canManage} />
+            {listQuery.isPending && <Loading />}
+            {listQuery.isError && (
+              <Alert variant="destructive">
+                <AlertDescription>予約一覧の取得に失敗しました。</AlertDescription>
+              </Alert>
+            )}
+            {listQuery.data && (
+              <PostsList
+                rows={listQuery.data.filter((row) => tabOfStatus(row.status) === t.value)}
+                tab={t.value}
+                canManage={canManage}
+                cancelling={cancelMutation.isPending}
+                onCancel={(id) => cancelMutation.mutate({ guildId, id })}
+              />
+            )}
           </TabsContent>
         ))}
-        {canManage && (
-          <TabsContent value="settings">
-            <AllowedRolesSection guildId={guildId} />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

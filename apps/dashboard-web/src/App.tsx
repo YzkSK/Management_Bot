@@ -11,6 +11,7 @@ import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
 import { ScheduledPostPage } from "./pages/ScheduledPostPage.js";
+import { ScheduledPostSettingsPage } from "./pages/ScheduledPostSettingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
@@ -80,6 +81,7 @@ export function App() {
           <Route path="logs/settings" element={<SettingsPage />} />
           <Route path="moderation" element={<ModerationPage />} />
           <Route path="scheduled-post" element={<ScheduledPostPage />} />
+          <Route path="scheduled-post/settings" element={<ScheduledPostSettingsPage />} />
           <Route path="temp-voice" element={<TempVoicePage />} />
           <Route path="access" element={<AccessPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
