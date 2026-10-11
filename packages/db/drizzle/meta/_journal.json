@@ -260,6 +260,13 @@
       "when": 1791293421781,
       "tag": "0036_dizzy_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791727493346,
+      "tag": "0037_audit_logs",
+      "breakpoints": true
     }
   ]
 }
