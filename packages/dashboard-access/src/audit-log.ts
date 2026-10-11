@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { auditLogs, type Db } from "@management-bot/db";
 import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, gte, isNotNull, lt, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { collectAuditIds, resolveAuditNames } from "./audit-names.js";
 import {
   protectedProcedure,
   requireCapability,
@@ -25,6 +26,8 @@ const listInput = z.object({
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),
   hideAccess: z.boolean().default(false),
+  /** 失敗・権限不足・結果不明(pending)の操作のみ。アクセス履歴は含めない。 */
+  onlyIssues: z.boolean().default(false),
   limit: z.number().int().min(1).max(100).default(50),
   /** 先頭から読み飛ばす件数(logging.listLogEntriesと同じ方式)。 */
   offset: z.number().int().min(0).default(0),
@@ -43,6 +46,9 @@ export async function listAuditLogs(db: Db, input: ListAuditLogsInput) {
     input.from ? gte(auditLogs.createdAt, new Date(input.from)) : undefined,
     input.to ? lt(auditLogs.createdAt, new Date(input.to)) : undefined,
     input.hideAccess ? ne(auditLogs.kind, "access") : undefined,
+    input.onlyIssues
+      ? and(eq(auditLogs.kind, "action"), inArray(auditLogs.outcome, ["failure", "denied", "pending"]))
+      : undefined,
   );
   const [rows, [total]] = await Promise.all([
     db
@@ -127,7 +133,12 @@ export const auditLogRouter = router({
     await recordAccessIfNeeded(ctx, input.guildId);
   }),
 
-  list: viewAuditLogProcedure(listInput).query(({ ctx, input }) => listAuditLogs(ctx.db, input)),
+  /** `names`は変更内容に含まれるチャンネル/ロール/ユーザーのID→表示名(解決できたものだけ)。 */
+  list: viewAuditLogProcedure(listInput).query(async ({ ctx, input }) => {
+    const result = await listAuditLogs(ctx.db, input);
+    const ids = collectAuditIds(result.entries.flatMap((entry) => [entry.before, entry.after]));
+    return { ...result, names: await resolveAuditNames(ctx, input.guildId, ids) };
+  }),
 
   listFilterOptions: viewAuditLogProcedure(guildIdInput).query(({ ctx, input }) =>
     listAuditLogFilterOptions(ctx.db, input.guildId),

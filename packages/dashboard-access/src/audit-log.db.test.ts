@@ -284,6 +284,40 @@ describe("auditLog.list / listFilterOptions", () => {
     expect(options.features).toContain("logging");
     expect(options.features).toContain("dashboard");
   });
+
+  test("onlyIssuesは失敗・権限不足の操作だけを返し、成功とアクセス履歴は含めない", async () => {
+    await callerFor("admin").logging.setThing({ guildId, value: "ok-op" });
+    await captureRejection(callerFor("nobody").logging.setThing({ guildId, value: "denied-op" }));
+    await captureRejection(callerFor("admin").logging.failThing({ guildId }));
+    await callerFor("owner").auditLog.recordAccess({ guildId });
+
+    const issues = await callerFor("owner").auditLog.list({ guildId, onlyIssues: true });
+    expect(issues.entries.length).toBeGreaterThanOrEqual(2);
+    expect(issues.entries.every((e) => e.kind === "action" && e.outcome !== "success")).toBe(true);
+    expect(issues.entries.some((e) => e.outcome === "denied")).toBe(true);
+    expect(issues.entries.some((e) => e.outcome === "failure")).toBe(true);
+  });
+
+  test("listはafter/beforeに含まれるチャンネル・ロール・ユーザーIDを名前に解決してnamesで返す", async () => {
+    const channelId = "111111111111111111";
+    const roleId = "222222222222222222";
+    await db.insert(auditLogs).values({
+      id: randomUUID(),
+      guildId,
+      kind: "action",
+      actorId: "admin",
+      actorName: "admin-nick",
+      feature: "logging",
+      action: "setChannelSetting",
+      outcome: "success",
+      before: { channelId },
+      after: { roleIds: [roleId] },
+    });
+    const list = await callerFor("owner").auditLog.list({ guildId });
+    // テスト用ctxはチャンネル/ロールが空のため、メンバー名解決(`<id>-nick`)にフォールバックする。
+    expect(list.names[channelId]).toBe(`${channelId}-nick`);
+    expect(list.names[roleId]).toBe(`${roleId}-nick`);
+  });
 });
 
 describe("auditLog.recordAccess", () => {
