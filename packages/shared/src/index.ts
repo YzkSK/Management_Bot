@@ -2,6 +2,7 @@ export {
   CAPABILITIES,
   ALL_CAPABILITIES,
   BASELINE_EVERYONE_CAPABILITIES,
+  OWNER_ONLY_CAPABILITIES,
   hasCapability,
   canGrantCapabilities,
   isKnownCapabilityMask,
