@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 import { moderationIncidentSchema } from "./moderation-incident.js";
+import { SCHEDULED_POST_CANCELLED_BY, SCHEDULED_POST_FAILURE_REASONS } from "./scheduled-post.js";
 
 /**
  * 機能パッケージ間の連携はRedis Pub/Sub経由のイベントで疎結合にする(直接import禁止)。
@@ -135,10 +136,60 @@ export const tempVoiceEventRecordedSchema = z.discriminatedUnion("action", [
 
 export type TempVoiceEventRecordedEvent = z.infer<typeof tempVoiceEventRecordedSchema>;
 
+const scheduledPostEventBaseFields = {
+  type: z.literal("scheduled-post.event.recorded"),
+  guildId: z.string(),
+  /** 予約ID(scheduled_posts.id)。ログ相関キーを兼ねる。 */
+  postId: z.string(),
+  channelId: z.string(),
+  channelName: z.string().min(1).optional(),
+  /** 予約者。 */
+  authorId: z.string(),
+  authorName: z.string().optional(),
+  createdAt: z.iso.datetime(),
+  /** 管理者によるDashboard取り消しの場合のみ設定する(取り消した管理者)。 */
+  executorId: z.string().optional(),
+  executorName: z.string().optional(),
+};
+
+const scheduledPostSnapshotSchema = z.object({ content: z.string(), scheduledAt: z.iso.datetime() });
+
+/** 予約投稿のライフサイクル(登録・編集・取り消し・投稿成功・投稿失敗)をlogging機能へ渡す。 */
+export const scheduledPostEventRecordedSchema = z.discriminatedUnion("action", [
+  z.object({ ...scheduledPostEventBaseFields, action: z.literal("created"), ...scheduledPostSnapshotSchema.shape }),
+  z.object({
+    ...scheduledPostEventBaseFields,
+    action: z.literal("edited"),
+    before: scheduledPostSnapshotSchema,
+    after: scheduledPostSnapshotSchema,
+  }),
+  z.object({
+    ...scheduledPostEventBaseFields,
+    action: z.literal("cancelled"),
+    by: z.enum(SCHEDULED_POST_CANCELLED_BY),
+    scheduledAt: z.iso.datetime(),
+  }),
+  z.object({
+    ...scheduledPostEventBaseFields,
+    action: z.literal("posted"),
+    messageId: z.string(),
+    scheduledAt: z.iso.datetime(),
+  }),
+  z.object({
+    ...scheduledPostEventBaseFields,
+    action: z.literal("failed"),
+    reason: z.enum(SCHEDULED_POST_FAILURE_REASONS),
+    scheduledAt: z.iso.datetime(),
+  }),
+]);
+
+export type ScheduledPostEventRecordedEvent = z.infer<typeof scheduledPostEventRecordedSchema>;
+
 export const DOMAIN_EVENT_SCHEMAS = {
   "voice.session.ended": voiceSessionEndedSchema,
   "moderation.action.recorded": moderationActionRecordedSchema,
   "temp-voice.event.recorded": tempVoiceEventRecordedSchema,
+  "scheduled-post.event.recorded": scheduledPostEventRecordedSchema,
 } as const;
 
 export type DomainEventType = keyof typeof DOMAIN_EVENT_SCHEMAS;

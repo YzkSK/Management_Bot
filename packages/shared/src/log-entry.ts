@@ -3,6 +3,7 @@ import { discordIdSchema } from "./discord-id.js";
 import { LOG_CATEGORIES } from "./log-category.js";
 import { MODERATION_ACTION_TYPES } from "./moderation-action-type.js";
 import { moderationIncidentSchema } from "./moderation-incident.js";
+import { SCHEDULED_POST_CANCELLED_BY, SCHEDULED_POST_FAILURE_REASONS } from "./scheduled-post.js";
 
 /** LogEntryのID系フィールド(userId/channelId等)はほぼ全てDiscord IDのため、共通スキーマをそのまま使う(issue #227)。 */
 const nonEmptyString = discordIdSchema;
@@ -385,6 +386,53 @@ export const tempVoiceLogEntrySchema = z.discriminatedUnion("action", [
   }),
 ]);
 
+const scheduledPostBase = {
+  ...base,
+  category: z.literal("scheduledPost"),
+  /** 予約ID(scheduled_posts.id)。 */
+  postId: nonEmptyString,
+  channelId: nonEmptyString,
+  channelName: nonEmptyString.optional(),
+  /** 予約者。管理者による取り消しの実行者はexecutorIdに入る。 */
+  authorId: nonEmptyString,
+  authorName: nonEmptyString.optional(),
+};
+
+/**
+ * domain-events(scheduledPostEventRecordedSchema)のactionバリアントを踏襲する。
+ * editedのbefore/afterは、summarizeLogEntryが読む`content`/`previousContent`に平坦化して保存する
+ * (一覧・詳細で変更前後を本文として表示できるようにするため)。
+ */
+export const scheduledPostLogEntrySchema = z.discriminatedUnion("action", [
+  z.object({ ...scheduledPostBase, action: z.literal("created"), content: z.string(), scheduledAt: z.iso.datetime() }),
+  z.object({
+    ...scheduledPostBase,
+    action: z.literal("edited"),
+    content: z.string(),
+    previousContent: z.string(),
+    scheduledAt: z.iso.datetime(),
+    previousScheduledAt: z.iso.datetime(),
+  }),
+  z.object({
+    ...scheduledPostBase,
+    action: z.literal("cancelled"),
+    by: z.enum(SCHEDULED_POST_CANCELLED_BY),
+    scheduledAt: z.iso.datetime(),
+  }),
+  z.object({
+    ...scheduledPostBase,
+    action: z.literal("posted"),
+    messageId: nonEmptyString,
+    scheduledAt: z.iso.datetime(),
+  }),
+  z.object({
+    ...scheduledPostBase,
+    action: z.literal("failed"),
+    reason: z.enum(SCHEDULED_POST_FAILURE_REASONS),
+    scheduledAt: z.iso.datetime(),
+  }),
+]);
+
 export const LOG_ENTRY_SCHEMAS = {
   message: messageLogEntrySchema,
   reaction: reactionLogEntrySchema,
@@ -405,6 +453,7 @@ export const LOG_ENTRY_SCHEMAS = {
   moderationCase: moderationCaseLogEntrySchema,
   voice: voiceLogEntrySchema,
   tempVoice: tempVoiceLogEntrySchema,
+  scheduledPost: scheduledPostLogEntrySchema,
 } as const;
 
 export type LogCategory = keyof typeof LOG_ENTRY_SCHEMAS;

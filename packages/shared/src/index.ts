@@ -21,12 +21,24 @@ export {
   voiceSessionEndedSchema,
   moderationActionRecordedSchema,
   tempVoiceEventRecordedSchema,
+  scheduledPostEventRecordedSchema,
+  type ScheduledPostEventRecordedEvent,
   type DomainEvent,
   type DomainEventType,
   type VoiceSessionEndedEvent,
   type ModerationActionRecordedEvent,
   type TempVoiceEventRecordedEvent,
 } from "./domain-events.js";
+export {
+  SCHEDULED_POST_STATUSES,
+  SCHEDULED_POST_FAILURE_REASONS,
+  SCHEDULED_POST_CANCELLED_BY,
+  SCHEDULED_POST_FAILURE_LABELS,
+  SCHEDULED_POST_CONTENT_MAX,
+  type ScheduledPostStatus,
+  type ScheduledPostFailureReason,
+  type ScheduledPostCancelledBy,
+} from "./scheduled-post.js";
 export { moderationIncidentSchema, type ModerationIncident } from "./moderation-incident.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
@@ -62,6 +74,7 @@ export {
   moderationCaseLogEntrySchema,
   voiceLogEntrySchema,
   tempVoiceLogEntrySchema,
+  scheduledPostLogEntrySchema,
   VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
   isBulkDeleteLogEntry,
@@ -123,6 +136,13 @@ export {
   RESOURCE_SAMPLE_MAXLEN,
   resourceSampleSchema,
   type ResourceSample,
+  BACKUP_REQUEST_KEY,
+  BACKUP_FILES_KEY,
+  BACKUP_REQUEST_POLL_MS,
+  backupFileSchema,
+  backupFilesSchema,
+  type BackupFile,
+  type BackupFiles,
   INFRA_LOG_SERVICES,
   INFRA_LOG_LEVELS,
   infraLogEntrySchema,

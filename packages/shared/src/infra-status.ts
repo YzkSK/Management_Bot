@@ -39,6 +39,19 @@ export const resourceSampleSchema = z.object({
 });
 export type ResourceSample = z.infer<typeof resourceSampleSchema>;
 
+/**
+ * バックアップ一覧と手動実行(issue #629)。backupコンテナとdashboard-apiはボリュームを共有しないため、
+ * 一覧はbackup側がRedisへ書き、手動実行の要求はdashboard-apiがキーを立ててbackup側がポーリングで拾う。
+ */
+export const BACKUP_REQUEST_KEY = "infra:backup:request";
+export const BACKUP_FILES_KEY = "infra:backup:files";
+export const BACKUP_REQUEST_POLL_MS = 10_000;
+
+export const backupFileSchema = z.object({ name: z.string(), sizeBytes: z.number(), createdAt: z.string() });
+export type BackupFile = z.infer<typeof backupFileSchema>;
+export const backupFilesSchema = z.object({ updatedAt: z.string(), files: z.array(backupFileSchema) });
+export type BackupFiles = z.infer<typeof backupFilesSchema>;
+
 export const INFRA_LOG_SERVICES = ["bot", "api", "worker", "postgres", "redis"] as const;
 export type InfraLogService = (typeof INFRA_LOG_SERVICES)[number];
 export const INFRA_LOG_LEVELS = ["DEBUG", "INFO", "LOG", "WARN", "ERROR"] as const;
