@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Header } from "./Header.js";
 import { Sidebar } from "./Sidebar.js";
 import { Footer } from "./Footer.js";
+import { trpc } from "./trpc.js";
 import { Dialog } from "@/components/ui/dialog";
 
 interface LayoutProps {
@@ -18,6 +20,12 @@ interface LayoutProps {
 export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showSidebar = true }: LayoutProps) {
   const { guildId } = useParams<{ guildId?: string }>();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  // ギルドの管理画面を開いたことをアクセス履歴に記録する(guildIdが変わったとき1回。同一人物・ギルドは
+  // サーバー側で30分にまとめる)。失敗しても画面表示は妨げない。
+  const { mutate: recordAccess } = useMutation(trpc.auditLog.recordAccess.mutationOptions());
+  useEffect(() => {
+    if (guildId) recordAccess({ guildId });
+  }, [guildId, recordAccess]);
   // サーバー選択画面(guildId未指定)ではサイドバーを出さない(issue #527)。
   const sidebarVisible = showSidebar && Boolean(guildId);
 

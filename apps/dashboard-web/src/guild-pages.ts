@@ -27,6 +27,7 @@ export const GUILD_PAGES: readonly GuildPage[] = [
     return path ? [{ key: feature.key, name: feature.name, path, capability: feature.viewCapability }] : [];
   }),
   { key: "access", name: "アクセス権限", path: "access", capability: CAPABILITIES.MANAGE_ACCESS },
+  { key: "audit-log", name: "操作履歴", path: "audit-log", capability: CAPABILITIES.VIEW_AUDIT_LOG },
 ];
 
 export function guildPagePath(guildId: string, page: GuildPage): string {

@@ -83,8 +83,8 @@ function SidebarNav({
   const visiblePages = currentGuild
     ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
     : GUILD_PAGES;
-  const featurePages = visiblePages.filter((page) => page.key !== "access");
-  const adminPages = visiblePages.filter((page) => page.key === "access");
+  const featurePages = visiblePages.filter((page) => page.key !== "access" && page.key !== "audit-log");
+  const adminPages = visiblePages.filter((page) => page.key === "access" || page.key === "audit-log");
 
   return (
     <>

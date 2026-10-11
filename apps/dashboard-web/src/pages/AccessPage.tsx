@@ -8,6 +8,7 @@ import {
   addCapabilityPrerequisites,
   CAPABILITIES,
   canGrantCapabilities,
+  OWNER_ONLY_CAPABILITIES,
   removeUnmetDependents,
   type CapabilityName,
 } from "@management-bot/shared";
@@ -290,12 +291,15 @@ function TargetEditor({
   target,
   existingCapabilities,
   granterCapabilities,
+  isOwner,
   lockReason,
 }: {
   guildId: string;
   target: SidebarTarget;
   existingCapabilities: number;
   granterCapabilities: number;
+  /** オーナー専用capability(OWNER_ONLY_CAPABILITIES)を変更できるのはサーバーオーナーのみ(issue #618)。 */
+  isOwner: boolean;
   /**
    * 編集・剥奪させない理由。オーナーの実効権限はgrantで変わらないため編集させない(issue #523)。
    * オーナー判定が付かない間(取得中・失敗)も、オーナーの付与を誤って剥奪しないよう個別ユーザーは編集させない。
@@ -339,8 +343,11 @@ function TargetEditor({
   const capabilities = namesToCapabilities(selectedCapabilities);
   const dirty = capabilities !== existingCapabilities;
   // 全て外して保存した場合は付与自体を剥奪する。既存付与・新しい付与のどちらも自分の権限の範囲内でなければ保存できない。
+  // オーナー専用bitは非オーナーには委譲判定の対象外(変更不可。サーバー側のgrantCapabilitiesが最終判定)。
+  const ownerOnlyLocked = isOwner ? 0 : OWNER_ONLY_CAPABILITIES;
   const canSave =
-    canGrantCapabilities(granterCapabilities, capabilities) && canGrantCapabilities(granterCapabilities, existingCapabilities);
+    canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, capabilities & ~ownerOnlyLocked) &&
+    canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, existingCapabilities & ~ownerOnlyLocked);
   const isPending = grantMutation.isPending || revokeMutation.isPending;
   const currentPreset = presetLabelFor(capabilities);
   const isOffPreset = currentPreset === CUSTOM_PRESET_LABEL || currentPreset === NO_CAPABILITIES_LABEL;
@@ -370,7 +377,14 @@ function TargetEditor({
             disabled={isLocked}
             onValueChange={(label) => {
               const preset = CAPABILITY_PRESETS.find((p) => p.label === label);
-              if (preset) setSelectedCapabilities(capabilitiesToNames(preset.capabilities));
+              // 非オーナーはオーナー専用bitを変更できないため、既存の状態を保つ。
+              if (preset) {
+                setSelectedCapabilities(
+                  capabilitiesToNames(
+                    (preset.capabilities & ~ownerOnlyLocked) | (existingCapabilities & ownerOnlyLocked),
+                  ),
+                );
+              }
             }}
           >
             <SelectTrigger className="w-36" aria-label="権限プリセット">
@@ -386,7 +400,9 @@ function TargetEditor({
                 <SelectItem
                   key={preset.label}
                   value={preset.label}
-                  disabled={!canGrantCapabilities(granterCapabilities, preset.capabilities)}
+                  disabled={
+                    !canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, preset.capabilities & ~ownerOnlyLocked)
+                  }
                 >
                   {preset.label}
                 </SelectItem>
@@ -412,7 +428,8 @@ function TargetEditor({
               if (!option) {
                 return null;
               }
-              const grantable = !isLocked && (granterCapabilities & option.bit) === option.bit;
+              const ownerOnlyBlocked = (ownerOnlyLocked & option.bit) !== 0;
+              const grantable = !isLocked && !ownerOnlyBlocked && (granterCapabilities & option.bit) === option.bit;
               return (
                 <label
                   key={option.value}
@@ -436,6 +453,7 @@ function TargetEditor({
                     }
                   />
                   {option.label}
+                  {ownerOnlyBlocked && <span className="text-xs">(サーバーオーナーのみ変更できます)</span>}
                 </label>
               );
             })}
@@ -607,6 +625,7 @@ export function AccessPage() {
             target={activeTarget}
             existingCapabilities={grantByKey.get(targetKey(activeTarget)) ?? 0}
             granterCapabilities={granterCapabilities}
+            isOwner={myCapabilitiesQuery.data.isOwner}
             lockReason={lockReasonOf(activeTarget)}
           />
         ) : (

@@ -5,6 +5,7 @@ import { logout } from "./logout.js";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
 import { AccessPage } from "./pages/AccessPage.js";
+import { AuditLogPage } from "./pages/AuditLogPage.js";
 import { ActivityPage } from "./pages/ActivityPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
@@ -81,6 +82,7 @@ export function App() {
           <Route path="scheduled-post" element={<ScheduledPostPage />} />
           <Route path="temp-voice" element={<TempVoicePage />} />
           <Route path="access" element={<AccessPage />} />
+          <Route path="audit-log" element={<AuditLogPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
