@@ -13,6 +13,7 @@ import {
 import { SCHEDULED_POST_REQUIRED_PERMISSIONS } from "../discord/required-permissions.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
+const MAX_MENTION_NAME_LOOKUPS = 100;
 const cancelInput = z.object({ guildId: discordIdSchema, id: z.uuid() });
 const updateSettingsInput = z.object({
   guildId: discordIdSchema,
@@ -32,23 +33,37 @@ export const scheduledPostRouter = router({
   list: viewProcedure(guildIdInput).query(async ({ ctx, input }) => {
     const rows = await listGuildPosts(ctx.db, input.guildId);
     if (rows.length === 0) return [];
-    const [channels, authorNames] = await Promise.all([
+    // メンション先ユーザーの名前解決は表示の補助なので件数を絞る(超えた分はIDのまま表示)。
+    const mentionUserIds = [...new Set(rows.flatMap((row) => row.mentionUserIds))].slice(0, MAX_MENTION_NAME_LOOKUPS);
+    const userIds = new Set([...rows.map((row) => row.authorId), ...mentionUserIds]);
+    const hasRoleMentions = rows.some((row) => row.mentionRoleIds.length > 0);
+    const [channels, userNames, roles] = await Promise.all([
       ctx.getAllGuildChannels(input.guildId),
-      ctx.getGuildMemberNames(input.guildId, [...new Set(rows.map((row) => row.authorId))]),
+      ctx.getGuildMemberNames(input.guildId, [...userIds]),
+      // ロール名の取得失敗で一覧全体を失敗させない(IDのまま表示する)。
+      hasRoleMentions ? ctx.getGuildRoles(input.guildId).catch(() => []) : Promise.resolve([]),
     ]);
     const channelNames = new Map(channels.map((channel) => [channel.id, channel.name]));
+    const roleNames = new Map(roles.map((role) => [role.id, role.name]));
     return rows.map((row) => ({
       id: row.id,
       channelId: row.channelId,
       channelName: channelNames.get(row.channelId),
       authorId: row.authorId,
-      authorName: authorNames.get(row.authorId),
+      authorName: userNames.get(row.authorId),
       content: row.content,
       scheduledAt: row.scheduledAt,
       status: row.status,
       failureReason: row.failureReason,
       cancelledBy: row.cancelledBy,
       finishedAt: row.finishedAt,
+      /** メンション先の表示名(@everyone/@here/@ロール名/@ユーザー名)。名前を解決できなければID。 */
+      mentions: [
+        ...(row.mentionEveryone ? ["@everyone"] : []),
+        ...(row.mentionHere ? ["@here"] : []),
+        ...row.mentionRoleIds.map((id) => `@${roleNames.get(id) ?? id}`),
+        ...row.mentionUserIds.map((id) => `@${userNames.get(id) ?? id}`),
+      ],
     }));
   }),
 
