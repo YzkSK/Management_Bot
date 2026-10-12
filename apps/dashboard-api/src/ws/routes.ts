@@ -10,6 +10,7 @@ import { SESSION_COOKIE } from "../oauth/routes.js";
 import { startAccessRevalidation } from "./access-revalidation.js";
 import { activityClients } from "./activity-broadcaster.js";
 import { createConnectionLimiter } from "./connection-limiter.js";
+import { guildDataClients } from "./guild-data-broadcaster.js";
 import { registerLogClient, unregisterLogClient } from "./log-broadcaster.js";
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -34,10 +35,19 @@ interface WsVariables {
   sessionId: string;
   sessionExpiresAt: Date;
   discordUserId: string;
+  capabilities: number;
 }
 
-// 複数タブ×2エンドポイント(logs/activity)を想定したユーザー単位の上限と、プロセス全体の上限(issue #559)。
-const MAX_CONNECTIONS_PER_USER = 10;
+/** 接続の購読。capabilities(定期再検証で更新される)を使うのは/ws/guildだけ。 */
+interface Subscription {
+  update(capabilities: number): void;
+  unsubscribe(): void;
+}
+type Subscribe = (guildId: string, ws: WSContext, capabilities: number) => Subscription;
+
+// 複数タブ×3エンドポイント(logs/activity/guild)を想定したユーザー単位の上限と、プロセス全体の上限(issue #559)。
+// ギルド画面は全ページで/ws/guildに1本つなぐため、1タブあたり最大3本。5タブ分を見込んで15とする(#643)。
+const MAX_CONNECTIONS_PER_USER = 15;
 const MAX_CONNECTIONS_TOTAL = 1000;
 const TRY_AGAIN_LATER_CLOSE_CODE = 1013;
 /** クライアントからの受信は使わないため、受信サイズの上限を小さくする(Bun既定は16MB)。 */
@@ -61,7 +71,10 @@ export function createWsRoutes(
     sessionId: string | undefined,
     guildId: string,
     capability: number,
-  ): Promise<{ ok: true; session: { expiresAt: Date; discordUserId: string } } | { ok: false; status: 401 | 403 }> => {
+  ): Promise<
+    | { ok: true; session: { expiresAt: Date; discordUserId: string }; capabilities: number }
+    | { ok: false; status: 401 | 403 }
+  > => {
     const session = sessionId ? await validateSession(db, sessionId) : null;
     if (!session) {
       return { ok: false, status: 401 };
@@ -82,7 +95,7 @@ export function createWsRoutes(
     if (!hasCapability(capabilities, capability)) {
       return { ok: false, status: 403 };
     }
-    return { ok: true, session };
+    return { ok: true, session, capabilities };
   };
 
   const authorize =
@@ -110,19 +123,26 @@ export function createWsRoutes(
       c.set("sessionId", sessionId);
       c.set("sessionExpiresAt", result.session.expiresAt);
       c.set("discordUserId", result.session.discordUserId);
+      c.set("capabilities", result.capabilities);
       return next();
     };
 
-  const upgrade = (
-    capability: number,
-    register: (guildId: string, ws: WSContext) => void,
-    unregister: (guildId: string, ws: WSContext) => void,
-  ) =>
+  // 単純な通知broadcaster(logs/activity)用。capabilitiesは使わない。
+  const simpleSubscribe =
+    (register: (guildId: string, ws: WSContext) => void, unregister: (guildId: string, ws: WSContext) => void): Subscribe =>
+    (guildId, ws) => {
+      register(guildId, ws);
+      return { update: () => undefined, unsubscribe: () => unregister(guildId, ws) };
+    };
+
+  const upgrade = (capability: number, subscribe: Subscribe) =>
     upgradeWebSocket((c) => {
       const guildId = c.req.param("guildId");
       const sessionId = c.get("sessionId");
       const sessionExpiresAt = c.get("sessionExpiresAt");
       const discordUserId = c.get("discordUserId");
+      const initialCapabilities = c.get("capabilities");
+      let subscription: Subscription | undefined;
       let expiryTimer: ReturnType<typeof setTimeout> | undefined;
       let stopRevalidation: (() => void) | undefined;
       let acquired = false;
@@ -135,7 +155,8 @@ export function createWsRoutes(
             return;
           }
           acquired = true;
-          register(guildId, ws);
+          const sub = subscribe(guildId, ws, initialCapabilities);
+          subscription = sub;
           // セッション失効後もWebSocket自体は生き続けてしまうため、有効期限で強制切断する。
           expiryTimer = setTimeout(
             () => ws.close(SESSION_EXPIRED_CLOSE_CODE, "session expired"),
@@ -145,7 +166,11 @@ export function createWsRoutes(
           stopRevalidation ??= startAccessRevalidation(
             async () => {
               const result = await checkAccess(sessionId, guildId, capability);
-              if (result.ok) return null;
+              if (result.ok) {
+                // 権限が増減しても再接続なしで通知の送り先が追従する。
+                sub.update(result.capabilities);
+                return null;
+              }
               return result.status === 401 ? SESSION_EXPIRED_CLOSE_CODE : ACCESS_REVOKED_CLOSE_CODE;
             },
             (code, reason) => ws.close(code, reason),
@@ -153,12 +178,12 @@ export function createWsRoutes(
             ACCESS_REVALIDATE_INTERVAL_MS + Math.floor(Math.random() * ACCESS_REVALIDATE_JITTER_MS),
           );
         },
-        onClose(_event, ws) {
+        onClose() {
           if (expiryTimer) clearTimeout(expiryTimer);
           stopRevalidation?.();
           if (!acquired) return;
           connectionLimiter.release(discordUserId);
-          if (guildId) unregister(guildId, ws);
+          subscription?.unsubscribe();
         },
       };
     });
@@ -170,11 +195,33 @@ export function createWsRoutes(
    * 必ずVIEW_LOGS_RAWのチェックも追加すること。忘れるとVIEW_LOGS-onlyのユーザーに
    * WebSocket経由で生データが漏れる(issue #220)。
    */
-  app.get("/logs/:guildId", authorize(CAPABILITIES.VIEW_LOGS), upgrade(CAPABILITIES.VIEW_LOGS, registerLogClient, unregisterLogClient));
+  app.get(
+    "/logs/:guildId",
+    authorize(CAPABILITIES.VIEW_LOGS),
+    upgrade(CAPABILITIES.VIEW_LOGS, simpleSubscribe(registerLogClient, unregisterLogClient)),
+  );
   app.get(
     "/activity/:guildId",
     authorize(CAPABILITIES.VIEW_ACTIVITY),
-    upgrade(CAPABILITIES.VIEW_ACTIVITY, activityClients.register, activityClients.unregister),
+    upgrade(CAPABILITIES.VIEW_ACTIVITY, simpleSubscribe(activityClients.register, activityClients.unregister)),
+  );
+  /**
+   * 在籍していれば接続できる(必須capabilityなし)。送るtopicは接続中の実効capabilitiesで絞る
+   * (GUILD_DATA_TOPIC_CAPABILITY)。通知にtopic以外の本文は含めない。
+   */
+  app.get(
+    "/guild/:guildId",
+    authorize(0),
+    upgrade(0, (guildId, ws, capabilities) => {
+      const client = { ws, capabilities };
+      guildDataClients.register(guildId, client);
+      return {
+        update: (next) => {
+          client.capabilities = next;
+        },
+        unsubscribe: () => guildDataClients.unregister(guildId, client),
+      };
+    }),
   );
 
   return { app, websocket };
