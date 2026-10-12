@@ -50,7 +50,7 @@ export type CreateScheduledPostResult =
 /**
  * 予約を登録する。上限(1人10件・1ギルド100件、pendingのみ)の判定とINSERTは、ギルド単位の
  * advisory lockで直列化し、同時登録で上限を超えないようにする。
- * (時刻の検証=過去・1分以内・半年超は呼び出し側でdomainのvalidateScheduledAtを通す)
+ * (時刻の検証=過去・半年超は呼び出し側でdomainのvalidateScheduledAtを通す)
  */
 export async function createScheduledPost(
   db: Db,
