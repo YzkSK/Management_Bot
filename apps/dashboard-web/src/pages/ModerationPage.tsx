@@ -12,6 +12,7 @@ import {
   type ModerationViolationType,
 } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
+import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import {
   describePreset,
   ESCALATION_DESCRIPTIONS,
@@ -828,7 +829,13 @@ function StrikeTab({ guildId }: { guildId: string }) {
 }
 
 export function ModerationHistoryTab({ guildId }: { guildId: string }) {
-  const query = useQuery(trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 }));
+  const queryClient = useQueryClient();
+  const historyQueryOptions = trpc.logging.listLogEntries.queryOptions({ guildId, categories: ["moderationCase"], limit: 50 });
+  const query = useQuery(historyQueryOptions);
+  // Botが処分を記録したら(新規のmoderationCaseログ)取り直す。ログ一覧と同じ/ws/logsの通知を使う。
+  useLogEntryNotifications(guildId, (category) => {
+    if (category === "moderationCase") void queryClient.invalidateQueries({ queryKey: historyQueryOptions.queryKey });
+  });
   const targetUserIds = useMemo(
     () =>
       query.data

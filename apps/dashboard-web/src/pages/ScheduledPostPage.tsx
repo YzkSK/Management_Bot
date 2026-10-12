@@ -211,7 +211,6 @@ export function ScheduledPostPage() {
   const listQuery = useQuery({
     ...trpc.scheduledPost.list.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
-    refetchInterval: 15_000,
   });
   const cancelCallbacks = {
     onSuccess: () => toast.success("予約を取り消しました。"),

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -312,8 +312,18 @@ function TargetEditor({
   );
 
   // 選択対象が切り替わったら、その対象の既存付与状態にトグルをリセットする。
+  // 同じ対象で既存付与がサーバー側で変わった場合(他の管理者の変更・リアルタイム更新, #643)は、
+  // 未保存の編集(既存付与と異なる選択)があるときはそれを消さず、編集前だったときだけ追従する。
+  const previousRef = useRef({ key: `${target.targetType}-${target.targetId}`, existing: existingCapabilities });
   useEffect(() => {
-    setSelectedCapabilities(capabilitiesToNames(existingCapabilities));
+    const previous = previousRef.current;
+    const key = `${target.targetType}-${target.targetId}`;
+    previousRef.current = { key, existing: existingCapabilities };
+    setSelectedCapabilities((current) =>
+      key !== previous.key || namesToCapabilities(current) === previous.existing
+        ? capabilitiesToNames(existingCapabilities)
+        : current,
+    );
   }, [target.targetType, target.targetId, existingCapabilities]);
 
   const onError = (error: unknown) =>

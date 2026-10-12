@@ -6,6 +6,7 @@ import { Header } from "./Header.js";
 import { Sidebar } from "./Sidebar.js";
 import { Footer } from "./Footer.js";
 import { trpc } from "./trpc.js";
+import { useGuildLiveUpdates } from "./use-guild-live-updates.js";
 import { Dialog } from "@/components/ui/dialog";
 
 interface LayoutProps {
@@ -26,6 +27,8 @@ export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showS
   useEffect(() => {
     if (guildId) recordAccess({ guildId });
   }, [guildId, recordAccess]);
+  // ギルド配下の全画面で、他の人・Botによるデータ変更を自動反映する(issue #643)。
+  useGuildLiveUpdates(guildId);
   // サーバー選択画面(guildId未指定)ではサイドバーを出さない(issue #527)。
   const sidebarVisible = showSidebar && Boolean(guildId);
 
