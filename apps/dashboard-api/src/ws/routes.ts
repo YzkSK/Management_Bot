@@ -217,7 +217,15 @@ export function createWsRoutes(
       guildDataClients.register(guildId, client);
       return {
         update: (next) => {
+          if (next === client.capabilities) return;
           client.capabilities = next;
+          // Discord側のロール変更・オーナー交代などDBを経由しない権限変化も、定期再検証で気づいた時点で
+          // 本人に知らせ、見られなくなったデータを画面から消させる(本文は含めない)。
+          try {
+            ws.send(JSON.stringify({ type: "changed", topic: "access" }));
+          } catch (error) {
+            console.error("Failed to notify capability change to a guild data client", error);
+          }
         },
         unsubscribe: () => guildDataClients.unregister(guildId, client),
       };
