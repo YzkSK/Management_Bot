@@ -267,6 +267,20 @@
       "when": 1791727493346,
       "tag": "0037_audit_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791813893346,
+      "tag": "0038_backfill_author_cancel_notified",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791804147156,
+      "tag": "0039_scheduled_post_cancel_unnotified_idx",
+      "breakpoints": true
     }
   ]
 }

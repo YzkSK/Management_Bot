@@ -1,0 +1,2 @@
+DROP INDEX "scheduled_posts_admin_cancel_unnotified_idx";--> statement-breakpoint
+CREATE INDEX "scheduled_posts_cancel_unnotified_idx" ON "scheduled_posts" USING btree ("finished_at") WHERE "scheduled_posts"."status" = 'cancelled' AND "scheduled_posts"."cancel_notified_at" IS NULL;
