@@ -18,6 +18,24 @@ const AUDIT_FEATURE_LABELS: Record<string, string> = {
   dashboard: "ダッシュボード",
 };
 
+/**
+ * 機能ごとの色。`--c`をセットするTailwindクラス(ライト/ダーク)。タイムラインの点と機能名タグが`var(--c)`で参照する。
+ * 未知の機能はグレー。
+ */
+const AUDIT_FEATURE_COLORS: Record<string, string> = {
+  logging: "[--c:oklch(0.55_0.15_150)] dark:[--c:oklch(0.78_0.15_150)]",
+  moderation: "[--c:oklch(0.58_0.17_30)] dark:[--c:oklch(0.78_0.14_30)]",
+  tempVoice: "[--c:oklch(0.55_0.15_250)] dark:[--c:oklch(0.78_0.12_250)]",
+  scheduledPost: "[--c:oklch(0.56_0.14_200)] dark:[--c:oklch(0.8_0.12_200)]",
+  access: "[--c:oklch(0.55_0.17_300)] dark:[--c:oklch(0.78_0.14_300)]",
+  dashboard: "[--c:oklch(0.55_0.02_260)] dark:[--c:oklch(0.75_0.02_260)]",
+};
+const AUDIT_FEATURE_COLOR_FALLBACK = "[--c:oklch(0.55_0_0)] dark:[--c:oklch(0.75_0_0)]";
+
+export function auditFeatureColorClass(feature: string): string {
+  return AUDIT_FEATURE_COLORS[feature] ?? AUDIT_FEATURE_COLOR_FALLBACK;
+}
+
 export function auditFeatureLabel(feature: string): string {
   return AUDIT_FEATURE_LABELS[feature] ?? feature;
 }
