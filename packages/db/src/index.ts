@@ -19,6 +19,7 @@ export {
   type LogEntryInsertNotification,
   type LogChannelSettingChangedNotification,
 } from "./log-entry-notifications.js";
+export { listenForGuildDataChanges, type GuildDataChangedNotification } from "./guild-data-notifications.js";
 export {
   listenForModerationConfigChanges,
   type ModerationConfigChangedNotification,

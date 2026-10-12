@@ -12,6 +12,13 @@ export {
   type CapabilityName,
 } from "./capabilities.js";
 export {
+  GUILD_DATA_TOPICS,
+  GUILD_DATA_TOPIC_CAPABILITY,
+  guildDataTopicSchema,
+  guildDataChangedMessageSchema,
+  type GuildDataTopic,
+} from "./guild-data-topics.js";
+export {
   FEATURE_KEYS,
   FEATURE_METADATA,
   type FeatureKey,

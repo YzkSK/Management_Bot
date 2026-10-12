@@ -281,6 +281,13 @@
       "when": 1791804147156,
       "tag": "0039_scheduled_post_cancel_unnotified_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791900000000,
+      "tag": "0040_guild_data_changed_notify",
+      "breakpoints": true
     }
   ]
 }
