@@ -38,6 +38,7 @@ interface PostRow {
   channelName?: string | undefined;
   authorId: string;
   authorName?: string | undefined;
+  authorAvatarUrl?: string | undefined;
   mentions?: readonly string[];
   content: string;
   scheduledAt: string;
@@ -99,7 +100,7 @@ function PostCard({ row, canCancel, cancelling, onCancel }: { row: PostRow; canC
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]">
           <span className="text-foreground font-semibold">#{row.channelName ?? row.channelId}</span>
           <span className="inline-flex items-center gap-1.5">
-            <InitialAvatar name={author} className="size-5 text-[10px]" />
+            <InitialAvatar name={author} avatarUrl={row.authorAvatarUrl} className="size-5 text-[10px]" />
             {author}
           </span>
           {row.mentions?.map((mention) => (

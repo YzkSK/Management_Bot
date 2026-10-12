@@ -37,12 +37,15 @@ export const scheduledPostRouter = router({
     const mentionUserIds = [...new Set(rows.flatMap((row) => row.mentionUserIds))].slice(0, MAX_MENTION_NAME_LOOKUPS);
     const userIds = new Set([...rows.map((row) => row.authorId), ...mentionUserIds]);
     const hasRoleMentions = rows.some((row) => row.mentionRoleIds.length > 0);
-    const [channels, userNames, roles] = await Promise.all([
+    const [channels, userNames, roles, memberPage] = await Promise.all([
       ctx.getAllGuildChannels(input.guildId),
       ctx.getGuildMemberNames(input.guildId, [...userIds]),
       // ロール名の取得失敗で一覧全体を失敗させない(IDのまま表示する)。
       hasRoleMentions ? ctx.getGuildRoles(input.guildId).catch(() => []) : Promise.resolve([]),
+      // 予約者アイコン用。名前解決と同じキャッシュ済みのメンバー一覧から取るだけ(失敗時は頭文字アイコン)。
+      ctx.getGuildMembersPage(input.guildId).catch(() => ({ members: [] })),
     ]);
+    const avatarUrls = new Map(memberPage.members.flatMap((m) => (m.avatarUrl ? [[m.id, m.avatarUrl] as const] : [])));
     const channelNames = new Map(channels.map((channel) => [channel.id, channel.name]));
     const roleNames = new Map(roles.map((role) => [role.id, role.name]));
     return rows.map((row) => ({
@@ -51,6 +54,7 @@ export const scheduledPostRouter = router({
       channelName: channelNames.get(row.channelId),
       authorId: row.authorId,
       authorName: userNames.get(row.authorId),
+      authorAvatarUrl: avatarUrls.get(row.authorId),
       content: row.content,
       scheduledAt: row.scheduledAt,
       status: row.status,
