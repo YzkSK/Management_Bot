@@ -55,7 +55,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   );
 }
 
-function AuditRow({ row, names }: { row: AuditRowData; names: AuditNames }) {
+function AuditRow({ row, names, avatarUrl }: { row: AuditRowData; names: AuditNames; avatarUrl: string | undefined }) {
   const actor = row.actorId === null ? "Bot(自動)" : row.actorName;
   const time = (
     <time dateTime={row.createdAt} className="text-muted-foreground text-xs tabular-nums">
@@ -79,7 +79,7 @@ function AuditRow({ row, names }: { row: AuditRowData; names: AuditNames }) {
     <div className="relative grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 border-t px-4 py-3 first:border-t-0 sm:grid-cols-[3rem_2rem_minmax(0,1fr)_auto]">
       {rail && <span className={cn("absolute inset-y-0 left-0 w-[3px]", rail)} aria-hidden="true" />}
       <div className="col-start-2 row-start-1 sm:col-start-1 sm:pt-1.5">{time}</div>
-      <InitialAvatar name={actor} className="col-start-1 row-span-3 row-start-1 sm:col-start-2 sm:row-span-1" />
+      <InitialAvatar name={actor} avatarUrl={avatarUrl} className="col-start-1 row-span-3 row-start-1 sm:col-start-2 sm:row-span-1" />
       <div className="col-start-2 row-start-2 min-w-0 sm:col-start-3 sm:row-start-1">
         <p className="text-sm break-words">
           <span className="text-muted-foreground mr-1.5 inline-block rounded border px-1.5 align-[1px] text-[11px]">
@@ -175,6 +175,7 @@ export function AuditLogPage() {
   const isForbidden = listQuery.error instanceof TRPCClientError && listQuery.error.data?.code === "FORBIDDEN";
   const entries = listQuery.data?.pages.flatMap((page) => page.entries) ?? [];
   const names = (listQuery.data?.pages ?? []).reduce<Record<string, string>>((acc, page) => ({ ...acc, ...page.names }), {});
+  const avatars = (listQuery.data?.pages ?? []).reduce<Record<string, string>>((acc, page) => ({ ...acc, ...page.avatars }), {});
   const groups = groupByDay(entries, (entry) => entry.createdAt);
 
   return (
@@ -226,7 +227,7 @@ export function AuditLogPage() {
                   </h2>
                   <div className="bg-card overflow-hidden rounded-xl border">
                     {group.items.map((row) => (
-                      <AuditRow key={row.id} row={row} names={names} />
+                      <AuditRow key={row.id} row={row} names={names} avatarUrl={row.actorId === null ? undefined : avatars[row.actorId]} />
                     ))}
                   </div>
                 </section>

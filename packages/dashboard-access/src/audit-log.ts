@@ -120,6 +120,26 @@ export async function recordAccessIfNeeded(
   });
 }
 
+/**
+ * 操作者アイコン用のDiscordアバターURL(userId→URL)。表示名解決と同じキャッシュ済みのメンバー一覧(先頭1000人)から
+ * 取るだけで追加のAPI呼び出しはしない。含まれない人・取得失敗時は画面側で頭文字アイコンにフォールバックする。
+ */
+async function resolveActorAvatars(
+  ctx: AuthenticatedContext,
+  guildId: string,
+  actorIds: ReadonlySet<string>,
+): Promise<Record<string, string>> {
+  if (actorIds.size === 0) return {};
+  try {
+    const page = await ctx.getGuildMembersPage(guildId);
+    return Object.fromEntries(
+      page.members.flatMap((m) => (m.avatarUrl && actorIds.has(m.id) ? [[m.id, m.avatarUrl]] : [])),
+    );
+  } catch {
+    return {};
+  }
+}
+
 export const auditLogRouter = router({
   /**
    * ギルドの管理画面を開いたことを記録する(アクセス履歴)。操作履歴の対象ではないためrequireCapabilityは
@@ -137,7 +157,15 @@ export const auditLogRouter = router({
   list: viewAuditLogProcedure(listInput).query(async ({ ctx, input }) => {
     const result = await listAuditLogs(ctx.db, input);
     const ids = collectAuditIds(result.entries.flatMap((entry) => [entry.before, entry.after]));
-    return { ...result, names: await resolveAuditNames(ctx, input.guildId, ids) };
+    const [names, avatars] = await Promise.all([
+      resolveAuditNames(ctx, input.guildId, ids),
+      resolveActorAvatars(
+        ctx,
+        input.guildId,
+        new Set(result.entries.flatMap((entry) => (entry.actorId === null ? [] : [entry.actorId]))),
+      ),
+    ]);
+    return { ...result, names, avatars };
   }),
 
   listFilterOptions: viewAuditLogProcedure(guildIdInput).query(({ ctx, input }) =>
