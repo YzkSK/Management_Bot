@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { matchQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
@@ -752,6 +752,19 @@ function useStrikePages(guildId: string) {
   };
 
   useEffect(resetPages, [guildId]);
+
+  // リアルタイム更新等で警告回数の一覧がinvalidateされたら、読み込み済みの2ページ目以降も古くなるため
+  // 積み上げたページを捨てて先頭から読み直す(invalidateは表示中のカーソルのクエリしか取り直さないため)。
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const strikesKey = trpc.moderation.listStrikes.pathKey();
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || event.action.type !== "invalidate") return;
+      if (!matchQuery({ queryKey: strikesKey }, event.query)) return;
+      setAfter(undefined);
+      setPages({});
+    });
+  }, [queryClient]);
 
   const query = useQuery(trpc.moderation.listStrikes.queryOptions({ guildId, after }));
 
