@@ -223,6 +223,44 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
  * これがassertGuildScope相当を兼ねる: 在籍確認を通らない限り他ギルドのデータには到達できない。
  * protectedProcedureの後に.use()すること(discordUserIdをctxから読む)。
  */
+async function resolveGuildMember(ctx: DashboardAccessContext, input: unknown) {
+  const { discordUserId } = ctx as AuthenticatedContext;
+  const parsed = input as { guildId?: unknown };
+  if (typeof parsed?.guildId !== "string") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "guildId is required" });
+  }
+  const guildId = parsed.guildId;
+
+  const membership = await ctx.getGuildMembership(guildId, discordUserId);
+  if (!membership) {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+
+  const resolve =
+    ctx.resolveEffectiveCapabilities ??
+    ((i: ResolveEffectiveCapabilitiesInput) => resolveEffectiveCapabilities(ctx.db, i));
+  const capabilities = await resolve({
+    guildId,
+    discordUserId,
+    isOwner: membership.isOwner,
+    roleIds: membership.roleIds,
+  });
+  return { guildId, membership, capabilities };
+}
+
+/**
+ * ギルド在籍だけを確認し、特定のcapabilityは要求しない(本人のデータだけを扱うprocedure用)。
+ * 実効capabilitiesとisOwnerはctxに載せるので、閲覧範囲の出し分けなどに使える。
+ * 注意: mutationに使っても操作履歴(audit_logs)には記録しない(記録が必要な操作はrequireCapabilityを使う)。
+ * protectedProcedureの後、`.input()`の後に.use()すること。
+ */
+export function requireGuildMember() {
+  return t.middleware(async ({ ctx, input, next }) => {
+    const { membership, capabilities } = await resolveGuildMember(ctx as DashboardAccessContext, input);
+    return next({ ctx: { ...ctx, capabilities, isOwner: membership.isOwner } });
+  });
+}
+
 export function requireCapability(cap: number) {
   if (!isKnownCapabilityMask(cap) || cap === 0) {
     throw new Error("requireCapability requires a non-zero known capability mask");
@@ -230,29 +268,7 @@ export function requireCapability(cap: number) {
 
   return t.middleware(async ({ ctx, input, next, type, path }) => {
     const { db, discordUserId } = ctx as AuthenticatedContext;
-    const parsed = input as { guildId?: unknown };
-    if (typeof parsed?.guildId !== "string") {
-      throw new TRPCError({ code: "BAD_REQUEST", message: "guildId is required" });
-    }
-    const guildId = parsed.guildId;
-
-    const membership = await (ctx as DashboardAccessContext).getGuildMembership(
-      guildId,
-      discordUserId,
-    );
-    if (!membership) {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
-
-    const resolve =
-      (ctx as DashboardAccessContext).resolveEffectiveCapabilities ??
-      ((input: ResolveEffectiveCapabilitiesInput) => resolveEffectiveCapabilities(db, input));
-    const capabilities = await resolve({
-      guildId,
-      discordUserId,
-      isOwner: membership.isOwner,
-      roleIds: membership.roleIds,
-    });
+    const { guildId, membership, capabilities } = await resolveGuildMember(ctx as DashboardAccessContext, input);
 
     // 変更を伴う操作(mutation)のみ操作履歴に記録する(issue #618)。queryは記録しない。
     const isMutation = type === "mutation";

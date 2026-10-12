@@ -29,6 +29,7 @@ export {
   publicProcedure,
   protectedProcedure,
   requireCapability,
+  requireGuildMember,
   captureAuditBefore,
   createCallerFactory,
   type DashboardAccessContext,
