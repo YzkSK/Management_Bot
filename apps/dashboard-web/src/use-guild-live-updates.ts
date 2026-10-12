@@ -38,12 +38,9 @@ function queryKeysFor(topic: GuildDataTopic): readonly QueryKey[] {
         trpc.logging.listLogEntries.pathKey(),
       ];
     case "access":
-      // 自分の権限が変わりうるため、サーバー一覧(サイドバーの項目出し分け)も取り直す。
-      return [
-        trpc.access.listCapabilityGrants.pathKey(),
-        trpc.access.getMyCapabilities.pathKey(),
-        trpc.guildSettings.listMyGuilds.pathKey(),
-      ];
+      // 自分の権限が変わりうるため、表示中の全クエリを取り直す。権限を失ったクエリはFORBIDDENになり、
+      // dashboard-query-clientが保持していたデータを消す(ログの生データ表示等もここで切り替わる)。
+      return [[]];
   }
 }
 
