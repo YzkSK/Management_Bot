@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
-import { Lock, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import {
   buildScheduledPostSettingsDraft,
@@ -11,6 +11,7 @@ import {
   toUpdateSettingsInput,
   type ScheduledPostSettingsDraft,
 } from "./scheduled-post-settings-draft.js";
+import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loading } from "@/components/ui/skeleton";
@@ -42,11 +43,12 @@ export function ScheduledPostSettingsPage() {
   }
 
   const queries = [settingsQuery, roleOptionsQuery];
-  const isForbidden = queries.some(
-    (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
-  );
+  if (queries.some((query) => isForbiddenError(query.error))) {
+    return <ForbiddenState pageName="予約投稿の設定" capabilities={["MANAGE_SCHEDULED_POSTS"]} />;
+  }
+  const failedQueries = queries.filter((query) => query.isError);
   const isPending = queries.some((query) => query.isPending);
-  const isError = queries.some((query) => query.isError);
+  const isError = failedQueries.length > 0;
 
   const server = settingsQuery.data ?? null;
   const roleOptions = roleOptionsQuery.data ?? null;
@@ -83,19 +85,7 @@ export function ScheduledPostSettingsPage() {
       <h1 className="text-2xl font-bold">予約投稿の設定</h1>
 
       {isPending && !isError && <Loading />}
-      {isForbidden && (
-        <Alert variant="warning">
-          <Lock />
-          <AlertDescription>
-            この操作を行う権限がありません。予約投稿の設定の変更には「予約投稿の管理」権限が必要です。
-          </AlertDescription>
-        </Alert>
-      )}
-      {isError && !isForbidden && (
-        <Alert variant="destructive">
-          <AlertDescription>設定の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
-      )}
+      {isError && <ErrorState subject="予約投稿の設定" onRetry={() => failedQueries.forEach((query) => void query.refetch())} />}
 
       {draft && roleOptions && (
         <>

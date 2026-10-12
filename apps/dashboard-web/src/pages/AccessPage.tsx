@@ -12,6 +12,7 @@ import {
   removeUnmetDependents,
   type CapabilityName,
 } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import {
   CAPABILITY_GROUPS,
@@ -21,6 +22,7 @@ import {
   NO_CAPABILITIES_LABEL,
   presetLabelFor,
 } from "./capability-labels.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -524,19 +526,11 @@ export function AccessPage() {
   }
 
   const requiredQueries = [grantsQuery, myCapabilitiesQuery];
-  const isForbidden = requiredQueries.some(
-    (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
-  );
   const isPending = requiredQueries.some((query) => query.isPending);
   const isError = requiredQueries.some((query) => query.isError);
 
-  if (isForbidden) {
-    return (
-      <Alert variant="warning">
-        <Lock />
-        <AlertDescription>この操作を行う権限がありません。アクセス権限の変更には「アクセス権限の管理」権限が必要です。</AlertDescription>
-      </Alert>
-    );
+  if (requiredQueries.some((query) => isForbiddenError(query.error))) {
+    return <ForbiddenState pageName="アクセス権限" capabilities={["MANAGE_ACCESS"]} />;
   }
 
   if (isPending) {
@@ -545,9 +539,10 @@ export function AccessPage() {
 
   if (isError || !grantsQuery.data || !myCapabilitiesQuery.data) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>権限情報の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
+      <ErrorState
+        subject="アクセス権限"
+        onRetry={() => requiredQueries.filter((query) => query.isError).forEach((query) => void query.refetch())}
+      />
     );
   }
 
@@ -595,6 +590,16 @@ export function AccessPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">アクセス権限</h1>
+      {roleOptionsQuery.isError && (
+        <InlineError summary="ロール一覧を読み込めませんでした。" onRetry={() => void roleOptionsQuery.refetch()} />
+      )}
+      {targetUserNamesQuery.isError && (
+        <InlineError
+          summary="ユーザー名を読み込めませんでした。"
+          detail="一部の名前がIDで表示されています。"
+          onRetry={() => void targetUserNamesQuery.refetch()}
+        />
+      )}
       {/* 狭い画面では一覧と編集欄を縦に積むとスクロールが増えるため、対象は選択欄で選ぶ */}
       <div className="flex flex-col gap-2 lg:hidden">
         <label className="text-muted-foreground flex flex-col gap-1.5 text-sm">

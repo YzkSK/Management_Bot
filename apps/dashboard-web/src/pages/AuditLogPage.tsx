@@ -1,13 +1,13 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
-import { Lock } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import { describeChanges, type AuditNames } from "./audit-log-changes.js";
 import { auditActionLabel, auditFeatureColorClass, auditFeatureLabel, auditOutcomeLabel, periodToRange } from "./audit-log-labels.js";
 import { formatTime, groupByDay } from "./day-groups.js";
 import { AuditLogFilter, EMPTY_AUDIT_FILTER, type AuditFilterValue } from "./AuditLogFilter.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/initial-avatar";
@@ -184,7 +184,9 @@ export function AuditLogPage() {
     );
   }
 
-  const isForbidden = listQuery.error instanceof TRPCClientError && listQuery.error.data?.code === "FORBIDDEN";
+  if (isForbiddenError(listQuery.error)) {
+    return <ForbiddenState pageName="操作履歴" capabilities={["VIEW_AUDIT_LOG"]} />;
+  }
   const entries = listQuery.data?.pages.flatMap((page) => page.entries) ?? [];
   const names = (listQuery.data?.pages ?? []).reduce<Record<string, string>>((acc, page) => ({ ...acc, ...page.names }), {});
   const avatars = (listQuery.data?.pages ?? []).reduce<Record<string, string>>((acc, page) => ({ ...acc, ...page.avatars }), {});
@@ -207,18 +209,14 @@ export function AuditLogPage() {
       />
 
       {listQuery.isPending && !listQuery.isError && <Loading />}
-      {isForbidden && (
-        <Alert variant="warning">
-          <Lock />
-          <AlertDescription>
-            この操作を行う権限がありません。操作履歴の閲覧には「操作履歴の閲覧」権限が必要です。
-          </AlertDescription>
-        </Alert>
-      )}
-      {listQuery.isError && !isForbidden && (
-        <Alert variant="destructive">
-          <AlertDescription>操作履歴の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
+      {listQuery.isError &&
+        (listQuery.data ? (
+          <InlineError summary="続きを読み込めませんでした。" onRetry={() => void listQuery.fetchNextPage()} />
+        ) : (
+          <ErrorState subject="操作履歴" onRetry={() => void listQuery.refetch()} />
+        ))}
+      {optionsQuery.isError && (
+        <InlineError summary="絞り込みの候補を読み込めませんでした。" onRetry={() => void optionsQuery.refetch()} />
       )}
 
       {listQuery.data && (

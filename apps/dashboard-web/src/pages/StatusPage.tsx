@@ -21,7 +21,7 @@ import {
   type LevelFilter,
   type StatusItem,
 } from "./status-labels.js";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ErrorState } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -111,9 +111,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
               </div>
             </>
           ) : overview.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>ステータスの取得に失敗しました。</AlertDescription>
-            </Alert>
+            <ErrorState subject="ステータス" onRetry={() => void overview.refetch()} />
           ) : (
             <Loading />
           )}
@@ -255,9 +253,7 @@ function ResourcesTab() {
 
       {!latest ? (
         resources.isError ? (
-          <Alert variant="destructive">
-            <AlertDescription>リソース情報の取得に失敗しました。</AlertDescription>
-          </Alert>
+          <ErrorState subject="リソース情報" onRetry={() => void resources.refetch()} />
         ) : resources.isLoading ? (
           <Loading />
         ) : (
@@ -489,9 +485,7 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
           </p>
         </>
       ) : logs.isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>ログの取得に失敗しました。</AlertDescription>
-        </Alert>
+        <ErrorState subject="ログ" onRetry={() => void logs.refetch()} />
       ) : (
         <Loading />
       )}
@@ -525,9 +519,7 @@ function BackupTab({ isOwner }: { isOwner: boolean }) {
       )}
 
       {backups.isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>バックアップ情報の取得に失敗しました。</AlertDescription>
-        </Alert>
+        <ErrorState subject="バックアップ情報" onRetry={() => void backups.refetch()} />
       ) : !backups.data ? (
         <Loading />
       ) : !files?.length ? (
@@ -640,9 +632,7 @@ function AccessTab() {
           ))}
         </ul>
       ) : viewers.isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>閲覧権限の取得に失敗しました。</AlertDescription>
-        </Alert>
+        <ErrorState subject="閲覧権限" onRetry={() => void viewers.refetch()} />
       ) : (
         <Loading />
       )}

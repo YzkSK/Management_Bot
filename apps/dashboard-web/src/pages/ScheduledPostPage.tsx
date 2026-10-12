@@ -15,6 +15,8 @@ import {
   tabOfStatus,
   type ScheduledPostTab,
 } from "./scheduled-post-view.js";
+import { BOT_PERMISSION_LABELS } from "./bot-permission-labels.js";
+import { BotNotJoinedState, BotPermissionState, ErrorState } from "@/components/page-state";
 import { InitialAvatar } from "@/components/initial-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -260,25 +262,9 @@ export function ScheduledPostPage() {
         )}
       </div>
 
-      {status?.accessStatus === "not_found" && (
-        <Alert variant="destructive">
-          <AlertDescription>このサーバーにBotが参加していません。</AlertDescription>
-        </Alert>
-      )}
-      {status && !status.hasRequiredPermissions && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Botの権限(チャンネルを見る・メッセージを送信・スレッドでメッセージを送信)が不足しています。
-            {status.reauthorizeUrl && (
-              <>
-                {" "}
-                <a href={status.reauthorizeUrl} className="underline" target="_blank" rel="noreferrer">
-                  必要な権限を付与してBotを再認可する
-                </a>
-              </>
-            )}
-          </AlertDescription>
-        </Alert>
+      {status?.accessStatus === "not_found" && <BotNotJoinedState />}
+      {status && status.accessStatus !== "not_found" && !status.hasRequiredPermissions && (
+        <BotPermissionState guildId={guildId} permissions={BOT_PERMISSION_LABELS.scheduledPost} reauthorizeUrl={status.reauthorizeUrl} />
       )}
 
       <Tabs value={tab} onValueChange={(value) => setTab(SCHEDULED_POST_TABS.find((t) => t.value === value)?.value ?? "pending")}>
@@ -295,11 +281,7 @@ export function ScheduledPostPage() {
         {SCHEDULED_POST_TABS.map((t) => (
           <TabsContent key={t.value} value={t.value}>
             {listQuery.isPending && <Loading />}
-            {listQuery.isError && (
-              <Alert variant="destructive">
-                <AlertDescription>予約一覧の取得に失敗しました。</AlertDescription>
-              </Alert>
-            )}
+            {listQuery.isError && <ErrorState subject="予約一覧" onRetry={() => void listQuery.refetch()} />}
             {listQuery.data && (
               <PostsList
                 rows={listQuery.data.filter((row) => tabOfStatus(row.status) === t.value)}

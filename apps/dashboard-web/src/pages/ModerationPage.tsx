@@ -1,7 +1,7 @@
 import { matchQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -11,7 +11,9 @@ import {
   type ModerationPreset,
   type ModerationViolationType,
 } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
+import { BOT_PERMISSION_LABELS } from "./bot-permission-labels.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import {
   describePreset,
@@ -23,6 +25,7 @@ import {
   type NgwordMatchType,
 } from "./moderation-labels.js";
 import { formatCreatedAt } from "./format-created-at.js";
+import { BotNotJoinedState, BotPermissionState, ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -117,9 +120,7 @@ function ThresholdsTab({ guildId, thresholds }: { guildId: string; thresholds: r
   return (
     <div className="flex flex-col gap-4">
       {escalationQuery.isError && (
-        <Alert variant="destructive">
-          <AlertDescription>エスカレーション強度の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
+        <InlineError summary="エスカレーション強度を読み込めませんでした。" onRetry={() => void escalationQuery.refetch()} />
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
         <label className="flex items-center gap-2">
@@ -213,7 +214,7 @@ function LockdownPanel({ guildId }: { guildId: string }) {
 
   if (query.isPending) return <Loading />;
   if (query.isError || !query.data) {
-    return <div className="text-destructive text-sm">ロックダウン設定の取得に失敗しました。</div>;
+    return <InlineError summary="ロックダウン設定を読み込めませんでした。" onRetry={() => void query.refetch()} />;
   }
 
   const isPending = autoLockdownMutation.isPending || requestedLockMutation.isPending;
@@ -555,11 +556,7 @@ function NgwordTab({ guildId }: { guildId: string }) {
     <div className="flex flex-col gap-3">
       <NgwordForm guildId={guildId} />
       {query.isPending && <Loading />}
-      {query.isError && (
-        <Alert variant="destructive">
-          <AlertDescription>NGワード一覧の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
-      )}
+      {query.isError && <ErrorState subject="NGワード一覧" onRetry={() => void query.refetch()} />}
       {query.data && query.data.length === 0 && (
         <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">登録されたNGワードはありません。</p>
       )}
@@ -783,6 +780,7 @@ function useStrikePages(guildId: string) {
     userNames,
     isPending: isStrikePagesPending(rows.length, query.isPending, query.isFetching),
     isError: query.isError,
+    refetch: query.refetch,
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
     loadNextPage: () => setAfter(query.data?.nextAfter),
@@ -791,7 +789,7 @@ function useStrikePages(guildId: string) {
 }
 
 function StrikeTab({ guildId }: { guildId: string }) {
-  const { rows, userNames, isPending, isError, nextAfter, isFetchingNextPage, loadNextPage, resetPages } =
+  const { rows, userNames, isPending, isError, refetch, nextAfter, isFetchingNextPage, loadNextPage, resetPages } =
     useStrikePages(guildId);
 
   if (isPending) {
@@ -799,11 +797,7 @@ function StrikeTab({ guildId }: { guildId: string }) {
   }
 
   if (isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>警告回数の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="警告回数" onRetry={() => void refetch()} />;
   }
 
   if (rows.length === 0) {
@@ -875,16 +869,22 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
   };
 
   if (query.isPending) return <Loading />;
+  // 検知履歴はログ(logging.listLogEntries)から取るため、モデレーション管理権限とは別にログの閲覧権限が要る。
+  if (isForbiddenError(query.error)) return <ForbiddenState pageName="検知履歴" capabilities={["VIEW_LOGS"]} />;
   if (query.isError || !query.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>検知履歴の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="検知履歴" onRetry={() => void query.refetch()} />;
   }
   if (query.data.entries.length === 0) return <div className="text-sm">検知履歴はありません。</div>;
 
   return (
+    <div className="flex flex-col gap-4">
+      {namesQuery.isError && (
+        <InlineError
+          summary="名前を読み込めませんでした。"
+          detail="一部の名前がIDで表示されています。"
+          onRetry={() => void namesQuery.refetch()}
+        />
+      )}
     <div className="flex flex-col gap-2">
       {query.data.entries.map(({ id, entry }) => {
         if (entry.category !== "moderationCase") return null;
@@ -953,6 +953,7 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
         );
       })}
     </div>
+    </div>
   );
 }
 
@@ -996,15 +997,8 @@ export function ModerationPage() {
     );
   }
 
-  const isForbidden = thresholdsQuery.error instanceof TRPCClientError && thresholdsQuery.error.data?.code === "FORBIDDEN";
-
-  if (isForbidden) {
-    return (
-      <Alert variant="warning">
-        <Lock />
-        <AlertDescription>この操作を行う権限がありません。スパム対策の閲覧には「モデレーションの閲覧」権限が必要です。</AlertDescription>
-      </Alert>
-    );
+  if (isForbiddenError(thresholdsQuery.error)) {
+    return <ForbiddenState pageName="スパム対策" capabilities={["MANAGE_MODERATION"]} />;
   }
 
   if (thresholdsQuery.isPending) {
@@ -1012,11 +1006,7 @@ export function ModerationPage() {
   }
 
   if (thresholdsQuery.isError || !thresholdsQuery.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>設定の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="スパム対策の設定" onRetry={() => void thresholdsQuery.refetch()} />;
   }
 
   const roleNameById = new Map((roleOptionsQuery.data?.roles ?? []).map((role) => [role.id, role.name]));
@@ -1025,38 +1015,24 @@ export function ModerationPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">スパム対策</h1>
 
-      {permissionStatusQuery.data?.accessStatus === "not_found" && (
-        <Alert variant="destructive">
-          <AlertDescription>このサーバーにBotが参加していません。</AlertDescription>
-        </Alert>
-      )}
-      {permissionStatusQuery.data && !permissionStatusQuery.data.hasRequiredPermissions && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Botの基本権限(メッセージ削除・タイムアウト・キック/BAN)が不足しています。
-            対象のロール階層やチャンネル個別設定によっては、権限を満たしていても実行に失敗する場合があります。
-            {permissionStatusQuery.data.reauthorizeUrl && (
-              <>
-                {" "}
-                <a
-                  href={permissionStatusQuery.data.reauthorizeUrl}
-                  className="underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  必要な権限を付与してBotを再認可する
-                </a>
-              </>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      {permissionStatusQuery.data?.accessStatus === "not_found" && <BotNotJoinedState />}
+      {permissionStatusQuery.data &&
+        permissionStatusQuery.data.accessStatus !== "not_found" &&
+        !permissionStatusQuery.data.hasRequiredPermissions && (
+          <BotPermissionState
+            guildId={guildId}
+            permissions={BOT_PERMISSION_LABELS.moderation}
+            reauthorizeUrl={permissionStatusQuery.data.reauthorizeUrl}
+          />
+        )}
       {roleOptionsQuery.data?.accessStatus === "forbidden" && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Botに権限がないため、ロール一覧を取得できません。サーバー設定でBotの権限を確認してください。
-          </AlertDescription>
-        </Alert>
+        <BotPermissionState guildId={guildId} />
+      )}
+      {permissionStatusQuery.isError && (
+        <InlineError summary="Botの権限状況を読み込めませんでした。" onRetry={() => void permissionStatusQuery.refetch()} />
+      )}
+      {isWhitelistTab && roleOptionsQuery.isError && (
+        <InlineError summary="ロール一覧を読み込めませんでした。" detail="ロール名がIDで表示されます。" onRetry={() => void roleOptionsQuery.refetch()} />
       )}
 
       <LockdownPanel guildId={guildId} />
@@ -1097,11 +1073,7 @@ export function ModerationPage() {
         <TabsContent value="whitelist" className="flex flex-col gap-3">
           <WhitelistForm guildId={guildId} />
           {whitelistQuery.isPending && <Loading />}
-          {whitelistQuery.isError && (
-            <Alert variant="destructive">
-              <AlertDescription>ホワイトリストの取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-            </Alert>
-          )}
+          {whitelistQuery.isError && <ErrorState subject="ホワイトリスト" onRetry={() => void whitelistQuery.refetch()} />}
           {whitelistQuery.data && whitelistQuery.data.length > 0 && (
             <ul className="bg-card divide-y rounded-xl border">
                 {whitelistQuery.data.map((entry) => (

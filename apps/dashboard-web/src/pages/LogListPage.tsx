@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CAPABILITIES, hasCapability, type LogCategory, type LogEntry, type MessageAttachment, contentWithoutGifLinks } from "@management-bot/shared";
@@ -14,14 +13,16 @@ import {
   isBulkDeleteLogEntry,
   summarizeLogEntry,
 } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { ChevronLeft, ChevronRight, ExternalLink, Lock, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Settings } from "lucide-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { visiblePages } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
@@ -352,7 +353,9 @@ export function LogListPage() {
     );
   }
 
-  const isForbidden = logsQuery.error instanceof TRPCClientError && logsQuery.error.data?.code === "FORBIDDEN";
+  if (isForbiddenError(logsQuery.error)) {
+    return <ForbiddenState pageName="ログ" capabilities={["VIEW_LOGS"]} />;
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -386,16 +389,13 @@ export function LogListPage() {
       />
 
       {logsQuery.isPending && <Loading />}
-      {isForbidden && (
-        <Alert variant="warning">
-          <Lock />
-          <AlertDescription>この操作を行う権限がありません。ログの閲覧には「ログの閲覧」権限が必要です。</AlertDescription>
-        </Alert>
-      )}
-      {logsQuery.isError && !isForbidden && (
-        <Alert variant="destructive">
-          <AlertDescription>ログの取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
+      {logsQuery.isError && <ErrorState subject="ログ" onRetry={() => void logsQuery.refetch()} />}
+      {namesQuery.isError && (
+        <InlineError
+          summary="名前を読み込めませんでした。"
+          detail="一部の名前がIDで表示されています。"
+          onRetry={() => void namesQuery.refetch()}
+        />
       )}
 
       {logsQuery.data && (

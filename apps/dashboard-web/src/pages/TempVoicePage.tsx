@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -117,12 +119,11 @@ function ActiveChannelsTab({
   });
 
   if (listQuery.isPending) return <Loading />;
+  if (isForbiddenError(listQuery.error)) {
+    return <ForbiddenState pageName="一時VC一覧" capabilities={["VIEW_TEMP_VOICE"]} />;
+  }
   if (listQuery.isError || !listQuery.data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>一時VC一覧の取得に失敗しました。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="一時VC一覧" onRetry={() => void listQuery.refetch()} />;
   }
 
   return (
@@ -195,11 +196,15 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
   });
 
   if (rolesQuery.isPending || roleOptionsQuery.isPending) return <Loading />;
+  if (isForbiddenError(rolesQuery.error) || isForbiddenError(roleOptionsQuery.error)) {
+    return <ForbiddenState pageName="拒否禁止ロール" capabilities={["MANAGE_TEMP_VOICE"]} />;
+  }
   if (rolesQuery.isError || !rolesQuery.data || roleOptionsQuery.isError || !roleOptionsQuery.data) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>拒否禁止ロールの取得に失敗しました。</AlertDescription>
-      </Alert>
+      <ErrorState
+        subject="拒否禁止ロール"
+        onRetry={() => [rolesQuery, roleOptionsQuery].forEach((query) => void query.refetch())}
+      />
     );
   }
 
@@ -366,9 +371,10 @@ function ConfigForm({
         <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
           <h2 className="font-bold">作成用ボイスチャンネル</h2>
           {channelOptionsFailed ? (
-            <Alert variant="destructive">
-              <AlertDescription>チャンネル一覧の取得に失敗しました。</AlertDescription>
-            </Alert>
+            <InlineError
+              summary="チャンネル一覧を読み込めませんでした。"
+              onRetry={() => [voiceOptionsQuery, categoryOptionsQuery].forEach((query) => void query.refetch())}
+            />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={FIELD_LABEL}>
@@ -557,12 +563,11 @@ export function TempVoicePage() {
 
   if (configQuery.isPending) return <Loading />;
   // configQuery.dataは未設定ギルドでnullを返す(エラーではない)ため、isErrorのみで判定する。
+  if (isForbiddenError(configQuery.error)) {
+    return <ForbiddenState pageName="一時VC" capabilities={["MANAGE_TEMP_VOICE"]} />;
+  }
   if (configQuery.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>設定の取得に失敗しました。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="一時VCの設定" onRetry={() => void configQuery.refetch()} />;
   }
 
   const config: TempVoiceConfigData = configQuery.data ?? {
