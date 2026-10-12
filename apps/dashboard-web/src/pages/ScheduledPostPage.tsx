@@ -37,6 +37,8 @@ interface PostRow {
   channelId: string;
   channelName?: string | undefined;
   authorId: string;
+  /** 操作者本人の予約か(APIが返す)。 */
+  isMine: boolean;
   authorName?: string | undefined;
   authorAvatarUrl?: string | undefined;
   mentions?: readonly string[];
@@ -55,7 +57,7 @@ const STATUS_BADGES: Record<string, { label: string; tone: string }> = {
   cancelled: { label: "取り消し", tone: "bg-muted text-muted-foreground" },
 };
 
-function CancelButton({ onConfirm, disabled }: { onConfirm: () => void; disabled: boolean }) {
+function CancelButton({ onConfirm, disabled, notifiesAuthor }: { onConfirm: () => void; disabled: boolean; notifiesAuthor: boolean }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -66,7 +68,7 @@ function CancelButton({ onConfirm, disabled }: { onConfirm: () => void; disabled
       <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
         <DialogHeader>
           <DialogTitle>予約を取り消しますか?</DialogTitle>
-          <DialogDescription>予約者にDMで通知されます。この操作は元に戻せません。</DialogDescription>
+          <DialogDescription>{notifiesAuthor ? "予約者にDMで通知されます。" : ""}この操作は元に戻せません。</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <DialogClose asChild>
@@ -83,7 +85,19 @@ function CancelButton({ onConfirm, disabled }: { onConfirm: () => void; disabled
   );
 }
 
-function PostCard({ row, canCancel, cancelling, onCancel }: { row: PostRow; canCancel: boolean; cancelling: boolean; onCancel: () => void }) {
+function PostCard({
+  row,
+  canCancel,
+  notifiesAuthor,
+  cancelling,
+  onCancel,
+}: {
+  row: PostRow;
+  canCancel: boolean;
+  notifiesAuthor: boolean;
+  cancelling: boolean;
+  onCancel: () => void;
+}) {
   const relative = describeRelativeTime(row.scheduledAt, row.status);
   const badge = STATUS_BADGES[row.status];
   const outcome = describeOutcome(row);
@@ -120,7 +134,7 @@ function PostCard({ row, canCancel, cancelling, onCancel }: { row: PostRow; canC
           </p>
         )}
       </div>
-      {canCancel && <CancelButton disabled={cancelling} onConfirm={onCancel} />}
+      {canCancel && <CancelButton disabled={cancelling} onConfirm={onCancel} notifiesAuthor={notifiesAuthor} />}
     </article>
   );
 }
@@ -129,17 +143,24 @@ function PostsList({
   rows,
   tab,
   canManage,
+  canView,
   cancelling,
   onCancel,
 }: {
   rows: readonly PostRow[];
   tab: ScheduledPostTab;
   canManage: boolean;
+  /** 全員の予約を閲覧できるか。falseのときrowsは自分の予約のみ(APIが絞る)。 */
+  canView: boolean;
   cancelling: boolean;
   onCancel: (id: string) => void;
 }) {
   if (rows.length === 0) {
-    return <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">該当する予約はありません。</p>;
+    return (
+      <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+        {canView ? "該当する予約はありません。" : "あなたの予約はありません。"}
+      </p>
+    );
   }
   // 投稿待ちは近い順、それ以外は新しい順。
   const sorted = [...rows].sort((a, b) => {
@@ -161,7 +182,8 @@ function PostsList({
             <PostCard
               key={row.id}
               row={row}
-              canCancel={canManage && tab === "pending" && row.status === "pending"}
+              canCancel={(canManage || row.isMine) && tab === "pending" && row.status === "pending"}
+              notifiesAuthor={canManage}
               cancelling={cancelling}
               onCancel={() => onCancel(row.id)}
             />
@@ -179,22 +201,27 @@ export function ScheduledPostPage() {
   const capabilities = useGuildCapabilities(guildId);
   const canManage = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.MANAGE_SCHEDULED_POSTS);
 
+  const canView = capabilities !== undefined && hasCapability(capabilities, CAPABILITIES.VIEW_SCHEDULED_POSTS);
+
+  // Bot権限の状態は閲覧権限が必要(なければFORBIDDENになるため呼ばない)。
   const statusQuery = useQuery({
     ...trpc.scheduledPost.getRequiredPermissionStatus.queryOptions({ guildId: guildId ?? "" }),
-    enabled: Boolean(guildId),
+    enabled: Boolean(guildId) && canView,
   });
   const listQuery = useQuery({
     ...trpc.scheduledPost.list.queryOptions({ guildId: guildId ?? "" }),
     enabled: Boolean(guildId),
     refetchInterval: 15_000,
   });
-  const cancelMutation = useMutation({
-    ...trpc.scheduledPost.cancel.mutationOptions(),
+  const cancelCallbacks = {
     onSuccess: () => toast.success("予約を取り消しました。"),
     onError: () => toast.error("取り消しに失敗しました。すでに投稿処理が始まった可能性があります。"),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: trpc.scheduledPost.list.queryOptions({ guildId: guildId ?? "" }).queryKey }),
-  });
+  };
+  const cancelAdminMutation = useMutation({ ...trpc.scheduledPost.cancel.mutationOptions(), ...cancelCallbacks });
+  const cancelOwnMutation = useMutation({ ...trpc.scheduledPost.cancelOwn.mutationOptions(), ...cancelCallbacks });
+  const cancelMutation = canManage ? cancelAdminMutation : cancelOwnMutation;
 
   if (!guildId) {
     return (
@@ -213,7 +240,15 @@ export function ScheduledPostPage() {
         <div>
           <h1 className="text-2xl font-bold">予約投稿</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            メンバーが <code>/schedule</code> で予約した投稿の一覧です。
+            {canView ? (
+              <>
+                メンバーが <code>/schedule</code> で予約した投稿の一覧です。
+              </>
+            ) : (
+              <>
+                あなたが <code>/schedule</code> で予約した投稿の一覧です。
+              </>
+            )}
           </p>
         </div>
         {canManage && (
@@ -271,6 +306,7 @@ export function ScheduledPostPage() {
                 rows={listQuery.data.filter((row) => tabOfStatus(row.status) === t.value)}
                 tab={t.value}
                 canManage={canManage}
+                canView={canView}
                 cancelling={cancelMutation.isPending}
                 onCancel={(id) => cancelMutation.mutate({ guildId, id })}
               />

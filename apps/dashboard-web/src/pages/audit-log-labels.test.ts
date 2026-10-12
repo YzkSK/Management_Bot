@@ -48,7 +48,8 @@ function mutationNames(relativePath: string): string[] {
   const body = source.slice(source.search(/Router = router\(\{/));
   return body
     .split(/\n {2}(?=[A-Za-z])/)
-    .filter((segment) => segment.includes(".mutation("))
+    // requireGuildMemberのmutation(本人取り消し等)は操作履歴に記録しないのでラベル不要。
+    .filter((segment) => segment.includes(".mutation(") && !segment.includes("requireGuildMember()"))
     .flatMap((segment) => {
       const name = /^(\w+):/.exec(segment)?.[1];
       return name === undefined ? [] : [name];

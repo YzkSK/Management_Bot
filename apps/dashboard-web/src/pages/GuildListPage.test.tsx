@@ -50,16 +50,15 @@ describe("GuildListPage", () => {
     expect(html).toContain('href="/guilds/g1/activity"');
   });
 
-  test("閲覧できるページが1つもないサーバーはリンクにせずクリック不可の表示にする(issue #263)", () => {
+  test("権限が何もないサーバーでも、全メンバー向けの予約投稿(自分の予約)ページへのリンクになる(issue #641)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
       { id: "g1", name: "権限なしサーバー", isManaged: false, iconUrl: null, capabilities: 0 },
     ]);
     const html = renderPage(queryClient);
     expect(html).toContain("権限なしサーバー");
-    expect(html).toContain("アクセス権限がありません");
-    expect(html).not.toContain('href="/guilds/g1/activity"');
-    expect(html).toContain('aria-describedby="guild-access-note-g1"');
+    expect(html).toContain('href="/guilds/g1/scheduled-post"');
+    expect(html).not.toContain("アクセス権限がありません");
   });
 
   test("VIEW_LOGSのみのサーバーはログ一覧へのリンクになる(issue #527)", () => {

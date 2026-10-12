@@ -15,6 +15,7 @@ function row(overrides: Record<string, unknown>) {
     channelId: "c1",
     channelName: "お知らせ",
     authorId: "u1",
+    isMine: false,
     authorName: "ゆずき",
     content: "明日の集合は20時です",
     scheduledAt: new Date(Date.now() + 18.5 * 3_600_000).toISOString(),
@@ -121,5 +122,24 @@ describe("ScheduledPostPage", () => {
     expect(html).toContain("明日の集合は20時です");
     expect(html).not.toContain("予約投稿の設定");
     expect(html).not.toContain("text-destructive border-destructive/40");
+  });
+
+  test("閲覧権限なしのメンバーには自分用の説明文を出し、自分の投稿待ちにだけ取り消すボタンを出す", () => {
+    const html = renderPage(0, [row({ isMine: true })]);
+    expect(html).toContain("あなたが");
+    expect(html).not.toContain("メンバーが");
+    expect(html).toContain("取り消す");
+    expect(html).not.toContain("予約投稿の設定");
+
+    expect(renderPage(0, [row({ isMine: false })])).not.toContain("取り消す");
+  });
+
+  test("閲覧権限なしで予約が0件なら「あなたの予約はありません。」", () => {
+    expect(renderPage(0, [])).toContain("あなたの予約はありません。");
+    expect(renderPage(CAPABILITIES.VIEW_SCHEDULED_POSTS, [])).toContain("該当する予約はありません。");
+  });
+
+  test("閲覧権限のみのメンバーも自分の投稿待ちは取り消せる", () => {
+    expect(renderPage(CAPABILITIES.VIEW_SCHEDULED_POSTS, [row({ isMine: true })])).toContain("取り消す");
   });
 });
