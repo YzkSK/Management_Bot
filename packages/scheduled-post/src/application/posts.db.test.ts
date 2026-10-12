@@ -240,5 +240,9 @@ describe("listMyPendingPosts / listGuildPosts", () => {
 
     const all = await listGuildPosts(db, guildId);
     expect(all).toHaveLength(3);
+
+    const onlyU2 = await listGuildPosts(db, guildId, { authorId: "u2" });
+    expect(onlyU2).toHaveLength(1);
+    expect(onlyU2.every((p) => p.authorId === "u2")).toBe(true);
   });
 });

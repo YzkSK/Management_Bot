@@ -86,16 +86,17 @@ export async function recoverStuckPosting(db: Db, now: Date): Promise<ScheduledP
  * 複数Botプロセス・pg_notifyとtick回収が競合しても行を得るのは1プロセスだけ。claim後のクラッシュでは
  * 再送しない(重複より取りこぼしを選ぶ)。
  */
-export async function claimAdminCancelNotice(
+export async function claimCancelNotice(
   db: Db,
   id: string,
   now: Date,
   guildId?: string,
+  by?: "admin" | "author",
 ): Promise<ScheduledPostRow | null> {
   const conditions = [
     eq(scheduledPosts.id, id),
     eq(scheduledPosts.status, "cancelled"),
-    eq(scheduledPosts.cancelledBy, "admin"),
+    inArray(scheduledPosts.cancelledBy, by === undefined ? ["admin", "author"] : [by]),
     isNull(scheduledPosts.cancelNotifiedAt),
   ];
   if (guildId !== undefined) conditions.push(eq(scheduledPosts.guildId, guildId));
@@ -107,8 +108,8 @@ export async function claimAdminCancelNotice(
   return row ?? null;
 }
 
-/** 未処理の管理者取り消し(通知の取りこぼし・Bot停止中の取り消し)を最大limit件claimして返す。 */
-export async function claimPendingAdminCancelNotices(
+/** 未処理のDashboard取り消し(管理者・本人。通知の取りこぼし・Bot停止中の取り消し)を最大limit件claimして返す。 */
+export async function claimPendingCancelNotices(
   db: Db,
   now: Date,
   limit = CLAIM_BATCH,
@@ -119,7 +120,7 @@ export async function claimPendingAdminCancelNotices(
     .where(
       and(
         eq(scheduledPosts.status, "cancelled"),
-        eq(scheduledPosts.cancelledBy, "admin"),
+        inArray(scheduledPosts.cancelledBy, ["admin", "author"]),
         isNull(scheduledPosts.cancelNotifiedAt),
       ),
     )
@@ -127,7 +128,7 @@ export async function claimPendingAdminCancelNotices(
     .limit(limit);
   const claimed: ScheduledPostRow[] = [];
   for (const { id } of candidates) {
-    const row = await claimAdminCancelNotice(db, id, now);
+    const row = await claimCancelNotice(db, id, now);
     if (row) claimed.push(row);
   }
   return claimed;

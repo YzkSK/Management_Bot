@@ -157,6 +157,8 @@ export interface CancelScheduledPostInput {
   /** by="admin"のとき、取り消した管理者(DBに保存し、Botの後処理のログイベントで使う)。 */
   executor?: { id: string; name?: string };
   now: Date;
+  /** 呼び出し側がその場でログを発行するならtrue(cancel_notified_atを同時に埋め、Botの後処理回収の対象にしない)。 */
+  notifiedInline?: boolean;
 }
 
 /** 取り消す。投稿処理が始まっていない(status='pending')間のみ成功し、成功時のみ更新後の行を返す。 */
@@ -179,6 +181,7 @@ export async function cancelScheduledPost(db: Db, input: CancelScheduledPostInpu
       cancelledByUserName: input.by === "admin" ? (input.executor?.name ?? null) : null,
       finishedAt: input.now,
       updatedAt: input.now,
+      ...(input.notifiedInline ? { cancelNotifiedAt: input.now } : {}),
     })
     .where(and(...conditions))
     .returning();
@@ -205,11 +208,15 @@ export async function listMyPendingPosts(db: Db, guildId: string, authorId: stri
 const GUILD_LIST_LIMIT = 300;
 
 /** ギルド全体の予約(Dashboard)。保持期間(30日)内の全状態を、予定時刻の新しい順で返す。 */
-export async function listGuildPosts(db: Db, guildId: string): Promise<ScheduledPostRow[]> {
+export async function listGuildPosts(db: Db, guildId: string, options?: { authorId?: string }): Promise<ScheduledPostRow[]> {
   return db
     .select()
     .from(scheduledPosts)
-    .where(eq(scheduledPosts.guildId, guildId))
+    .where(
+      options?.authorId === undefined
+        ? eq(scheduledPosts.guildId, guildId)
+        : and(eq(scheduledPosts.guildId, guildId), eq(scheduledPosts.authorId, options.authorId)),
+    )
     .orderBy(desc(scheduledPosts.scheduledAt))
     .limit(GUILD_LIST_LIMIT);
 }

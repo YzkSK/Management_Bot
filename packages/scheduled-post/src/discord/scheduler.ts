@@ -20,7 +20,7 @@ import {
   type MentionMessage,
   type PostFacts,
 } from "../domain/index.js";
-import { processPendingAdminCancels, type AdminCancelDiscord } from "./dashboard-action-listener.js";
+import { processPendingCancelNotices, type AdminCancelDiscord } from "./dashboard-action-listener.js";
 import type { PublishScheduledPostEvent } from "./events.js";
 import type { PostView } from "./post-message.js";
 
@@ -231,7 +231,7 @@ export function createScheduler(deps: SchedulerDeps, intervalMs: number = SCHEDU
       try {
         // 起動直後だけでなく毎tick確認する(経過時間で判定するため、起動時点ではまだ対象外の行もある)。
         await recoverInterruptedPosts(deps);
-        if (deps.adminCancel) await processPendingAdminCancels({ ...deps, discord: deps.adminCancel });
+        if (deps.adminCancel) await processPendingCancelNotices({ ...deps, discord: deps.adminCancel });
         await runSchedulerTick(deps);
         const now = clock();
         if (now.getTime() - lastPurgeAt >= PURGE_INTERVAL_MS) {

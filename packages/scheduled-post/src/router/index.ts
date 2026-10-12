@@ -1,10 +1,17 @@
-import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import {
+  captureAuditBefore,
+  protectedProcedure,
+  requireCapability,
+  requireGuildMember,
+  router,
+} from "@management-bot/dashboard-access";
 import { CAPABILITIES, buildInviteUrl, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
 import {
   cancelScheduledPost,
+  getScheduledPost,
   getSettings,
   listGuildPosts,
   notifyScheduledPostAdminCancel,
@@ -29,9 +36,16 @@ const manageProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: T
   protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_SCHEDULED_POSTS));
 
 export const scheduledPostRouter = router({
-  /** ギルド全体の予約(保持期間内の全状態)。ユーザー・チャンネルは名前を解決して返す(解決できなければ未設定)。 */
-  list: viewProcedure(guildIdInput).query(async ({ ctx, input }) => {
-    const rows = await listGuildPosts(ctx.db, input.guildId);
+  /**
+   * ギルド全体の予約(保持期間内の全状態)。閲覧権限がないメンバーは自分の予約のみ(DBクエリで絞る)。
+   * ユーザー・チャンネルは名前を解決して返す(解決できなければ未設定)。
+   */
+  list: protectedProcedure
+    .input(guildIdInput)
+    .use(requireGuildMember())
+    .query(async ({ ctx, input }) => {
+    const canViewAll = (ctx.capabilities & CAPABILITIES.VIEW_SCHEDULED_POSTS) === CAPABILITIES.VIEW_SCHEDULED_POSTS;
+    const rows = await listGuildPosts(ctx.db, input.guildId, canViewAll ? undefined : { authorId: ctx.discordUserId });
     if (rows.length === 0) return [];
     // メンション先ユーザーの名前解決は表示の補助なので件数を絞る(超えた分はIDのまま表示)。
     const mentionUserIds = [...new Set(rows.flatMap((row) => row.mentionUserIds))].slice(0, MAX_MENTION_NAME_LOOKUPS);
@@ -53,6 +67,7 @@ export const scheduledPostRouter = router({
       channelId: row.channelId,
       channelName: channelNames.get(row.channelId),
       authorId: row.authorId,
+      isMine: row.authorId === ctx.discordUserId,
       authorName: userNames.get(row.authorId),
       authorAvatarUrl: avatarUrls.get(row.authorId),
       content: row.content,
@@ -88,6 +103,34 @@ export const scheduledPostRouter = router({
     }
     await notifyScheduledPostAdminCancel(ctx.db, { guildId: input.guildId, postId: row.id });
   }),
+
+  /**
+   * 本人による取り消し(/scheduleの本人取り消しと同じ扱い)。管理権限は不要で、在籍と本人確認のみ。
+   * 操作履歴(audit_logs)には記録しない(#618)。予約者へのDMは送らず、ログイベントのみBotに依頼する。
+   */
+  cancelOwn: protectedProcedure
+    .input(cancelInput)
+    .use(requireGuildMember())
+    .mutation(async ({ ctx, input }) => {
+      const post = await getScheduledPost(ctx.db, input.id);
+      if (!post || post.guildId !== input.guildId || post.authorId !== ctx.discordUserId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const row = await cancelScheduledPost(ctx.db, {
+        id: input.id,
+        by: "author",
+        guildId: input.guildId,
+        authorId: ctx.discordUserId,
+        now: new Date(),
+      });
+      if (!row) {
+        throw new TRPCError({ code: "CONFLICT", message: "この予約はすでに投稿処理が始まったか、取り消されています。" });
+      }
+      // 取り消しは確定済み。通知に失敗してもBotのtick回収がログイベントを発行するため、失敗扱いにしない。
+      await notifyScheduledPostAdminCancel(ctx.db, { guildId: input.guildId, postId: row.id, by: "author" }).catch(
+        (error: unknown) => console.error("Failed to notify scheduled post self-cancel:", error),
+      );
+    }),
 
   getSettings: manageProcedure(guildIdInput).query(async ({ ctx, input }) => {
     const { allowedRoleIds, allowEveryone, allowHere } = await getSettings(ctx.db, input.guildId);
