@@ -114,7 +114,7 @@ export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
 export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
-export { discordIdSchema } from "./discord-id.js";
+export { discordIdSchema, roleMentionLabel } from "./discord-id.js";
 export {
   TEMP_VOICE_CREATE_REASON,
   TEMP_VOICE_CONTROL_CREATE_REASON,

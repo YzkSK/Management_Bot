@@ -5,7 +5,7 @@ import {
   requireGuildMember,
   router,
 } from "@management-bot/dashboard-access";
-import { CAPABILITIES, buildInviteUrl, discordIdSchema } from "@management-bot/shared";
+import { CAPABILITIES, buildInviteUrl, discordIdSchema, roleMentionLabel } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
 import { z } from "zod";
@@ -80,7 +80,7 @@ export const scheduledPostRouter = router({
       mentions: [
         ...(row.mentionEveryone ? ["@everyone"] : []),
         ...(row.mentionHere ? ["@here"] : []),
-        ...row.mentionRoleIds.map((id) => `@${roleNames.get(id) ?? id}`),
+        ...row.mentionRoleIds.map((id) => roleMentionLabel(roleNames.get(id) ?? id)),
         ...row.mentionUserIds.map((id) => `@${userNames.get(id) ?? id}`),
       ],
     }));

@@ -1,4 +1,4 @@
-import { CATEGORY_LABELS } from "@management-bot/shared";
+import { CATEGORY_LABELS, roleMentionLabel } from "@management-bot/shared";
 import { CAPABILITY_OPTIONS } from "./capability-labels.js";
 import { NGWORD_MATCH_TYPE_LABELS, PRESET_LABELS, VIOLATION_TYPE_LABELS } from "./moderation-labels.js";
 
@@ -83,7 +83,9 @@ export function describeCapabilityChange(before: number, after: number): string 
 
 function nameOf(prefix: string, id: string, names: AuditNames): string {
   const name = names[id];
-  return name === undefined ? id : `${prefix}${name}`;
+  if (name === undefined) return id;
+  // "@"はロールにのみ使う(呼び出し元はrole/roles)。@everyoneロールは名前自体が「@everyone」のため二重に付けない。
+  return prefix === "@" ? roleMentionLabel(name) : `${prefix}${name}`;
 }
 
 function formatList(values: unknown, one: (id: string) => string): string {

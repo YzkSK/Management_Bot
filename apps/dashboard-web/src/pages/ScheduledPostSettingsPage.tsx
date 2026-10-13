@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { roleMentionLabel } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import {
@@ -97,7 +98,7 @@ export function ScheduledPostSettingsPage() {
             <div className="flex flex-wrap items-center gap-2">
               {draft.roleIds.length === 0 && <span className="text-muted-foreground text-sm">メンバー全員が使えます</span>}
               {draft.roleIds.map((roleId) => {
-                const name = `@${roleNameById.get(roleId) ?? roleId}`;
+                const name = roleMentionLabel(roleNameById.get(roleId) ?? roleId);
                 return (
                   <span key={roleId} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
                     {name}
