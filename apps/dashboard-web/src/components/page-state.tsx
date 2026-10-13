@@ -139,6 +139,19 @@ export function BotPermissionState({
 }
 
 /** Botがサーバーに未参加。 */
+/** 自分が参加していない(またはBotが導入されていない)サーバーのページを開いたとき。 */
+export function NotMemberState() {
+  return (
+    <StateCard tone="warning" icon={<Lock aria-hidden="true" />} title="このサーバーのページは開けません">
+      <Text>
+        このサーバーに参加していないか、Botが導入されていません。
+        <br />
+        サーバー一覧から開き直してください。
+      </Text>
+    </StateCard>
+  );
+}
+
 export function BotNotJoinedState() {
   return (
     <StateCard tone="muted" icon={<Bot aria-hidden="true" />} title="Botがこのサーバーに参加していません">

@@ -4,6 +4,7 @@ import { isUnauthorizedError } from "./is-unauthorized-error.js";
 import { logout } from "./logout.js";
 import { API_URL, trpc } from "./trpc.js";
 import { Layout } from "./Layout.js";
+import { RequirePageAccess } from "./components/require-page-access.js";
 import { AccessPage } from "./pages/AccessPage.js";
 import { AuditLogPage } from "./pages/AuditLogPage.js";
 import { ActivityPage } from "./pages/ActivityPage.js";
@@ -76,15 +77,16 @@ export function App() {
           path="/guilds/:guildId"
           element={layout}
         >
-          <Route path="activity" element={<ActivityPage />} />
-          <Route path="logs" element={<LogListPage />} />
-          <Route path="logs/settings" element={<SettingsPage />} />
-          <Route path="moderation" element={<ModerationPage />} />
-          <Route path="scheduled-post" element={<ScheduledPostPage />} />
-          <Route path="scheduled-post/settings" element={<ScheduledPostSettingsPage />} />
-          <Route path="temp-voice" element={<TempVoicePage />} />
-          <Route path="access" element={<AccessPage />} />
-          <Route path="audit-log" element={<AuditLogPage />} />
+          {/* 本体を描く前に閲覧可否を判定し、リロード時に権限のない画面が一瞬映るのを防ぐ */}
+          <Route path="activity" element={<RequirePageAccess pageName="アクティビティ" capability="VIEW_ACTIVITY"><ActivityPage /></RequirePageAccess>} />
+          <Route path="logs" element={<RequirePageAccess pageName="ログ" capability="VIEW_LOGS"><LogListPage /></RequirePageAccess>} />
+          <Route path="logs/settings" element={<RequirePageAccess pageName="ログ設定" capability="MANAGE_LOGGING_SETTINGS"><SettingsPage /></RequirePageAccess>} />
+          <Route path="moderation" element={<RequirePageAccess pageName="スパム対策" capability="MANAGE_MODERATION"><ModerationPage /></RequirePageAccess>} />
+          <Route path="scheduled-post" element={<RequirePageAccess pageName="予約投稿"><ScheduledPostPage /></RequirePageAccess>} />
+          <Route path="scheduled-post/settings" element={<RequirePageAccess pageName="予約投稿の設定" capability="MANAGE_SCHEDULED_POSTS"><ScheduledPostSettingsPage /></RequirePageAccess>} />
+          <Route path="temp-voice" element={<RequirePageAccess pageName="一時VC" capability="VIEW_TEMP_VOICE"><TempVoicePage /></RequirePageAccess>} />
+          <Route path="access" element={<RequirePageAccess pageName="アクセス権限" capability="MANAGE_ACCESS"><AccessPage /></RequirePageAccess>} />
+          <Route path="audit-log" element={<RequirePageAccess pageName="操作履歴" capability="VIEW_AUDIT_LOG"><AuditLogPage /></RequirePageAccess>} />
         </Route>
       </Routes>
     </BrowserRouter>
