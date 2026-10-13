@@ -79,10 +79,14 @@ function SidebarNav({
   // SelectItem側で直接どのguildが押されたかを記録する。
   const pickedGuildRef = useRef<ManagedGuildWithAccess | null>(null);
   // サーバー選択中は閲覧権限のあるページだけを出す(issue #527)。未選択時は全項目を非リンクで出す。
+  // 選択中だが権限がまだ分からない(サーバー一覧の取得中・一覧に無い)間は何も出さない
+  // (リロード直後に権限のない項目まで一瞬映るのを防ぐ)。
   const currentGuild = guilds.find((g) => g.id === guildId);
-  const visiblePages = currentGuild
-    ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
-    : GUILD_PAGES;
+  const visiblePages = guildId === undefined
+    ? GUILD_PAGES
+    : currentGuild
+      ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
+      : [];
   const featurePages = visiblePages.filter((page) => page.key !== "access" && page.key !== "audit-log");
   const adminPages = visiblePages.filter((page) => page.key === "access" || page.key === "audit-log");
 

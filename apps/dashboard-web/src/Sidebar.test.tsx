@@ -32,15 +32,29 @@ describe("Sidebar", () => {
     expect(html).not.toContain("<a ");
   });
 
+  function seededWith(capabilities: number): QueryClient {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+      { id: "g1", name: "サーバー", isManaged: true, iconUrl: null, capabilities },
+    ]);
+    return queryClient;
+  }
+
   test("guildId指定時はログ機能がログ一覧画面へのリンクになる", () => {
-    const html = renderSidebar(new QueryClient(), "g1");
+    const html = renderSidebar(seededWith(CAPABILITIES.VIEW_LOGS), "g1");
     expect(html).toContain('href="/guilds/g1/logs"');
   });
 
   test("guildId指定時はアクセス権限画面へのリンクが表示される", () => {
-    const html = renderSidebar(new QueryClient(), "g1");
+    const html = renderSidebar(seededWith(CAPABILITIES.MANAGE_ACCESS), "g1");
     expect(html).toContain('href="/guilds/g1/access"');
     expect(html).toContain("アクセス権限");
+  });
+
+  test("guildId指定時、権限が分かるまで(サーバー一覧の取得中)は項目を出さない(リロード時のちらつき防止)", () => {
+    const html = renderSidebar(new QueryClient(), "g1");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("アクセス権限");
   });
 
   test("guildId未指定時はアクセス権限画面へのリンクにならない", () => {
