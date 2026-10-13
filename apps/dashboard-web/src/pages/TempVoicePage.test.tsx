@@ -124,6 +124,17 @@ describe("TempVoicePage", () => {
     expect(html).not.toContain("2人");
   });
 
+  test("同期済みで在室者0人のVCは削除待ちと表示する", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
+      { ...activeChannel(guildId), members: [] },
+    ]);
+
+    expect(renderPage(guildId, queryClient)).toContain("誰もいません。まもなく自動で削除されます。");
+  });
+
   test("状態未同期のチャンネルでもチップなしで崩れずに表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";
@@ -135,7 +146,8 @@ describe("TempVoicePage", () => {
     const html = renderPage(guildId, queryClient);
 
     expect(html).toContain("YoMiのVC");
-    expect(html).toContain("誰もいません。まもなく自動で削除されます。");
+    expect(html).toContain("在室状況を取得できません。");
+    expect(html).not.toContain("まもなく自動で削除されます");
     expect(html).not.toContain("kbps");
     expect(html).not.toContain("無制限");
     expect(html).not.toContain('aria-label="ロック中"');

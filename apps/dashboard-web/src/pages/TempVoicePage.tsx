@@ -175,8 +175,10 @@ function ActiveChannelsTab({
                   </span>
                 </div>
                 {channel.members.length === 0 ? (
-                  // 無人の一時VCは削除待ち(#411)。空欄のままにせず状態を伝える。
-                  <p className="text-muted-foreground px-2 py-1.5 text-sm">誰もいません。まもなく自動で削除されます。</p>
+                  // 状態未同期(bot停止中・作成直後)はAPIがuserLimit: nullで返すので、無人(削除待ち、#411)と区別する。
+                  <p className="text-muted-foreground px-2 py-1.5 text-sm">
+                    {channel.userLimit === null ? "在室状況を取得できません。" : "誰もいません。まもなく自動で削除されます。"}
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1">
                     {channel.members.map((m) => (
