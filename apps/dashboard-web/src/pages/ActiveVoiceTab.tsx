@@ -52,7 +52,16 @@ export function VoiceMemberRow({ member: m, dimmed = false, badge }: { member: V
   );
 }
 
-export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVoiceChannel[]; now: Date }) {
+export function ActiveVoiceView({
+  channels,
+  now,
+  tempVoiceChannelIds = new Set(),
+}: {
+  channels: readonly ActiveVoiceChannel[];
+  now: Date;
+  /** 一時VCのchannelId。該当チャンネルに「一時VC」バッジを付ける。 */
+  tempVoiceChannelIds?: ReadonlySet<string>;
+}) {
   if (channels.length === 0) {
     return <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">現在VCにいるメンバーはいません。</p>;
   }
@@ -71,6 +80,9 @@ export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVo
                 <span className="truncate text-sm font-semibold">{channel.channelName}</span>
                 <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{channel.members.length}人</span>
                 {channel.afk && <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">AFK</span>}
+                {tempVoiceChannelIds.has(channel.channelId) && (
+                  <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">一時VC</span>
+                )}
               </div>
               <span className="text-muted-foreground text-xs whitespace-nowrap">
                 継続{" "}
@@ -96,7 +108,12 @@ export function ActiveVoiceTab({ guildId, now }: { guildId: string; now: Date })
     ...trpc.activity.activeVoice.queryOptions({ guildId }),
     placeholderData: keepPreviousData,
   });
+  // 一時VCかどうかの判定用。バッジは補助表示なので、取得できなくてもアクティブVC自体は表示する。
+  // VIEW_TEMP_VOICEが無ければAPIは自分がオーナーのVCしか返さないため、他人の一時VCにはバッジが付かない。
+  // Redis由来でWSの無効化対象外のため、一時VCページと同じく10秒ごとに再取得する(後から作られた一時VCにもバッジを付ける)。
+  const tempVoiceQuery = useQuery({ ...trpc.tempVoice.listActiveChannels.queryOptions({ guildId }), refetchInterval: 10_000 });
   if (query.isPending) return <Loading />;
   if (query.isError) return <ErrorState subject="アクティブVC" onRetry={() => void query.refetch()} />;
-  return <ActiveVoiceView channels={query.data} now={now} />;
+  const tempVoiceChannelIds = new Set(tempVoiceQuery.data?.map((c) => c.channelId));
+  return <ActiveVoiceView channels={query.data} now={now} tempVoiceChannelIds={tempVoiceChannelIds} />;
 }
