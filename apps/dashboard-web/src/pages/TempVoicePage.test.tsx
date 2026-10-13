@@ -39,6 +39,26 @@ function seedCommonQueries(queryClient: QueryClient, guildId: string): void {
   ]);
 }
 
+function activeChannel(guildId: string) {
+  const base = { avatarUrl: null, selfMute: false, serverMute: false, selfDeaf: false, serverDeaf: false, streaming: false, video: false };
+  return {
+    channelId: "vc-2",
+    guildId,
+    ownerId: "owner-1",
+    createdAt: "2026-09-24T00:00:00.000Z",
+    channelName: "YoMiのVC",
+    ownerName: "YoMi",
+    userLimit: 5,
+    bitrate: 64000,
+    isLocked: true,
+    isHidden: true,
+    members: [
+      { ...base, userId: "owner-1", name: "YoMi", selfMute: true },
+      { ...base, userId: "u2", name: "Bob" },
+    ],
+  };
+}
+
 describe("TempVoicePage", () => {
   test("未設定時、一覧タブの先頭に設定を促す案内が表示される", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
@@ -71,9 +91,7 @@ describe("TempVoicePage", () => {
       defaultUserLimit: 0,
       defaultBitrate: null,
     });
-    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
-      { channelId: "vc-2", guildId, ownerId: "owner-1", createdAt: "2026-09-24T00:00:00.000Z", memberCount: 3 },
-    ]);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [activeChannel(guildId)]);
     seedCommonQueries(queryClient, guildId);
 
     const html = renderPage(guildId, queryClient);
@@ -82,13 +100,48 @@ describe("TempVoicePage", () => {
     expect(html).not.toContain("一時VCがまだ設定されていません");
   });
 
-  test("VIEW_TEMP_VOICEのみでは一覧だけを表示し、設定・拒否禁止ロール・強制削除・未設定案内は出さない(issue #527)", () => {
+  test("一覧はカード表示で、メンバー・オーナーバッジ・ロックアイコン・チップを出し、人数バッジは出さない", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [activeChannel(guildId)]);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).toContain("YoMiのVC");
+    expect(html).toContain("YoMi");
+    expect(html).toContain("オーナー");
+    expect(html).toContain("Bob");
+    expect(html).toContain('aria-label="ロック中"');
+    expect(html).toContain("上限 5人");
+    expect(html).toContain("64 kbps");
+    expect(html).toContain("非表示");
+    expect(html).toContain('aria-label="ミュート"');
+    expect(html).toContain("継続");
+    expect(html).not.toContain("2人");
+  });
+
+  test("状態未同期のチャンネルでもチップなしで崩れずに表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const guildId = "g1";
     seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
     queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
-      { channelId: "vc-2", guildId, ownerId: "owner-1", createdAt: "2026-09-24T00:00:00.000Z", memberCount: 3 },
+      { ...activeChannel(guildId), userLimit: null, bitrate: null, isLocked: false, isHidden: false, members: [] },
     ]);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).toContain("YoMiのVC");
+    expect(html).not.toContain("kbps");
+    expect(html).not.toContain("無制限");
+    expect(html).not.toContain('aria-label="ロック中"');
+  });
+
+  test("VIEW_TEMP_VOICEのみでは一覧だけを表示し、設定・拒否禁止ロール・強制削除・未設定案内は出さない(issue #527)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [activeChannel(guildId)]);
 
     const html = renderPage(guildId, queryClient);
 
