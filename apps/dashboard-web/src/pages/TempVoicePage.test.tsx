@@ -135,6 +135,7 @@ describe("TempVoicePage", () => {
     const html = renderPage(guildId, queryClient);
 
     expect(html).toContain("YoMiのVC");
+    expect(html).toContain("誰もいません。まもなく自動で削除されます。");
     expect(html).not.toContain("kbps");
     expect(html).not.toContain("無制限");
     expect(html).not.toContain('aria-label="ロック中"');

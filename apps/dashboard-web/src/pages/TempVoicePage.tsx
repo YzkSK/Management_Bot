@@ -174,11 +174,16 @@ function ActiveChannelsTab({
                     </b>
                   </span>
                 </div>
-                <ul className="flex flex-col gap-1">
-                  {channel.members.map((m) => (
-                    <VoiceMemberRow key={m.userId} member={m} badge={m.userId === channel.ownerId ? "オーナー" : undefined} />
-                  ))}
-                </ul>
+                {channel.members.length === 0 ? (
+                  // 無人の一時VCは削除待ち(#411)。空欄のままにせず状態を伝える。
+                  <p className="text-muted-foreground px-2 py-1.5 text-sm">誰もいません。まもなく自動で削除されます。</p>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {channel.members.map((m) => (
+                      <VoiceMemberRow key={m.userId} member={m} badge={m.userId === channel.ownerId ? "オーナー" : undefined} />
+                    ))}
+                  </ul>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
                     {channel.userLimit !== null && (
