@@ -24,6 +24,46 @@ export function tabOfStatus(status: string): ScheduledPostTab | null {
   }
 }
 
+/** タブごとの件数。どのタブにも属さない状態は数えない。 */
+export function countByTab(rows: readonly { status: string }[]): Record<ScheduledPostTab, number> {
+  const counts: Record<ScheduledPostTab, number> = { pending: 0, posted: 0, failed: 0, cancelled: 0 };
+  for (const row of rows) {
+    const tab = tabOfStatus(row.status);
+    if (tab) counts[tab] += 1;
+  }
+  return counts;
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * 予約日時までの相対時間。未来は「あと18時間」(強調対象)、過去は「2日前」(投稿済みは「2日前に投稿」)。
+ * 投稿待ちで予約時刻を過ぎている間は「まもなく投稿」。
+ */
+export function describeRelativeTime(
+  scheduledAt: string | Date,
+  status: string,
+  now: Date = new Date(),
+): { text: string; upcoming: boolean } {
+  const diff = new Date(scheduledAt).getTime() - now.getTime();
+  if (diff > 0) {
+    if (diff < HOUR_MS) return { text: `あと${Math.max(1, Math.ceil(diff / MINUTE_MS))}分`, upcoming: true };
+    if (diff < 2 * DAY_MS) return { text: `あと${Math.floor(diff / HOUR_MS)}時間`, upcoming: true };
+    return { text: `あと${Math.floor(diff / DAY_MS)}日`, upcoming: true };
+  }
+  if (tabOfStatus(status) === "pending") return { text: "まもなく投稿", upcoming: true };
+  const past = -diff;
+  const ago =
+    past < HOUR_MS
+      ? `${Math.max(1, Math.floor(past / MINUTE_MS))}分前`
+      : past < DAY_MS
+        ? `${Math.floor(past / HOUR_MS)}時間前`
+        : `${Math.floor(past / DAY_MS)}日前`;
+  return { text: status === "posted" ? `${ago}に投稿` : ago, upcoming: false };
+}
+
 const FAILURE_LABELS: Record<string, string> = SCHEDULED_POST_FAILURE_LABELS;
 
 /** 一覧の「状態」列に出す補足(失敗原因・取り消した人)。 */

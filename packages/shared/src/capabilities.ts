@@ -17,6 +17,7 @@ export const CAPABILITIES = {
   // 1 << 10: 旧MANAGE_GUILD_SETTINGS(サーバー単位の設定項目が無いため削除。issue #527)
   VIEW_SCHEDULED_POSTS: 1 << 11,
   MANAGE_SCHEDULED_POSTS: 1 << 12,
+  VIEW_AUDIT_LOG: 1 << 13,
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
@@ -25,6 +26,13 @@ export const ALL_CAPABILITIES: number = Object.values(CAPABILITIES).reduce(
   (acc, bit) => acc | bit,
   0,
 );
+
+/**
+ * ギルドオーナーのみが付与・剥奪できるcapability(issue #618)。通常のcanGrantCapabilitiesによる
+ * 委譲の対象外で、付与・剥奪の可否はgrantCapabilities/revokeCapabilityGrantがctx.isOwnerで判定する。
+ * #619の「カスタム機能の作成」も将来ここに足す共通の仕組み。
+ */
+export const OWNER_ONLY_CAPABILITIES: number = CAPABILITIES.VIEW_AUDIT_LOG;
 
 /** @everyone に付与するデフォルトcapabilities。閲覧系の基本機能のみ。 */
 export const BASELINE_EVERYONE_CAPABILITIES: number =

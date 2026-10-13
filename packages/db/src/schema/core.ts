@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -97,3 +98,31 @@ export const statusViewers = pgTable("status_viewers", {
   discordUsername: text("discord_username").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * 操作履歴・アクセス履歴(issue #618)。追記専用で、UPDATE/DELETEはDBトリガーで制限する
+ * (pending→確定の1回のoutcome更新と、保存期間切れ行の削除のみ許可。マイグレーション参照)。
+ * guildsへのFKは張らない: ギルド削除のcascadeで履歴が消える/追記専用トリガーと衝突するため。
+ * actor_idがNULLの行はBot自身の自動操作を表す。
+ */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id").notNull(),
+    kind: text("kind").notNull(),
+    actorId: text("actor_id"),
+    actorName: text("actor_name").notNull(),
+    feature: text("feature").notNull(),
+    action: text("action").notNull(),
+    outcome: text("outcome").notNull(),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_guild_created_at_idx").on(table.guildId, table.createdAt.desc()),
+    check("audit_logs_kind_check", sql`${table.kind} IN ('action', 'access')`),
+    check("audit_logs_outcome_check", sql`${table.outcome} IN ('pending', 'success', 'failure', 'denied')`),
+  ],
+);

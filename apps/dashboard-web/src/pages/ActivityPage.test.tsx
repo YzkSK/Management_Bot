@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as React from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { forbiddenError, seedQueryError } from "../test-helpers.js";
 import { trpc } from "../trpc.js";
 import { ActiveVoiceView } from "./ActiveVoiceTab.js";
 import { ActivityPage, MemberDetailView, RankingTable } from "./ActivityPage.js";
@@ -74,6 +75,24 @@ describe("ActivityPage", () => {
     expect(html).toContain("43");
     expect(html.indexOf("アクティブメンバー")).toBeLessThan(html.indexOf("発言数"));
     expect(html).not.toContain("メンバーランキング");
+  });
+
+  test("権限がない(FORBIDDEN)ときは統計などの本体を描画せず権限なしの表示だけを出す(#645)", () => {
+    // 失敗状態のクエリはマウント時に再取得されて待機中に戻るため、SSRで失敗状態を保つ。
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retryOnMount: false } } });
+    const range = toRange("7d", now);
+    queryClient.setQueryData(trpc.activity.serverSummary.queryOptions({ guildId, ...range }).queryKey, {
+      totals: { messageCount: 1210, voiceSeconds: 57 * 3600, activeMembers: 43 },
+      series: [],
+    });
+    seedQueryError(queryClient, trpc.activity.activeVoice.queryOptions({ guildId }).queryKey, forbiddenError());
+
+    const html = renderPage(queryClient);
+
+    expect(html).toContain("このページを見る権限がありません");
+    expect(html).toContain("アクティビティの閲覧");
+    expect(html).not.toContain("アクティビティモニター");
+    expect(html).not.toContain("1,210");
   });
 });
 

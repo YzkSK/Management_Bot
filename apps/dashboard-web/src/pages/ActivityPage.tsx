@@ -15,9 +15,11 @@ import {
   parseActivityNotification,
   longestLive,
 } from "./activity-live.js";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { buildGuildWsUrl } from "./log-notifications.js";
 import { visiblePages } from "./pagination.js";
 import { useGuildWs } from "./use-guild-ws.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -233,7 +235,9 @@ export function RankingTable({
       {query.isPending || !avatars.ready || !liveReady ? (
         <Loading />
       ) : query.isError ? (
-        <p className="text-destructive p-4 text-sm">ランキングの取得に失敗しました。</p>
+        <div className="p-4">
+          <InlineError summary="ランキングを読み込めませんでした。" onRetry={() => void query.refetch()} />
+        </div>
       ) : query.data.rows.length === 0 ? (
         <p className="text-muted-foreground p-8 text-center text-sm">この期間の活動はありません。</p>
       ) : (
@@ -354,7 +358,7 @@ function ServerStatsTab({ guildId, range, now, live }: { guildId: string; range:
           <ChartSkeleton title={range.granularity === "hour" ? "推移(時間別)" : "推移(日別)"} />
         </Loading>
       ) : query.isError ? (
-        <p className="text-destructive text-sm">サーバー統計の取得に失敗しました。</p>
+        <ErrorState subject="サーバー統計" onRetry={() => void query.refetch()} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -408,6 +412,7 @@ function useMemberOptions(guildId: string) {
     options: Object.values(pages).flat(),
     isPending: query.isPending && Object.keys(pages).length === 0,
     isError: query.isError,
+    refetch: query.refetch,
     nextAfter: query.data?.nextAfter,
     isFetchingNextPage: query.isFetching,
     loadNextPage: () => setAfter(query.data?.nextAfter),
@@ -506,9 +511,7 @@ function MemberTab({
         <ChartSkeleton title="日別" height={180} />
       </Loading>
     ) : detailQuery.isError ? (
-      <p key="detail" className="text-destructive text-sm">
-        メンバーのアクティビティの取得に失敗しました。
-      </p>
+      <InlineError key="detail" summary="メンバーのアクティビティを読み込めませんでした。" onRetry={() => void detailQuery.refetch()} />
     ) : (
       <MemberDetailView key="detail" detail={detailQuery.data} range={range} now={now} liveSeconds={live.get(userId)} />
     );
@@ -555,7 +558,9 @@ function MemberTab({
           </Button>
         )}
       </div>
-      {memberOptions.isError && <p className="text-destructive text-sm">メンバー候補の取得に失敗しました。</p>}
+      {memberOptions.isError && (
+        <InlineError summary="メンバー候補を読み込めませんでした。" onRetry={() => void memberOptions.refetch()} />
+      )}
       {/* 未選択時はランキングから選ばせるので上に、選択後は詳細を主役にしてランキングを下に置く。
           keyで並べ替えるのでランキングは再マウントされず(ページ位置を保つ)、DOM順=表示順になる。 */}
       {userId === "" ? [rankingBlock, detailBlock] : [detailBlock, rankingBlock]}
@@ -631,8 +636,13 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
   useActivityNotifications(guildId, !fixedNow, () => setRangeNow(new Date()));
 
   // 進行中のVC区間。ActiveVoiceTabと同じクエリキーなのでキャッシュを共有する。
+  // アクティビティの各クエリは同じ閲覧権限なので、これがFORBIDDENならページ全体を権限なし表示にする。
   const activeVoice = useQuery(trpc.activity.activeVoice.queryOptions({ guildId }));
   const live = useMemo(() => liveVoiceSeconds(activeVoice.data ?? [], clock), [activeVoice.data, clock]);
+
+  if (isForbiddenError(activeVoice.error)) {
+    return <ForbiddenState pageName="アクティビティ" capabilities={["VIEW_ACTIVITY"]} />;
+  }
 
   const changePeriod = (next: ActivityPeriod) => {
     setPeriod(next);

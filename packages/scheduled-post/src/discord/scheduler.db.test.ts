@@ -5,7 +5,7 @@ import type { ScheduledPostEventRecordedEvent } from "@management-bot/shared";
 import { eq } from "drizzle-orm";
 import { cancelScheduledPost, getSettings, saveSettings } from "../application/index.js";
 import type { MentionMessage, MentionSelection, PostFacts } from "../domain/index.js";
-import { handleAdminCancelNotification, processPendingAdminCancels } from "./dashboard-action-listener.js";
+import { handleAdminCancelNotification, processPendingCancelNotices } from "./dashboard-action-listener.js";
 import { cancelOwnPostAction, createPostAction, editPostAction } from "./schedule-actions.js";
 import {
   createScheduler,
@@ -175,6 +175,7 @@ describe("予約投稿の複合シナリオ", () => {
     const post = await reserve(h, 5);
     const cancelled = await cancelOwnPostAction(h.deps, { id: post.id, guildId, authorId: "u1", authorName: "ゆずき" });
     expect(cancelled?.status).toBe("cancelled");
+    expect(cancelled?.cancelNotifiedAt).not.toBeNull();
 
     h.clock.now = new Date(T0.getTime() + minutes(6));
     await runSchedulerTick(h.deps);
@@ -418,8 +419,8 @@ describe("予約投稿の複合シナリオ", () => {
     };
     const before = h.events.length;
 
-    await processPendingAdminCancels({ ...h.deps, discord: adminCancel });
-    await processPendingAdminCancels({ ...h.deps, discord: adminCancel });
+    await processPendingCancelNotices({ ...h.deps, discord: adminCancel });
+    await processPendingCancelNotices({ ...h.deps, discord: adminCancel });
 
     expect(sentDms).toEqual(["u1"]);
     expect(h.events).toHaveLength(before + 1);
@@ -454,14 +455,14 @@ describe("予約投稿の複合シナリオ", () => {
     expect(sentDms).toEqual(["u1"]);
   });
 
-  test("本人取り消し(by=author)は管理者取り消しの回収対象にならない", async () => {
+  test("/scheduleの本人取り消し(notifiedInline)はcancel_notified_atが埋まり、tick回収の対象にならない", async () => {
     const h = createHarness();
     const post = await reserve(h, 30);
-    await cancelScheduledPost(db, { id: post.id, by: "author", guildId, authorId: "u1", now: T0 });
+    await cancelScheduledPost(db, { id: post.id, by: "author", guildId, authorId: "u1", now: T0, notifiedInline: true });
     const sentDms: string[] = [];
     const before = h.events.length;
 
-    await processPendingAdminCancels({
+    await processPendingCancelNotices({
       ...h.deps,
       discord: {
         channelName: () => undefined,
@@ -474,7 +475,32 @@ describe("予約投稿の複合シナリオ", () => {
 
     expect(sentDms).toEqual([]);
     expect(h.events).toHaveLength(before);
-    expect((await statusOf(post.id))?.cancelNotifiedAt).toBeNull();
+    expect((await statusOf(post.id))?.cancelNotifiedAt).not.toBeNull();
+  });
+
+  test("Dashboardの本人取り消し(pg_notifyなし)はtick回収で1回だけログ発行され、DMは送られない", async () => {
+    const h = createHarness();
+    const post = await reserve(h, 30);
+    await cancelScheduledPost(db, { id: post.id, by: "author", guildId, authorId: "u1", now: T0 });
+    const sentDms: string[] = [];
+    const before = h.events.length;
+    const deps = {
+      ...h.deps,
+      discord: {
+        channelName: () => undefined,
+        authorName: () => undefined,
+        sendDm: async (userId: string) => {
+          sentDms.push(userId);
+        },
+      },
+    };
+
+    await processPendingCancelNotices(deps);
+    await processPendingCancelNotices(deps);
+
+    expect(sentDms).toEqual([]);
+    expect(h.events).toHaveLength(before + 1);
+    expect((await statusOf(post.id))?.cancelNotifiedAt).not.toBeNull();
   });
 
   test("管理者取り消しの通知は、DMが届かなくても例外にならず、別ギルドの予約は処理しない", async () => {

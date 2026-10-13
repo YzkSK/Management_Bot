@@ -29,6 +29,10 @@ export function shouldRetryDashboardQuery(failureCount: number, error: unknown):
   );
 }
 
+export function isForbiddenError(error: unknown): boolean {
+  return error instanceof TRPCClientError && error.data?.code === "FORBIDDEN";
+}
+
 export function createDashboardQueryClient(onUnauthorized: (error: unknown) => void): QueryClient {
   const onError = (error: unknown) => {
     if (isUnauthorizedError(error)) {
@@ -37,7 +41,15 @@ export function createDashboardQueryClient(onUnauthorized: (error: unknown) => v
   };
 
   return new QueryClient({
-    queryCache: new QueryCache({ onError }),
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        onError(error);
+        // 権限を失った後も、以前取得できたデータが画面に残らないよう消す(エラー状態は保つ)。
+        if (isForbiddenError(error) && query.state.data !== undefined) {
+          query.setState({ ...query.state, data: undefined, dataUpdatedAt: 0 });
+        }
+      },
+    }),
     mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {

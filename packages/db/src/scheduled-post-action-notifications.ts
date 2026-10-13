@@ -5,6 +5,8 @@ import { listenForNotification } from "./pg-notify.js";
 const adminCancelSchema = z.object({
   guildId: discordIdSchema,
   postId: z.uuid(),
+  /** Dashboardからの本人取り消しは"author"(DMなし・ログイベントのみ)。省略は管理者取り消し。取りこぼしはtick回収しない。 */
+  by: z.enum(["admin", "author"]).optional(),
 });
 
 export type ScheduledPostAdminCancelNotification = z.infer<typeof adminCancelSchema>;

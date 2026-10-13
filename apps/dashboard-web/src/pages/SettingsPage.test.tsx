@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LogCategory } from "@management-bot/shared";
+import { forbiddenError, seedQueryError } from "../test-helpers.js";
 import { trpc } from "../trpc.js";
 import { SettingsPage } from "./SettingsPage.js";
 
@@ -55,9 +56,29 @@ describe("SettingsPage", () => {
     expect(html).toContain("読み込み中");
   });
 
-  test("channelOptionsのaccessStatusがforbiddenならBot権限不足メッセージを表示する", () => {
+  test("channelOptionsのaccessStatusがforbiddenならBot権限不足の表示を出す", () => {
     const html = renderPage("g1", seeded({ accessStatus: "forbidden" }));
-    expect(html).toContain("Botに権限がないため");
+    expect(html).toContain("Botの権限が足りません");
+    // どの権限が足りないかはDiscordの403からは特定できないため、権限名は出さない
+    expect(html).toContain("Botに必要な権限がないため");
+    expect(html).not.toContain("チャンネルを見る");
+  });
+
+  test("権限がない(FORBIDDEN)ときは設定フォームを描画せず権限なしの表示だけを出す", () => {
+    const queryClient = seeded();
+    seedQueryError(queryClient, trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, forbiddenError());
+    const html = renderPage("g1", queryClient);
+    expect(html).toContain("このページを見る権限がありません");
+    expect(html).toContain("ログ設定の管理");
+    expect(html).not.toContain("一括設定");
+  });
+
+  test("権限以外の取得失敗では再読み込み付きの取得エラーを出す", () => {
+    const queryClient = seeded();
+    seedQueryError(queryClient, trpc.logging.listRetentionSettings.queryOptions({ guildId: "g1" }).queryKey, new Error("boom"));
+    const html = renderPage("g1", queryClient);
+    expect(html).toContain("ログ設定を読み込めませんでした");
+    expect(html).toContain("再読み込み");
   });
 
   test("カテゴリごとの保持期間・出力先チャンネルの入力欄を描画する", () => {

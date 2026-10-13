@@ -1,4 +1,4 @@
-import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
 import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -76,6 +76,7 @@ export const tempVoiceRouter = router({
         if (!validated.ok) throw new TRPCError({ code: "BAD_REQUEST", message: validated.message });
       }
 
+      await captureAuditBefore(ctx, () => getTempVoiceConfig(ctx.db, input.guildId));
       await upsertTempVoiceConfig(ctx.db, input.guildId, {
         createChannelId: input.createChannelId,
         categoryId: input.categoryId,
@@ -103,7 +104,10 @@ export const tempVoiceRouter = router({
    * 解除後はDashboard上で自動セットアップ画面が再表示される。名前テンプレート等の共通設定は保持する。
    */
   clearConfig: tempVoiceManageProcedure(guildIdInput)
-    .mutation(({ ctx, input }) => clearTempVoiceCreateChannel(ctx.db, input.guildId)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => getTempVoiceConfig(ctx.db, input.guildId));
+      return clearTempVoiceCreateChannel(ctx.db, input.guildId);
+    }),
 
   getDenyProtectedRoles: tempVoiceManageProcedure(guildIdInput)
     .query(({ ctx, input }) => listDenyProtectedRoleIds(ctx.db, input.guildId)),
@@ -117,6 +121,7 @@ export const tempVoiceRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: `roleId ${roleId} is not a role of this guild` });
         }
       }
+      await captureAuditBefore(ctx, () => listDenyProtectedRoleIds(ctx.db, input.guildId));
       await replaceDenyProtectedRoles(ctx.db, input.guildId, input.roleIds);
     }),
 

@@ -4,6 +4,7 @@ import {
   discordIdSchema,
   hasCapabilityPrerequisites,
   isKnownCapabilityMask,
+  OWNER_ONLY_CAPABILITIES,
 } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -16,7 +17,7 @@ import {
   type CapabilityGrantTargetType,
 } from "./capability-grants.js";
 import type { DashboardAccessContext } from "./trpc.js";
-import { protectedProcedure, requireCapability, router } from "./trpc.js";
+import { captureAuditBefore, protectedProcedure, requireCapability, router } from "./trpc.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
@@ -76,6 +77,20 @@ async function assertGrantTargetExists(
   }
 }
 
+function withoutOwnerOnly(caps: number): number {
+  return caps & ~OWNER_ONLY_CAPABILITIES;
+}
+
+/** オーナー専用bit(OWNER_ONLY_CAPABILITIES)を変更する付与・剥奪は、ギルドオーナーのみ許可する(issue #618)。 */
+export function assertOwnerForOwnerOnlyChange(isOwner: boolean, currentCaps: number, nextCaps: number): void {
+  if (!isOwner && (currentCaps & OWNER_ONLY_CAPABILITIES) !== (nextCaps & OWNER_ONLY_CAPABILITIES)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "only the guild owner can grant or revoke owner-only capabilities",
+    });
+  }
+}
+
 // requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
 // (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
 const manageAccessProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
@@ -98,7 +113,7 @@ export const capabilityGrantsRouter = router({
    * この値はUIのdisabled制御用のヒントに過ぎない。
    */
   getMyCapabilities: manageAccessProcedure(guildIdInput)
-    .query(({ ctx }) => ({ capabilities: ctx.capabilities })),
+    .query(({ ctx }) => ({ capabilities: ctx.capabilities, isOwner: ctx.isOwner })),
 
   /**
    * Dashboard UIでのID直接入力を禁止するため、選択肢(実在ロール)をこのprocedure経由で提供する。
@@ -149,7 +164,8 @@ export const capabilityGrantsRouter = router({
       if (!hasCapabilityPrerequisites(input.capabilities)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "capabilities lacks a required view capability" });
       }
-      if (!canGrantCapabilities(ctx.capabilities, input.capabilities)) {
+      // オーナー専用bitは委譲の対象外のため、通常の部分集合判定からは除外する(可否は下のisOwner判定で決める)。
+      if (!canGrantCapabilities(withoutOwnerOnly(ctx.capabilities), withoutOwnerOnly(input.capabilities))) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "cannot grant capabilities you do not have yourself",
@@ -163,12 +179,14 @@ export const capabilityGrantsRouter = router({
         targetType: input.targetType,
         targetId: input.targetId,
       });
-      if (existing && !canGrantCapabilities(ctx.capabilities, existing.capabilities)) {
+      if (existing && !canGrantCapabilities(withoutOwnerOnly(ctx.capabilities), withoutOwnerOnly(existing.capabilities))) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "cannot overwrite a grant that includes capabilities you do not have yourself",
         });
       }
+      assertOwnerForOwnerOnlyChange(ctx.isOwner, existing?.capabilities ?? 0, input.capabilities);
+      await captureAuditBefore(ctx, async () => existing);
       await assertGrantTargetExists(ctx, input.guildId, input.targetType, input.targetId);
       await grantCapabilities(ctx.db, input);
     }),
@@ -179,12 +197,15 @@ export const capabilityGrantsRouter = router({
       if (!existing) {
         return;
       }
-      if (!canGrantCapabilities(ctx.capabilities, existing.capabilities)) {
+      if (!canGrantCapabilities(withoutOwnerOnly(ctx.capabilities), withoutOwnerOnly(existing.capabilities))) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "cannot revoke capabilities you do not have yourself",
         });
       }
+      // 剥奪後の値は0。既存にオーナー専用bitが含まれる場合は非オーナーは剥奪できない。
+      assertOwnerForOwnerOnlyChange(ctx.isOwner, existing.capabilities, 0);
+      await captureAuditBefore(ctx, async () => existing);
       await revokeCapabilityGrant(ctx.db, input);
     }),
 });

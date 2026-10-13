@@ -71,6 +71,30 @@ describe("createDashboardQueryClient", () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
+  test("権限を失ってFORBIDDENになったら、以前取得できたデータを消す(エラー状態は保つ)", async () => {
+    const client = createDashboardQueryClient(() => {});
+    client.setQueryData(["logs"], { entries: ["secret"] });
+
+    await client
+      .fetchQuery({ queryKey: ["logs"], queryFn: () => Promise.reject(forbiddenError()), retry: false, staleTime: 0 })
+      .catch(() => {});
+
+    const state = client.getQueryCache().find({ queryKey: ["logs"] })?.state;
+    expect(state?.data).toBeUndefined();
+    expect(state?.status).toBe("error");
+  });
+
+  test("FORBIDDEN以外のエラーでは以前のデータを残す", async () => {
+    const client = createDashboardQueryClient(() => {});
+    client.setQueryData(["logs"], { entries: ["ok"] });
+
+    await client
+      .fetchQuery({ queryKey: ["logs"], queryFn: () => Promise.reject(internalServerError()), retry: false, staleTime: 0 })
+      .catch(() => {});
+
+    expect(client.getQueryData(["logs"])).toEqual({ entries: ["ok"] });
+  });
+
   test("mutationがUNAUTHORIZEDで失敗してもonUnauthorizedが呼ばれる", async () => {
     const onUnauthorized = mock();
     const client = createDashboardQueryClient(onUnauthorized);
