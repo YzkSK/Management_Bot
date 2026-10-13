@@ -151,6 +151,18 @@ describe("TempVoicePage", () => {
     expect(html).not.toContain("一時VCがまだ設定されていません");
   });
 
+  test("閲覧権限が無ければ自分がオーナーのVCとして表示する(issue #649)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, 0);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, []);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html).toContain("あなたがオーナーの一時VCはありません");
+    expect(html).not.toContain("強制削除");
+  });
+
   test("guildIdが無い場合はエラーを表示する", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const html = renderToStaticMarkup(

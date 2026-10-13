@@ -123,6 +123,9 @@ function ActiveChannelsTab({
 
   // 継続時間の基準時刻。一覧は10秒ごとに再取得されるため、そのたびに更新される。
   const now = new Date();
+  // VIEW_TEMP_VOICEが無ければAPIは自分がオーナーのVCだけを返す。
+  const capabilities = useGuildCapabilities(guildId);
+  const ownOnly = capabilities !== undefined && !hasCapability(capabilities, CAPABILITIES.VIEW_TEMP_VOICE);
 
   if (listQuery.isPending) return <Loading />;
   if (isForbiddenError(listQuery.error)) {
@@ -134,10 +137,13 @@ function ActiveChannelsTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-muted-foreground text-sm">現在Discord上に存在する一時VCです。</p>
+      <p className="text-muted-foreground text-sm">
+        {ownOnly ? "あなたがオーナーの一時VCです。" : "現在Discord上に存在する一時VCです。"}
+      </p>
       {listQuery.data.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
-          現在アクティブな一時VCはありません。作成用チャンネルに入室すると自動で作成されます。
+          {ownOnly ? "あなたがオーナーの一時VCはありません。" : "現在アクティブな一時VCはありません。"}
+          作成用チャンネルに入室すると自動で作成されます。
         </p>
       ) : (
         <div className="grid items-start gap-3 md:grid-cols-2">

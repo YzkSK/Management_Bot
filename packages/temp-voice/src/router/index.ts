@@ -1,5 +1,5 @@
-import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
-import { CAPABILITIES, discordIdSchema } from "@management-bot/shared";
+import { captureAuditBefore, protectedProcedure, requireCapability, requireGuildMember, router } from "@management-bot/dashboard-access";
+import { CAPABILITIES, discordIdSchema, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -51,8 +51,6 @@ const forceDeleteInput = z.object({ guildId: discordIdSchema, channelId: discord
 
 // requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する必要がある
 // (tRPCでは`.input()`より前のmiddlewareにinputが渡らない)。そのためinputを受け取る関数の形にしている。
-const tempVoiceViewProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
-  protectedProcedure.input(input).use(requireCapability(CAPABILITIES.VIEW_TEMP_VOICE));
 const tempVoiceManageProcedure = <TInput extends z.ZodType<{ guildId: string }>>(input: TInput) =>
   protectedProcedure.input(input).use(requireCapability(CAPABILITIES.MANAGE_TEMP_VOICE));
 
@@ -141,9 +139,15 @@ export const tempVoiceRouter = router({
       await replaceDenyProtectedRoles(ctx.db, input.guildId, input.roleIds);
     }),
 
-  listActiveChannels: tempVoiceViewProcedure(guildIdInput)
+  /** VIEW_TEMP_VOICEが無いメンバーには、自分がオーナーのVCだけを返す(予約投稿のlistと同じ設計)。 */
+  listActiveChannels: protectedProcedure
+    .input(guildIdInput)
+    .use(requireGuildMember())
     .query(async ({ ctx, input }) => {
-      const rows = await listActiveTempVoiceChannels(ctx.db, input.guildId);
+      const canViewAll = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_TEMP_VOICE);
+      const rows = (await listActiveTempVoiceChannels(ctx.db, input.guildId)).filter(
+        (row) => canViewAll || row.ownerId === ctx.discordUserId,
+      );
       if (rows.length === 0) return [];
       // 一覧でIDをそのまま見せないよう名前を付ける。解決できなければ未設定(画面側でIDにフォールバック)。
       const [channels, ownerNames, states] = await Promise.all([

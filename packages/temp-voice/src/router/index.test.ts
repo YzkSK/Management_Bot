@@ -280,6 +280,17 @@ describe("tempVoiceRouter.listActiveChannels", () => {
 
     expect(result[0]).toMatchObject({ channelName: "YoMiのVC", ownerName: "YoMi" });
   });
+
+  test("VIEW_TEMP_VOICEが無いメンバーには自分がオーナーのVCだけを返す", async () => {
+    const ownId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId: ownId, guildId, controlChannelId: "control-1", ownerId: "user-1" });
+    await insertTempVoiceChannel(db, { channelId: `channel-${randomUUID()}`, guildId, controlChannelId: "control-2", ownerId: "owner-2" });
+    const caller = createCaller(buildContext());
+
+    const result = await caller.listActiveChannels({ guildId });
+
+    expect(result.map((r) => r.channelId)).toEqual([ownId]);
+  });
 });
 
 describe("tempVoiceRouter.forceDelete", () => {

@@ -84,7 +84,7 @@ export function App() {
           <Route path="moderation" element={<RequirePageAccess pageName="スパム対策" capability="MANAGE_MODERATION"><ModerationPage /></RequirePageAccess>} />
           <Route path="scheduled-post" element={<RequirePageAccess pageName="予約投稿"><ScheduledPostPage /></RequirePageAccess>} />
           <Route path="scheduled-post/settings" element={<RequirePageAccess pageName="予約投稿の設定" capability="MANAGE_SCHEDULED_POSTS"><ScheduledPostSettingsPage /></RequirePageAccess>} />
-          <Route path="temp-voice" element={<RequirePageAccess pageName="一時VC" capability="VIEW_TEMP_VOICE"><TempVoicePage /></RequirePageAccess>} />
+          <Route path="temp-voice" element={<RequirePageAccess pageName="一時VC"><TempVoicePage /></RequirePageAccess>} />
           <Route path="access" element={<RequirePageAccess pageName="アクセス権限" capability="MANAGE_ACCESS"><AccessPage /></RequirePageAccess>} />
           <Route path="audit-log" element={<RequirePageAccess pageName="操作履歴" capability="VIEW_AUDIT_LOG"><AuditLogPage /></RequirePageAccess>} />
         </Route>
