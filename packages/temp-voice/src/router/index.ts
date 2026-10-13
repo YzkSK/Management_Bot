@@ -43,10 +43,8 @@ export interface ActiveTempVoiceChannel {
   isLocked: boolean;
   isHidden: boolean;
   members: TempVoiceMemberState[];
-  /** 呼び出したユーザー自身がオーナーのVCか(「あなたのVC」表示用)。 */
+  /** 呼び出したユーザー自身がオーナーのVCか(「あなたのVC」表示・設定変更の可否)。 */
   isMine: boolean;
-  /** 呼び出したユーザーがこのVCの設定を変更できるか(オーナー本人またはMANAGE_TEMP_VOICE保持者)。 */
-  canEdit: boolean;
 }
 
 /** getChannelOverridesの1件。dashboard-apiの型生成でapplication層の型名を参照させないよう明示的に定義する。 */
@@ -97,11 +95,12 @@ const updateChannelInput = channelInput.extend({ action: tempVoiceChannelActionS
 const overrideTargetOptionsInput = channelInput.extend({ after: discordIdSchema.optional() });
 
 /**
- * オーナー本人またはMANAGE_TEMP_VOICE保持者のみがそのギルドの一時VCを編集できる(#649)。
+ * そのVCのオーナー本人のみが編集できる(#649)。MANAGE_TEMP_VOICE保持者・サーバーオーナーでも不可
+ * (Discordの制御パネルと同じくオーナー専用)。
  * requireCapabilityを通らないため操作履歴には記録されない(Discordボタン操作と同じ扱い)。
  */
 async function requireEditableChannel(
-  ctx: { db: Db; discordUserId: string; capabilities: number },
+  ctx: { db: Db; discordUserId: string },
   guildId: string,
   channelId: string,
 ) {
@@ -109,7 +108,7 @@ async function requireEditableChannel(
   if (!row || row.guildId !== guildId) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not an active temp voice channel of this guild" });
   }
-  if (row.ownerId !== ctx.discordUserId && !hasCapability(ctx.capabilities, CAPABILITIES.MANAGE_TEMP_VOICE)) {
+  if (row.ownerId !== ctx.discordUserId) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return row;
@@ -211,7 +210,6 @@ export const tempVoiceRouter = router({
     .use(requireGuildMember())
     .query(async ({ ctx, input }) => {
       const canViewAll = hasCapability(ctx.capabilities, CAPABILITIES.VIEW_TEMP_VOICE);
-      const canManage = hasCapability(ctx.capabilities, CAPABILITIES.MANAGE_TEMP_VOICE);
       const rows = (await listActiveTempVoiceChannels(ctx.db, input.guildId)).filter(
         (row) => canViewAll || row.ownerId === ctx.discordUserId,
       );
@@ -239,7 +237,6 @@ export const tempVoiceRouter = router({
           isHidden: state?.isHidden ?? false,
           members: state?.members ?? [],
           isMine: row.ownerId === ctx.discordUserId,
-          canEdit: canManage || row.ownerId === ctx.discordUserId,
         };
       });
     }),

@@ -201,9 +201,10 @@ function ActiveChannelsTab({
                     )}
                   </div>
                 </div>
-                {(channel.canEdit || canForceDelete) && (
+                {(channel.isMine || canForceDelete) && (
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {channel.canEdit && (
+                  {/* 設定変更はそのVCのオーナー本人のみ(管理者・サーバーオーナーでも不可)。 */}
+                  {channel.isMine && (
                     <EditChannelButton
                       guildId={guildId}
                       channel={{

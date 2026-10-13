@@ -55,7 +55,6 @@ function activeChannel(guildId: string) {
     isLocked: true,
     isHidden: true,
     isMine: false,
-    canEdit: false,
     members: [
       { ...base, userId: "owner-1", name: "YoMi", selfMute: true },
       { ...base, userId: "u2", name: "Bob" },
@@ -172,7 +171,7 @@ describe("TempVoicePage", () => {
     const guildId = "g1";
     seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
     queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
-      { ...activeChannel(guildId), isMine: true, canEdit: true },
+      { ...activeChannel(guildId), isMine: true },
       { ...activeChannel(guildId), channelId: "vc-3", channelName: "他人のVC" },
     ]);
 

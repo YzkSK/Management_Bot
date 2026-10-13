@@ -456,14 +456,20 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
     expect(calls).toBe(3);
   });
 
-  test("他人のVCはFORBIDDEN、MANAGE_TEMP_VOICE保持者は他人のVCも変更できる", async () => {
+  test("他人のVCはMANAGE_TEMP_VOICE保持者・サーバーオーナーでもFORBIDDEN(オーナー専用)", async () => {
     const channelId = await insertOwned("owner-2");
-    const caller = createCaller(okContext());
-    const error = await captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "setLocked", locked: true } }));
-    expect(error).toMatchObject({ code: "FORBIDDEN" });
+    const action = { type: "setLocked", locked: true } as const;
+    expect(await captureRejection(createCaller(okContext()).updateChannel({ guildId, channelId, action }))).toMatchObject({
+      code: "FORBIDDEN",
+    });
 
     await grant(CAPABILITIES.MANAGE_TEMP_VOICE | CAPABILITIES.VIEW_TEMP_VOICE);
-    expect(await caller.updateChannel({ guildId, channelId, action: { type: "setLocked", locked: true } })).toBeUndefined();
+    expect(await captureRejection(createCaller(okContext()).updateChannel({ guildId, channelId, action }))).toMatchObject({
+      code: "FORBIDDEN",
+    });
+
+    const serverOwner = createCaller({ ...okContext(), getGuildMembership: async () => ({ isOwner: true, roleIds: [] }) });
+    expect(await captureRejection(serverOwner.updateChannel({ guildId, channelId, action }))).toMatchObject({ code: "FORBIDDEN" });
   });
 
   test("一時VCでないchannelIdや別ギルドのVCはBAD_REQUEST", async () => {
@@ -545,12 +551,12 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
     expect(await captureRejection(caller.listOverrideTargetOptions({ guildId, channelId: otherId }))).toMatchObject({ code: "FORBIDDEN" });
   });
 
-  test("listActiveChannelsはisMine/canEditを返す", async () => {
+  test("listActiveChannelsはisMineを返す", async () => {
     await grant(CAPABILITIES.VIEW_TEMP_VOICE);
     const mine = await insertOwned("user-1");
     const other = await insertOwned("owner-2");
     const result = await createCaller(buildContext()).listActiveChannels({ guildId });
-    expect(result.find((r) => r.channelId === mine)).toMatchObject({ isMine: true, canEdit: true });
-    expect(result.find((r) => r.channelId === other)).toMatchObject({ isMine: false, canEdit: false });
+    expect(result.find((r) => r.channelId === mine)).toMatchObject({ isMine: true });
+    expect(result.find((r) => r.channelId === other)).toMatchObject({ isMine: false });
   });
 });
