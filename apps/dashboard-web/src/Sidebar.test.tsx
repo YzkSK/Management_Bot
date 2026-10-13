@@ -51,10 +51,17 @@ describe("Sidebar", () => {
     expect(html).toContain("アクセス権限");
   });
 
-  test("guildId指定時、権限が分かるまで(サーバー一覧の取得中)は項目を出さない(リロード時のちらつき防止)", () => {
+  test("guildId指定時、権限が分かるまで(サーバー一覧の取得中)は項目を出さずスケルトンを出す(リロード時のちらつき防止)", () => {
     const html = renderSidebar(new QueryClient(), "g1");
     expect(html).not.toContain("<a ");
     expect(html).not.toContain("アクセス権限");
+    expect(html).toContain('aria-label="メニューを読み込み中"');
+  });
+
+  test("取得済みで一覧に無いサーバーでは、スケルトンも項目も出さない", () => {
+    const html = renderSidebar(seededWith(CAPABILITIES.VIEW_LOGS), "other");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("メニューを読み込み中");
   });
 
   test("guildId未指定時はアクセス権限画面へのリンクにならない", () => {
