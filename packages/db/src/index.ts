@@ -27,6 +27,11 @@ export {
 export {
   listenForTempVoiceAutoSetup,
   listenForTempVoiceForceDelete,
+  listenForTempVoiceChannelAction,
+  tempVoiceChannelActionSchema,
+  tempVoiceChannelActionNotificationSchema,
+  type TempVoiceChannelAction,
+  type TempVoiceChannelActionNotification,
   type TempVoiceAutoSetupNotification,
   type TempVoiceForceDeleteNotification,
 } from "./temp-voice-action-notifications.js";

@@ -45,12 +45,33 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   const emptyChannelScheduler = new EmptyChannelDeletionScheduler();
   const emptyChannelDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
 
-  // Dashboard操作(自動セットアップ・強制削除)のpg_notifyを起動時に購読する(#415)。
+  // renameのレート制限(2回/10分/チャンネル)はプロセス内メモリで判定する(#408)。
+  // bot再起動で失われても実害は「制限がリセットされる」程度で許容する。Dashboard経由のrename(#649)とも共有する。
+  const renameTimestamps = new Map<string, number[]>();
+  /** モーダルを開く前の目安チェックのみ(予約しない)。実際の消費判定はtryReserveRenameSlotで行う。 */
+  const canRename = (channelId: string): boolean =>
+    canRenameWithinRateLimit(renameTimestamps.get(channelId) ?? [], Date.now());
+  /**
+   * モーダル送信時(handle-modal-submit.ts)・Dashboard経由の実行時、実際にrenameを実行する直前に呼ぶ。
+   * チェックと予約(タイムスタンプ追加)をアトミックに行うことで、モーダルを開いてから送信するまでの間に
+   * 他の実行が割り込んでも、window内の実際の実行回数を超えて許可しない(codexレビュー指摘:
+   * モーダル表示時のみチェックするとTOCTOUで3回目のrenameが素通りしていた)。
+   */
+  const tryReserveRenameSlot = (channelId: string): boolean => {
+    const now = Date.now();
+    const timestamps = renameTimestamps.get(channelId) ?? [];
+    if (!canRenameWithinRateLimit(timestamps, now)) return false;
+    renameTimestamps.set(channelId, [...timestamps, now]);
+    return true;
+  };
+
+  // Dashboard操作(自動セットアップ・強制削除・オーナーの設定変更)のpg_notifyを起動時に購読する(#415, #649)。
   const dashboardActionListener = registerDashboardActionListener({
     client: ctx.client,
     db: ctx.db,
     eventBus: ctx.eventBus,
     databaseUrl: ctx.databaseUrl,
+    tryReserveRenameSlot,
   });
   ctx.onShutdown(dashboardActionListener.close);
 
@@ -145,26 +166,6 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     if (["connecting", "connect", "ready"].includes(redis.status)) await redis.quit().catch(() => redis.disconnect());
     else redis.disconnect();
   });
-
-  // renameのレート制限(2回/10分/チャンネル)はプロセス内メモリで判定する(#408)。
-  // bot再起動で失われても実害は「制限がリセットされる」程度で許容する。
-  const renameTimestamps = new Map<string, number[]>();
-  /** モーダルを開く前の目安チェックのみ(予約しない)。実際の消費判定はtryReserveRenameSlotで行う。 */
-  const canRename = (channelId: string): boolean =>
-    canRenameWithinRateLimit(renameTimestamps.get(channelId) ?? [], Date.now());
-  /**
-   * モーダル送信時(handle-modal-submit.ts)、実際にrenameを実行する直前に呼ぶ。チェックと予約
-   * (タイムスタンプ追加)をアトミックに行うことで、モーダルを開いてから送信するまでの間に
-   * 他の実行が割り込んでも、window内の実際の実行回数を超えて許可しない(codexレビュー指摘:
-   * モーダル表示時のみチェックするとTOCTOUで3回目のrenameが素通りしていた)。
-   */
-  const tryReserveRenameSlot = (channelId: string): boolean => {
-    const now = Date.now();
-    const timestamps = renameTimestamps.get(channelId) ?? [];
-    if (!canRenameWithinRateLimit(timestamps, now)) return false;
-    renameTimestamps.set(channelId, [...timestamps, now]);
-    return true;
-  };
 
   ctx.client.on("interactionCreate", (interaction) => {
     // 他機能パッケージのボタン/モーダル/セレクトメニューと混在するため、customIdのprefixで早期に絞り込む。

@@ -28,6 +28,41 @@ export function listenForTempVoiceAutoSetup(
   }, onNotify);
 }
 
+const permissionTargetSchema = z.object({ targetType: z.enum(["user", "role"]), targetId: discordIdSchema });
+
+/** オーナーがDashboardから行う一時VC設定変更の1操作(Discordの制御パネルと同じ操作群)。 */
+export const tempVoiceChannelActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("rename"), name: z.string() }),
+  z.object({ type: z.literal("userLimit"), value: z.number().int() }),
+  z.object({ type: z.literal("bitrate"), kbps: z.number().int() }),
+  z.object({ type: z.literal("setLocked"), locked: z.boolean() }),
+  z.object({ type: z.literal("setHidden"), hidden: z.boolean() }),
+  z.object({ type: z.literal("permit") }).extend(permissionTargetSchema.shape),
+  z.object({ type: z.literal("deny") }).extend(permissionTargetSchema.shape),
+  z.object({ type: z.literal("removeOverride") }).extend(permissionTargetSchema.shape),
+  z.object({ type: z.literal("transferOwner"), userId: discordIdSchema }),
+]);
+export type TempVoiceChannelAction = z.infer<typeof tempVoiceChannelActionSchema>;
+
+export const tempVoiceChannelActionNotificationSchema = z.object({
+  guildId: discordIdSchema,
+  channelId: discordIdSchema,
+  executorId: discordIdSchema,
+  action: tempVoiceChannelActionSchema,
+});
+export type TempVoiceChannelActionNotification = z.infer<typeof tempVoiceChannelActionNotificationSchema>;
+
+/** Dashboardのオーナー向け設定変更由来のpg_notify('temp_voice_channel_action', ...)を購読する(#649)。 */
+export function listenForTempVoiceChannelAction(
+  databaseUrl: string,
+  onNotify: (notification: TempVoiceChannelActionNotification) => void,
+): { ready: Promise<void>; close: () => Promise<void> } {
+  return listenForNotification(databaseUrl, "temp_voice_channel_action", (payload) => {
+    const result = tempVoiceChannelActionNotificationSchema.safeParse(payload);
+    return result.success ? result.data : null;
+  }, onNotify);
+}
+
 /** Dashboard「強制削除」ボタン由来のpg_notify('temp_voice_force_delete', ...)を購読する(#415)。 */
 export function listenForTempVoiceForceDelete(
   databaseUrl: string,

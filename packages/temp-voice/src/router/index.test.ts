@@ -1,11 +1,19 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { capabilityGrants, createDb, guilds, sessions } from "@management-bot/db";
+import {
+  capabilityGrants,
+  createDb,
+  guilds,
+  listenForTempVoiceChannelAction,
+  sessions,
+  tempVoiceDenyProtectedRoles,
+  type TempVoiceChannelActionNotification,
+} from "@management-bot/db";
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type ChannelOption, type RoleOption } from "@management-bot/dashboard-access";
 import { eq } from "drizzle-orm";
 import { tempVoiceRouter } from "./index.js";
-import { insertTempVoiceChannel } from "../application/index.js";
+import { insertTempVoiceChannel, upsertPermissionOverride } from "../application/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to run this test");
@@ -61,9 +69,9 @@ function buildContext(
     getGuildAccessStatus: async () => "ok" as const,
     getGuildOwnerId: async () => null,
     verifyGuildRole: async () => true,
-    getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
+    getGuildMembersPage: async () => ({ members: [{ id: "user-2", name: "Bob" }], nextAfter: undefined }),
     readRedisHash: overrides.readRedisHash ?? (async () => ({})),
-    isGuildMember: async () => true,
+    isGuildMember: async (_guildId: string, userId: string) => userId !== "ghost",
     listMyGuilds: async () => [],
   };
 }
@@ -347,5 +355,145 @@ describe("tempVoiceRouter.listVoiceChannelOptions / listCategoryOptions / listRo
     const caller = createCaller(buildContext());
 
     expect(await caller.listRoleOptions({ guildId })).toEqual([{ id: "role-1", name: "モデレーター" }]);
+  });
+});
+
+describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTargetOptions (#649)", () => {
+  const stateWith = (channelId: string, userIds: string[]) => async () => ({
+    [channelId]: JSON.stringify({
+      userLimit: 0,
+      bitrate: 64000,
+      isLocked: false,
+      isHidden: false,
+      members: userIds.map((userId) => ({
+        userId,
+        name: userId,
+        avatarUrl: null,
+        selfMute: false,
+        serverMute: false,
+        selfDeaf: false,
+        serverDeaf: false,
+        streaming: false,
+        video: false,
+      })),
+    }),
+  });
+
+  async function insertOwned(ownerId: string): Promise<string> {
+    const channelId = `channel-${randomUUID()}`;
+    await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId });
+    return channelId;
+  }
+
+  test("オーナー本人はrenameでき、pg_notifyでbotへ届く(Dashboard→notifyの複合)", async () => {
+    const channelId = await insertOwned("user-1");
+    const received: TempVoiceChannelActionNotification[] = [];
+    const listener = listenForTempVoiceChannelAction(databaseUrl, (n) => received.push(n));
+    await listener.ready;
+    try {
+      await createCaller(buildContext()).updateChannel({ guildId, channelId, action: { type: "rename", name: "新しい名前" } });
+      for (let i = 0; i < 50 && received.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      await listener.close();
+    }
+    expect(received).toEqual([{ guildId, channelId, executorId: "user-1", action: { type: "rename", name: "新しい名前" } }]);
+  });
+
+  test("他人のVCはFORBIDDEN、MANAGE_TEMP_VOICE保持者は他人のVCも変更できる", async () => {
+    const channelId = await insertOwned("owner-2");
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "setLocked", locked: true } }));
+    expect(error).toMatchObject({ code: "FORBIDDEN" });
+
+    await grant(CAPABILITIES.MANAGE_TEMP_VOICE | CAPABILITIES.VIEW_TEMP_VOICE);
+    expect(await caller.updateChannel({ guildId, channelId, action: { type: "setLocked", locked: true } })).toBeUndefined();
+  });
+
+  test("一時VCでないchannelIdや別ギルドのVCはBAD_REQUEST", async () => {
+    const caller = createCaller(buildContext());
+    const error = await captureRejection(caller.updateChannel({ guildId, channelId: "missing", action: { type: "setHidden", hidden: true } }));
+    expect(error).toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  test("不正な入力値はBAD_REQUEST", async () => {
+    const channelId = await insertOwned("user-1");
+    const caller = createCaller(buildContext());
+    for (const action of [
+      { type: "rename", name: "   " },
+      { type: "userLimit", value: 100 },
+      { type: "bitrate", kbps: 7 },
+      { type: "bitrate", kbps: 200 },
+    ] as const) {
+      const error = await captureRejection(caller.updateChannel({ guildId, channelId, action }));
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+    }
+  });
+
+  test("permit/denyは実在するロール/メンバーのみ、拒否禁止ロールとeveryoneは拒否する", async () => {
+    const channelId = await insertOwned("user-1");
+    await db.insert(tempVoiceDenyProtectedRoles).values({ guildId, roleId: "role-1" });
+    const caller = createCaller(buildContext());
+    const reject = (action: Parameters<typeof caller.updateChannel>[0]["action"]) =>
+      captureRejection(caller.updateChannel({ guildId, channelId, action }));
+
+    expect(await reject({ type: "deny", targetType: "role", targetId: "role-1" })).toMatchObject({ code: "BAD_REQUEST" });
+    expect(await reject({ type: "permit", targetType: "role", targetId: "unknown-role" })).toMatchObject({ code: "BAD_REQUEST" });
+    expect(await reject({ type: "permit", targetType: "role", targetId: guildId })).toMatchObject({ code: "BAD_REQUEST" });
+    expect(await reject({ type: "permit", targetType: "user", targetId: "ghost" })).toMatchObject({ code: "BAD_REQUEST" });
+    // 保護ロールでも許可は可能、実在メンバーの拒否も可能。
+    expect(await caller.updateChannel({ guildId, channelId, action: { type: "permit", targetType: "role", targetId: "role-1" } })).toBeUndefined();
+    expect(await caller.updateChannel({ guildId, channelId, action: { type: "deny", targetType: "user", targetId: "user-2" } })).toBeUndefined();
+  });
+
+  test("transferOwnerは在室中の別メンバーのみ", async () => {
+    const channelId = await insertOwned("user-1");
+    const caller = createCaller(buildContext({ readRedisHash: stateWith(channelId, ["user-1", "user-2"]) }));
+    const reject = (userId: string) => captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "transferOwner", userId } }));
+
+    expect(await reject("not-in-channel")).toMatchObject({ code: "BAD_REQUEST" });
+    expect(await reject("user-1")).toMatchObject({ code: "BAD_REQUEST" });
+    expect(await caller.updateChannel({ guildId, channelId, action: { type: "transferOwner", userId: "user-2" } })).toBeUndefined();
+
+    await insertOwned("user-2");
+    expect(await reject("user-2")).toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  test("getChannelOverridesは名前を付けて返し、他人のVCはFORBIDDEN", async () => {
+    const channelId = await insertOwned("user-1");
+    await upsertPermissionOverride(db, { channelId, targetType: "user", targetId: "user-2", state: "allow" });
+    await upsertPermissionOverride(db, { channelId, targetType: "role", targetId: "role-1", state: "deny" });
+    const caller = createCaller(buildContext({ getGuildMemberNames: async () => new Map([["user-2", "Bob"]]) }));
+
+    const result = await caller.getChannelOverrides({ guildId, channelId });
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({ targetType: "user", targetId: "user-2", state: "allow", name: "Bob" });
+    expect(result).toContainEqual({ targetType: "role", targetId: "role-1", state: "deny", name: "モデレーター" });
+
+    const otherId = await insertOwned("owner-3");
+    expect(await captureRejection(caller.getChannelOverrides({ guildId, channelId: otherId }))).toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  test("listOverrideTargetOptionsはメンバーとロール(@everyone除外)を返し、他人のVCはFORBIDDEN", async () => {
+    const channelId = await insertOwned("user-1");
+    const caller = createCaller(
+      buildContext({ getGuildRoles: async () => [{ id: guildId, name: "@everyone" }, { id: "role-1", name: "モデレーター" }] }),
+    );
+
+    expect(await caller.listOverrideTargetOptions({ guildId, channelId })).toEqual({
+      members: [{ id: "user-2", name: "Bob" }],
+      nextAfter: undefined,
+      roles: [{ id: "role-1", name: "モデレーター" }],
+    });
+    const otherId = await insertOwned("owner-3");
+    expect(await captureRejection(caller.listOverrideTargetOptions({ guildId, channelId: otherId }))).toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  test("listActiveChannelsはisMine/canEditを返す", async () => {
+    await grant(CAPABILITIES.VIEW_TEMP_VOICE);
+    const mine = await insertOwned("user-1");
+    const other = await insertOwned("owner-2");
+    const result = await createCaller(buildContext()).listActiveChannels({ guildId });
+    expect(result.find((r) => r.channelId === mine)).toMatchObject({ isMine: true, canEdit: true });
+    expect(result.find((r) => r.channelId === other)).toMatchObject({ isMine: false, canEdit: false });
   });
 });

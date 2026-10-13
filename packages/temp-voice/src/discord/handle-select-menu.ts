@@ -28,7 +28,7 @@ async function replyOwnerOnly(interaction: RoleSelectMenuInteraction | UserSelec
 }
 
 /** ロール拒否時、対象ロールを持つVC内メンバー全員を切断する(issueの指示)。 */
-async function kickMembersWithRole(voiceChannel: VoiceBasedChannel, roleId: string): Promise<void> {
+export async function kickMembersWithRole(voiceChannel: VoiceBasedChannel, roleId: string): Promise<void> {
   const membersInChannel = voiceChannel.members;
   const targets = membersInChannel.filter((member: GuildMember) => member.roles.cache.has(roleId));
   await Promise.all(

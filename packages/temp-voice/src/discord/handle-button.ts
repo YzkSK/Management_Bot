@@ -26,7 +26,7 @@ async function replyOwnerOnly(interaction: ButtonInteraction): Promise<void> {
  * permissionOverwrites.editは同じchannelオブジェクトを返すだけで、cacheはgatewayのCHANNEL_UPDATE
  * 受信まで古いまま。そのため呼び出し側はcacheを読み直さず、操作前の状態を反転してパネルを再描画する。
  */
-async function toggleEveryoneOverwrite(
+export async function toggleEveryoneOverwrite(
   voiceChannel: VoiceBasedChannel,
   permission: "Connect" | "ViewChannel",
   currentlyDenied: boolean,

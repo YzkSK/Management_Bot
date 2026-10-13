@@ -9,6 +9,7 @@ import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { formatDuration } from "./activity-range.js";
 import { VoiceMemberRow } from "./ActiveVoiceTab.js";
+import { EditChannelButton } from "./TempVoiceEditDialog.js";
 import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
@@ -150,7 +151,10 @@ function ActiveChannelsTab({
           {listQuery.data.map((channel) => {
             const ChannelIcon = channel.isLocked ? Lock : Volume2;
             return (
-              <section key={channel.channelId} className="flex flex-col gap-3 rounded-lg border p-4">
+              <section
+                key={channel.channelId}
+                className={`flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <ChannelIcon
@@ -159,6 +163,9 @@ function ActiveChannelsTab({
                       className="text-muted-foreground size-4 shrink-0"
                     />
                     <span className="truncate text-sm font-semibold">{channel.channelName ?? channel.channelId}</span>
+                    {channel.isMine && (
+                      <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">あなたのVC</span>
+                    )}
                   </div>
                   <span className="text-muted-foreground text-xs whitespace-nowrap">
                     継続{" "}
@@ -193,6 +200,24 @@ function ActiveChannelsTab({
                       </span>
                     )}
                   </div>
+                </div>
+                {(channel.canEdit || canForceDelete) && (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {channel.canEdit && (
+                    <EditChannelButton
+                      guildId={guildId}
+                      channel={{
+                        channelId: channel.channelId,
+                        ownerId: channel.ownerId,
+                        name: channel.channelName ?? "",
+                        userLimit: channel.userLimit,
+                        bitrate: channel.bitrate,
+                        isLocked: channel.isLocked,
+                        isHidden: channel.isHidden,
+                        members: channel.members,
+                      }}
+                    />
+                  )}
                   {canForceDelete && (
                     <ForceDeleteButton
                       guildId={guildId}
@@ -202,6 +227,7 @@ function ActiveChannelsTab({
                     />
                   )}
                 </div>
+                )}
               </section>
             );
           })}

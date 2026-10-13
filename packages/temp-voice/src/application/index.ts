@@ -43,5 +43,5 @@ export {
   extendTempVoiceStateTtl,
   readTempVoiceStates,
 } from "./channel-state-store.js";
-export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete } from "./notify-dashboard-actions.js";
+export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete, notifyTempVoiceChannelAction } from "./notify-dashboard-actions.js";
 export { forceDeleteTempVoiceChannel, type ForceDeleteTempVoiceChannelDeps } from "./force-delete-channel.js";

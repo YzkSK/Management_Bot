@@ -1,5 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import { handleAutoSetupNotification, handleForceDeleteNotification } from "./dashboard-action-listener.js";
+import { handleAutoSetupNotification, handleChannelActionNotification, handleForceDeleteNotification } from "./dashboard-action-listener.js";
+
+describe("handleChannelActionNotification", () => {
+  test("通知をapplyDashboardActionへそのまま渡す", async () => {
+    const apply = mock(async () => {});
+    const deps = { client: {}, db: {}, eventBus: {}, tryReserveRenameSlot: () => true, apply } as never;
+    const notification = { guildId: "g1", channelId: "c1", executorId: "u1", action: { type: "setHidden", hidden: true } } as const;
+    await handleChannelActionNotification(deps, notification);
+    expect(apply).toHaveBeenCalledWith(expect.anything(), notification);
+  });
+});
 
 describe("handleAutoSetupNotification", () => {
   test("guildが見つからない場合は何もしない", async () => {

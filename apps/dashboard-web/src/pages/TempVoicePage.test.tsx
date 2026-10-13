@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CAPABILITIES } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { TempVoicePage } from "./TempVoicePage.js";
+import { EditForm } from "./TempVoiceEditDialog.js";
+import { Dialog } from "@/components/ui/dialog";
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
@@ -52,6 +54,8 @@ function activeChannel(guildId: string) {
     bitrate: 64000,
     isLocked: true,
     isHidden: true,
+    isMine: false,
+    canEdit: false,
     members: [
       { ...base, userId: "owner-1", name: "YoMi", selfMute: true },
       { ...base, userId: "u2", name: "Bob" },
@@ -161,6 +165,59 @@ describe("TempVoicePage", () => {
 
     expect(html).toContain("あなたがオーナーの一時VCはありません");
     expect(html).not.toContain("強制削除");
+  });
+
+  test("自分がオーナーのVCには「あなたのVC」バッジと「設定を変更」が出て、他人のVCには出ない(issue #649)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    queryClient.setQueryData(trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey, [
+      { ...activeChannel(guildId), isMine: true, canEdit: true },
+      { ...activeChannel(guildId), channelId: "vc-3", channelName: "他人のVC" },
+    ]);
+
+    const html = renderPage(guildId, queryClient);
+
+    expect(html.match(/あなたのVC/g)?.length).toBe(1);
+    expect(html.match(/設定を変更/g)?.length).toBe(1);
+    expect(html).toContain("border-primary");
+  });
+
+  test("設定を変更ダイアログに各項目が並ぶ(issue #649)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedCapabilities(queryClient, guildId, CAPABILITIES.VIEW_TEMP_VOICE);
+    const channel = activeChannel(guildId);
+    queryClient.setQueryData(trpc.tempVoice.getChannelOverrides.queryOptions({ guildId, channelId: channel.channelId }).queryKey, [
+      { targetType: "user", targetId: "u2", state: "allow", name: "Bob" },
+    ]);
+    queryClient.setQueryData(trpc.tempVoice.listOverrideTargetOptions.queryOptions({ guildId, channelId: channel.channelId }).queryKey, {
+      members: [{ id: "u2", name: "Bob" }],
+      roles: [{ id: "r1", name: "モデレーター" }],
+      nextAfter: undefined,
+    });
+
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <Dialog>
+          <EditForm
+            guildId={guildId}
+            channel={{ ...channel, name: channel.channelName, members: channel.members }}
+            onDone={() => {}}
+          />
+        </Dialog>
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain("チャンネル名");
+    expect(html).toContain("10分に2回");
+    expect(html).toContain("人数制限");
+    expect(html).toContain("音質");
+    expect(html).toContain("ロック");
+    expect(html).toContain("非表示");
+    expect(html).toContain("個別許可・拒否");
+    expect(html).toContain("Bob");
+    expect(html).toContain("オーナー移譲");
   });
 
   test("guildIdが無い場合はエラーを表示する", () => {
