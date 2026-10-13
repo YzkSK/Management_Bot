@@ -10,7 +10,13 @@ import {
   upsertPermissionOverride,
   type TempVoicePermissionTargetType,
 } from "../application/index.js";
-import { validateBitrateKbps, validateChannelName, validateUserLimit } from "../domain/index.js";
+import {
+  type TempVoiceActionFailureReason,
+  type TempVoiceActionResult,
+  validateBitrateKbps,
+  validateChannelName,
+  validateUserLimit,
+} from "../domain/index.js";
 import { readTempVoiceState, type TempVoiceState } from "./control-panel-message.js";
 import { executeOwnerTransfer } from "./execute-owner-transfer.js";
 import { toggleEveryoneOverwrite } from "./handle-button.js";
@@ -26,27 +32,31 @@ export interface ApplyDashboardActionDeps {
   tryReserveRenameSlot: (channelId: string) => boolean;
 }
 
-function warn(channelId: string, message: string): void {
+const OK: TempVoiceActionResult = { ok: true };
+
+function fail(channelId: string, reason: TempVoiceActionFailureReason, message: string): TempVoiceActionResult {
   console.warn(`temp-voice: dashboard action on ${channelId} skipped: ${message}`);
+  return { ok: false, reason };
 }
 
 /**
  * Dashboardのオーナー向け設定変更(pg_notify temp_voice_channel_action、#649)をDiscordへ反映する。
  * 権限(オーナー/MANAGE_TEMP_VOICE)はAPI側で確認済みのため再確認しない。入力値の範囲は
- * Discord経路と同じdomainのバリデータで再検証する。VCが無ければ無視する。
+ * Discord経路と同じdomainのバリデータで再検証する。VCが無ければ`channel_not_found`で失敗とする。
+ * 結果(成功/失敗理由)を返し、Dashboardへの通知は呼び出し側(listener)が行う。Discord API等の例外はそのまま投げる。
  * 反映後のチャンネル状態のRedis同期はchannelUpdateイベントが担い、制御パネルはここで再描画する。
  */
 export async function applyDashboardAction(
   deps: ApplyDashboardActionDeps,
   notification: TempVoiceChannelActionNotification,
-): Promise<void> {
+): Promise<TempVoiceActionResult> {
   const { client, db, eventBus } = deps;
   const { channelId, action } = notification;
   const guild = client.guilds.cache.get(notification.guildId);
   const row = await findTempVoiceChannel(db, channelId);
-  if (!guild || !row || row.guildId !== guild.id) return;
+  if (!guild || !row || row.guildId !== guild.id) return fail(channelId, "channel_not_found", "channel or guild not found");
   const voiceChannel = guild.channels.cache.get(channelId);
-  if (!voiceChannel?.isVoiceBased()) return;
+  if (!voiceChannel?.isVoiceBased()) return fail(channelId, "channel_not_found", "voice channel not found");
 
   const executorName = guild.members.cache.get(notification.executorId)?.displayName ?? notification.executorId;
   const executor = { executorId: notification.executorId, executorName };
@@ -58,8 +68,8 @@ export async function applyDashboardAction(
   switch (action.type) {
     case "rename": {
       const validated = validateChannelName(action.name);
-      if (!validated.ok) return warn(channelId, validated.message);
-      if (!deps.tryReserveRenameSlot(channelId)) return warn(channelId, "rename rate limit exceeded");
+      if (!validated.ok) return fail(channelId, "invalid_input", validated.message);
+      if (!deps.tryReserveRenameSlot(channelId)) return fail(channelId, "rate_limited", "rename rate limit exceeded");
       const before = voiceChannel.name;
       suppressTempVoiceChannelLog(channelId);
       let updated: VoiceBasedChannel;
@@ -79,11 +89,11 @@ export async function applyDashboardAction(
       }
       await refresh(readTempVoiceState(updated));
       await eventBus.publish({ ...base, action: "renamed", before, after: validated.value, createdAt: now() });
-      return;
+      return OK;
     }
     case "userLimit": {
       const validated = validateUserLimit(String(action.value));
-      if (!validated.ok) return warn(channelId, validated.message);
+      if (!validated.ok) return fail(channelId, "invalid_input", validated.message);
       const before = voiceChannel.userLimit;
       suppressTempVoiceChannelLog(channelId);
       let updated: VoiceBasedChannel;
@@ -95,11 +105,11 @@ export async function applyDashboardAction(
       }
       await refresh(readTempVoiceState(updated));
       await eventBus.publish({ ...base, action: "userLimitChanged", before, after: validated.value, createdAt: now() });
-      return;
+      return OK;
     }
     case "bitrate": {
       const validated = validateBitrateKbps(String(action.kbps), guild.maximumBitrate);
-      if (!validated.ok) return warn(channelId, validated.message);
+      if (!validated.ok) return fail(channelId, "invalid_input", validated.message);
       const before = voiceChannel.bitrate;
       suppressTempVoiceChannelLog(channelId);
       let updated: VoiceBasedChannel;
@@ -111,7 +121,7 @@ export async function applyDashboardAction(
       }
       await refresh(readTempVoiceState(updated));
       await eventBus.publish({ ...base, action: "bitrateChanged", before, after: validated.value, createdAt: now() });
-      return;
+      return OK;
     }
     case "setLocked":
     case "setHidden": {
@@ -119,7 +129,7 @@ export async function applyDashboardAction(
       const desired = isLock ? action.locked : action.hidden;
       const before = readTempVoiceState(voiceChannel);
       const current = isLock ? before.isLocked : before.isHidden;
-      if (current === desired) return; // 既に希望の状態(Discordのトグルと違い冪等)。
+      if (current === desired) return OK; // 既に希望の状態(Discordのトグルと違い冪等)。
       // handle-button.tsのtoggleLock/toggleHideと同じ順序: オーナーの個別許可を先に確定させてから@everyoneを変更する。
       await grantOwnerVoiceAccess(voiceChannel, row.ownerId);
       await toggleEveryoneOverwrite(voiceChannel, isLock ? "Connect" : "ViewChannel", current);
@@ -131,13 +141,13 @@ export async function applyDashboardAction(
         allowed: !desired,
         createdAt: now(),
       });
-      return;
+      return OK;
     }
     case "permit":
     case "deny": {
       const state = action.type === "permit" ? "allow" : "deny";
       if (state === "deny" && action.targetType === "role" && (await isDenyProtectedRole(db, row.guildId, action.targetId))) {
-        return warn(channelId, "protected role cannot be denied");
+        return fail(channelId, "protected_role", "protected role cannot be denied");
       }
       await applyOverride(deps, guild, voiceChannel, action.targetType, action.targetId, state);
       await refresh();
@@ -150,7 +160,7 @@ export async function applyDashboardAction(
         targetName: targetName(guild, action.targetType, action.targetId),
         createdAt: now(),
       });
-      return;
+      return OK;
     }
     case "removeOverride": {
       // handle-remove-member.tsと同じ: overwrite全体の削除ではなくConnectキーのみクリアする。
@@ -172,14 +182,17 @@ export async function applyDashboardAction(
         targetName: targetName(guild, action.targetType, action.targetId),
         createdAt: now(),
       });
-      return;
+      return OK;
     }
     case "transferOwner": {
       const newOwnerMember = voiceChannel.members.get(action.userId);
-      if (!newOwnerMember || action.userId === row.ownerId) return warn(channelId, "new owner is not another member in the channel");
-      if (await findOwnedTempVoiceChannelId(db, row.guildId, action.userId)) {
-        return warn(channelId, "new owner already owns another temp voice channel");
+      if (!newOwnerMember || action.userId === row.ownerId) {
+        return fail(channelId, "invalid_new_owner", "new owner is not another member in the channel");
       }
+      if (await findOwnedTempVoiceChannelId(db, row.guildId, action.userId)) {
+        return fail(channelId, "already_owner", "new owner already owns another temp voice channel");
+      }
+      const failures: string[] = [];
       await executeOwnerTransfer({
         db,
         client,
@@ -191,10 +204,13 @@ export async function applyDashboardAction(
         previousOwnerName: guild.members.cache.get(row.ownerId)?.displayName ?? row.ownerId,
         onFailure: async (content) => {
           console.error(`temp-voice: dashboard owner transfer failed for ${channelId}: ${content}`);
+          failures.push(content);
         },
         refreshPanel: () => refresh(undefined, newOwnerMember.id),
       });
-      return;
+      // onFailureが呼ばれた場合(競合負け等)。例外で終わった場合はそのまま投げられる。
+      if (failures.length === 0) return OK;
+      return { ok: false, reason: failures.some((f) => f.includes("既に別の一時VCのオーナー")) ? "already_owner" : "transfer_failed" };
     }
   }
 }

@@ -45,6 +45,8 @@ export const tempVoiceChannelActionSchema = z.discriminatedUnion("type", [
 export type TempVoiceChannelAction = z.infer<typeof tempVoiceChannelActionSchema>;
 
 export const tempVoiceChannelActionNotificationSchema = z.object({
+  /** bot側の反映結果をRedisで突き合わせるためのID(Dashboardが採番)。 */
+  requestId: z.string().uuid(),
   guildId: discordIdSchema,
   channelId: discordIdSchema,
   executorId: discordIdSchema,

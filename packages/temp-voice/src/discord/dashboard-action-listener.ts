@@ -9,7 +9,9 @@ import {
   type TempVoiceForceDeleteNotification,
 } from "@management-bot/db";
 import { ChannelType, type Client } from "discord.js";
-import { forceDeleteTempVoiceChannel, upsertTempVoiceConfig } from "../application/index.js";
+import type { Redis } from "ioredis";
+import { forceDeleteTempVoiceChannel, upsertTempVoiceConfig, writeTempVoiceActionResult } from "../application/index.js";
+import type { TempVoiceActionResult } from "../domain/index.js";
 import { applyDashboardAction, type ApplyDashboardActionDeps } from "./apply-dashboard-action.js";
 import { createUserSerializer } from "./serialize-by-user.js";
 
@@ -18,16 +20,30 @@ export interface DashboardActionListenerDeps {
   db: Db;
   eventBus: DomainEventBus;
   databaseUrl: string;
+  /** 反映結果の書き込み先(Dashboardが失敗を検知する用、discord/index.tsのRedisクライアントを共有)。 */
+  redis: Redis;
   /** renameのレート制限(ボタン経由のモーダル送信と共有、discord/index.tsで生成)。 */
   tryReserveRenameSlot: (channelId: string) => boolean;
 }
 
-/** テストでのDI用に`apply`を差し替え可能にする。 */
+/**
+ * 反映結果(例外は`discord_error`)をRedisへ書き、Dashboardが失敗を検知できるようにする(Redisへの書き込み失敗はログのみ)。
+ * テストでのDI用に`apply`を差し替え可能にする。
+ */
 export async function handleChannelActionNotification(
-  deps: ApplyDashboardActionDeps & { apply?: typeof applyDashboardAction },
+  deps: ApplyDashboardActionDeps & { redis: Redis; apply?: typeof applyDashboardAction },
   notification: TempVoiceChannelActionNotification,
 ): Promise<void> {
-  await (deps.apply ?? applyDashboardAction)(deps, notification);
+  let result: TempVoiceActionResult;
+  try {
+    result = await (deps.apply ?? applyDashboardAction)(deps, notification);
+  } catch (error) {
+    console.error(`temp-voice: failed to apply dashboard action for channel ${notification.channelId}`, error);
+    result = { ok: false, reason: "discord_error" };
+  }
+  await writeTempVoiceActionResult(deps.redis, notification.guildId, notification.requestId, result).catch((error: unknown) => {
+    console.error(`temp-voice: failed to write dashboard action result for channel ${notification.channelId}`, error);
+  });
 }
 
 /** テストでのDI用に`upsertConfig`を差し替え可能にする。本番はデフォルト実装を使う。 */

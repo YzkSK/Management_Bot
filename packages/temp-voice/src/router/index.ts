@@ -2,6 +2,7 @@ import { captureAuditBefore, protectedProcedure, requireCapability, requireGuild
 import { CAPABILITIES, discordIdSchema, hasCapability } from "@management-bot/shared";
 import { type Db, tempVoiceChannelActionSchema } from "@management-bot/db";
 import { TRPCError } from "@trpc/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   clearTempVoiceCreateChannel,
@@ -18,8 +19,10 @@ import {
   readTempVoiceStates,
   replaceDenyProtectedRoles,
   upsertTempVoiceConfig,
+  waitForTempVoiceActionResult,
 } from "../application/index.js";
 import {
+  type TempVoiceActionFailureReason,
   type TempVoiceMemberState,
   validateBitrateKbps,
   validateChannelName,
@@ -53,6 +56,24 @@ export interface ChannelOverride {
   state: "allow" | "deny";
   name: string | undefined;
 }
+
+/** updateChannelがbotの反映結果を待つ設定。テストで短い間隔・固定のrequestIdに差し替える。 */
+export const updateChannelWait = {
+  intervalMs: 250,
+  timeoutMs: 10_000,
+  newRequestId: (): string => randomUUID(),
+};
+
+const ACTION_FAILURE_MESSAGES: Record<TempVoiceActionFailureReason, string> = {
+  rate_limited: "名前の変更は10分に2回までです。しばらくしてからお試しください。",
+  protected_role: "このロールは拒否指定できません(サーバー管理者が保護しています)。",
+  invalid_new_owner: "移譲先のメンバーがVCにいません。",
+  already_owner: "選択されたメンバーは既に別の一時VCのオーナーです。",
+  channel_not_found: "この一時VCは既に存在しません。",
+  invalid_input: "入力値が不正です。",
+  transfer_failed: "オーナー移譲に失敗しました。時間を置いて再度お試しください。",
+  discord_error: "Discordへの反映に失敗しました。Botの権限を確認してください。",
+};
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
@@ -282,12 +303,21 @@ export const tempVoiceRouter = router({
         }
       }
 
+      const requestId = updateChannelWait.newRequestId();
       await notifyTempVoiceChannelAction(ctx.db, {
+        requestId,
         guildId: input.guildId,
         channelId: input.channelId,
         executorId: ctx.discordUserId,
         action,
       });
+
+      // botの反映結果(Redis)を待ち、失敗・無応答をDashboardに返す。
+      const result = await waitForTempVoiceActionResult(ctx.readRedisHash, input.guildId, requestId, updateChannelWait);
+      if (!result) {
+        throw new TRPCError({ code: "TIMEOUT", message: "Botから応答がありません。Botが起動しているか確認してください。" });
+      }
+      if (!result.ok) throw badRequest(ACTION_FAILURE_MESSAGES[result.reason]);
     }),
 
   /** そのVCの個別許可/拒否の一覧。ユーザー名・ロール名を付けて返す(解決できなければname未設定)。 */

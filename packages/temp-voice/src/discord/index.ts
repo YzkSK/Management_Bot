@@ -71,6 +71,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     db: ctx.db,
     eventBus: ctx.eventBus,
     databaseUrl: ctx.databaseUrl,
+    redis,
     tryReserveRenameSlot,
   });
   ctx.onShutdown(dashboardActionListener.close);

@@ -18,7 +18,7 @@ export async function notifyTempVoiceForceDelete(db: Db, guildId: string, channe
 /** オーナーがDashboardから行う設定変更をbotへ指示する(#649)。 */
 export async function notifyTempVoiceChannelAction(
   db: Db,
-  input: { guildId: string; channelId: string; executorId: string; action: TempVoiceChannelAction },
+  input: { requestId: string; guildId: string; channelId: string; executorId: string; action: TempVoiceChannelAction },
 ): Promise<void> {
   await db.execute(sql`SELECT pg_notify('temp_voice_channel_action', ${JSON.stringify(input)})`);
 }

@@ -22,6 +22,7 @@ describe("notifyTempVoiceChannelAction", () => {
   test("pg_notifyがエラーにならず完了する(#649)", async () => {
     await expect(
       notifyTempVoiceChannelAction(db, {
+        requestId: randomUUID(),
         guildId: `guild-${randomUUID()}`,
         channelId: `channel-${randomUUID()}`,
         executorId: "user-1",

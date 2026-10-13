@@ -23,9 +23,9 @@ function fakeDb(row: typeof ROW | null, protectedRoleIds: string[] = []) {
             selectCount++;
             // 1回目: findTempVoiceChannel、以降: isDenyProtectedRole / findOwnedTempVoiceChannelId。
             if (selectCount === 1) return Promise.resolve(row ? [row] : []);
-            return Object.assign(Promise.resolve(protectedRoleIds.map((roleId) => ({ roleId }))), {
-              limit: () => Promise.resolve(protectedRoleIds.map((roleId) => ({ roleId }))),
-            });
+            // channelIdはfindOwnedTempVoiceChannelId用(行があれば「他のVCのオーナー」扱い)。
+            const rows = protectedRoleIds.map((roleId) => ({ roleId, channelId: "other-vc" }));
+            return Object.assign(Promise.resolve(rows), { limit: () => Promise.resolve(rows) });
           },
         }),
       }),
@@ -97,73 +97,73 @@ function setup(options: { row?: typeof ROW | null; protectedRoleIds?: string[]; 
 }
 
 describe("applyDashboardAction", () => {
-  test("VCまたはギルドが存在しなければ何もしない", async () => {
+  test("VCまたはギルドが存在しなければchannel_not_foundで何もしない", async () => {
     const a = setup({ row: null });
-    await a.run({ type: "rename", name: "x" });
+    expect(await a.run({ type: "rename", name: "x" })).toEqual({ ok: false, reason: "channel_not_found" });
     expect(a.voiceChannel.setName).not.toHaveBeenCalled();
     const b = setup({ guildMissing: true });
-    await b.run({ type: "rename", name: "x" });
+    expect(await b.run({ type: "rename", name: "x" })).toEqual({ ok: false, reason: "channel_not_found" });
     expect(b.voiceChannel.setName).not.toHaveBeenCalled();
   });
 
   test("rename: 検証してVCを改名しイベントを発行する", async () => {
     const t = setup();
-    await t.run({ type: "rename", name: " 新しい名前 " });
+    expect(await t.run({ type: "rename", name: " 新しい名前 " })).toEqual({ ok: true });
     expect(t.voiceChannel.setName).toHaveBeenCalledWith("新しい名前", expect.any(String));
     expect(t.publish).toHaveBeenCalledWith(expect.objectContaining({ action: "renamed", before: "太郎のVC", after: "新しい名前", executorId: "owner-1" }));
   });
 
-  test("rename: レート制限超過・不正な名前ではAPIを呼ばない(ログのみ)", async () => {
+  test("rename: レート制限超過・不正な名前ではAPIを呼ばず失敗を返す", async () => {
     const limited = setup({ reserve: false });
-    await limited.run({ type: "rename", name: "新しい名前" });
+    expect(await limited.run({ type: "rename", name: "新しい名前" })).toEqual({ ok: false, reason: "rate_limited" });
     expect(limited.voiceChannel.setName).not.toHaveBeenCalled();
     const invalid = setup();
-    await invalid.run({ type: "rename", name: "   " });
+    expect(await invalid.run({ type: "rename", name: "   " })).toEqual({ ok: false, reason: "invalid_input" });
     expect(invalid.voiceChannel.setName).not.toHaveBeenCalled();
     expect(invalid.publish).not.toHaveBeenCalled();
   });
 
   test("userLimit / bitrate: 検証後に反映し、範囲外は無視する", async () => {
     const t = setup();
-    await t.run({ type: "userLimit", value: 10 });
-    await t.run({ type: "userLimit", value: 100 });
+    expect(await t.run({ type: "userLimit", value: 10 })).toEqual({ ok: true });
+    expect(await t.run({ type: "userLimit", value: 100 })).toEqual({ ok: false, reason: "invalid_input" });
     expect(t.voiceChannel.setUserLimit).toHaveBeenCalledTimes(1);
     expect(t.voiceChannel.setUserLimit).toHaveBeenCalledWith(10, expect.any(String));
-    await t.run({ type: "bitrate", kbps: 64 });
-    await t.run({ type: "bitrate", kbps: 500 });
+    expect(await t.run({ type: "bitrate", kbps: 64 })).toEqual({ ok: true });
+    expect(await t.run({ type: "bitrate", kbps: 500 })).toEqual({ ok: false, reason: "invalid_input" });
     expect(t.voiceChannel.setBitrate).toHaveBeenCalledTimes(1);
     expect(t.voiceChannel.setBitrate).toHaveBeenCalledWith(64_000, expect.any(String));
   });
 
   test("setLocked: オーナーの個別許可を先に付与してから@everyoneのConnectを拒否する。既に同状態なら何もしない", async () => {
     const t = setup();
-    await t.run({ type: "setLocked", locked: true });
+    expect(await t.run({ type: "setLocked", locked: true })).toEqual({ ok: true });
     const calls = t.voiceChannel.permissionOverwrites.edit.mock.calls as unknown as [string, Record<string, unknown>][];
     expect(calls[0]).toEqual(["owner-1", { Connect: true, ViewChannel: true }, expect.anything()]);
     expect(calls.at(-1)).toEqual(["everyone-id", { Connect: false }, expect.anything()]);
     expect(t.publish).toHaveBeenCalledWith(expect.objectContaining({ action: "permissionChanged", permission: "connect", allowed: false }));
 
     const idempotent = setup();
-    await idempotent.run({ type: "setLocked", locked: false });
+    expect(await idempotent.run({ type: "setLocked", locked: false })).toEqual({ ok: true });
     expect(idempotent.voiceChannel.permissionOverwrites.edit).not.toHaveBeenCalled();
   });
 
   test("permit: overwriteを付与しDBへ登録、deny: 保護ロールは拒否しない", async () => {
     const t = setup();
-    await t.run({ type: "permit", targetType: "user", targetId: "u2" });
+    expect(await t.run({ type: "permit", targetType: "user", targetId: "u2" })).toEqual({ ok: true });
     expect(t.voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith("u2", { Connect: true }, expect.anything());
     expect(t.upsertCalls).toEqual([{ channelId: "vc-1", targetType: "user", targetId: "u2", state: "allow" }]);
     expect(t.publish).toHaveBeenCalledWith(expect.objectContaining({ action: "memberPermissionChanged", state: "allow", targetId: "u2" }));
 
     const protectedRole = setup({ protectedRoleIds: ["r1"] });
-    await protectedRole.run({ type: "deny", targetType: "role", targetId: "r1" });
+    expect(await protectedRole.run({ type: "deny", targetType: "role", targetId: "r1" })).toEqual({ ok: false, reason: "protected_role" });
     expect(protectedRole.voiceChannel.permissionOverwrites.edit).not.toHaveBeenCalled();
     expect(protectedRole.upsertCalls).toEqual([]);
   });
 
   test("removeOverride: Connectキーのみクリアし、DBから削除する", async () => {
     const t = setup();
-    await t.run({ type: "removeOverride", targetType: "role", targetId: "r1" });
+    expect(await t.run({ type: "removeOverride", targetType: "role", targetId: "r1" })).toEqual({ ok: true });
     expect(t.voiceChannel.permissionOverwrites.edit).toHaveBeenCalledWith("r1", { Connect: null }, expect.anything());
     expect(t.deleteCalls).toHaveLength(1);
     expect(t.publish).toHaveBeenCalledWith(expect.objectContaining({ state: "cleared", targetType: "role" }));
@@ -171,8 +171,15 @@ describe("applyDashboardAction", () => {
 
   test("transferOwner: 在室していないメンバーへは移譲しない", async () => {
     const t = setup();
-    await t.run({ type: "transferOwner", userId: "u9" });
+    expect(await t.run({ type: "transferOwner", userId: "u9" })).toEqual({ ok: false, reason: "invalid_new_owner" });
     expect(t.publish).not.toHaveBeenCalled();
     expect(t.voiceChannel.permissionOverwrites.edit).not.toHaveBeenCalled();
+  });
+
+  test("transferOwner: 移譲先が既に別VCのオーナーならalready_owner", async () => {
+    const t = setup({ protectedRoleIds: ["any"] });
+    t.voiceChannel.members.set("u2", { id: "u2" });
+    expect(await t.run({ type: "transferOwner", userId: "u2" })).toEqual({ ok: false, reason: "already_owner" });
+    expect(t.publish).not.toHaveBeenCalled();
   });
 });

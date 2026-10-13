@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { TRPCClientError } from "@trpc/client";
 import {
   buildChannelEditActions,
   buildChannelEditDraft,
+  describeSaveFailure,
+  SAVE_SUCCESS_MESSAGE,
   effectiveOverrides,
   validateChannelEditDraft,
   type ChannelEditInitial,
@@ -10,6 +13,31 @@ import {
 
 const initial: ChannelEditInitial = { name: "VC", userLimit: 5, bitrate: 64_000, isLocked: false, isHidden: false };
 const current: OverrideEntry[] = [{ targetType: "user", targetId: "u1", state: "allow", name: "Bob" }];
+
+describe("describeSaveFailure", () => {
+  const serverError = (message: string) => TRPCClientError.from({ error: { code: -32600, message, data: { code: "BAD_REQUEST" } } });
+
+  test("成功文言は反映完了を示す", () => {
+    expect(SAVE_SUCCESS_MESSAGE).toBe("変更を反映しました。");
+  });
+
+  test("サーバーのエラーメッセージをそのまま出す", () => {
+    expect(describeSaveFailure(serverError("移譲先のメンバーがVCにいません。"), 0)).toEqual({
+      message: "移譲先のメンバーがVCにいません。",
+    });
+  });
+
+  test("途中まで反映済みなら説明を添える", () => {
+    expect(describeSaveFailure(serverError("入力値が不正です。"), 2)).toEqual({
+      message: "入力値が不正です。",
+      description: "途中の項目までは反映されています。",
+    });
+  });
+
+  test("TRPCClientError以外は汎用メッセージ", () => {
+    expect(describeSaveFailure(new Error("network"), 0).message).toBe("変更の反映に失敗しました。時間を置いて再度お試しください。");
+  });
+});
 
 describe("buildChannelEditActions", () => {
   test("変更が無ければ操作は空", () => {

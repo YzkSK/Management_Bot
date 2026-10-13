@@ -14,7 +14,7 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const base = { guildId: "g1", channelId: "c1", executorId: "u1" };
+const base = { requestId: "11111111-1111-4111-8111-111111111111", guildId: "g1", channelId: "c1", executorId: "u1" };
 
 describe("tempVoiceChannelActionNotificationSchema", () => {
   test("各actionを受理し、不正な形式は拒否する", () => {
@@ -39,6 +39,10 @@ describe("tempVoiceChannelActionNotificationSchema", () => {
     ];
     for (const action of invalid) expect(tempVoiceChannelActionNotificationSchema.safeParse({ ...base, action }).success).toBe(false);
     expect(tempVoiceChannelActionNotificationSchema.safeParse({ guildId: "g1", action: valid[0] }).success).toBe(false);
+    expect(
+      tempVoiceChannelActionNotificationSchema.safeParse({ guildId: "g1", channelId: "c1", executorId: "u1", action: valid[0] }).success,
+    ).toBe(false);
+    expect(tempVoiceChannelActionNotificationSchema.safeParse({ ...base, requestId: "not-uuid", action: valid[0] }).success).toBe(false);
   });
 });
 

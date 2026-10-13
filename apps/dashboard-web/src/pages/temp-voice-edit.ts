@@ -1,4 +1,19 @@
 /** 一時VCの設定変更ダイアログの下書きと、保存時に送る操作列(updateChannelのaction)への変換。 */
+import { TRPCClientError } from "@trpc/client";
+
+export const SAVE_SUCCESS_MESSAGE = "変更を反映しました。";
+
+/**
+ * 保存が途中で失敗したときのトースト文言。サーバー(updateChannel)のエラーメッセージをそのまま出し、
+ * 既に反映済みの項目があればその旨を説明に添える。
+ */
+export function describeSaveFailure(error: unknown, appliedCount: number): { message: string; description?: string } {
+  const message =
+    error instanceof TRPCClientError && error.message !== ""
+      ? error.message
+      : "変更の反映に失敗しました。時間を置いて再度お試しください。";
+  return appliedCount > 0 ? { message, description: "途中の項目までは反映されています。" } : { message };
+}
 
 export type OverrideTargetType = "user" | "role";
 export type OverrideState = "allow" | "deny";

@@ -6,8 +6,10 @@ import { trpc } from "../trpc.js";
 import {
   buildChannelEditActions,
   buildChannelEditDraft,
+  describeSaveFailure,
   effectiveOverrides,
   overrideKey,
+  SAVE_SUCCESS_MESSAGE,
   validateChannelEditDraft,
   type ChannelEditDraft,
   type ChannelEditInitial,
@@ -188,22 +190,30 @@ export function EditForm({
   const overridesQuery = useQuery(trpc.tempVoice.getChannelOverrides.queryOptions({ guildId, channelId: channel.channelId }));
   const [draft, setDraft] = useState<ChannelEditDraft>(() => buildChannelEditDraft(channel));
   const update = (patch: Partial<ChannelEditDraft>) => setDraft((prev) => ({ ...prev, ...patch }));
+  // 項目を順に送るため、updateChannel.isPendingだけだと項目間でボタンが一瞬戻ってしまう。
+  const [saving, setSaving] = useState(false);
 
   const errors = validateChannelEditDraft(draft, channel.name);
   const actions = buildChannelEditActions(channel, draft, overridesQuery.data ?? []);
   const transferCandidates = channel.members.filter((m) => m.userId !== channel.ownerId);
 
   const save = async () => {
+    let applied = 0;
+    setSaving(true);
     try {
-      // 変更された項目だけを順に送る(オーナー移譲は最後)。途中で失敗したらそこで止める。
+      // 変更された項目だけを順に送る(オーナー移譲は最後)。updateChannelはbotの反映完了まで待つため、
+      // 途中で失敗したらそこで止め、サーバーのエラーメッセージを出す。
       for (const action of actions) {
         await updateChannel.mutateAsync({ guildId, channelId: channel.channelId, action });
+        applied++;
       }
-      toast.success("変更を送信しました。数秒後に反映されます。");
+      toast.success(SAVE_SUCCESS_MESSAGE);
       onDone();
-    } catch {
-      toast.error("変更の送信に失敗しました。入力内容を確認して再度お試しください。");
+    } catch (error) {
+      const { message, description } = describeSaveFailure(error, applied);
+      toast.error(message, description === undefined ? undefined : { description });
     } finally {
+      setSaving(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: trpc.tempVoice.listActiveChannels.queryOptions({ guildId }).queryKey }),
         queryClient.invalidateQueries({
@@ -297,8 +307,8 @@ export function EditForm({
         <DialogClose asChild>
           <Button variant="outline">キャンセル</Button>
         </DialogClose>
-        <Button type="button" disabled={errors.length > 0 || actions.length === 0 || updateChannel.isPending} onClick={() => void save()}>
-          保存
+        <Button type="button" disabled={errors.length > 0 || actions.length === 0 || saving} onClick={() => void save()}>
+          {saving ? "反映中…" : "保存"}
         </Button>
       </DialogFooter>
     </>
@@ -319,7 +329,7 @@ export function EditChannelButton({ guildId, channel }: { guildId: string; chann
       <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
         <DialogHeader>
           <DialogTitle>{channel.name || "一時VC"}の設定を変更</DialogTitle>
-          <DialogDescription>変更した項目だけがDiscordに送信されます。反映まで数秒かかります。</DialogDescription>
+          <DialogDescription>変更した項目だけがDiscordに反映されます。反映が終わるまで少しお待ちください。</DialogDescription>
         </DialogHeader>
         <EditForm guildId={guildId} channel={channel} onDone={() => setOpen(false)} />
       </DialogContent>

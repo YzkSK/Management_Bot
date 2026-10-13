@@ -12,7 +12,7 @@ import {
 import { CAPABILITIES } from "@management-bot/shared";
 import { createCallerFactory, type ChannelOption, type RoleOption } from "@management-bot/dashboard-access";
 import { eq } from "drizzle-orm";
-import { tempVoiceRouter } from "./index.js";
+import { tempVoiceRouter, updateChannelWait } from "./index.js";
 import { insertTempVoiceChannel, upsertPermissionOverride } from "../application/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -379,6 +379,22 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
     }),
   });
 
+  const REQUEST_ID = "22222222-2222-4222-8222-222222222222";
+  const OK_RESULT = JSON.stringify({ ok: true });
+  beforeEach(() => {
+    updateChannelWait.intervalMs = 5;
+    updateChannelWait.timeoutMs = 100;
+    updateChannelWait.newRequestId = () => REQUEST_ID;
+  });
+  /** botがresultRawを書いた状態のRedis(stateは一時VC状態Hashの読み取りを差し替える)。resultRaw未指定は無応答。 */
+  const withResult =
+    (resultRaw?: string, state?: () => Promise<Record<string, string>>) =>
+    async (key: string): Promise<Record<string, string>> => {
+      if (key === `temp-voice:action-result:${guildId}:${REQUEST_ID}`) return resultRaw === undefined ? {} : { result: resultRaw };
+      return state ? state() : {};
+    };
+  const okContext = (state?: () => Promise<Record<string, string>>) => buildContext({ readRedisHash: withResult(OK_RESULT, state) });
+
   async function insertOwned(ownerId: string): Promise<string> {
     const channelId = `channel-${randomUUID()}`;
     await insertTempVoiceChannel(db, { channelId, guildId, controlChannelId: "control-1", ownerId });
@@ -391,17 +407,58 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
     const listener = listenForTempVoiceChannelAction(databaseUrl, (n) => received.push(n));
     await listener.ready;
     try {
-      await createCaller(buildContext()).updateChannel({ guildId, channelId, action: { type: "rename", name: "新しい名前" } });
+      await createCaller(okContext()).updateChannel({ guildId, channelId, action: { type: "rename", name: "新しい名前" } });
       for (let i = 0; i < 50 && received.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
     } finally {
       await listener.close();
     }
-    expect(received).toEqual([{ guildId, channelId, executorId: "user-1", action: { type: "rename", name: "新しい名前" } }]);
+    expect(received).toEqual([
+      { requestId: REQUEST_ID, guildId, channelId, executorId: "user-1", action: { type: "rename", name: "新しい名前" } },
+    ]);
+  });
+
+  test("botの反映失敗は理由コードに応じたメッセージのBAD_REQUEST", async () => {
+    const channelId = await insertOwned("user-1");
+    const cases = [
+      ["rate_limited", "名前の変更は10分に2回までです。しばらくしてからお試しください。"],
+      ["protected_role", "このロールは拒否指定できません(サーバー管理者が保護しています)。"],
+      ["invalid_new_owner", "移譲先のメンバーがVCにいません。"],
+      ["already_owner", "選択されたメンバーは既に別の一時VCのオーナーです。"],
+      ["channel_not_found", "この一時VCは既に存在しません。"],
+      ["invalid_input", "入力値が不正です。"],
+      ["discord_error", "Discordへの反映に失敗しました。Botの権限を確認してください。"],
+    ] as const;
+    for (const [reason, message] of cases) {
+      const caller = createCaller(buildContext({ readRedisHash: withResult(JSON.stringify({ ok: false, reason })) }));
+      const error = await captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "setHidden", hidden: true } }));
+      expect(error).toMatchObject({ code: "BAD_REQUEST", message });
+    }
+  });
+
+  test("botが応答しない・結果JSONが不正ならTIMEOUT", async () => {
+    const channelId = await insertOwned("user-1");
+    for (const raw of [undefined, "not json", JSON.stringify({ ok: false, reason: "bogus" })]) {
+      const caller = createCaller(buildContext({ readRedisHash: withResult(raw) }));
+      const error = await captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "setHidden", hidden: true } }));
+      expect(error).toMatchObject({ code: "TIMEOUT", message: "Botから応答がありません。Botが起動しているか確認してください。" });
+    }
+  });
+
+  test("結果が少し遅れて書かれても待って成功する", async () => {
+    const channelId = await insertOwned("user-1");
+    let calls = 0;
+    const readRedisHash = async (key: string) => {
+      if (key !== `temp-voice:action-result:${guildId}:${REQUEST_ID}`) return {};
+      return ++calls >= 3 ? { result: OK_RESULT } : {};
+    };
+    const caller = createCaller(buildContext({ readRedisHash }));
+    expect(await caller.updateChannel({ guildId, channelId, action: { type: "setHidden", hidden: true } })).toBeUndefined();
+    expect(calls).toBe(3);
   });
 
   test("他人のVCはFORBIDDEN、MANAGE_TEMP_VOICE保持者は他人のVCも変更できる", async () => {
     const channelId = await insertOwned("owner-2");
-    const caller = createCaller(buildContext());
+    const caller = createCaller(okContext());
     const error = await captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "setLocked", locked: true } }));
     expect(error).toMatchObject({ code: "FORBIDDEN" });
 
@@ -432,7 +489,7 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
   test("permit/denyは実在するロール/メンバーのみ、拒否禁止ロールとeveryoneは拒否する", async () => {
     const channelId = await insertOwned("user-1");
     await db.insert(tempVoiceDenyProtectedRoles).values({ guildId, roleId: "role-1" });
-    const caller = createCaller(buildContext());
+    const caller = createCaller(okContext());
     const reject = (action: Parameters<typeof caller.updateChannel>[0]["action"]) =>
       captureRejection(caller.updateChannel({ guildId, channelId, action }));
 
@@ -447,7 +504,7 @@ describe("tempVoiceRouter.updateChannel / getChannelOverrides / listOverrideTarg
 
   test("transferOwnerは在室中の別メンバーのみ", async () => {
     const channelId = await insertOwned("user-1");
-    const caller = createCaller(buildContext({ readRedisHash: stateWith(channelId, ["user-1", "user-2"]) }));
+    const caller = createCaller(okContext(stateWith(channelId, ["user-1", "user-2"])));
     const reject = (userId: string) => captureRejection(caller.updateChannel({ guildId, channelId, action: { type: "transferOwner", userId } }));
 
     expect(await reject("not-in-channel")).toMatchObject({ code: "BAD_REQUEST" });
