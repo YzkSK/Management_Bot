@@ -35,5 +35,13 @@ export {
   type TempVoicePermissionState,
   type TempVoicePermissionOverrideRow,
 } from "./permission-overrides.js";
+export {
+  TEMP_VOICE_STATE_TTL_SECONDS,
+  upsertTempVoiceState,
+  removeTempVoiceState,
+  listTempVoiceStateChannelIds,
+  extendTempVoiceStateTtl,
+  readTempVoiceStates,
+} from "./channel-state-store.js";
 export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete } from "./notify-dashboard-actions.js";
 export { forceDeleteTempVoiceChannel, type ForceDeleteTempVoiceChannelDeps } from "./force-delete-channel.js";

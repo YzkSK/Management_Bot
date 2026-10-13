@@ -10,10 +10,26 @@ import {
   listDenyProtectedRoleIds,
   notifyTempVoiceAutoSetup,
   notifyTempVoiceForceDelete,
+  readTempVoiceStates,
   replaceDenyProtectedRoles,
   upsertTempVoiceConfig,
 } from "../application/index.js";
-import { validateBitrateKbps, validateNameTemplate, validateUserLimit } from "../domain/index.js";
+import { type TempVoiceMemberState, validateBitrateKbps, validateNameTemplate, validateUserLimit } from "../domain/index.js";
+
+/** Dashboard一覧の1件。DB行にRedis上の現在状態(人数制限・音質・ロック/非表示・在室メンバー)を突き合わせたもの。 */
+export interface ActiveTempVoiceChannel {
+  channelId: string;
+  guildId: string;
+  ownerId: string;
+  createdAt: Date;
+  channelName: string | undefined;
+  ownerName: string | undefined;
+  userLimit: number | null;
+  bitrate: number | null;
+  isLocked: boolean;
+  isHidden: boolean;
+  members: TempVoiceMemberState[];
+}
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
@@ -130,16 +146,29 @@ export const tempVoiceRouter = router({
       const rows = await listActiveTempVoiceChannels(ctx.db, input.guildId);
       if (rows.length === 0) return [];
       // 一覧でIDをそのまま見せないよう名前を付ける。解決できなければ未設定(画面側でIDにフォールバック)。
-      const [channels, ownerNames] = await Promise.all([
+      const [channels, ownerNames, states] = await Promise.all([
         ctx.getAllGuildChannels(input.guildId),
         ctx.getGuildMemberNames(input.guildId, [...new Set(rows.map((row) => row.ownerId))]),
+        readTempVoiceStates(ctx.readRedisHash, input.guildId),
       ]);
       const channelNames = new Map(channels.map((channel) => [channel.id, channel.name]));
-      return rows.map((row) => ({
-        ...row,
-        channelName: channelNames.get(row.channelId),
-        ownerName: ownerNames.get(row.ownerId),
-      }));
+      return rows.map((row): ActiveTempVoiceChannel => {
+        const state = states.get(row.channelId);
+        return {
+          channelId: row.channelId,
+          guildId: row.guildId,
+          ownerId: row.ownerId,
+          createdAt: row.createdAt,
+          channelName: channelNames.get(row.channelId),
+          ownerName: ownerNames.get(row.ownerId),
+          // 状態未同期(bot停止中・作成直後など)のチャンネルは設定値null・在室者なしで返す。
+          userLimit: state?.userLimit ?? null,
+          bitrate: state?.bitrate ?? null,
+          isLocked: state?.isLocked ?? false,
+          isHidden: state?.isHidden ?? false,
+          members: state?.members ?? [],
+        };
+      });
     }),
 
   forceDelete: tempVoiceManageProcedure(forceDeleteInput)

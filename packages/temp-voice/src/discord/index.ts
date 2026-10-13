@@ -1,4 +1,5 @@
 import type { FeatureModuleContext } from "@management-bot/core";
+import { Redis } from "ioredis";
 import cron from "node-cron";
 import { canRenameWithinRateLimit } from "../domain/index.js";
 import { handleVoiceCreate } from "./voice-create.js";
@@ -16,6 +17,16 @@ import { clearTempVoiceCreateChannel, getTempVoiceConfig } from "../application/
 import { runStartupReconcile } from "./reconcile.js";
 import { registerDashboardActionListener } from "./dashboard-action-listener.js";
 import { syncTempVoiceMemberCount } from "./sync-member-count.js";
+import {
+  extendAllTempVoiceStateTtl,
+  rebuildTempVoiceChannelStates,
+  removeTempVoiceChannelState,
+  syncTempVoiceChannelState,
+  syncTempVoiceChannelStateOnVoiceUpdate,
+} from "./sync-channel-state.js";
+
+// TTL(120秒)の半分で延長する。
+const STATE_TTL_REFRESH_MS = 60_000;
 
 /** オーナー不在からVC自動再割当までの猶予期間(#410)。 */
 const OWNER_GRACE_PERIOD_MS = 10 * 60 * 1000;
@@ -26,6 +37,9 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // プロセス起動時に1回だけ生成し、voice-create.ts(作成時のオーナー入室)と
   // handle-voice-session.ts(以降の入退室・移動)の両方で共有する。
   const sessionStore = new VoiceSessionStore();
+  // Dashboard表示用の一時VC状態の書き込み先。lazyConnect: 最初の書き込みまで接続を開かない(activityと同じ)。
+  const redis = new Redis(ctx.redisUrl, { lazyConnect: true });
+  const stateDeps = { redis, sessionStore };
   const voiceCreateDeps = { db: ctx.db, eventBus: ctx.eventBus, sessionStore };
   // 無人一時VCの削除猶予タイマーをプロセス内メモリで管理する(#411)。sessionStoreと同様プロセス起動時に1回だけ生成する。
   const emptyChannelScheduler = new EmptyChannelDeletionScheduler();
@@ -52,6 +66,13 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
     });
     handleEmptyChannel(emptyChannelDeps, emptyChannelScheduler, oldState, newState);
     syncTempVoiceMemberCount({ db: ctx.db, sessionStore }, oldState, newState);
+    syncTempVoiceChannelStateOnVoiceUpdate(stateDeps, oldState, newState);
+  });
+
+  // 権限上書き(ロック/非表示)・人数制限・音質の変更をDashboard表示用の状態に反映する。
+  ctx.client.on("channelUpdate", (_oldChannel, newChannel) => {
+    if (newChannel.isDMBased() || !newChannel.isVoiceBased()) return;
+    syncTempVoiceChannelState(stateDeps, newChannel);
   });
 
   // 一時VC削除時(制御パネルからの明示削除・手動削除・#411の無人削除等、経路を問わず)に
@@ -75,6 +96,7 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
       });
 
     if (!sessionStore.isTracked(channel.id)) return;
+    removeTempVoiceChannelState(stateDeps, channel.guildId, channel.id);
     emptyChannelScheduler.cancel(channel.id);
     sessionStore.endAllSessionsForChannel(ctx.eventBus, channel.guildId, channel.id, new Date()).catch((error: unknown) => {
       console.error(`temp-voice: failed to end sessions for deleted channel ${channel.id}`, error);
@@ -91,23 +113,37 @@ export function registerDiscordHandlers(ctx: FeatureModuleContext): void {
   // 起動時リコンサイル(#412)。bot再起動で失われるプロセス内状態(入退室セッション・空チャンネル
   // 削除猶予タイマー)を補正し、片肺状態・設定チャンネル消失も検知する。起動時の1回のみ実行する。
   const runReconcile = () => {
-    runStartupReconcile({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore, emptyChannelScheduler }).catch(
-      (error: unknown) => {
+    runStartupReconcile({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore, emptyChannelScheduler })
+      .catch((error: unknown) => {
         console.error("temp-voice: startup reconcile failed", error);
-      },
-    );
+      })
+      // リコンサイル(片肺チャンネルの削除等)の後に、Dashboard表示用の状態をDB上の一時VC全件で作り直す。
+      .then(() => rebuildTempVoiceChannelStates({ ...stateDeps, db: ctx.db, client: ctx.client }))
+      .catch((error: unknown) => {
+        console.error("temp-voice: failed to rebuild channel states", error);
+      });
   };
   if (ctx.client.isReady()) runReconcile();
   else ctx.client.once("ready", runReconcile);
 
   const graceRunner = createGraceRunner({ db: ctx.db, client: ctx.client, eventBus: ctx.eventBus, sessionStore });
   const graceTask = cron.schedule(graceCron, () => void graceRunner.run(), { timezone: GRACE_CRON_TIMEZONE });
+  // TTL(120秒)の半分で延長し、botが落ちたら一時VCの詳細表示が自然に消えるようにする。
+  const stateTtlTimer = setInterval(() => {
+    extendAllTempVoiceStateTtl(redis, ctx.client).catch((error: unknown) => {
+      console.error("temp-voice: failed to extend channel state ttl", error);
+    });
+  }, STATE_TTL_REFRESH_MS);
   ctx.onShutdown(async () => {
     graceTask.stop();
+    clearInterval(stateTtlTimer);
     await graceRunner.waitForIdle();
     // 無人削除の猶予タイマー(#411)もshutdown時に解除する(codexレビュー指摘: cronのみ停止すると
     // 最大graceMs(既定30秒)分、client.destroy()やDB切断後にタイマーが残りプロセスがぶら下がる)。
     emptyChannelScheduler.cancelAll();
+    // activityと同様、接続中ならquitで送信済みコマンドの応答を待って閉じる(Redis停止中はdisconnect)。
+    if (["connecting", "connect", "ready"].includes(redis.status)) await redis.quit().catch(() => redis.disconnect());
+    else redis.disconnect();
   });
 
   // renameのレート制限(2回/10分/チャンネル)はプロセス内メモリで判定する(#408)。
