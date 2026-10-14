@@ -32,7 +32,7 @@ import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/starwind/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
