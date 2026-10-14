@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { trpc } from "../trpc.js";
 import {
@@ -64,7 +64,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
   const service = parseService(params.get("service"));
   const overview = useQuery({ ...trpc.status.overview.queryOptions(), refetchInterval: STATUS_REFETCH_MS });
 
-  if (isNotFoundError(overview.error)) return <NotFoundPage />;
+  if (isNotFoundError(overview.error)) return <Navigate to="/404" replace />;
 
   const go = (next: StatusTab, nextService?: ServiceFilter) =>
     setParams(next === "status" ? {} : { tab: next, ...(nextService && nextService !== "all" ? { service: nextService } : {}) });

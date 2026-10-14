@@ -68,6 +68,7 @@ function buildContext(
     getGuildCategoryOptions: overrides.getGuildCategoryOptions ?? (async () => [{ id: "cat-1", name: "一時VC" }]),
     getGuildAccessStatus: async () => "ok" as const,
     getGuildOwnerId: async () => null,
+    getGuildRoleList: async () => null,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [{ id: "user-2", name: "Bob" }], nextAfter: undefined }),
     readRedisHash: overrides.readRedisHash ?? (async () => ({})),
