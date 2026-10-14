@@ -20,7 +20,7 @@ import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { LOGOUT_FAILED_MESSAGE } from "./pages/UserSettingsPage.js";
 import { Button } from "@/components/ui/button";
 import { Loader2Icon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 
 export function App() {
   const me = useQuery(trpc.me.queryOptions());

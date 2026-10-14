@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AudioLines, Ban, Check, Crown, EyeOff, Lock, Pencil, Users, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { trpc } from "../trpc.js";
 import {
   buildChannelEditActions,

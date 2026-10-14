@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { GuildIcon } from "../guild-icon.js";
 import { firstAccessiblePath } from "../guild-pages.js";

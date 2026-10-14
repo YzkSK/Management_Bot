@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type RefObject } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { logout } from "../logout.js";
 import { getStoredTheme, setTheme, type Theme } from "../theme.js";
 import { trpc } from "../trpc.js";

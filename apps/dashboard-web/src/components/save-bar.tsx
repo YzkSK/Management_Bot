@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * 未保存の変更がある間だけ画面下部に出す保存バー。編集は即時保存せず、ここから明示的に保存する。
- * 保存結果はバーではなくトースト(sonner)で知らせる。
+ * 保存結果はバーではなくトースト(Starwind)で知らせる。
  */
 export function SaveBar({
   dirty,
