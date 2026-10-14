@@ -11,7 +11,7 @@ import { EMPTY_ROLE_FILTER, filterRoles, type RoleFilterValue } from "./role-fil
 import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 import { Loading } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
