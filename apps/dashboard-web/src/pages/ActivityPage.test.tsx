@@ -243,6 +243,20 @@ describe("ActiveVoiceView", () => {
     expect(html).toContain("opacity-50");
     expect(html).not.toContain("集計対象外");
   });
+  test("一時VCのチャンネルにだけ「一時VC」バッジを付ける", () => {
+    const channel = { channelName: "VC", afk: false, startedAt: "2026-09-29T11:00:00.000Z", members: [member] };
+    const html = renderToStaticMarkup(
+      <ActiveVoiceView
+        now={now}
+        channels={[
+          { ...channel, channelId: "c1" },
+          { ...channel, channelId: "c2" },
+        ]}
+        tempVoiceChannelIds={new Set(["c1"])}
+      />,
+    );
+    expect(html.match(/一時VC/g)?.length).toBe(1);
+  });
   test("在室者がいなければ空状態", () => {
     expect(renderToStaticMarkup(<ActiveVoiceView now={now} channels={[]} />)).toContain("現在VCにいるメンバーはいません。");
   });

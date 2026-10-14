@@ -2,18 +2,48 @@ import type { DomainEventBus } from "@management-bot/core";
 import type { Db } from "@management-bot/db";
 import {
   listenForTempVoiceAutoSetup,
+  listenForTempVoiceChannelAction,
   listenForTempVoiceForceDelete,
   type TempVoiceAutoSetupNotification,
+  type TempVoiceChannelActionNotification,
   type TempVoiceForceDeleteNotification,
 } from "@management-bot/db";
 import { ChannelType, type Client } from "discord.js";
-import { forceDeleteTempVoiceChannel, upsertTempVoiceConfig } from "../application/index.js";
+import type { Redis } from "ioredis";
+import { forceDeleteTempVoiceChannel, upsertTempVoiceConfig, writeTempVoiceActionResult } from "../application/index.js";
+import type { TempVoiceActionResult } from "../domain/index.js";
+import { applyDashboardAction, type ApplyDashboardActionDeps } from "./apply-dashboard-action.js";
+import { createUserSerializer } from "./serialize-by-user.js";
 
 export interface DashboardActionListenerDeps {
   client: Client;
   db: Db;
   eventBus: DomainEventBus;
   databaseUrl: string;
+  /** 反映結果の書き込み先(Dashboardが失敗を検知する用、discord/index.tsのRedisクライアントを共有)。 */
+  redis: Redis;
+  /** renameのレート制限(ボタン経由のモーダル送信と共有、discord/index.tsで生成)。 */
+  tryReserveRenameSlot: (channelId: string) => boolean;
+}
+
+/**
+ * 反映結果(例外は`discord_error`)をRedisへ書き、Dashboardが失敗を検知できるようにする(Redisへの書き込み失敗はログのみ)。
+ * テストでのDI用に`apply`を差し替え可能にする。
+ */
+export async function handleChannelActionNotification(
+  deps: ApplyDashboardActionDeps & { redis: Redis; apply?: typeof applyDashboardAction },
+  notification: TempVoiceChannelActionNotification,
+): Promise<void> {
+  let result: TempVoiceActionResult;
+  try {
+    result = await (deps.apply ?? applyDashboardAction)(deps, notification);
+  } catch (error) {
+    console.error(`temp-voice: failed to apply dashboard action for channel ${notification.channelId}`, error);
+    result = { ok: false, reason: "discord_error" };
+  }
+  await writeTempVoiceActionResult(deps.redis, notification.guildId, notification.requestId, result).catch((error: unknown) => {
+    console.error(`temp-voice: failed to write dashboard action result for channel ${notification.channelId}`, error);
+  });
 }
 
 /** テストでのDI用に`upsertConfig`を差し替え可能にする。本番はデフォルト実装を使う。 */
@@ -78,9 +108,21 @@ export function registerDashboardActionListener(deps: DashboardActionListenerDep
     console.error("Failed to listen for temp_voice_force_delete", error);
   });
 
+  // 同じVCへの操作はチャンネル単位で直列化する(1回の保存でロック変更とオーナー移譲が並行すると、
+  // 移譲で外した旧オーナーの権限を後から付け直してしまうため。codexレビュー指摘)。
+  const runSerialized = createUserSerializer();
+  const channelAction = listenForTempVoiceChannelAction(deps.databaseUrl, (notification) => {
+    runSerialized(notification.channelId, () => handleChannelActionNotification(deps, notification)).catch((error: unknown) => {
+      console.error(`temp-voice: failed to apply dashboard action for channel ${notification.channelId}`, error);
+    });
+  });
+  channelAction.ready.catch((error: unknown) => {
+    console.error("Failed to listen for temp_voice_channel_action", error);
+  });
+
   return {
     close: async () => {
-      await Promise.all([autoSetup.close(), forceDelete.close()]);
+      await Promise.all([autoSetup.close(), forceDelete.close(), channelAction.close()]);
     },
   };
 }

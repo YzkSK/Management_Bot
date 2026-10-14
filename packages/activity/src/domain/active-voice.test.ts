@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { type ActiveVoiceEntry, activeVoiceKey, groupActiveVoice, nextJoinedAt, parseActiveVoiceEntry } from "./active-voice.js";
+import {
+  type ActiveVoiceEntry,
+  activeVoiceJoinedKey,
+  activeVoiceKey,
+  groupActiveVoice,
+  nextJoinedAt,
+  parseActiveVoiceEntry,
+  parseActiveVoiceJoined,
+} from "./active-voice.js";
 
 function entry(overrides: Partial<ActiveVoiceEntry> = {}): ActiveVoiceEntry {
   return {
@@ -34,6 +42,17 @@ describe("nextJoinedAt", () => {
   test("移動・新規入室なら現在時刻", () => {
     expect(nextJoinedAt(entry(), "c2", now)).toBe(now.toISOString());
     expect(nextJoinedAt(undefined, "c1", now)).toBe(now.toISOString());
+  });
+});
+
+describe("parseActiveVoiceJoined", () => {
+  test("正しい値のみ受け付ける", () => {
+    const v = { channelId: "c1", joinedAt: "2026-09-29T10:00:00.000Z" };
+    expect(parseActiveVoiceJoined(JSON.stringify(v))).toEqual(v);
+    expect(parseActiveVoiceJoined(JSON.stringify({ ...v, joinedAt: "x" }))).toBeUndefined();
+    expect(parseActiveVoiceJoined("{")).toBeUndefined();
+    expect(parseActiveVoiceJoined(null)).toBeUndefined();
+    expect(activeVoiceJoinedKey("g1")).toBe("activity:voice-joined:g1");
   });
 });
 

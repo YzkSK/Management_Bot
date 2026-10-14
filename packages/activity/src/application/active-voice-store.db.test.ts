@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
-import { type ActiveVoiceEntry, activeVoiceKey, activityChangedChannel, parseActivityChanged } from "../domain/index.js";
+import { type ActiveVoiceEntry, activeVoiceJoinedKey, activeVoiceKey, activityChangedChannel, parseActivityChanged } from "../domain/index.js";
 import { publishActivityChanged } from "./activity-changed.js";
 import {
+  ACTIVE_VOICE_JOINED_TTL_SECONDS,
   ACTIVE_VOICE_TTL_SECONDS,
   extendActiveVoiceTtl,
   getActiveVoiceEntry,
+  getActiveVoiceJoined,
   readActiveVoice,
   setActiveVoiceCountingSince,
   removeActiveVoice,
@@ -53,7 +55,7 @@ describe.skipIf(!(await isRedisAvailable()))("active-voice-store", () => {
   const readHash = (key: string) => redis.hgetall(key);
 
   afterEach(async () => {
-    await redis.del(activeVoiceKey(guildId));
+    await redis.del(activeVoiceKey(guildId), activeVoiceJoinedKey(guildId));
   });
   afterAll(() => redis.disconnect());
 
@@ -93,6 +95,20 @@ describe.skipIf(!(await isRedisAvailable()))("active-voice-store", () => {
     await redis.expire(activeVoiceKey(guildId), 5);
     await extendActiveVoiceTtl(redis, [guildId]);
     expect(await redis.ttl(activeVoiceKey(guildId))).toBeGreaterThan(5);
+  });
+
+  test("入室時刻Hashには24時間TTLで保存し、extendで延長、removeで消す", async () => {
+    const joinedKey = activeVoiceJoinedKey(guildId);
+    await upsertActiveVoice(redis, guildId, "u1", entry());
+    expect(await getActiveVoiceJoined(redis, guildId, "u1")).toEqual({ channelId: "c1", joinedAt: "2026-09-29T10:00:00.000Z" });
+    const ttl = await redis.ttl(joinedKey);
+    expect(ttl).toBeGreaterThan(ACTIVE_VOICE_TTL_SECONDS);
+    expect(ttl).toBeLessThanOrEqual(ACTIVE_VOICE_JOINED_TTL_SECONDS);
+    await redis.expire(joinedKey, 5);
+    await extendActiveVoiceTtl(redis, [guildId]);
+    expect(await redis.ttl(joinedKey)).toBeGreaterThan(5);
+    await removeActiveVoice(redis, guildId, "u1");
+    expect(await redis.hexists(joinedKey, "u1")).toBe(0);
   });
 
   test("保存済みメンバーのIDを列挙する", async () => {

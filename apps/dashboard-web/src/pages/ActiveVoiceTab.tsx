@@ -20,7 +20,48 @@ function MuteIcon({ self, server, label, Icon }: { self: boolean; server: boolea
   );
 }
 
-export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVoiceChannel[]; now: Date }) {
+interface VoiceMember {
+  name: string;
+  avatarUrl: string | null;
+  selfMute: boolean;
+  serverMute: boolean;
+  selfDeaf: boolean;
+  serverDeaf: boolean;
+  streaming: boolean;
+  video: boolean;
+}
+
+/** アクティブVCと一時VC一覧で共通のメンバー行(アバター・名前・画面共有/カメラ/ミュートのアイコン)。 */
+export function VoiceMemberRow({ member: m, dimmed = false, badge }: { member: VoiceMember; dimmed?: boolean; badge?: string }) {
+  return (
+    <li className={cn("flex items-center gap-2.5 rounded-md px-2 py-1.5", dimmed && "opacity-50")}>
+      {m.avatarUrl ? (
+        <img src={m.avatarUrl} alt="" className="size-7 shrink-0 rounded-full" />
+      ) : (
+        <span className="bg-muted size-7 shrink-0 rounded-full" />
+      )}
+      <span className="min-w-0 truncate text-sm">{m.name}</span>
+      {badge && <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">{badge}</span>}
+      <span className="flex flex-1 items-center justify-end gap-1.5">
+        {m.streaming && <Monitor aria-label="画面共有中" className="size-4 text-violet-600" />}
+        {m.video && <Video aria-label="カメラON" className="size-4 text-blue-600" />}
+        <MuteIcon self={m.selfMute} server={m.serverMute} label="ミュート" Icon={MicOff} />
+        <MuteIcon self={m.selfDeaf} server={m.serverDeaf} label="スピーカーミュート" Icon={HeadphoneOff} />
+      </span>
+    </li>
+  );
+}
+
+export function ActiveVoiceView({
+  channels,
+  now,
+  tempVoiceChannelIds = new Set(),
+}: {
+  channels: readonly ActiveVoiceChannel[];
+  now: Date;
+  /** 一時VCのchannelId。該当チャンネルに「一時VC」バッジを付ける。 */
+  tempVoiceChannelIds?: ReadonlySet<string>;
+}) {
   if (channels.length === 0) {
     return <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">現在VCにいるメンバーはいません。</p>;
   }
@@ -39,6 +80,9 @@ export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVo
                 <span className="truncate text-sm font-semibold">{channel.channelName}</span>
                 <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{channel.members.length}人</span>
                 {channel.afk && <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">AFK</span>}
+                {tempVoiceChannelIds.has(channel.channelId) && (
+                  <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">一時VC</span>
+                )}
               </div>
               <span className="text-muted-foreground text-xs whitespace-nowrap">
                 継続{" "}
@@ -49,20 +93,7 @@ export function ActiveVoiceView({ channels, now }: { channels: readonly ActiveVo
             </div>
             <ul className="flex flex-col gap-1">
               {channel.members.map((m) => (
-                <li key={m.userId} className={cn("flex items-center gap-2.5 rounded-md px-2 py-1.5", !m.counting && "opacity-50")}>
-                  {m.avatarUrl ? (
-                    <img src={m.avatarUrl} alt="" className="size-7 shrink-0 rounded-full" />
-                  ) : (
-                    <span className="bg-muted size-7 shrink-0 rounded-full" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-sm">{m.name}</span>
-                  <span className="flex items-center gap-1.5">
-                    {m.streaming && <Monitor aria-label="画面共有中" className="size-4 text-violet-600" />}
-                    {m.video && <Video aria-label="カメラON" className="size-4 text-blue-600" />}
-                    <MuteIcon self={m.selfMute} server={m.serverMute} label="ミュート" Icon={MicOff} />
-                    <MuteIcon self={m.selfDeaf} server={m.serverDeaf} label="スピーカーミュート" Icon={HeadphoneOff} />
-                  </span>
-                </li>
+                <VoiceMemberRow key={m.userId} member={m} dimmed={!m.counting} />
               ))}
             </ul>
           </section>
@@ -77,7 +108,12 @@ export function ActiveVoiceTab({ guildId, now }: { guildId: string; now: Date })
     ...trpc.activity.activeVoice.queryOptions({ guildId }),
     placeholderData: keepPreviousData,
   });
+  // 一時VCかどうかの判定用。バッジは補助表示なので、取得できなくてもアクティブVC自体は表示する。
+  // VIEW_TEMP_VOICEが無ければAPIは自分がオーナーのVCしか返さないため、他人の一時VCにはバッジが付かない。
+  // Redis由来でWSの無効化対象外のため、一時VCページと同じく10秒ごとに再取得する(後から作られた一時VCにもバッジを付ける)。
+  const tempVoiceQuery = useQuery({ ...trpc.tempVoice.listActiveChannels.queryOptions({ guildId }), refetchInterval: 10_000 });
   if (query.isPending) return <Loading />;
   if (query.isError) return <ErrorState subject="アクティブVC" onRetry={() => void query.refetch()} />;
-  return <ActiveVoiceView channels={query.data} now={now} />;
+  const tempVoiceChannelIds = new Set(tempVoiceQuery.data?.map((c) => c.channelId));
+  return <ActiveVoiceView channels={query.data} now={now} tempVoiceChannelIds={tempVoiceChannelIds} />;
 }

@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AudioLines, EyeOff, Lock, Users, Volume2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
+import { formatDuration } from "./activity-range.js";
+import { VoiceMemberRow } from "./ActiveVoiceTab.js";
+import { EditChannelButton } from "./TempVoiceEditDialog.js";
 import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
@@ -118,6 +122,12 @@ function ActiveChannelsTab({
     onError: () => toast.error("強制削除リクエストの送信に失敗しました。"),
   });
 
+  // 継続時間の基準時刻。一覧は10秒ごとに再取得されるため、そのたびに更新される。
+  const now = new Date();
+  // VIEW_TEMP_VOICEが無ければAPIは自分がオーナーのVCだけを返す。
+  const capabilities = useGuildCapabilities(guildId);
+  const ownOnly = capabilities !== undefined && !hasCapability(capabilities, CAPABILITIES.VIEW_TEMP_VOICE);
+
   if (listQuery.isPending) return <Loading />;
   if (isForbiddenError(listQuery.error)) {
     return <ForbiddenState pageName="一時VC一覧" capabilities={["VIEW_TEMP_VOICE"]} />;
@@ -128,55 +138,107 @@ function ActiveChannelsTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-muted-foreground text-sm">現在Discord上に存在する一時VCです。</p>
+      <p className="text-muted-foreground text-sm">
+        {ownOnly ? "あなたがオーナーの一時VCです。" : "現在Discord上に存在する一時VCです。"}
+      </p>
       {listQuery.data.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
-          現在アクティブな一時VCはありません。作成用チャンネルに入室すると自動で作成されます。
+          {ownOnly ? "あなたがオーナーの一時VCはありません。" : "現在アクティブな一時VCはありません。"}
+          作成用チャンネルに入室すると自動で作成されます。
         </p>
       ) : (
-        <div className="bg-card overflow-hidden rounded-xl border">
-          <table className="hidden w-full text-sm md:table">
-            <thead>
-              <tr className="text-muted-foreground border-b text-left text-xs">
-                <th className="px-4 py-2.5 font-medium">チャンネル</th>
-                <th className="px-3 py-2.5 font-medium">オーナー</th>
-                <th className="px-3 py-2.5 text-right font-medium">在室人数</th>
-                <th className="px-3 py-2.5 font-medium">作成日時</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {listQuery.data.map((channel) => (
-                <tr key={channel.channelId} className="border-b last:border-b-0">
-                  <td className="px-4 py-2.5">{channel.channelName ?? channel.channelId}</td>
-                  <td className="px-3 py-2.5">{channel.ownerName ?? channel.ownerId}</td>
-                  <td className="px-3 py-2.5 text-right">{channel.memberCount}人</td>
-                  <td className="text-muted-foreground px-3 py-2.5">{new Date(channel.createdAt).toLocaleString("ja-JP")}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    {canForceDelete && (
-                      <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+        <div className="grid items-start gap-3 md:grid-cols-2">
+          {listQuery.data.map((channel) => {
+            const ChannelIcon = channel.isLocked ? Lock : Volume2;
+            return (
+              <section
+                key={channel.channelId}
+                className={`flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ChannelIcon
+                      aria-label={channel.isLocked ? "ロック中" : undefined}
+                      aria-hidden={channel.isLocked ? undefined : true}
+                      className="text-muted-foreground size-4 shrink-0"
+                    />
+                    <span className="truncate text-sm font-semibold">{channel.channelName ?? channel.channelId}</span>
+                    {channel.isMine && (
+                      <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">あなたのVC</span>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <ul className="divide-y md:hidden">
-            {listQuery.data.map((channel) => (
-              <li key={channel.channelId} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-sm">{channel.channelName ?? channel.channelId}</span>
-                  <span className="text-muted-foreground text-xs">
-                    オーナー {channel.ownerName ?? channel.ownerId} ・ {channel.memberCount}人 ・{" "}
-                    {new Date(channel.createdAt).toLocaleString("ja-JP")}
+                  </div>
+                  <span className="text-muted-foreground text-xs whitespace-nowrap">
+                    継続{" "}
+                    <b className="text-foreground text-sm">
+                      {formatDuration(Math.max(0, (now.getTime() - new Date(channel.createdAt).getTime()) / 1000))}
+                    </b>
                   </span>
                 </div>
-                {canForceDelete && (
-                  <ForceDeleteButton guildId={guildId} channel={channel} disabled={!isConfigured} onConfirm={forceDeleteMutation.mutate} />
+                {channel.members.length === 0 ? (
+                  // 状態未同期(bot停止中・作成直後)はAPIがuserLimit: nullで返すので、無人(削除待ち、#411)と区別する。
+                  <p className="text-muted-foreground px-2 py-1.5 text-sm">
+                    {channel.userLimit === null ? "在室状況を取得できません。" : "誰もいません。まもなく自動で削除されます。"}
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {channel.members.map((m) => (
+                      <VoiceMemberRow key={m.userId} member={m} badge={m.userId === channel.ownerId ? "オーナー" : undefined} />
+                    ))}
+                  </ul>
                 )}
-              </li>
-            ))}
-          </ul>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+                    {channel.userLimit !== null && (
+                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                        <Users className="size-3" aria-hidden />
+                        {channel.userLimit === 0 ? "無制限" : `上限 ${channel.userLimit}人`}
+                      </span>
+                    )}
+                    {channel.bitrate !== null && (
+                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                        <AudioLines className="size-3" aria-hidden />
+                        {Math.round(channel.bitrate / 1000)} kbps
+                      </span>
+                    )}
+                    {channel.isHidden && (
+                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                        <EyeOff className="size-3" aria-hidden />
+                        非表示
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {(channel.isMine || canForceDelete) && (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* 設定変更はそのVCのオーナー本人のみ(管理者・サーバーオーナーでも不可)。 */}
+                  {channel.isMine && (
+                    <EditChannelButton
+                      guildId={guildId}
+                      channel={{
+                        channelId: channel.channelId,
+                        ownerId: channel.ownerId,
+                        name: channel.channelName ?? "",
+                        userLimit: channel.userLimit,
+                        bitrate: channel.bitrate,
+                        isLocked: channel.isLocked,
+                        isHidden: channel.isHidden,
+                        members: channel.members,
+                      }}
+                    />
+                  )}
+                  {canForceDelete && (
+                    <ForceDeleteButton
+                      guildId={guildId}
+                      channel={{ channelId: channel.channelId, memberCount: channel.members.length }}
+                      disabled={!isConfigured}
+                      onConfirm={forceDeleteMutation.mutate}
+                    />
+                  )}
+                </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
     </div>

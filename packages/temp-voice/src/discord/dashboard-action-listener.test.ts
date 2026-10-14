@@ -1,5 +1,68 @@
 import { describe, expect, mock, test } from "bun:test";
-import { handleAutoSetupNotification, handleForceDeleteNotification } from "./dashboard-action-listener.js";
+import { handleAutoSetupNotification, handleChannelActionNotification, handleForceDeleteNotification } from "./dashboard-action-listener.js";
+
+/** multi().hset().expire().exec()の呼び出しを記録するfake redis。execが失敗するよう切り替えられる。 */
+function fakeRedis(execError?: Error) {
+  const calls: unknown[][] = [];
+  const chain: { hset: (...args: unknown[]) => unknown; expire: (...args: unknown[]) => unknown; exec: () => Promise<unknown[]> } = {
+    hset: (...args: unknown[]) => {
+      calls.push(["hset", ...args]);
+      return chain;
+    },
+    expire: (...args: unknown[]) => {
+      calls.push(["expire", ...args]);
+      return chain;
+    },
+    exec: () => (execError ? Promise.reject(execError) : Promise.resolve([])),
+  };
+  return { redis: { multi: () => chain }, calls };
+}
+
+describe("handleChannelActionNotification", () => {
+  const notification = {
+    requestId: "11111111-1111-4111-8111-111111111111",
+    guildId: "g1",
+    channelId: "c1",
+    executorId: "u1",
+    action: { type: "setHidden", hidden: true },
+  } as const;
+  const baseDeps = { client: {}, db: {}, eventBus: {}, tryReserveRenameSlot: () => true };
+
+  const resultKey = `temp-voice:action-result:g1:${notification.requestId}`;
+
+  test("通知をapplyDashboardActionへそのまま渡し、結果をrequestIdごとのキーに60秒TTLで書く", async () => {
+    const apply = mock(async () => ({ ok: true }) as const);
+    const { redis, calls } = fakeRedis();
+    await handleChannelActionNotification({ ...baseDeps, redis, apply } as never, notification);
+    expect(apply).toHaveBeenCalledWith(expect.anything(), notification);
+    expect(calls).toEqual([
+      ["hset", resultKey, "result", JSON.stringify({ ok: true })],
+      ["expire", resultKey, 60],
+    ]);
+  });
+
+  test("失敗結果はそのまま書く", async () => {
+    const apply = mock(async () => ({ ok: false, reason: "rate_limited" }) as const);
+    const { redis, calls } = fakeRedis();
+    await handleChannelActionNotification({ ...baseDeps, redis, apply } as never, notification);
+    expect(calls[0]).toEqual(["hset", resultKey, "result", JSON.stringify({ ok: false, reason: "rate_limited" })]);
+  });
+
+  test("applyが例外を投げたらdiscord_errorを書く", async () => {
+    const apply = mock(async () => {
+      throw new Error("Missing Permissions");
+    });
+    const { redis, calls } = fakeRedis();
+    await handleChannelActionNotification({ ...baseDeps, redis, apply } as never, notification);
+    expect(calls[0]).toEqual(["hset", resultKey, "result", JSON.stringify({ ok: false, reason: "discord_error" })]);
+  });
+
+  test("Redisへの書き込みに失敗しても例外を投げない", async () => {
+    const apply = mock(async () => ({ ok: true }) as const);
+    const { redis } = fakeRedis(new Error("redis down"));
+    await handleChannelActionNotification({ ...baseDeps, redis, apply } as never, notification);
+  });
+});
 
 describe("handleAutoSetupNotification", () => {
   test("guildが見つからない場合は何もしない", async () => {

@@ -79,8 +79,9 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/guilds/g1/logs"');
     expect(html).not.toContain('href="/guilds/g1/activity"');
     expect(html).not.toContain('href="/guilds/g1/moderation"');
-    expect(html).not.toContain('href="/guilds/g1/temp-voice"');
     expect(html).not.toContain('href="/guilds/g1/access"');
+    // 一時VCは全メンバー向け(権限がなければ自分がオーナーのVCのみ表示)。
+    expect(html).toContain('href="/guilds/g1/temp-voice"');
     expect(html).not.toContain(">管理<");
   });
 

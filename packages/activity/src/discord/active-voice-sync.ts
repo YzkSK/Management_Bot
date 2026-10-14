@@ -3,6 +3,7 @@ import type { Redis } from "ioredis";
 import {
   extendActiveVoiceTtl,
   getActiveVoiceEntry,
+  getActiveVoiceJoined,
   listActiveVoiceUserIds,
   removeActiveVoice,
   upsertActiveVoice,
@@ -74,7 +75,7 @@ export async function syncActiveVoice(
 ): Promise<void> {
   const guildId = state.guild.id;
   if (state.channelId === null) return removeActiveVoice(redis, guildId, state.id);
-  const prev = await getActiveVoiceEntry(redis, guildId, state.id);
+  const prev = (await getActiveVoiceEntry(redis, guildId, state.id)) ?? (await getActiveVoiceJoined(redis, guildId, state.id));
   const since = countingSinceOf(guildId, state.id);
   const entry = toActiveVoiceEntry(state, nextJoinedAt(prev, state.channelId, now), since ? since.toISOString() : null);
   if (entry) await upsertActiveVoice(redis, guildId, state.id, entry);
