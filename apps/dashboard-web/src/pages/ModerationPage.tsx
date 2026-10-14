@@ -29,7 +29,7 @@ import { BotNotJoinedState, BotPermissionState, ErrorState, ForbiddenState, Inli
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/starwind/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

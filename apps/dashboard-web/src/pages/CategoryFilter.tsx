@@ -4,7 +4,7 @@ import type { LogCategory } from "@management-bot/shared";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 
 function CategoryMark({ category }: { category: LogCategory }) {
   const Icon = CATEGORY_ICON[category];

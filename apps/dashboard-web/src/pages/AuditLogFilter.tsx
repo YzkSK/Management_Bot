@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod } from "./audit-log-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export interface AuditFilterValue {

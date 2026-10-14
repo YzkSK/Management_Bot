@@ -27,7 +27,7 @@ import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
