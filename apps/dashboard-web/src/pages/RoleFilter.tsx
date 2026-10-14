@@ -3,6 +3,7 @@ import { ChevronDown, ListFilter, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { permissionIcon } from "./permission-icons.js";
 import { EMPTY_ROLE_FILTER, type RoleFilterValue } from "./role-filter.js";
+import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -137,11 +138,11 @@ export function RoleFilter({
                 const Icon = permissionIcon(key);
                 return (
                   <label key={key} className="hover:bg-accent/60 flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm">
-                    <input
-                      type="checkbox"
-                      className="accent-foreground size-4 shrink-0"
+                    <Checkbox
+                      aria-label={label}
+                      className="shrink-0"
                       checked={value.permissionKeys.includes(key)}
-                      onChange={(e) => togglePermission(key, e.target.checked)}
+                      onCheckedChange={(checked) => togglePermission(key, checked)}
                     />
                     <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
                     <span className="min-w-0 break-words">{label}</span>

@@ -152,8 +152,7 @@ describe("AccessPage", () => {
     const html = renderPage("g1", queryClient);
 
     expect(html).toContain("サーバーオーナーのみ変更できます");
-    const tag = html.slice(html.lastIndexOf("<input", html.indexOf(CAPABILITY_LABELS.VIEW_AUDIT_LOG)));
-    expect(tag.slice(0, tag.indexOf(">"))).toContain('disabled=""');
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_AUDIT_LOG)).toContain('disabled=""');
     expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).not.toContain('disabled=""');
   });
 

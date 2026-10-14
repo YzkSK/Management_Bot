@@ -1,6 +1,7 @@
 import { ChevronDown, ListFilter, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod } from "./audit-log-labels.js";
+import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -204,20 +205,18 @@ export function AuditLogFilter({
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="hover:bg-accent/60 flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm">
-              <input
-                type="checkbox"
-                className="accent-foreground size-4"
+              <Checkbox
+                aria-label="失敗・権限不足のみ表示する"
                 checked={value.onlyIssues}
-                onChange={(e) => patch({ onlyIssues: e.target.checked })}
+                onCheckedChange={(checked) => patch({ onlyIssues: checked })}
               />
               失敗・権限不足のみ表示する
             </label>
             <label className="hover:bg-accent/60 flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm">
-              <input
-                type="checkbox"
-                className="accent-foreground size-4"
+              <Checkbox
+                aria-label="アクセス履歴を隠す"
                 checked={value.hideAccess}
-                onChange={(e) => patch({ hideAccess: e.target.checked })}
+                onCheckedChange={(checked) => patch({ hideAccess: checked })}
               />
               アクセス履歴を隠す
             </label>

@@ -25,6 +25,7 @@ import {
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -447,17 +448,16 @@ function TargetEditor({
                   key={option.value}
                   className={cn("flex min-h-9 items-center gap-2.5 text-sm", grantable ? "cursor-pointer" : "text-muted-foreground")}
                 >
-                  <input
-                    type="checkbox"
-                    className="accent-foreground size-4"
+                  <Checkbox
+                    aria-label={option.label}
                     checked={selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       // 管理権限をONにすると前提の閲覧権限もONに、閲覧権限をOFFにすると依存する権限もOFFにする(issue #527)。
                       setSelectedCapabilities((prev) => {
                         const current = namesToCapabilities(prev);
                         return capabilitiesToNames(
-                          e.target.checked
+                          checked
                             ? addCapabilityPrerequisites(current | option.bit)
                             : removeUnmetDependents(current & ~option.bit),
                         );
