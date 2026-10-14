@@ -47,7 +47,11 @@ function ClickPopover({ trigger, label, children }: { trigger: ReactNode; label:
           {trigger}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-w-80 p-3 text-sm">
+      <DropdownMenuContent
+        align="end"
+        collisionPadding={16}
+        className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] max-w-80 overflow-y-auto p-3 text-sm"
+      >
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
