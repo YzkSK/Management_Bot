@@ -35,14 +35,18 @@ function compareSnowflake(a: string, b: string): number {
   return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
 }
 
+/** ロール階層の比較(正ならaが上)。Discordは同じpositionのロールをidが小さい方を上として扱う。 */
+function compareHierarchy(a: { id: string; position: number }, b: { id: string; position: number }): number {
+  return a.position - b.position || compareSnowflake(b.id, a.id);
+}
+
 /** Discordのロール順(position降順、同順位はid昇順)に並べ、画面表示用の属性を付与する。 */
 export function buildRoleListItems(input: BuildRoleListItemsInput): RoleListItem[] {
   const { guildId, roles, memberCounts, botRoleIds } = input;
   const botRoleIdSet = new Set(botRoleIds);
-  const botTopPosition = roles.reduce(
-    (max, role) => (botRoleIdSet.has(role.id) ? Math.max(max, role.position) : max),
-    0,
-  );
+  const botTopRole = roles
+    .filter((role) => botRoleIdSet.has(role.id))
+    .reduce<RoleListSourceRole | null>((top, role) => (!top || compareHierarchy(role, top) > 0 ? role : top), null);
 
   return roles
     .map((role): RoleListItem => {
@@ -56,8 +60,8 @@ export function buildRoleListItems(input: BuildRoleListItemsInput): RoleListItem
         memberCount: isEveryone ? null : memberCounts ? (memberCounts[role.id] ?? 0) : null,
         isEveryone,
         botId: role.botId,
-        botManageable: !role.managed && !isEveryone && role.position < botTopPosition,
+        botManageable: !role.managed && !isEveryone && botTopRole !== null && compareHierarchy(role, botTopRole) < 0,
       };
     })
-    .sort((a, b) => b.position - a.position || compareSnowflake(a.id, b.id));
+    .sort((a, b) => compareHierarchy(b, a));
 }
