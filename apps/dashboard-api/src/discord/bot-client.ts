@@ -1,5 +1,11 @@
 import { z } from "zod";
-import type { ChannelOption, GuildAccessStatus, MemberOption, RoleOption } from "@management-bot/dashboard-access";
+import type {
+  ChannelOption,
+  GuildAccessStatus,
+  GuildRoleList,
+  MemberOption,
+  RoleOption,
+} from "@management-bot/dashboard-access";
 import { mapWithConcurrency } from "@management-bot/shared";
 import { buildAvatarUrl } from "../oauth/discord-client.js";
 import { isChannelSendable, resolveGuildLevelPermissions } from "./channel-permissions.js";
@@ -266,6 +272,59 @@ export async function fetchGuildRoles(botToken: string, guildId: string): Promis
     return [];
   }
   return roles.map((role) => ({ id: role.id, name: role.name }));
+}
+
+const guildRoleDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.number(),
+  position: z.number(),
+  permissions: z.string().regex(/^\d+$/, "must be an unsigned decimal string"),
+  managed: z.boolean(),
+  tags: z.object({ bot_id: z.string().optional() }).optional(),
+});
+
+const roleMemberCountsSchema = z.record(z.string(), z.number().int().nonnegative());
+
+/**
+ * ロール管理画面向けにguild直下の全ロールの詳細・メンバー数・Bot保有ロールを返す(issue #625)。
+ * guildが見つからない/Bot未参加(403/404)の場合はnullを返す。
+ * メンバー数(`/roles/member-counts`)は提供されない場合があるため、取得に失敗しても
+ * 一覧全体は失敗させず`memberCounts: null`にdegradeする。
+ */
+export async function fetchGuildRoleList(botToken: string, guildId: string): Promise<GuildRoleList | null> {
+  const [me, roles, memberCounts] = await Promise.all([
+    getMe(botToken),
+    discordGet(botToken, `/guilds/${guildId}/roles`, z.array(guildRoleDetailSchema)),
+    discordGet(botToken, `/guilds/${guildId}/roles/member-counts`, roleMemberCountsSchema).catch(
+      (error: unknown) => {
+        console.error(`Failed to fetch role member counts for guild ${guildId}`, error);
+        return "not_found" as const;
+      },
+    ),
+  ]);
+  if (me === "not_found" || roles === "not_found") {
+    return null;
+  }
+
+  const member = await discordGet(botToken, `/guilds/${guildId}/members/${me.id}`, guildMemberSchema);
+  if (member === "not_found") {
+    return null;
+  }
+
+  return {
+    roles: roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      position: role.position,
+      permissions: role.permissions,
+      managed: role.managed,
+      botId: role.tags?.bot_id ?? null,
+    })),
+    memberCounts: memberCounts === "not_found" ? null : memberCounts,
+    botRoleIds: member.roles,
+  };
 }
 
 /**
