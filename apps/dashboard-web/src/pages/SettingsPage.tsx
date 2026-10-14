@@ -24,7 +24,7 @@ import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loading } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import { Switch } from "@/components/starwind/switch";
 import { cn } from "@/lib/utils";
 
 const NO_CHANNEL = "__none__";

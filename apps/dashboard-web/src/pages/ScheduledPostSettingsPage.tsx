@@ -17,7 +17,7 @@ import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loading } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Switch } from "@/components/starwind/switch";
 
 export function ScheduledPostSettingsPage() {
   const { guildId } = useParams<{ guildId: string }>();
