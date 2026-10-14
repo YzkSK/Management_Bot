@@ -79,6 +79,7 @@
         "@management-bot/db": "workspace:*",
         "@management-bot/logging": "workspace:*",
         "@management-bot/moderation": "workspace:*",
+        "@management-bot/role-management": "workspace:*",
         "@management-bot/scheduled-post": "workspace:*",
         "@management-bot/shared": "workspace:*",
         "@management-bot/temp-voice": "workspace:*",
@@ -308,6 +309,23 @@
         "typescript": "^6.0.3",
       },
     },
+    "packages/role-management": {
+      "name": "@management-bot/role-management",
+      "version": "0.0.0",
+      "dependencies": {
+        "@management-bot/dashboard-access": "workspace:*",
+        "@management-bot/shared": "workspace:*",
+        "@trpc/server": "^11.19.0",
+        "zod": "^4.6.5",
+      },
+      "devDependencies": {
+        "@management-bot/db": "workspace:*",
+        "@types/bun": "^1.4.2",
+        "@types/node": "^26.6.4",
+        "drizzle-orm": "^0.45.4",
+        "typescript": "^6.0.3",
+      },
+    },
     "packages/scheduled-post": {
       "name": "@management-bot/scheduled-post",
       "version": "0.0.0",
@@ -516,6 +534,8 @@
     "@management-bot/moderation": ["@management-bot/moderation@workspace:packages/moderation"],
 
     "@management-bot/moderation-decay": ["@management-bot/moderation-decay@workspace:apps/moderation-decay"],
+
+    "@management-bot/role-management": ["@management-bot/role-management@workspace:packages/role-management"],
 
     "@management-bot/scheduled-post": ["@management-bot/scheduled-post@workspace:packages/scheduled-post"],
 
