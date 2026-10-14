@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { knownPermissionsForBits } from "@management-bot/shared";
 import { Bot, Lock, Search, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
@@ -10,6 +10,7 @@ import { RoleFilter } from "./RoleFilter.js";
 import { EMPTY_ROLE_FILTER, filterRoles, type RoleFilterValue } from "./role-filter.js";
 import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,8 +26,32 @@ interface RoleRowData {
   permissions: string;
   memberCount: number | null;
   isEveryone: boolean;
+  managed: boolean;
   botId: string | null;
   botManageable: boolean;
+}
+
+/** 「操作不可」をクリックしたときに出す理由。 */
+function lockedReason(role: RoleRowData): string {
+  return role.managed
+    ? "連携サービス(サーバーブースト・外部アプリ等)が管理するロールのため、Botからは付け外しできません。"
+    : "Botの最上位ロールと同じ位置かそれより上にあるため、Botからは付け外し・設定変更ができません。Discordのサーバー設定でBotのロールをこのロールより上に移動すると操作できるようになります。";
+}
+
+/** クリックで中身を開くバッジ・タグ。 */
+function ClickPopover({ trigger, label, children }: { trigger: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-full">
+          {trigger}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-80 p-3 text-sm">
+        {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function roleColor(color: number): string | undefined {
@@ -58,9 +83,26 @@ function PermissionCell({ permissions, selectedKeys }: { permissions: string; se
         );
       })}
       {rest.length > 0 && (
-        <span className="bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 py-0.5 text-xs" title={rest.map((p) => p.label).join("、")}>
-          +{rest.length}
-        </span>
+        <ClickPopover
+          label={`ほか${rest.length}件の権限を表示`}
+          trigger={
+            <span className="bg-muted text-muted-foreground hover:text-foreground block rounded-md px-1.5 py-0.5 text-xs">
+              +{rest.length}
+            </span>
+          }
+        >
+          <ul className="flex flex-col gap-1.5">
+            {rest.map(({ key, label }) => {
+              const Icon = permissionIcon(key);
+              return (
+                <li key={key} className="flex items-center gap-2 text-xs">
+                  <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
+                  {label}
+                </li>
+              );
+            })}
+          </ul>
+        </ClickPopover>
       )}
     </div>
   );
@@ -91,9 +133,19 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
           ) : (
             !role.botManageable &&
             !role.isEveryone && (
-              <span className={`${BADGE_BASE} border-destructive/40 bg-destructive/10 text-destructive ml-auto`}>
-                <TriangleAlert className="size-3" aria-hidden="true" />
-                操作不可
+              <span className="ml-auto">
+                <ClickPopover
+                  label="操作不可の理由を表示"
+                  trigger={
+                    <span className={`${BADGE_BASE} border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20`}>
+                      <TriangleAlert className="size-3" aria-hidden="true" />
+                      操作不可
+                    </span>
+                  }
+                >
+                  <p className="font-medium">Botからは操作できません</p>
+                  <p className="text-muted-foreground mt-1 text-xs leading-relaxed">{lockedReason(role)}</p>
+                </ClickPopover>
               </span>
             )
           )}
@@ -168,11 +220,8 @@ export function RolesPage() {
         <Loading />
       ) : (
         <>
-          <div className="text-muted-foreground flex items-center justify-between text-xs">
-            <span>
-              {NUMBER_FORMAT.format(visibleRoles.length)} / {NUMBER_FORMAT.format(roles.length)} ロール
-            </span>
-            <span>Discordのロール順</span>
+          <div className="text-muted-foreground text-xs">
+            {NUMBER_FORMAT.format(visibleRoles.length)} / {NUMBER_FORMAT.format(roles.length)} ロール
           </div>
           <div className="rounded-xl border">
             <Table>

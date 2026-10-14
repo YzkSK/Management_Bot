@@ -18,6 +18,8 @@ export interface RoleListItem {
   /** メンバー数。@everyone・メンバー数が取得できない場合はnull。 */
   memberCount: number | null;
   isEveryone: boolean;
+  /** Bot・ブースト等の連携サービスが管理するロール(Botからは付け外しできない)。 */
+  managed: boolean;
   botId: string | null;
   /** Botのロール階層上、Botがこのロールを操作できるか。 */
   botManageable: boolean;
@@ -59,6 +61,7 @@ export function buildRoleListItems(input: BuildRoleListItemsInput): RoleListItem
         permissions: role.permissions,
         memberCount: isEveryone ? null : memberCounts ? (memberCounts[role.id] ?? 0) : null,
         isEveryone,
+        managed: role.managed,
         botId: role.botId,
         botManageable: !role.managed && !isEveryone && botTopRole !== null && compareHierarchy(role, botTopRole) < 0,
       };
