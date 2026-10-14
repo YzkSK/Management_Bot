@@ -22,7 +22,7 @@ import {
   type StatusItem,
 } from "./status-labels.js";
 import { ErrorState } from "@/components/page-state";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loading } from "@/components/ui/skeleton";
@@ -43,9 +43,9 @@ export function NotFoundPage() {
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-16 text-center">
       <span className="text-6xl font-bold tracking-wide">404</span>
       <p className="text-muted-foreground">ページが見つかりません。</p>
-      <Button asChild className="mt-2 h-11 px-5">
-        <Link to="/">サーバー一覧へ戻る</Link>
-      </Button>
+      <Link to="/" data-slot="button" className={ButtonVariants.button({ class: "mt-2 h-11 px-5" })}>
+        サーバー一覧へ戻る
+      </Link>
     </div>
   );
 }

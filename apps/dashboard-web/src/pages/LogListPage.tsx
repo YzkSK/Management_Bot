@@ -24,7 +24,7 @@ import { visiblePages } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -371,12 +371,14 @@ export function LogListPage() {
           </p>
         </div>
         {canManageSettings && (
-          <Button asChild variant="outline">
-            <Link to={`/guilds/${guildId}/logs/settings`}>
-              <Settings aria-hidden="true" />
-              ログ設定
-            </Link>
-          </Button>
+          <Link
+            to={`/guilds/${guildId}/logs/settings`}
+            data-slot="button"
+            className={ButtonVariants.button({ variant: "outline" })}
+          >
+            <Settings aria-hidden="true" />
+            ログ設定
+          </Link>
         )}
       </div>
 

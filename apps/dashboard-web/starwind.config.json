@@ -18,6 +18,12 @@
       "version": "2.1.1",
       "framework": "react",
       "registry": "default"
+    },
+    {
+      "name": "button",
+      "version": "3.0.2",
+      "framework": "react",
+      "registry": "default"
     }
   ],
   "tailwind": {

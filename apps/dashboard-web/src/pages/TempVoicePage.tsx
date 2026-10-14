@@ -14,7 +14,7 @@ import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type Tem
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,
