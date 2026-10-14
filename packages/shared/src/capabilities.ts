@@ -18,6 +18,8 @@ export const CAPABILITIES = {
   VIEW_SCHEDULED_POSTS: 1 << 11,
   MANAGE_SCHEDULED_POSTS: 1 << 12,
   VIEW_AUDIT_LOG: 1 << 13,
+  // ロール管理の閲覧(issue #617/#625)
+  VIEW_ROLES: 1 << 14,
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
