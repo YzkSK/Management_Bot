@@ -82,6 +82,7 @@ function buildContext(
     getGuildRoles: overrides.getGuildRoles ?? rolesOf(),
     getGuildAccessStatus: overrides.getGuildAccessStatus ?? (async () => "ok" as const),
     getGuildOwnerId: overrides.getGuildOwnerId ?? (async () => null),
+    getGuildRoleList: async () => null,
     verifyGuildRole: overrides.verifyGuildRole ?? (async () => true),
     getGuildMembersPage: membersPageOf(),
     readRedisHash: async () => ({}),

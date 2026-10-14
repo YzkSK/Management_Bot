@@ -3,6 +3,7 @@ import type {
   DashboardAccessContext,
   GuildAccessStatus,
   GuildMembership,
+  GuildRoleList,
   ManagedGuild,
   MemberPage,
   ResolveEffectiveCapabilitiesInput,
@@ -29,6 +30,7 @@ import {
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildOwnerId,
+  fetchGuildRoleList,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -70,6 +72,7 @@ const guildVoiceChannelsCache = createTtlCache<readonly ChannelOption[]>(GUILD_T
 const guildCategoriesCache = createTtlCache<readonly ChannelOption[]>(GUILD_TTL_MS);
 const botPermissionsCache = createTtlCache<bigint>(GUILD_TTL_MS);
 const guildRolesCache = createTtlCache<readonly RoleOption[]>(GUILD_TTL_MS);
+const guildRoleListCache = createTtlCache<GuildRoleList | null>(GUILD_TTL_MS);
 const guildAccessStatusCache = createTtlCache<GuildAccessStatus>(GUILD_TTL_MS);
 const guildOwnerIdCache = createTtlCache<string | null>(GUILD_TTL_MS);
 /** キーは`${guildId}:${after}`(ページ単位)。 */
@@ -171,6 +174,10 @@ function createGetGuildOwnerId(botToken: string): (guildId: string) => Promise<s
 
 function createGetGuildRoles(botToken: string): (guildId: string) => Promise<readonly RoleOption[]> {
   return (guildId) => guildRolesCache(guildId, () => fetchGuildRoles(botToken, guildId));
+}
+
+function createGetGuildRoleList(botToken: string): (guildId: string) => Promise<GuildRoleList | null> {
+  return (guildId) => guildRoleListCache(guildId, () => fetchGuildRoleList(botToken, guildId));
 }
 
 function createVerifyGuildRole(botToken: string): (guildId: string, roleId: string) => Promise<boolean> {
@@ -369,6 +376,7 @@ export function createContext(
       getGuildMemberNames: createGetGuildMemberNames(botToken),
       getBotPermissions: createGetBotPermissions(botToken),
       getGuildRoles: createGetGuildRoles(botToken),
+      getGuildRoleList: createGetGuildRoleList(botToken),
       getGuildVoiceChannelOptions: createGetGuildVoiceChannelOptions(botToken),
       getGuildCategoryOptions: createGetGuildCategoryOptions(botToken),
       getGuildAccessStatus: createGetGuildAccessStatus(botToken),
