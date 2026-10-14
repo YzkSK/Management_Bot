@@ -19,6 +19,7 @@ export {
   type LogEntryInsertNotification,
   type LogChannelSettingChangedNotification,
 } from "./log-entry-notifications.js";
+export { listenForGuildDataChanges, type GuildDataChangedNotification } from "./guild-data-notifications.js";
 export {
   listenForModerationConfigChanges,
   type ModerationConfigChangedNotification,
@@ -26,6 +27,11 @@ export {
 export {
   listenForTempVoiceAutoSetup,
   listenForTempVoiceForceDelete,
+  listenForTempVoiceChannelAction,
+  tempVoiceChannelActionSchema,
+  tempVoiceChannelActionNotificationSchema,
+  type TempVoiceChannelAction,
+  type TempVoiceChannelActionNotification,
   type TempVoiceAutoSetupNotification,
   type TempVoiceForceDeleteNotification,
 } from "./temp-voice-action-notifications.js";
@@ -34,4 +40,13 @@ export {
   SCHEDULED_POST_ADMIN_CANCEL_CHANNEL,
   type ScheduledPostAdminCancelNotification,
 } from "./scheduled-post-action-notifications.js";
+export {
+  completeAuditLog,
+  purgeExpiredAuditLogs,
+  recordAuditLog,
+  redactSecrets,
+  type AuditLogEntry,
+  type AuditLogKind,
+  type AuditLogOutcome,
+} from "./audit-log.js";
 export * from "./schema/index.js";

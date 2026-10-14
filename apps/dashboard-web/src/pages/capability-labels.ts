@@ -11,6 +11,7 @@ export const CAPABILITY_LABELS: Record<CapabilityName, string> = {
   MANAGE_ACCESS: "アクセス権限の管理",
   VIEW_SCHEDULED_POSTS: "予約投稿の閲覧",
   MANAGE_SCHEDULED_POSTS: "予約投稿の管理",
+  VIEW_AUDIT_LOG: "操作履歴の閲覧",
 };
 
 export const CAPABILITY_OPTIONS: readonly { value: CapabilityName; label: string; bit: number }[] = (
@@ -30,6 +31,7 @@ export const CAPABILITY_GROUPS: readonly CapabilityGroup[] = [
   { title: "モデレーション", items: ["MANAGE_MODERATION"] },
   { title: "予約投稿", items: ["VIEW_SCHEDULED_POSTS", "MANAGE_SCHEDULED_POSTS"] },
   { title: "アクセス権限", items: ["MANAGE_ACCESS"] },
+  { title: "操作履歴", items: ["VIEW_AUDIT_LOG"] },
 ];
 
 interface CapabilityPreset {

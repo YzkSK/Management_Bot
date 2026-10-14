@@ -1,4 +1,4 @@
-import { createAdvisoryLockRunner, type AdvisoryLockJobRunner, type Db } from "@management-bot/db";
+import { createAdvisoryLockRunner, purgeExpiredAuditLogs, type AdvisoryLockJobRunner, type Db } from "@management-bot/db";
 import { purgeExpiredLogs } from "@management-bot/logging";
 
 // アプリ全体で1つに固定した任意の64bit定数。他機能のadvisory lockと衝突しないよう、
@@ -23,7 +23,9 @@ export function createPurgeRunner(
     work: async (tx) => {
       const results = await purgeExpiredLogs(tx);
       const totalDeleted = results.reduce((sum, r) => sum + r.deletedCount, 0);
-      return `Logging retention job: deleted ${totalDeleted} entries across ${results.length} guild/category`;
+      // 操作履歴・アクセス履歴の保存期間切れ(issue #618)もここで削除する。
+      const auditDeleted = await purgeExpiredAuditLogs(tx);
+      return `Logging retention job: deleted ${totalDeleted} entries across ${results.length} guild/category, ${auditDeleted} audit log entries`;
     },
     onResult,
     onError,

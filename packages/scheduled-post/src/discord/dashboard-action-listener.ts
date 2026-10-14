@@ -1,8 +1,8 @@
 import type { ScheduledPostAdminCancelNotification } from "@management-bot/db";
 import { listenForScheduledPostAdminCancel } from "@management-bot/db";
 import {
-  claimAdminCancelNotice,
-  claimPendingAdminCancelNotices,
+  claimCancelNotice,
+  claimPendingCancelNotices,
   type ScheduledPostRow,
 } from "../application/index.js";
 import { buildAdminCancelDm } from "../domain/index.js";
@@ -40,6 +40,18 @@ async function notifyAdminCancel(deps: AdminCancelDeps, row: ScheduledPostRow): 
   }
 }
 
+/** claim済みの取り消し1件の後処理。本人取り消しはログイベントのみ(/scheduleと同じくDMなし)、管理者取り消しはDMも送る。 */
+async function notifyCancel(deps: AdminCancelDeps, row: ScheduledPostRow): Promise<void> {
+  if (row.cancelledBy === "author") {
+    await publishCancelled(deps, row, {
+      channelName: deps.discord.channelName(row.channelId),
+      authorName: deps.discord.authorName(row.authorId),
+    });
+    return;
+  }
+  await notifyAdminCancel(deps, row);
+}
+
 function clock(deps: ActionDeps): Date {
   return (deps.now ?? (() => new Date()))();
 }
@@ -52,18 +64,19 @@ export async function handleAdminCancelNotification(
   deps: AdminCancelDeps,
   notification: ScheduledPostAdminCancelNotification,
 ): Promise<void> {
-  const row = await claimAdminCancelNotice(deps.db, notification.postId, clock(deps), notification.guildId);
-  if (row) await notifyAdminCancel(deps, row);
+  const by = notification.by === "author" ? "author" : "admin";
+  const row = await claimCancelNotice(deps.db, notification.postId, clock(deps), notification.guildId, by);
+  if (row) await notifyCancel(deps, row);
 }
 
-/** tickごとの回収。通知を取りこぼした(Bot停止中など)管理者取り消しを一定件数ずつclaimして後処理する。 */
-export async function processPendingAdminCancels(deps: AdminCancelDeps): Promise<void> {
-  const rows = await claimPendingAdminCancelNotices(deps.db, clock(deps));
+/** tickごとの回収。通知を取りこぼした(Bot停止中など)Dashboardからの取り消し(管理者・本人)を一定件数ずつclaimして後処理する。 */
+export async function processPendingCancelNotices(deps: AdminCancelDeps): Promise<void> {
+  const rows = await claimPendingCancelNotices(deps.db, clock(deps));
   for (const row of rows) {
     try {
-      await notifyAdminCancel(deps, row);
+      await notifyCancel(deps, row);
     } catch (error) {
-      console.error(`scheduled-post: failed to process admin cancellation of post ${row.id}`, error);
+      console.error(`scheduled-post: failed to process cancellation of post ${row.id}`, error);
     }
   }
 }

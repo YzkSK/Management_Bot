@@ -74,10 +74,11 @@ export const scheduledPosts = pgTable(
     ),
     index("scheduled_posts_status_scheduled_at_idx").on(table.status, table.scheduledAt),
     index("scheduled_posts_guild_id_author_id_status_idx").on(table.guildId, table.authorId, table.status),
-    // 未処理の管理者取り消し(Botのtick回収用)だけを引く部分index。
-    index("scheduled_posts_admin_cancel_unnotified_idx")
-      .on(table.id)
-      .where(sql`${table.status} = 'cancelled' AND ${table.cancelledBy} = 'admin' AND ${table.cancelNotifiedAt} IS NULL`),
+    // 後処理が未完了の取り消し(管理者・Dashboardからの本人取り消し。Botのtick回収用)だけを引く部分index。
+    // /scheduleの本人取り消しはその場で通知済みにするため対象に入らない。回収はfinished_at順。
+    index("scheduled_posts_cancel_unnotified_idx")
+      .on(table.finishedAt)
+      .where(sql`${table.status} = 'cancelled' AND ${table.cancelNotifiedAt} IS NULL`),
   ],
 );
 

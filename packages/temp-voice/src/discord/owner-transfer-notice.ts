@@ -1,5 +1,5 @@
 import { ChannelType, ContainerBuilder, MessageFlags, TextDisplayBuilder, type Client, type MessageCreateOptions, type VoiceBasedChannel } from "discord.js";
-import { buildControlPanelContainer, buildTempVoiceCustomId, readTempVoiceState } from "./control-panel-message.js";
+import { buildControlPanelContainer, buildTempVoiceCustomId, readTempVoiceState, type TempVoiceState } from "./control-panel-message.js";
 
 export type OwnerTransferTrigger = "manual" | "autoGraceExpired";
 
@@ -18,6 +18,35 @@ export function buildOwnerTransferNotice(previousOwnerId: string, newOwnerId: st
 }
 
 /**
+ * 制御チャンネルの制御パネル(最古のメッセージ)を指定の状態で再描画する。interactionが無い経路
+ * (自動移譲・Dashboard経由の設定変更)用。失敗はログのみ。
+ * 移譲通知等を誤ってパネルとして上書きしないよう、パネルのボタンcustomIdを含むかも確認する。
+ */
+export async function refreshControlPanel(
+  client: Client,
+  controlChannelId: string,
+  voiceChannel: VoiceBasedChannel,
+  ownerId: string,
+  state: TempVoiceState = readTempVoiceState(voiceChannel),
+): Promise<void> {
+  const controlChannel = client.channels.cache.get(controlChannelId);
+  if (controlChannel?.type !== ChannelType.GuildText) return;
+  try {
+    const panel = (await controlChannel.messages.fetch({ after: "0", limit: 1 })).first();
+    const panelCustomId = buildTempVoiceCustomId("rename", voiceChannel.id);
+    if (panel && panel.author.id === client.user?.id && JSON.stringify(panel.components).includes(panelCustomId)) {
+      await panel.edit({
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] },
+        components: [buildControlPanelContainer(voiceChannel.id, ownerId, state)],
+      });
+    }
+  } catch (error) {
+    console.error(`temp-voice: failed to refresh control panel in ${controlChannelId}`, error);
+  }
+}
+
+/**
  * 移譲確定後に制御チャンネルへ通知を送る(#531)。DB更新は確定済みのため失敗はログのみ。
  * voiceChannelを渡した場合は制御パネルも新オーナー表示に更新する(自動移譲はinteractionが無いため)。
  * 制御チャンネルは全員SendMessages denyのため、最古のメッセージ=制御パネルとみなす。
@@ -32,22 +61,7 @@ export async function announceOwnerTransfer(
 ): Promise<void> {
   const controlChannel = client.channels.cache.get(controlChannelId);
   if (controlChannel?.type !== ChannelType.GuildText) return;
-  if (voiceChannel) {
-    try {
-      const panel = (await controlChannel.messages.fetch({ after: "0", limit: 1 })).first();
-      // 移譲通知等を誤ってパネルとして上書きしないよう、パネルのボタンcustomIdを含むかも確認する。
-      const panelCustomId = buildTempVoiceCustomId("rename", voiceChannel.id);
-      if (panel && panel.author.id === client.user?.id && JSON.stringify(panel.components).includes(panelCustomId)) {
-        await panel.edit({
-          flags: MessageFlags.IsComponentsV2,
-          allowedMentions: { parse: [] },
-          components: [buildControlPanelContainer(voiceChannel.id, newOwnerId, readTempVoiceState(voiceChannel))],
-        });
-      }
-    } catch (error) {
-      console.error(`temp-voice: failed to refresh control panel in ${controlChannelId}`, error);
-    }
-  }
+  if (voiceChannel) await refreshControlPanel(client, controlChannelId, voiceChannel, newOwnerId);
   let sent;
   try {
     sent = await controlChannel.send(buildOwnerTransferNotice(previousOwnerId, newOwnerId, trigger));

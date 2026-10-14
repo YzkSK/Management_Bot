@@ -59,18 +59,20 @@ describe("parseScheduleInput", () => {
 describe("validateScheduledAt", () => {
   const at = (offsetMs: number) => new Date(NOW.getTime() + offsetMs);
 
-  test("過去・1分以内・半年超はエラー、1分超〜半年以内は許可", () => {
+  test("過去・半年超はエラー、未来〜半年以内は許可", () => {
     expect(validateScheduledAt(at(-1), NOW)).toMatchObject({ error: "past" });
     expect(validateScheduledAt(at(0), NOW)).toMatchObject({ error: "past" });
-    expect(validateScheduledAt(at(60_000), NOW)).toMatchObject({ error: "too_soon" });
-    expect(validateScheduledAt(at(60_001), NOW).ok).toBe(true);
+    expect(validateScheduledAt(at(1), NOW).ok).toBe(true);
+    expect(validateScheduledAt(at(60_000), NOW).ok).toBe(true);
     expect(validateScheduledAt(at(183 * 86_400_000), NOW).ok).toBe(true);
     expect(validateScheduledAt(at(183 * 86_400_000 + 1), NOW)).toMatchObject({ error: "too_far" });
   });
 
   test("resolveScheduledAtは構文エラーも検証エラーもメッセージ付きで返す", () => {
     expect(resolveScheduledAt("あした", NOW)).toMatchObject({ ok: false, error: "invalid_format" });
-    expect(resolveScheduledAt("1分後", NOW)).toMatchObject({ ok: false, error: "too_soon" });
+    expect(resolveScheduledAt("1分後", NOW).ok).toBe(true);
+    // 秒の途中でも「1分後」は(分単位に切り捨てても)未来になる
+    expect(resolveScheduledAt("1分後", new Date(NOW.getTime() + 59_999)).ok).toBe(true);
     expect(resolveScheduledAt("400日後", NOW)).toMatchObject({ ok: false, error: "too_far" });
     expect(resolveScheduledAt("2時間後", NOW).ok).toBe(true);
   });

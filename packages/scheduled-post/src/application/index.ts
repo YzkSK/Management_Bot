@@ -18,9 +18,9 @@ export {
 export { getAllowedRoleIds, getSettings, saveSettings, type ScheduledPostSettings } from "./settings.js";
 export {
   RETENTION_DAYS,
-  claimAdminCancelNotice,
+  claimCancelNotice,
   claimDuePosts,
-  claimPendingAdminCancelNotices,
+  claimPendingCancelNotices,
   markFailed,
   markPosted,
   purgeFinishedPosts,

@@ -4,14 +4,14 @@ const DAY_MS = 24 * HOUR_MS;
 /** タイムゾーンは日本時間(JST、UTC+9、夏時間なし)固定。 */
 const JST_OFFSET_MS = 9 * HOUR_MS;
 
-/** 登録・編集とも、この時間以内(以下)に迫った日時は受け付けない。編集は投稿予定時刻のこの時間前まで。 */
+/** 編集は投稿予定時刻のこの時間前まで(投稿処理との競合防止)。新しく指定する日時は未来であればよい。 */
 export const MIN_LEAD_MS = MINUTE_MS;
 /** 予約できるのは最長半年(183日)先まで。 */
 export const MAX_AHEAD_MS = 183 * DAY_MS;
 /** Bot停止中などで予定時刻を過ぎていても、遅れがこの時間以内なら投稿する。超えたら時間切れ。 */
 export const EXPIRY_MS = HOUR_MS;
 
-export type ScheduleTimeError = "invalid_format" | "invalid_date" | "past" | "too_soon" | "too_far";
+export type ScheduleTimeError = "invalid_format" | "invalid_date" | "past" | "too_far";
 
 export type ScheduleTimeResult = { ok: true; date: Date } | { ok: false; error: ScheduleTimeError; message: string };
 
@@ -20,7 +20,6 @@ export const SCHEDULE_TIME_ERROR_MESSAGES: Record<ScheduleTimeError, string> = {
     "日時の形式が正しくありません。`2026/10/10 20:00`・`10/10 20:00`・`30分後`・`2時間後`・`3日後` のいずれかで指定してください。",
   invalid_date: "存在しない日時です。日付と時刻を確認してください。",
   past: "過去の日時は指定できません。",
-  too_soon: "1分以内の日時は指定できません。少し先の日時を指定してください。",
   too_far: "予約できるのは半年先までです。",
 };
 
@@ -87,11 +86,13 @@ export function parseScheduleInput(input: string, now: Date): ScheduleTimeResult
   return { ok: true, date };
 }
 
-/** 過去・1分以内・半年超を弾く。登録時と編集時で共通。 */
+/**
+ * 過去・半年超を弾く。登録時と編集時で共通。直近の未来(「1分後」等)は許可する
+ * (分単位に切り捨てるため、「1分後」は現在から60秒未満になる)。
+ */
 export function validateScheduledAt(date: Date, now: Date): ScheduleTimeResult {
   const diff = date.getTime() - now.getTime();
   if (diff <= 0) return fail("past");
-  if (diff <= MIN_LEAD_MS) return fail("too_soon");
   if (diff > MAX_AHEAD_MS) return fail("too_far");
   return { ok: true, date };
 }

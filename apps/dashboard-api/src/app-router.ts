@@ -1,4 +1,4 @@
-import { capabilityGrantsRouter, protectedProcedure, router } from "@management-bot/dashboard-access";
+import { auditLogRouter, capabilityGrantsRouter, protectedProcedure, router } from "@management-bot/dashboard-access";
 import { activityRouter } from "@management-bot/activity";
 import { loggingRouter } from "@management-bot/logging";
 import { moderationRouter } from "@management-bot/moderation";
@@ -23,6 +23,7 @@ export function createAppRouter(statusDeps: StatusDeps) {
     scheduledPost: scheduledPostRouter,
     tempVoice: tempVoiceRouter,
     access: capabilityGrantsRouter,
+    auditLog: auditLogRouter,
     status: createStatusRouter(statusDeps),
   });
 }

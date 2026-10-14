@@ -7,7 +7,7 @@ import { GuildIcon } from "../guild-icon.js";
 import { firstAccessiblePath } from "../guild-pages.js";
 import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ErrorState } from "@/components/page-state";
 import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/ui/skeleton";
 
@@ -66,11 +66,7 @@ export function GuildListPage() {
   }
 
   if (guildsQuery.isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>サーバー一覧の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
-    );
+    return <ErrorState subject="サーバー一覧" onRetry={() => void guildsQuery.refetch()} />;
   }
 
   if (guildsQuery.data.length === 0) {

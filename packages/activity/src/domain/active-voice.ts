@@ -6,6 +6,17 @@ export function activeVoiceKey(guildId: string): string {
   return `activity:voice:${guildId}`;
 }
 
+/** 入室時刻の長期保存用Hash(field = userId)。表示用Hashが期限切れになっても入室時刻を引き継ぐための控え。 */
+export function activeVoiceJoinedKey(guildId: string): string {
+  return `activity:voice-joined:${guildId}`;
+}
+
+export const activeVoiceJoinedSchema = z.object({
+  channelId: z.string(),
+  joinedAt: z.iso.datetime(),
+});
+export type ActiveVoiceJoined = z.infer<typeof activeVoiceJoinedSchema>;
+
 export const activeVoiceEntrySchema = z.object({
   channelId: z.string(),
   channelName: z.string(),
@@ -48,12 +59,11 @@ export interface ActiveVoiceChannel {
 }
 
 /** 同じチャンネル内の状態変化(ミュート等)では入室時刻を保ち、入室・移動時のみ更新する。 */
-export function nextJoinedAt(prev: ActiveVoiceEntry | undefined, channelId: string, now: Date): string {
+export function nextJoinedAt(prev: ActiveVoiceJoined | undefined, channelId: string, now: Date): string {
   return prev?.channelId === channelId ? prev.joinedAt : now.toISOString();
 }
 
-/** Redisの値(JSON文字列)を検証する。壊れた値は捨てる(他の在室者の表示を妨げない)。 */
-export function parseActiveVoiceEntry(raw: unknown): ActiveVoiceEntry | undefined {
+function parseJson<T>(schema: z.ZodType<T>, raw: unknown): T | undefined {
   if (typeof raw !== "string") return undefined;
   let json: unknown;
   try {
@@ -61,8 +71,17 @@ export function parseActiveVoiceEntry(raw: unknown): ActiveVoiceEntry | undefine
   } catch {
     return undefined;
   }
-  const result = activeVoiceEntrySchema.safeParse(json);
+  const result = schema.safeParse(json);
   return result.success ? result.data : undefined;
+}
+
+/** Redisの値(JSON文字列)を検証する。壊れた値は捨てる(他の在室者の表示を妨げない)。 */
+export function parseActiveVoiceEntry(raw: unknown): ActiveVoiceEntry | undefined {
+  return parseJson(activeVoiceEntrySchema, raw);
+}
+
+export function parseActiveVoiceJoined(raw: unknown): ActiveVoiceJoined | undefined {
+  return parseJson(activeVoiceJoinedSchema, raw);
 }
 
 export function groupActiveVoice(hash: Record<string, string>): ActiveVoiceChannel[] {

@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { LogCategory } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import { CATEGORY_LABELS } from "./category-labels.js";
 import {
@@ -17,6 +17,7 @@ import {
 } from "./log-settings-draft.js";
 import { MAX_RETENTION_DAYS, parseRetentionDaysInput } from "./parse-retention-days.js";
 import { uniformValue } from "./uniform-value.js";
+import { BotPermissionState, ErrorState, ForbiddenState } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -173,11 +174,12 @@ export function SettingsPage() {
   }
 
   const queries = [retentionQuery, channelSettingsQuery, channelOptionsQuery, displaySettingsQuery];
-  const isForbidden = queries.some(
-    (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
-  );
+  if (queries.some((query) => isForbiddenError(query.error))) {
+    return <ForbiddenState pageName="ログ設定" capabilities={["MANAGE_LOGGING_SETTINGS"]} />;
+  }
+  const failedQueries = queries.filter((query) => query.isError);
   const isPending = queries.some((query) => query.isPending);
-  const isError = queries.some((query) => query.isError);
+  const isError = failedQueries.length > 0;
   const isBotAccessForbidden = channelOptionsQuery.data?.accessStatus === "forbidden";
 
   const server: LogSettingsServerState | null =
@@ -238,25 +240,9 @@ export function SettingsPage() {
       </Link>
       <h1 className="text-2xl font-bold">ログ設定</h1>
 
-      {isPending && <Loading />}
-      {isForbidden && (
-        <Alert variant="warning">
-          <Lock />
-          <AlertDescription>この操作を行う権限がありません。ログ設定の変更には「ログ設定の管理」権限が必要です。</AlertDescription>
-        </Alert>
-      )}
-      {isError && !isForbidden && (
-        <Alert variant="destructive">
-          <AlertDescription>設定の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-        </Alert>
-      )}
-      {isBotAccessForbidden && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Botに権限がないため、チャンネル一覧を取得できません。サーバー設定でBotの権限を確認してください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isPending && !isError && <Loading />}
+      {isError && <ErrorState subject="ログ設定" onRetry={() => failedQueries.forEach((query) => void query.refetch())} />}
+      {isBotAccessForbidden && <BotPermissionState guildId={guildId} />}
 
       {draft && changes && channelOptionsQuery.data && (
         <>

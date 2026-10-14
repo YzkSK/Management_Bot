@@ -9,6 +9,23 @@ export {
   type ValidationResult,
 } from "./validate-input.js";
 export {
+  tempVoiceStateKey,
+  serializeTempVoiceChannelState,
+  parseTempVoiceChannelState,
+  parseTempVoiceStateHash,
+  type TempVoiceChannelState,
+  type TempVoiceMemberState,
+} from "./channel-state.js";
+export {
+  tempVoiceActionResultKey,
+  TEMP_VOICE_ACTION_RESULT_FIELD,
+  serializeTempVoiceActionResult,
+  parseTempVoiceActionResult,
+  TEMP_VOICE_ACTION_FAILURE_REASONS,
+  type TempVoiceActionFailureReason,
+  type TempVoiceActionResult,
+} from "./action-result.js";
+export {
   buildVoiceSessionEndedEvent,
   type VoiceSessionEndedInput,
   type VoiceSessionEndedEventPayload,

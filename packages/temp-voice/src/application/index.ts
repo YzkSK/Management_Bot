@@ -35,5 +35,14 @@ export {
   type TempVoicePermissionState,
   type TempVoicePermissionOverrideRow,
 } from "./permission-overrides.js";
-export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete } from "./notify-dashboard-actions.js";
+export {
+  TEMP_VOICE_STATE_TTL_SECONDS,
+  upsertTempVoiceState,
+  removeTempVoiceState,
+  listTempVoiceStateChannelIds,
+  extendTempVoiceStateTtl,
+  readTempVoiceStates,
+} from "./channel-state-store.js";
+export { writeTempVoiceActionResult, waitForTempVoiceActionResult } from "./action-result-store.js";
+export { notifyTempVoiceAutoSetup, notifyTempVoiceForceDelete, notifyTempVoiceChannelAction } from "./notify-dashboard-actions.js";
 export { forceDeleteTempVoiceChannel, type ForceDeleteTempVoiceChannelDeps } from "./force-delete-channel.js";

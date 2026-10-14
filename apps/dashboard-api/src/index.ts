@@ -1,6 +1,6 @@
 import { trpcServer } from "@hono/trpc-server";
 import { parseEnv, envSchema } from "@management-bot/config";
-import { createDb, listenForLogEntryInserts } from "@management-bot/db";
+import { createDb, listenForGuildDataChanges, listenForLogEntryInserts } from "@management-bot/db";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { Redis } from "ioredis";
@@ -21,6 +21,7 @@ import { readInfraLogs, subscribeInfraLogIngest } from "./status/infra-logs.js";
 import { fetchResourceSample, readResourceSamples, startResourceSampler } from "./status/resources.js";
 import { createContext } from "./context.js";
 import { createOAuthRoutes } from "./oauth/routes.js";
+import { guildDataClients } from "./ws/guild-data-broadcaster.js";
 import { broadcastNewLogEntry } from "./ws/log-broadcaster.js";
 import { subscribeActivityChanges } from "./ws/activity-broadcaster.js";
 import { createWsRoutes, WS_MAX_PAYLOAD_LENGTH } from "./ws/routes.js";
@@ -126,6 +127,13 @@ const logNotifications = listenForLogEntryInserts(env.DATABASE_URL, ({ guildId, 
 );
 logNotifications.ready.catch((error: unknown) => {
   console.error("Failed to start listening for log entry inserts (dashboard live updates disabled)", error);
+});
+
+const guildDataNotifications = listenForGuildDataChanges(env.DATABASE_URL, ({ guildId, topic }) =>
+  guildDataClients.broadcast(guildId, topic),
+);
+guildDataNotifications.ready.catch((error: unknown) => {
+  console.error("Failed to start listening for guild data changes (dashboard live updates disabled)", error);
 });
 
 subscribeActivityChanges(redis).catch((error: unknown) => {

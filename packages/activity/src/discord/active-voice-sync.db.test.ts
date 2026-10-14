@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Redis } from "ioredis";
 import { getActiveVoiceEntry, upsertActiveVoice } from "../application/index.js";
-import { activeVoiceKey } from "../domain/index.js";
+import { activeVoiceJoinedKey, activeVoiceKey } from "../domain/index.js";
 import { type ActiveVoiceStateLike, rebuildActiveVoice, syncActiveVoice } from "./active-voice-sync.js";
 import { KeyedQueue } from "./keyed-queue.js";
 
@@ -24,6 +24,7 @@ describe.skipIf(!(await isRedisAvailable()))("rebuildActiveVoice", () => {
   const redis = new Redis(REDIS_URL);
   const guildId = `g-${randomUUID()}`;
   const key = activeVoiceKey(guildId);
+  const joinedKey = activeVoiceJoinedKey(guildId);
 
   function state(id: string, channelId: string | null, bot = false): ActiveVoiceStateLike {
     return {
@@ -46,7 +47,7 @@ describe.skipIf(!(await isRedisAvailable()))("rebuildActiveVoice", () => {
   }
 
   afterEach(async () => {
-    await redis.del(key);
+    await redis.del(key, joinedKey);
   });
   afterAll(() => redis.disconnect());
 
@@ -83,6 +84,32 @@ describe.skipIf(!(await isRedisAvailable()))("rebuildActiveVoice", () => {
     const leaving = queue.run(`${guildId}:u1`, () => syncActiveVoice(redis, state("u1", null), new Date(), () => undefined));
     await Promise.all([rebuilding, leaving]);
     expect(await redis.hexists(key, "u1")).toBe(0);
+  });
+  test("表示用エントリが期限切れでも、入室時刻Hashから同じチャンネルなら引き継ぐ", async () => {
+    await syncActiveVoice(redis, state("u1", "c1"), new Date("2026-09-29T09:00:00.000Z"), () => undefined);
+    await redis.del(key); // bot停止で表示用Hashだけ期限切れ
+    await syncActiveVoice(redis, state("u1", "c1"), new Date("2026-09-29T12:00:00.000Z"), () => undefined);
+    expect((await getActiveVoiceEntry(redis, guildId, "u1"))?.joinedAt).toBe("2026-09-29T09:00:00.000Z");
+  });
+  test("入室時刻Hashのチャンネルと違えば起動時刻、不正値は無視する", async () => {
+    await syncActiveVoice(redis, state("u1", "c1"), new Date("2026-09-29T09:00:00.000Z"), () => undefined);
+    await redis.del(key);
+    const now = new Date("2026-09-29T12:00:00.000Z");
+    await syncActiveVoice(redis, state("u1", "c2"), now, () => undefined);
+    expect((await getActiveVoiceEntry(redis, guildId, "u1"))?.joinedAt).toBe(now.toISOString());
+    await redis.del(key);
+    await redis.hset(joinedKey, "u1", JSON.stringify({ channelId: "c2", joinedAt: "not-a-date" }));
+    await syncActiveVoice(redis, state("u1", "c2"), now, () => undefined);
+    expect((await getActiveVoiceEntry(redis, guildId, "u1"))?.joinedAt).toBe(now.toISOString());
+  });
+  test("退室と再構築で入室時刻Hashのfieldも消える", async () => {
+    await syncActiveVoice(redis, state("u1", "c1"), new Date(), () => undefined);
+    await syncActiveVoice(redis, state("u1", null), new Date(), () => undefined);
+    expect(await redis.hexists(joinedKey, "u1")).toBe(0);
+    await redis.hset(joinedKey, "orphan", JSON.stringify({ channelId: "c1", joinedAt: "2026-09-29T09:00:00.000Z" }));
+    await syncActiveVoice(redis, state("gone", "c1"), new Date(), () => undefined);
+    await rebuildActiveVoice(redis, [guild([state("stay", "c1")])], new KeyedQueue(), new Date(), () => undefined);
+    expect(Object.keys(await redis.hgetall(joinedKey))).toEqual(["stay"]);
   });
   test("syncActiveVoiceはキュー実行時点のcountingSinceを書く", async () => {
     const since = new Date("2026-09-29T10:00:00Z");

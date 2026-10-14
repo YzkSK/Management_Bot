@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,9 +8,11 @@ import {
   addCapabilityPrerequisites,
   CAPABILITIES,
   canGrantCapabilities,
+  OWNER_ONLY_CAPABILITIES,
   removeUnmetDependents,
   type CapabilityName,
 } from "@management-bot/shared";
+import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import {
   CAPABILITY_GROUPS,
@@ -20,6 +22,7 @@ import {
   NO_CAPABILITIES_LABEL,
   presetLabelFor,
 } from "./capability-labels.js";
+import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -290,12 +293,15 @@ function TargetEditor({
   target,
   existingCapabilities,
   granterCapabilities,
+  isOwner,
   lockReason,
 }: {
   guildId: string;
   target: SidebarTarget;
   existingCapabilities: number;
   granterCapabilities: number;
+  /** オーナー専用capability(OWNER_ONLY_CAPABILITIES)を変更できるのはサーバーオーナーのみ(issue #618)。 */
+  isOwner: boolean;
   /**
    * 編集・剥奪させない理由。オーナーの実効権限はgrantで変わらないため編集させない(issue #523)。
    * オーナー判定が付かない間(取得中・失敗)も、オーナーの付与を誤って剥奪しないよう個別ユーザーは編集させない。
@@ -308,8 +314,18 @@ function TargetEditor({
   );
 
   // 選択対象が切り替わったら、その対象の既存付与状態にトグルをリセットする。
+  // 同じ対象で既存付与がサーバー側で変わった場合(他の管理者の変更・リアルタイム更新, #643)は、
+  // 未保存の編集(既存付与と異なる選択)があるときはそれを消さず、編集前だったときだけ追従する。
+  const previousRef = useRef({ key: `${target.targetType}-${target.targetId}`, existing: existingCapabilities });
   useEffect(() => {
-    setSelectedCapabilities(capabilitiesToNames(existingCapabilities));
+    const previous = previousRef.current;
+    const key = `${target.targetType}-${target.targetId}`;
+    previousRef.current = { key, existing: existingCapabilities };
+    setSelectedCapabilities((current) =>
+      key !== previous.key || namesToCapabilities(current) === previous.existing
+        ? capabilitiesToNames(existingCapabilities)
+        : current,
+    );
   }, [target.targetType, target.targetId, existingCapabilities]);
 
   const onError = (error: unknown) =>
@@ -339,8 +355,11 @@ function TargetEditor({
   const capabilities = namesToCapabilities(selectedCapabilities);
   const dirty = capabilities !== existingCapabilities;
   // 全て外して保存した場合は付与自体を剥奪する。既存付与・新しい付与のどちらも自分の権限の範囲内でなければ保存できない。
+  // オーナー専用bitは非オーナーには委譲判定の対象外(変更不可。サーバー側のgrantCapabilitiesが最終判定)。
+  const ownerOnlyLocked = isOwner ? 0 : OWNER_ONLY_CAPABILITIES;
   const canSave =
-    canGrantCapabilities(granterCapabilities, capabilities) && canGrantCapabilities(granterCapabilities, existingCapabilities);
+    canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, capabilities & ~ownerOnlyLocked) &&
+    canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, existingCapabilities & ~ownerOnlyLocked);
   const isPending = grantMutation.isPending || revokeMutation.isPending;
   const currentPreset = presetLabelFor(capabilities);
   const isOffPreset = currentPreset === CUSTOM_PRESET_LABEL || currentPreset === NO_CAPABILITIES_LABEL;
@@ -370,7 +389,14 @@ function TargetEditor({
             disabled={isLocked}
             onValueChange={(label) => {
               const preset = CAPABILITY_PRESETS.find((p) => p.label === label);
-              if (preset) setSelectedCapabilities(capabilitiesToNames(preset.capabilities));
+              // 非オーナーはオーナー専用bitを変更できないため、既存の状態を保つ。
+              if (preset) {
+                setSelectedCapabilities(
+                  capabilitiesToNames(
+                    (preset.capabilities & ~ownerOnlyLocked) | (existingCapabilities & ownerOnlyLocked),
+                  ),
+                );
+              }
             }}
           >
             <SelectTrigger className="w-36" aria-label="権限プリセット">
@@ -386,7 +412,9 @@ function TargetEditor({
                 <SelectItem
                   key={preset.label}
                   value={preset.label}
-                  disabled={!canGrantCapabilities(granterCapabilities, preset.capabilities)}
+                  disabled={
+                    !canGrantCapabilities(granterCapabilities & ~ownerOnlyLocked, preset.capabilities & ~ownerOnlyLocked)
+                  }
                 >
                   {preset.label}
                 </SelectItem>
@@ -412,7 +440,8 @@ function TargetEditor({
               if (!option) {
                 return null;
               }
-              const grantable = !isLocked && (granterCapabilities & option.bit) === option.bit;
+              const ownerOnlyBlocked = (ownerOnlyLocked & option.bit) !== 0;
+              const grantable = !isLocked && !ownerOnlyBlocked && (granterCapabilities & option.bit) === option.bit;
               return (
                 <label
                   key={option.value}
@@ -436,6 +465,7 @@ function TargetEditor({
                     }
                   />
                   {option.label}
+                  {ownerOnlyBlocked && <span className="text-xs">(サーバーオーナーのみ変更できます)</span>}
                 </label>
               );
             })}
@@ -496,19 +526,11 @@ export function AccessPage() {
   }
 
   const requiredQueries = [grantsQuery, myCapabilitiesQuery];
-  const isForbidden = requiredQueries.some(
-    (query) => query.error instanceof TRPCClientError && query.error.data?.code === "FORBIDDEN",
-  );
   const isPending = requiredQueries.some((query) => query.isPending);
   const isError = requiredQueries.some((query) => query.isError);
 
-  if (isForbidden) {
-    return (
-      <Alert variant="warning">
-        <Lock />
-        <AlertDescription>この操作を行う権限がありません。アクセス権限の変更には「アクセス権限の管理」権限が必要です。</AlertDescription>
-      </Alert>
-    );
+  if (requiredQueries.some((query) => isForbiddenError(query.error))) {
+    return <ForbiddenState pageName="アクセス権限" capabilities={["MANAGE_ACCESS"]} />;
   }
 
   if (isPending) {
@@ -517,9 +539,10 @@ export function AccessPage() {
 
   if (isError || !grantsQuery.data || !myCapabilitiesQuery.data) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>権限情報の取得に失敗しました。時間をおいて再度お試しください。</AlertDescription>
-      </Alert>
+      <ErrorState
+        subject="アクセス権限"
+        onRetry={() => requiredQueries.filter((query) => query.isError).forEach((query) => void query.refetch())}
+      />
     );
   }
 
@@ -567,6 +590,16 @@ export function AccessPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">アクセス権限</h1>
+      {roleOptionsQuery.isError && (
+        <InlineError summary="ロール一覧を読み込めませんでした。" onRetry={() => void roleOptionsQuery.refetch()} />
+      )}
+      {targetUserNamesQuery.isError && (
+        <InlineError
+          summary="ユーザー名を読み込めませんでした。"
+          detail="一部の名前がIDで表示されています。"
+          onRetry={() => void targetUserNamesQuery.refetch()}
+        />
+      )}
       {/* 狭い画面では一覧と編集欄を縦に積むとスクロールが増えるため、対象は選択欄で選ぶ */}
       <div className="flex flex-col gap-2 lg:hidden">
         <label className="text-muted-foreground flex flex-col gap-1.5 text-sm">
@@ -607,6 +640,7 @@ export function AccessPage() {
             target={activeTarget}
             existingCapabilities={grantByKey.get(targetKey(activeTarget)) ?? 0}
             granterCapabilities={granterCapabilities}
+            isOwner={myCapabilitiesQuery.data.isOwner}
             lockReason={lockReasonOf(activeTarget)}
           />
         ) : (

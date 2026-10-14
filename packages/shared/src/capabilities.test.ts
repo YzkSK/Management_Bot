@@ -5,6 +5,7 @@ import {
   canGrantCapabilities,
   CAPABILITIES,
   isKnownCapabilityMask,
+  OWNER_ONLY_CAPABILITIES,
   addCapabilityPrerequisites,
   hasCapabilityPrerequisites,
   removeUnmetDependents,
@@ -91,5 +92,13 @@ describe("capabilityの前提関係(issue #527)", () => {
 
   test("removeUnmetDependentsは前提を失った権限を外す", () => {
     expect(removeUnmetDependents(VIEW_LOGS_RAW | MANAGE_LOGGING_SETTINGS | VIEW_TEMP_VOICE)).toBe(VIEW_TEMP_VOICE);
+  });
+});
+
+describe("OWNER_ONLY_CAPABILITIES (#618)", () => {
+  test("VIEW_AUDIT_LOGはオーナー専用で、既知のcapabilityであり@everyoneの既定には含まれない", () => {
+    expect(OWNER_ONLY_CAPABILITIES & CAPABILITIES.VIEW_AUDIT_LOG).toBe(CAPABILITIES.VIEW_AUDIT_LOG);
+    expect(isKnownCapabilityMask(OWNER_ONLY_CAPABILITIES)).toBe(true);
+    expect(BASELINE_EVERYONE_CAPABILITIES & OWNER_ONLY_CAPABILITIES).toBe(0);
   });
 });

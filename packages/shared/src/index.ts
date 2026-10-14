@@ -2,6 +2,7 @@ export {
   CAPABILITIES,
   ALL_CAPABILITIES,
   BASELINE_EVERYONE_CAPABILITIES,
+  OWNER_ONLY_CAPABILITIES,
   hasCapability,
   canGrantCapabilities,
   isKnownCapabilityMask,
@@ -10,6 +11,13 @@ export {
   removeUnmetDependents,
   type CapabilityName,
 } from "./capabilities.js";
+export {
+  GUILD_DATA_TOPICS,
+  GUILD_DATA_TOPIC_CAPABILITY,
+  guildDataTopicSchema,
+  guildDataChangedMessageSchema,
+  type GuildDataTopic,
+} from "./guild-data-topics.js";
 export {
   FEATURE_KEYS,
   FEATURE_METADATA,
@@ -106,7 +114,7 @@ export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
 export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
-export { discordIdSchema } from "./discord-id.js";
+export { discordIdSchema, roleMentionLabel } from "./discord-id.js";
 export {
   TEMP_VOICE_CREATE_REASON,
   TEMP_VOICE_CONTROL_CREATE_REASON,

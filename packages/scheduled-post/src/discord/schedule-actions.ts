@@ -86,7 +86,7 @@ export async function cancelOwnPostAction(
   input: Omit<CancelScheduledPostInput, "now" | "by"> & Names,
 ): Promise<ScheduledPostRow | null> {
   const now = clock(deps);
-  const row = await cancelScheduledPost(deps.db, { ...input, by: "author", now });
+  const row = await cancelScheduledPost(deps.db, { ...input, by: "author", now, notifiedInline: true });
   if (row) await publishCancelled(deps, row, input);
   return row;
 }

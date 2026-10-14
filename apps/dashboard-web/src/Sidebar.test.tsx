@@ -32,15 +32,36 @@ describe("Sidebar", () => {
     expect(html).not.toContain("<a ");
   });
 
+  function seededWith(capabilities: number): QueryClient {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(trpc.guildSettings.listMyGuilds.queryOptions().queryKey, [
+      { id: "g1", name: "サーバー", isManaged: true, iconUrl: null, capabilities },
+    ]);
+    return queryClient;
+  }
+
   test("guildId指定時はログ機能がログ一覧画面へのリンクになる", () => {
-    const html = renderSidebar(new QueryClient(), "g1");
+    const html = renderSidebar(seededWith(CAPABILITIES.VIEW_LOGS), "g1");
     expect(html).toContain('href="/guilds/g1/logs"');
   });
 
   test("guildId指定時はアクセス権限画面へのリンクが表示される", () => {
-    const html = renderSidebar(new QueryClient(), "g1");
+    const html = renderSidebar(seededWith(CAPABILITIES.MANAGE_ACCESS), "g1");
     expect(html).toContain('href="/guilds/g1/access"');
     expect(html).toContain("アクセス権限");
+  });
+
+  test("guildId指定時、権限が分かるまで(サーバー一覧の取得中)は項目を出さずスケルトンを出す(リロード時のちらつき防止)", () => {
+    const html = renderSidebar(new QueryClient(), "g1");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("アクセス権限");
+    expect(html).toContain('aria-label="メニューを読み込み中"');
+  });
+
+  test("取得済みで一覧に無いサーバーでは、スケルトンも項目も出さない", () => {
+    const html = renderSidebar(seededWith(CAPABILITIES.VIEW_LOGS), "other");
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("メニューを読み込み中");
   });
 
   test("guildId未指定時はアクセス権限画面へのリンクにならない", () => {
@@ -58,8 +79,9 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/guilds/g1/logs"');
     expect(html).not.toContain('href="/guilds/g1/activity"');
     expect(html).not.toContain('href="/guilds/g1/moderation"');
-    expect(html).not.toContain('href="/guilds/g1/temp-voice"');
     expect(html).not.toContain('href="/guilds/g1/access"');
+    // 一時VCは全メンバー向け(権限がなければ自分がオーナーのVCのみ表示)。
+    expect(html).toContain('href="/guilds/g1/temp-voice"');
     expect(html).not.toContain(">管理<");
   });
 

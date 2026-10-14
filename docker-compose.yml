@@ -95,7 +95,7 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.58.0-alpine@sha256:5dcf67db0ee378caa87f3395cb9484ebe3e97bb0334d119f2ac33116e00c5773
+    image: timberio/vector:0.59.0-alpine@sha256:0e36bc2a290039e9b6a5e92f04bd2f133223506f72d09682c1df16c015172b7a
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
@@ -283,7 +283,7 @@ services:
       - dashboard-api
 
   caddy:
-   image: caddy:2-alpine@sha256:881bbc60f9986d5ab8e7cfd6cf7e4ef3c9c0439fef2429d035d065577882f028
+   image: caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
    restart: unless-stopped
    ports:
      - "80:80"

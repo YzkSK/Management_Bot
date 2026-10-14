@@ -1,4 +1,4 @@
-import { protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
+import { captureAuditBefore, protectedProcedure, requireCapability, router } from "@management-bot/dashboard-access";
 import { buildInviteUrl, CAPABILITIES, discordIdSchema, LOG_CATEGORIES, hasCapability } from "@management-bot/shared";
 import { TRPCError } from "@trpc/server";
 import { PermissionFlagsBits } from "discord.js";
@@ -112,9 +112,10 @@ export const loggingRouter = router({
     .query(({ ctx, input }) => listRetentionSettings(ctx.db, input.guildId)),
 
   setRetentionSetting: loggingManageProcedure(setRetentionSettingInput)
-    .mutation(({ ctx, input }) =>
-      setRetentionSetting(ctx.db, input.guildId, input.category, input.retentionDays),
-    ),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => listRetentionSettings(ctx.db, input.guildId));
+      return setRetentionSetting(ctx.db, input.guildId, input.category, input.retentionDays);
+    }),
 
   listChannelSettings: loggingManageProcedure(guildIdInput)
     .query(({ ctx, input }) => listChannelSettings(ctx.db, input.guildId)),
@@ -142,11 +143,15 @@ export const loggingRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
         }
       }
+      await captureAuditBefore(ctx, () => listChannelSettings(ctx.db, input.guildId));
       await setChannelSetting(ctx.db, input.guildId, input.category, input.channelId);
     }),
 
   setRetentionSettingForAllCategories: loggingManageProcedure(setRetentionSettingForAllCategoriesInput)
-    .mutation(({ ctx, input }) => setRetentionSettingForAllCategories(ctx.db, input.guildId, input.retentionDays)),
+    .mutation(async ({ ctx, input }) => {
+      await captureAuditBefore(ctx, () => listRetentionSettings(ctx.db, input.guildId));
+      return setRetentionSettingForAllCategories(ctx.db, input.guildId, input.retentionDays);
+    }),
 
   setChannelSettingForAllCategories: loggingManageProcedure(setChannelSettingForAllCategoriesInput)
     .mutation(async ({ ctx, input }) => {
@@ -156,6 +161,7 @@ export const loggingRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "channelId is not a channel of this guild" });
         }
       }
+      await captureAuditBefore(ctx, () => listChannelSettings(ctx.db, input.guildId));
       await setChannelSettingForAllCategories(ctx.db, input.guildId, input.channelId);
     }),
 
@@ -163,8 +169,9 @@ export const loggingRouter = router({
     .query(({ ctx, input }) => getDisplaySettings(ctx.db, input.guildId)),
 
   setDisplaySetting: loggingManageProcedure(setDisplaySettingInput)
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { guildId, ...patch } = input;
+      await captureAuditBefore(ctx, () => getDisplaySettings(ctx.db, guildId));
       return setDisplaySetting(ctx.db, guildId, patch);
     }),
 

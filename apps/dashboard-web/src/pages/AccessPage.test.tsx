@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { CAPABILITIES } from "@management-bot/shared";
+import { ALL_CAPABILITIES, CAPABILITIES } from "@management-bot/shared";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { trpc } from "../trpc.js";
@@ -22,7 +22,7 @@ function renderPage(guildId: string, queryClient: QueryClient): string {
 function seedBaseQueries(
   queryClient: QueryClient,
   guildId: string,
-  options: { myCapabilities?: number; grants?: unknown[] } = {},
+  options: { myCapabilities?: number; isOwner?: boolean; grants?: unknown[] } = {},
 ): void {
   queryClient.setQueryData(trpc.access.listRoleOptions.queryOptions({ guildId }).queryKey, {
     roles: [
@@ -40,6 +40,7 @@ function seedBaseQueries(
   });
   queryClient.setQueryData(trpc.access.getMyCapabilities.queryOptions({ guildId }).queryKey, {
     capabilities: options.myCapabilities ?? 0,
+    isOwner: options.isOwner ?? false,
   });
   queryClient.setQueryData(trpc.access.listCapabilityGrants.queryOptions({ guildId }).queryKey, options.grants ?? []);
   queryClient.setQueryData(
@@ -56,7 +57,7 @@ function seedBaseQueries(
 
 /** 権限名ラベルの直前にあるチェックボックスのタグを返す(チェックボックスはラベル文字列の前に描画する)。 */
 function checkboxTagBefore(html: string, label: string): string {
-  const labelIndex = html.indexOf(`>${label}</label>`);
+  const labelIndex = html.indexOf(`>${label}<`);
   const start = html.lastIndexOf('type="checkbox"', labelIndex);
   const tagStart = html.lastIndexOf("<input", start);
   return html.slice(tagStart, html.indexOf(">", start));
@@ -138,6 +139,36 @@ describe("AccessPage", () => {
 
     expect(checkboxTagBefore(html, CAPABILITY_LABELS.MANAGE_ACCESS)).not.toContain('disabled=""');
     expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).toContain('disabled=""');
+  });
+
+  test("オーナー専用capability(操作履歴の閲覧)は、非オーナーだと全権限を持っていても無効化され注記が出る(#618)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: ALL_CAPABILITIES,
+      isOwner: false,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).toContain("サーバーオーナーのみ変更できます");
+    const tag = html.slice(html.lastIndexOf("<input", html.indexOf(CAPABILITY_LABELS.VIEW_AUDIT_LOG)));
+    expect(tag.slice(0, tag.indexOf(">"))).toContain('disabled=""');
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_LOGS)).not.toContain('disabled=""');
+  });
+
+  test("オーナーはオーナー専用capabilityを変更できる(#618)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    seedBaseQueries(queryClient, "g1", {
+      myCapabilities: ALL_CAPABILITIES,
+      isOwner: true,
+      grants: [{ id: "grant-1", targetType: "role", targetId: "g1", capabilities: CAPABILITIES.VIEW_LOGS }],
+    });
+
+    const html = renderPage("g1", queryClient);
+
+    expect(html).not.toContain("サーバーオーナーのみ変更できます");
+    expect(checkboxTagBefore(html, CAPABILITY_LABELS.VIEW_AUDIT_LOG)).not.toContain('disabled=""');
   });
 
   test("自分自身が保有capabilities=0の場合は全チェックボックスをdisabledにする", () => {
@@ -228,6 +259,7 @@ describe("AccessPage", () => {
     // listCapabilityGrantsは未取得のまま、getMyCapabilitiesのみ成功させる。
     queryClient.setQueryData(trpc.access.getMyCapabilities.queryOptions({ guildId: "g1" }).queryKey, {
       capabilities: CAPABILITIES.MANAGE_ACCESS,
+      isOwner: false,
     });
 
     renderPage("g1", queryClient);

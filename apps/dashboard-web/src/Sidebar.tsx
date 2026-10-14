@@ -11,6 +11,7 @@ import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SidebarProps {
   guildId?: string;
@@ -62,14 +63,31 @@ function PageSection({
   );
 }
 
+/** サーバー一覧(=自分の権限)の取得中に、項目の代わりに出すスケルトン。 */
+function PageSectionSkeleton() {
+  return (
+    <div role="status" aria-label="メニューを読み込み中" className="flex flex-col gap-0.5 pt-2">
+      <Skeleton className="mx-3 mb-2 h-3 w-10" />
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="flex min-h-10 items-center px-3">
+          <Skeleton className="h-4 w-28" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SidebarNav({
   guildId,
   guilds,
+  isLoading = false,
   navigate,
   onNavigate,
 }: {
   guildId?: string;
   guilds: readonly ManagedGuildWithAccess[];
+  /** サーバー一覧の取得中か(取得中は項目の代わりにスケルトンを出す)。 */
+  isLoading?: boolean;
   navigate: (path: string) => void;
   /** リンク/セレクトでの遷移後に呼ばれる(モバイルドロワーを閉じるため)。 */
   onNavigate?: () => void;
@@ -79,12 +97,16 @@ function SidebarNav({
   // SelectItem側で直接どのguildが押されたかを記録する。
   const pickedGuildRef = useRef<ManagedGuildWithAccess | null>(null);
   // サーバー選択中は閲覧権限のあるページだけを出す(issue #527)。未選択時は全項目を非リンクで出す。
+  // 選択中だが権限がまだ分からない(サーバー一覧の取得中・一覧に無い)間は何も出さない
+  // (リロード直後に権限のない項目まで一瞬映るのを防ぐ)。
   const currentGuild = guilds.find((g) => g.id === guildId);
-  const visiblePages = currentGuild
-    ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
-    : GUILD_PAGES;
-  const featurePages = visiblePages.filter((page) => page.key !== "access");
-  const adminPages = visiblePages.filter((page) => page.key === "access");
+  const visiblePages = guildId === undefined
+    ? GUILD_PAGES
+    : currentGuild
+      ? GUILD_PAGES.filter((page) => hasCapability(currentGuild.capabilities, page.capability))
+      : [];
+  const featurePages = visiblePages.filter((page) => page.key !== "access" && page.key !== "audit-log");
+  const adminPages = visiblePages.filter((page) => page.key === "access" || page.key === "audit-log");
 
   return (
     <>
@@ -139,8 +161,14 @@ function SidebarNav({
           </SelectContent>
         </Select>
       </div>
-      <PageSection title="機能" pages={featurePages} guildId={guildId} onNavigate={onNavigate} className="pt-2" />
-      <PageSection title="管理" pages={adminPages} guildId={guildId} onNavigate={onNavigate} className="pt-4" />
+      {guildId !== undefined && isLoading ? (
+        <PageSectionSkeleton />
+      ) : (
+        <>
+          <PageSection title="機能" pages={featurePages} guildId={guildId} onNavigate={onNavigate} className="pt-2" />
+          <PageSection title="管理" pages={adminPages} guildId={guildId} onNavigate={onNavigate} className="pt-4" />
+        </>
+      )}
     </>
   );
 }
@@ -158,7 +186,7 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
         aria-label="機能メニュー"
         className="hidden overflow-y-auto border-r p-2 md:block md:w-56 md:shrink-0"
       >
-        <SidebarNav guildId={guildId} guilds={guilds} navigate={navigate} />
+        <SidebarNav guildId={guildId} guilds={guilds} isLoading={guildsQuery.isPending} navigate={navigate} />
       </nav>
       {/*
         モバイルドロワーはRadix Dialogでモーダル化する(Tab循環・背景inert・
@@ -170,7 +198,13 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
           aria-label="機能メニュー"
         >
           <DialogTitle className="sr-only">機能メニュー</DialogTitle>
-          <SidebarNav guildId={guildId} guilds={guilds} navigate={navigate} onNavigate={closeMobileDrawer} />
+          <SidebarNav
+            guildId={guildId}
+            guilds={guilds}
+            isLoading={guildsQuery.isPending}
+            navigate={navigate}
+            onNavigate={closeMobileDrawer}
+          />
         </DialogContent>
       )}
     </>
