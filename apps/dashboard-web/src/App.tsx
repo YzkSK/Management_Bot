@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { isUnauthorizedError } from "./is-unauthorized-error.js";
 import { logout } from "./logout.js";
 import { API_URL, trpc } from "./trpc.js";
@@ -59,6 +59,8 @@ export function App() {
           element={layout}
         >
           <Route index element={<GuildListPage />} />
+          {/* /404 もここで受ける */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route
           path="/status"
@@ -72,7 +74,7 @@ export function App() {
             />
           }
         >
-          <Route index element={statusAccess ? <StatusPage isOwner={statusAccess === "owner"} /> : <NotFoundPage />} />
+          <Route index element={statusAccess ? <StatusPage isOwner={statusAccess === "owner"} /> : <Navigate to="/404" replace />} />
         </Route>
         <Route
           path="/guilds/:guildId"
@@ -89,6 +91,8 @@ export function App() {
           <Route path="roles" element={<RequirePageAccess pageName="ロール管理" capability="VIEW_ROLES"><RolesPage /></RequirePageAccess>} />
           <Route path="access" element={<RequirePageAccess pageName="アクセス権限" capability="MANAGE_ACCESS"><AccessPage /></RequirePageAccess>} />
           <Route path="audit-log" element={<RequirePageAccess pageName="操作履歴" capability="VIEW_AUDIT_LOG"><AuditLogPage /></RequirePageAccess>} />
+          <Route index element={<Navigate to="/404" replace />} />
+          <Route path="*" element={<Navigate to="/404" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
