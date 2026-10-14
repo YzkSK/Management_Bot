@@ -48,7 +48,8 @@ function Switch(props: SwitchProps) {
   const ariaLabel = rest["aria-label"] ?? label;
 
   return (
-    <div
+    // 親<label>内に置かれるため、div(フロー要素)ではなくspanにする。
+    <span
       className={switchWrapper()}
       data-sw-switch-wrapper
       data-slot="switch-wrapper"
@@ -87,7 +88,7 @@ function Switch(props: SwitchProps) {
           {label}
         </label>
       )}
-    </div>
+    </span>
   );
 }
 
