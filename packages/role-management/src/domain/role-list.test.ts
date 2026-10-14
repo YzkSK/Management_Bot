@@ -72,6 +72,23 @@ describe("buildRoleListItems", () => {
     });
   });
 
+  test("botManageable: 同じpositionではidが小さい方を上として判定する", () => {
+    const items = buildRoleListItems({
+      guildId,
+      roles: [
+        role({ id: "20", position: 5 }),
+        role({ id: "10", position: 5 }),
+        role({ id: "30", position: 5 }),
+      ],
+      memberCounts: null,
+      botRoleIds: ["20"],
+    });
+    const manageable = Object.fromEntries(items.map((i) => [i.id, i.botManageable]));
+
+    expect(items.map((i) => i.id)).toEqual(["10", "20", "30"]);
+    expect(manageable).toEqual({ "10": false, "20": false, "30": true });
+  });
+
   test("Botがロールを持たなければ(最上位position 0)どのロールも操作不可", () => {
     const items = buildRoleListItems({
       guildId,
