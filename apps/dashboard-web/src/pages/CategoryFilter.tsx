@@ -2,6 +2,7 @@ import { ChevronDown, ListFilter, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { LogCategory } from "@management-bot/shared";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
+import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -94,12 +95,7 @@ export function CategoryFilter({
                 key={option.value}
                 className="hover:bg-accent/60 has-checked:bg-accent flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm"
               >
-                <input
-                  type="checkbox"
-                  className="accent-foreground size-4"
-                  checked={selected.includes(option.value)}
-                  onChange={() => toggle(option.value)}
-                />
+                <Checkbox aria-label={option.label} checked={selected.includes(option.value)} onCheckedChange={() => toggle(option.value)} />
                 <CategoryMark category={option.value} />
                 {option.label}
               </label>
