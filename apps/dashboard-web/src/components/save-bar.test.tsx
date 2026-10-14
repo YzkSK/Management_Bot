@@ -19,6 +19,6 @@ describe("SaveBar", () => {
   test("保存中はボタンを無効化し保存中と表示する", () => {
     const html = renderToStaticMarkup(<SaveBar dirty saving onSave={noop} onDiscard={noop} />);
     expect(html).toContain("保存中...");
-    expect(html.match(/disabled=""/g)?.length).toBe(2);
+    expect(html.match(/ disabled=""/g)?.length).toBe(2);
   });
 });

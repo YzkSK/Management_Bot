@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { CapabilityName } from "@management-bot/shared";
 import { CAPABILITY_LABELS } from "../pages/capability-labels.js";
 import { trpc } from "../trpc.js";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { cn } from "@/lib/utils";
 
 // 文節の途中で折り返さず(auto-phrase)、行の長さを揃える(balance)。文の区切りは<br>で明示する。
@@ -108,10 +108,8 @@ export function BotPermissionState({
       {canReauthorize && reauthorizeUrl ? (
         <>
           <div className="mt-1.5">
-            <Button asChild>
-              <a href={reauthorizeUrl} target="_blank" rel="noreferrer">
-                Botを再認可する
-              </a>
+            <Button href={reauthorizeUrl} target="_blank" rel="noreferrer">
+              Botを再認可する
             </Button>
           </div>
           <Text small>

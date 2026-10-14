@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { permissionIcon } from "./permission-icons.js";
 import { EMPTY_ROLE_FILTER, type RoleFilterValue } from "./role-filter.js";
 import { Checkbox } from "@/components/starwind/checkbox";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/ui/input";
 
 interface ActiveChip {

@@ -19,7 +19,7 @@ import { BOT_PERMISSION_LABELS } from "./bot-permission-labels.js";
 import { BotNotJoinedState, BotPermissionState, ErrorState } from "@/components/page-state";
 import { InitialAvatar } from "@/components/initial-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonVariants } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,
@@ -253,12 +253,14 @@ export function ScheduledPostPage() {
           </p>
         </div>
         {canManage && (
-          <Button asChild variant="outline">
-            <Link to={`/guilds/${guildId}/scheduled-post/settings`}>
-              <Settings aria-hidden="true" />
-              予約投稿の設定
-            </Link>
-          </Button>
+          <Link
+            to={`/guilds/${guildId}/scheduled-post/settings`}
+            data-slot="button"
+            className={ButtonVariants.button({ variant: "outline" })}
+          >
+            <Settings aria-hidden="true" />
+            予約投稿の設定
+          </Link>
         )}
       </div>
 
