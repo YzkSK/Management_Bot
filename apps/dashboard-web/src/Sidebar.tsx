@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { hasCapability } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { GuildIcon } from "./guild-icon.js";
 import { firstAccessiblePath, GUILD_PAGES, guildPagePath, type GuildPage } from "./guild-pages.js";

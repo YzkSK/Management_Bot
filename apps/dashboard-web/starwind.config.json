@@ -6,7 +6,20 @@
     "source": "bundled",
     "version": "2.2.0"
   },
-  "components": [],
+  "components": [
+    {
+      "name": "checkbox",
+      "version": "2.0.2",
+      "framework": "react",
+      "registry": "default"
+    },
+    {
+      "name": "toast",
+      "version": "2.1.1",
+      "framework": "react",
+      "registry": "default"
+    }
+  ],
   "tailwind": {
     "css": "src/styles/starwind.css",
     "baseColor": "neutral",

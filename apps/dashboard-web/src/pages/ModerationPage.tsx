@@ -3,7 +3,7 @@ import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import {
   MODERATION_PRESETS,
   MODERATION_VIOLATION_TYPES,

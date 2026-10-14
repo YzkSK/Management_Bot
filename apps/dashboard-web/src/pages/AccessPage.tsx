@@ -3,7 +3,7 @@ import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import {
   addCapabilityPrerequisites,
   CAPABILITIES,

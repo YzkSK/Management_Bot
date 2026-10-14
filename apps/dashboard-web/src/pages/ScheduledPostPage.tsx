@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
