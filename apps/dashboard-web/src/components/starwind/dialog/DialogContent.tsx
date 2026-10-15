@@ -1,17 +1,28 @@
 "use client";
 
-import { createContext, useContext, useId } from "react";
+import { createContext, useContext, useId, useLayoutEffect, useState } from "react";
 import type * as React from "react";
 import DialogPrimitive from "@starwind-ui/react/dialog";
 import { useDialogMounted } from "./Dialog";
 import { dialogBackdrop, dialogContent } from "./variants";
 
-// ランタイムは初期化時にしかTitle/Descriptionを探さず、閉時は中身をマウントしないため紐付けが漏れる。
-// idをこちらで振り、aria-labelledby/aria-describedbyを明示する。
-const DialogLabelIdsContext = createContext<{ titleId?: string; descriptionId?: string }>({});
+type LabelKind = "title" | "description";
 
-export function useDialogLabelIds(): { titleId?: string; descriptionId?: string } {
-  return useContext(DialogLabelIdsContext);
+type DialogLabelContextValue = {
+  titleId?: string;
+  descriptionId?: string;
+  register?: (kind: LabelKind) => () => void;
+};
+
+// ランタイムは初期化時にしかTitle/Descriptionを探さず、閉時は中身をマウントしないため紐付けが漏れる。
+// idをこちらで振り、実際に描画されているものだけaria-labelledby/aria-describedbyで明示する。
+const DialogLabelContext = createContext<DialogLabelContextValue>({});
+
+/** DialogTitle/DialogDescriptionから呼び、描画中であることを登録して自分のidを受け取る。 */
+export function useDialogLabelId(kind: LabelKind): string | undefined {
+  const { titleId, descriptionId, register } = useContext(DialogLabelContext);
+  useLayoutEffect(() => register?.(kind), [register, kind]);
+  return kind === "title" ? titleId : descriptionId;
 }
 
 export type DialogContentProps = React.ComponentPropsWithoutRef<"dialog"> & {
@@ -25,6 +36,13 @@ function DialogContent(props: DialogContentProps) {
   const baseId = useId();
   const titleId = `${baseId}-title`;
   const descriptionId = `${baseId}-description`;
+  const [hasTitle, setHasTitle] = useState(false);
+  const [hasDescription, setHasDescription] = useState(false);
+  const [register] = useState(() => (kind: LabelKind) => {
+    const set = kind === "title" ? setHasTitle : setHasDescription;
+    set(true);
+    return () => set(false);
+  });
 
   return (
     <>
@@ -40,14 +58,14 @@ function DialogContent(props: DialogContentProps) {
       <DialogPrimitive.Popup
         className={dialogContent({ class: className })}
         data-state="closed"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-labelledby={hasTitle ? titleId : undefined}
+        aria-describedby={hasDescription ? descriptionId : undefined}
         {...rest}
         data-slot="dialog-content"
       >
-        <DialogLabelIdsContext.Provider value={{ titleId, descriptionId }}>
+        <DialogLabelContext.Provider value={{ titleId, descriptionId, register }}>
           {mounted ? children : null}
-        </DialogLabelIdsContext.Provider>
+        </DialogLabelContext.Provider>
       </DialogPrimitive.Popup>
     </>
   );

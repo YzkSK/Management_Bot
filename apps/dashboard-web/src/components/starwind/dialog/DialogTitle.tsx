@@ -2,14 +2,14 @@
 
 import DialogPrimitive from "@starwind-ui/react/dialog";
 import type * as React from "react";
-import { useDialogLabelIds } from "./DialogContent";
+import { useDialogLabelId } from "./DialogContent";
 import { dialogTitle } from "./variants";
 
 export type DialogTitleProps = React.ComponentPropsWithoutRef<"h2">;
 
 function DialogTitle(props: DialogTitleProps) {
   const { className, children, ...rest } = props;
-  const { titleId } = useDialogLabelIds();
+  const titleId = useDialogLabelId("title");
 
   return (
     <DialogPrimitive.Title

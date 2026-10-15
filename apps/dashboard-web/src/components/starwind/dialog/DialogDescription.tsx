@@ -2,14 +2,14 @@
 
 import DialogPrimitive from "@starwind-ui/react/dialog";
 import type * as React from "react";
-import { useDialogLabelIds } from "./DialogContent";
+import { useDialogLabelId } from "./DialogContent";
 import { dialogDescription } from "./variants";
 
 export type DialogDescriptionProps = React.ComponentPropsWithoutRef<"p">;
 
 function DialogDescription(props: DialogDescriptionProps) {
   const { className, children, ...rest } = props;
-  const { descriptionId } = useDialogLabelIds();
+  const descriptionId = useDialogLabelId("description");
 
   return (
     <DialogPrimitive.Description
