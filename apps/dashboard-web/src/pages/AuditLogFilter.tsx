@@ -83,12 +83,12 @@ export function AuditLogFilter({
     const onPointerDown = (e: PointerEvent) => {
       if (!(e.target instanceof Element)) return;
       // セレクターの選択肢はportalでパネルの外に描画されるため、外側クリック扱いにしない。
-      if (rootRef.current?.contains(e.target) || e.target.closest("[data-radix-popper-content-wrapper]")) return;
+      if (rootRef.current?.contains(e.target) || e.target.closest('[data-slot="select-positioner"]')) return;
       setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      // 開いているセレクターのEscはセレクター側だけを閉じる。
-      if (e.key === "Escape" && !document.querySelector('[role="listbox"]')) setOpen(false);
+      // 開いているセレクターのEscはセレクター側だけを閉じる。Starwindは閉じた選択肢をhiddenで残す。
+      if (e.key === "Escape" && !document.querySelector('[role="listbox"]:not([hidden])')) setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
