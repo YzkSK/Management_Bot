@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconChartBar, IconChevronLeft, IconChevronRight, IconMicrophone, IconUsers } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_URL, trpc } from "../trpc.js";
@@ -659,9 +659,18 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div>
           <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
-            <TabsTrigger value="server">サーバー統計</TabsTrigger>
-            <TabsTrigger value="member">メンバー</TabsTrigger>
-            <TabsTrigger value="voice">アクティブVC</TabsTrigger>
+            <TabsTrigger value="server">
+              <IconChartBar aria-hidden="true" />
+              サーバー統計
+            </TabsTrigger>
+            <TabsTrigger value="member">
+              <IconUsers aria-hidden="true" />
+              メンバー
+            </TabsTrigger>
+            <TabsTrigger value="voice">
+              <IconMicrophone aria-hidden="true" />
+              アクティブVC
+            </TabsTrigger>
           </TabsList>
         </div>
         <p className="text-muted-foreground text-xs">

@@ -1,7 +1,16 @@
 import { matchQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
+import {
+  IconAdjustments,
+  IconAlertTriangle,
+  IconBan,
+  IconChevronDown,
+  IconChevronRight,
+  IconHistory,
+  IconListCheck,
+  type TablerIcon,
+} from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import {
@@ -957,12 +966,12 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
 
 type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes" | "history";
 
-const MODERATION_TABS: readonly { value: ModerationTab; label: string }[] = [
-  { value: "thresholds", label: "検知設定" },
-  { value: "ngwords", label: "NGワード" },
-  { value: "whitelist", label: "ホワイトリスト" },
-  { value: "strikes", label: "警告回数" },
-  { value: "history", label: "検知履歴" },
+const MODERATION_TABS: readonly { value: ModerationTab; label: string; icon: TablerIcon }[] = [
+  { value: "thresholds", label: "検知設定", icon: IconAdjustments },
+  { value: "ngwords", label: "NGワード", icon: IconBan },
+  { value: "whitelist", label: "ホワイトリスト", icon: IconListCheck },
+  { value: "strikes", label: "警告回数", icon: IconAlertTriangle },
+  { value: "history", label: "検知履歴", icon: IconHistory },
 ];
 
 export function ModerationPage() {
@@ -1053,8 +1062,9 @@ export function ModerationPage() {
           </Select>
         </label>
         <TabsList aria-label="スパム対策の設定" className="hidden sm:inline-flex">
-          {MODERATION_TABS.map(({ value, label }) => (
+          {MODERATION_TABS.map(({ value, label, icon: Icon }) => (
             <TabsTrigger key={value} value={value}>
+              <Icon aria-hidden="true" />
               {label}
             </TabsTrigger>
           ))}

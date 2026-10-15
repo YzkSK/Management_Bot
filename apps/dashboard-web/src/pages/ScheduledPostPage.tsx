@@ -273,9 +273,10 @@ export function ScheduledPostPage() {
         <TabsList aria-label="予約投稿" className="overflow-x-auto">
           {SCHEDULED_POST_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
+              <t.icon aria-hidden="true" />
               {t.label}
               {counts && (
-                <span className="bg-muted text-muted-foreground ml-1.5 rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
+                <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
               )}
             </TabsTrigger>
           ))}

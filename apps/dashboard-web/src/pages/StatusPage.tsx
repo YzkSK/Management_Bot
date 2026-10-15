@@ -1,7 +1,7 @@
 import { INFRA_LOG_SERVICES, type InfraLogService } from "@management-bot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconActivity, IconChevronLeft, IconChevronRight, IconCpu, IconDatabaseExport, IconFileText, IconLock } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
@@ -89,11 +89,28 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
             aria-label="ステータスの表示"
             className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
           >
-            <TabsTrigger value="status">ステータス</TabsTrigger>
-            <TabsTrigger value="resources">リソース</TabsTrigger>
-            <TabsTrigger value="logs">ログ</TabsTrigger>
-            <TabsTrigger value="backup">バックアップ</TabsTrigger>
-            {isOwner && <TabsTrigger value="access">閲覧権限</TabsTrigger>}
+            <TabsTrigger value="status">
+              <IconActivity aria-hidden="true" />
+              ステータス
+            </TabsTrigger>
+            <TabsTrigger value="resources">
+              <IconCpu aria-hidden="true" />
+              リソース
+            </TabsTrigger>
+            <TabsTrigger value="logs">
+              <IconFileText aria-hidden="true" />
+              ログ
+            </TabsTrigger>
+            <TabsTrigger value="backup">
+              <IconDatabaseExport aria-hidden="true" />
+              バックアップ
+            </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="access">
+                <IconLock aria-hidden="true" />
+                閲覧権限
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
