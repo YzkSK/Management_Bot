@@ -8,7 +8,7 @@ import { firstAccessiblePath } from "../guild-pages.js";
 import { NO_ACCESS_MESSAGE } from "../no-access-message.js";
 import { trpc } from "../trpc.js";
 import { ErrorState } from "@/components/page-state";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/starwind/input";
 import { Loading } from "@/components/ui/skeleton";
 
 const CARD = "bg-card flex w-full items-center gap-3.5 rounded-xl border p-4 text-left";
