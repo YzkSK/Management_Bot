@@ -26,7 +26,7 @@ import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Loading } from "@/components/loading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 /** ヘッダーの状態ランプと同じクエリ・同じ間隔で更新する(キャッシュを共有する)。 */
@@ -91,24 +91,24 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           >
             <TabsTrigger value="status">
               <IconActivity aria-hidden="true" />
-              ステータス
+              <TabsLabel>ステータス</TabsLabel>
             </TabsTrigger>
             <TabsTrigger value="resources">
               <IconCpu aria-hidden="true" />
-              リソース
+              <TabsLabel>リソース</TabsLabel>
             </TabsTrigger>
             <TabsTrigger value="logs">
               <IconFileText aria-hidden="true" />
-              ログ
+              <TabsLabel>ログ</TabsLabel>
             </TabsTrigger>
             <TabsTrigger value="backup">
               <IconDatabaseExport aria-hidden="true" />
-              バックアップ
+              <TabsLabel>バックアップ</TabsLabel>
             </TabsTrigger>
             {isOwner && (
               <TabsTrigger value="access">
                 <IconLock aria-hidden="true" />
-                閲覧権限
+                <TabsLabel>閲覧権限</TabsLabel>
               </TabsTrigger>
             )}
           </TabsList>

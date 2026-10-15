@@ -27,7 +27,7 @@ import {
 } from "@/components/starwind/dialog";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading } from "@/components/loading";
 
 type TempVoiceTab = "list" | "roles" | "settings";
@@ -657,15 +657,15 @@ export function TempVoicePage() {
         <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
           <TabsTrigger value="list">
             <IconList aria-hidden="true" />
-            一時VC一覧
+            <TabsLabel>一時VC一覧</TabsLabel>
           </TabsTrigger>
           <TabsTrigger value="roles">
             <IconShieldLock aria-hidden="true" />
-            拒否禁止ロール
+            <TabsLabel>拒否禁止ロール</TabsLabel>
           </TabsTrigger>
           <TabsTrigger value="settings">
             <IconSettings aria-hidden="true" />
-            設定
+            <TabsLabel>設定</TabsLabel>
           </TabsTrigger>
         </TabsList>
 

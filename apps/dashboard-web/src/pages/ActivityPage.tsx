@@ -22,7 +22,7 @@ import { useGuildWs } from "./use-guild-ws.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Button } from "@/components/starwind/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_PERIODS,
@@ -661,15 +661,15 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
           <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
             <TabsTrigger value="server">
               <IconChartBar aria-hidden="true" />
-              サーバー統計
+              <TabsLabel>サーバー統計</TabsLabel>
             </TabsTrigger>
             <TabsTrigger value="member">
               <IconUsers aria-hidden="true" />
-              メンバー
+              <TabsLabel>メンバー</TabsLabel>
             </TabsTrigger>
             <TabsTrigger value="voice">
               <IconMicrophone aria-hidden="true" />
-              アクティブVC
+              <TabsLabel>アクティブVC</TabsLabel>
             </TabsTrigger>
           </TabsList>
         </div>
