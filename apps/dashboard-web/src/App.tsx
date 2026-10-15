@@ -121,7 +121,7 @@ export function AppStateScreen({ view }: { view: "boot" | "redirect" | "error" }
         )}
         {view === "error" && (
           <>
-            <p role="alert" className="text-destructive text-sm">接続に失敗しました。時間をおいて再度お試しください。</p>
+            <p role="alert" className="text-error text-sm">接続に失敗しました。時間をおいて再度お試しください。</p>
             <Button className="h-11 px-5" onClick={() => window.location.reload()}>再読み込み</Button>
           </>
         )}

@@ -119,7 +119,7 @@ export const dropdownShortcut = tv({
   ],
 });
 
-// 既存shadcn版のTriggerは装飾なし(呼び出し側がclassNameで指定する)。
+// 移行前のTriggerは装飾なし(呼び出し側がclassNameで指定する)。
 export const dropdownTrigger = tv({
   base: "",
 });

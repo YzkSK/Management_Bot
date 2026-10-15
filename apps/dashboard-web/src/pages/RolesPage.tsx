@@ -140,7 +140,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
                 <ClickPopover
                   label="操作不可の理由を表示"
                   trigger={
-                    <span className={`${BADGE_BASE} border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20`}>
+                    <span className={`${BADGE_BASE} border-error/40 bg-error/10 text-error hover:bg-error/20`}>
                       <IconAlertTriangle className="size-3" aria-hidden="true" />
                       操作不可
                     </span>

@@ -1,6 +1,6 @@
 import { tv } from "tailwind-variants";
 
-// 既存のRadix(shadcn)版Selectと同じ見た目に固定している。
+// 移行前のRadix版Selectと同じ見た目に固定している。
 // Rootは実DOMを持たないRadixに合わせてdisplay: contentsにし、レイアウトへ影響させない。
 export const select = tv({
   base: "contents",
@@ -67,7 +67,7 @@ export const selectSeparator = tv({
 
 export const selectTrigger = tv({
   base: [
-    "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
+    "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-outline focus-visible:ring-outline/50 aria-invalid:ring-error/20 aria-invalid:border-error",
     "data-[size=default]:h-9 data-[size=sm]:h-8 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]",
     "disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   ],

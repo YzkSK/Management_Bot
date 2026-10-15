@@ -18,7 +18,7 @@ const PAGE_SIZE = 50;
 
 const OUTCOME_TONES: Record<string, string> = {
   success: "bg-success/10 text-success",
-  failure: "bg-destructive/10 text-destructive",
+  failure: "bg-error/10 text-error",
   denied: "bg-warning/10 text-warning",
   pending: "bg-muted text-muted-foreground",
 };
@@ -26,8 +26,8 @@ const OUTCOME_TONES: Record<string, string> = {
 /** 縦線の上に置く点。通常は機能の色で塗りつぶし、失敗・権限不足は赤い輪、結果不明は機能色の破線の輪。 */
 const NODE_BASE = "absolute top-[13px] -left-[29px] size-3.5 rounded-full shadow-[0_0_0_4px_var(--background)]";
 const NODE_BY_OUTCOME: Record<string, string> = {
-  failure: "bg-background border-[3px] border-destructive",
-  denied: "bg-background border-[3px] border-destructive",
+  failure: "bg-background border-[3px] border-error",
+  denied: "bg-background border-[3px] border-error",
   pending: "bg-background border-2 border-dashed border-[var(--c)]",
 };
 

@@ -186,7 +186,7 @@ function AddUserSelect({
       </Select>
       {memberOptions.isError && (
         <div className="flex items-center gap-2">
-          <p className="text-destructive text-xs">候補の取得に失敗しました。</p>
+          <p className="text-error text-xs">候補の取得に失敗しました。</p>
           <Button type="button" variant="outline" size="sm" onClick={memberOptions.retry}>
             再試行
           </Button>

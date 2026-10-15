@@ -1,19 +1,19 @@
 import { tv } from "tailwind-variants";
 
-// 見た目は移行前のshadcn buttonに合わせる(variant/size名もそのまま維持)
+// 見た目は移行前のButtonに合わせる(variant/size名もそのまま維持)
 export const button = tv({
   base: [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium shrink-0",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-    "transition-all outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+    "transition-all outline-none focus-visible:border-outline focus-visible:ring-outline/50 focus-visible:ring-[3px]",
     "disabled:pointer-events-none disabled:opacity-50",
     "data-disabled:pointer-events-none data-disabled:opacity-50",
-    "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
+    "aria-invalid:ring-error/20 aria-invalid:border-error",
   ],
   variants: {
     variant: {
       default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-      destructive: "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20",
+      destructive: "bg-error text-white shadow-xs hover:bg-error/90 focus-visible:ring-error/20",
       outline: "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
       secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
       ghost: "hover:bg-accent hover:text-accent-foreground",

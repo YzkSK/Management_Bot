@@ -69,7 +69,7 @@ function ForceDeleteButton({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+        <Button variant="outline" size="sm" className="text-error border-error/40" disabled={disabled}>
           強制削除
         </Button>
       </DialogTrigger>
@@ -349,7 +349,7 @@ function ClearConfigButton({ guildId, disabled, onCleared }: { guildId: string; 
         <Button
           type="button"
           variant="outline"
-          className="text-destructive border-destructive/40 w-fit"
+          className="text-error border-error/40 w-fit"
           disabled={disabled || clearMutation.isPending}
         >
           一時VCの設定を解除
@@ -519,7 +519,7 @@ function ConfigForm({
       </section>
 
       {changes.errors.length > 0 && (
-        <ul className="text-destructive flex flex-col gap-1 text-sm">
+        <ul className="text-error flex flex-col gap-1 text-sm">
           {changes.errors.map((error) => (
             <li key={error}>{error}</li>
           ))}

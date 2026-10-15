@@ -79,7 +79,7 @@ const CONNECTION_STATUS_TONES = {
   connecting: "bg-muted text-muted-foreground [&>span]:bg-muted-foreground",
   open: "bg-success/10 text-success [&>span]:bg-success",
   reconnecting: "bg-warning/10 text-warning [&>span]:bg-warning",
-  stopped: "bg-destructive/10 text-destructive [&>span]:bg-destructive",
+  stopped: "bg-error/10 text-error [&>span]:bg-error",
 } as const;
 
 /** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
@@ -483,8 +483,8 @@ export function LogListPage() {
                         {(displayContent !== null || summary.previousContent !== null) && (
                           <div className="grid gap-2 md:grid-cols-2">
                             {summary.previousContent !== null && (
-                              <p className="bg-destructive/10 flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap">
-                                <span className="text-destructive text-xs">編集前</span>
+                              <p className="bg-error/10 flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap">
+                                <span className="text-error text-xs">編集前</span>
                                 <del>{summary.previousContent || "(本文なし)"}</del>
                               </p>
                             )}

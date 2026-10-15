@@ -296,7 +296,7 @@ export function EditForm({
         </label>
 
         {errors.length > 0 && (
-          <ul className="text-destructive flex flex-col gap-1 text-sm">
+          <ul className="text-error flex flex-col gap-1 text-sm">
             {errors.map((error) => (
               <li key={error}>{error}</li>
             ))}
