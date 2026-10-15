@@ -658,20 +658,7 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
       </div>
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div>
-          <label className="text-muted-foreground flex flex-col gap-1.5 text-sm sm:hidden">
-            表示する項目
-            <Select value={tab} onValueChange={(value) => setTab(toTab(value))}>
-              <SelectTrigger className="w-full" aria-label="表示する項目">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="server">サーバー統計</SelectItem>
-                <SelectItem value="member">メンバー</SelectItem>
-                <SelectItem value="voice">アクティブVC</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
-          <TabsList aria-label="アクティビティモニター" className="hidden sm:inline-flex">
+          <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
             <TabsTrigger value="server">
               <IconChartBar aria-hidden="true" />
               サーバー統計
