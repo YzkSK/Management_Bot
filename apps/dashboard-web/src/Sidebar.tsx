@@ -2,6 +2,17 @@ import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { hasCapability } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
+import {
+  IconCalendarTime,
+  IconChartBar,
+  IconFileText,
+  IconHeadphones,
+  IconHistory,
+  IconLock,
+  IconShieldExclamation,
+  IconUsersGroup,
+  type TablerIcon,
+} from "@tabler/icons-react";
 import { toast } from "@/components/starwind/toast";
 import type { ManagedGuildWithAccess } from "@management-bot/dashboard-api";
 import { GuildIcon } from "./guild-icon.js";
@@ -21,6 +32,23 @@ interface SidebarProps {
   /** モバイル幅でのドロワー開閉状態。デスクトップ幅(md以上)では常に表示するため参照しない。 */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+}
+
+/** ページごとのアイコン。タブやログカテゴリで同じ概念に使っているアイコンと揃える。 */
+const PAGE_ICONS: Record<string, TablerIcon> = {
+  activity: IconChartBar,
+  logging: IconFileText,
+  moderation: IconShieldExclamation,
+  "scheduled-post": IconCalendarTime,
+  "temp-voice": IconHeadphones,
+  roles: IconUsersGroup,
+  access: IconLock,
+  "audit-log": IconHistory,
+};
+
+function PageIcon({ pageKey }: { pageKey: string }) {
+  const Icon = PAGE_ICONS[pageKey];
+  return Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null;
 }
 
 function PageSection({
@@ -49,15 +77,19 @@ function PageSection({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
-                    "flex min-h-10 items-center rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
+                    "flex min-h-10 items-center gap-2 rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
                     isActive && "bg-accent text-accent-foreground font-medium",
                   )
                 }
               >
+                <PageIcon pageKey={page.key} />
                 {page.name}
               </NavLink>
             ) : (
-              <span className="text-muted-foreground flex min-h-10 items-center px-3 text-sm">{page.name}</span>
+              <span className="text-muted-foreground flex min-h-10 items-center gap-2 px-3 text-sm">
+                <PageIcon pageKey={page.key} />
+                {page.name}
+              </span>
             )}
           </li>
         ))}
