@@ -35,7 +35,8 @@ import {
   formatRelative,
   toRange,
 } from "./activity-range.js";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 
 type MemberDetail = inferOutput<typeof trpc.activity.memberDetail>;
 type RankingSort = "voice" | "messages";

@@ -1,14 +1,9 @@
-import * as React from "react";
+import type * as React from "react";
 import { Loader2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** ボタンや文中にも置けるよう、divではなくblockのspanで描く。 */
-function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
-  return <span data-slot="skeleton" className={cn("bg-accent block animate-pulse rounded-md", className)} {...props} />;
-}
-
 /** 読み込み中の領域。childrenを渡せば実レイアウト同形のスケルトン、省略時はスピナーを出す。 */
-function Loading({ className, children }: { className?: string; children?: React.ReactNode }) {
+export function Loading({ className, children }: { className?: string; children?: React.ReactNode }) {
   if (children) {
     return (
       <div role="status" aria-busy="true" className={cn("flex flex-col gap-2", className)}>
@@ -28,5 +23,3 @@ function Loading({ className, children }: { className?: string; children?: React
     </div>
   );
 }
-
-export { Loading, Skeleton };

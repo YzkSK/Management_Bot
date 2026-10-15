@@ -23,7 +23,7 @@ import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 import { Switch } from "@/components/starwind/switch";
 import { cn } from "@/lib/utils";
 

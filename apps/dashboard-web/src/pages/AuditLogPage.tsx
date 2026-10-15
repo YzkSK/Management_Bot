@@ -11,7 +11,7 @@ import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
 import { InitialAvatar } from "@/components/initial-avatar";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;

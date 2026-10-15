@@ -5,7 +5,7 @@ import { CAPABILITIES, hasCapability, type CapabilityName } from "@management-bo
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { ErrorState, ForbiddenState, NotMemberState } from "./page-state.js";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 
 /**
  * ページ本体を描く前に、自分の実効capabilities(サーバー一覧と一緒に取得済み)で閲覧可否を判定する。

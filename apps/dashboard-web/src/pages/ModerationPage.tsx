@@ -33,7 +33,8 @@ import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
 
 type TargetType = "user" | "role";

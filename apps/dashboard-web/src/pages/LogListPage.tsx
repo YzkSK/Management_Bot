@@ -25,7 +25,8 @@ import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button, ButtonVariants } from "@/components/starwind/button";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
