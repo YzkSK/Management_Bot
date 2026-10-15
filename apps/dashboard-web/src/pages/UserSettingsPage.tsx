@@ -4,7 +4,7 @@ import { toast } from "@/components/starwind/toast";
 import { logout } from "../logout.js";
 import { getStoredTheme, setTheme, type Theme } from "../theme.js";
 import { trpc } from "../trpc.js";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";

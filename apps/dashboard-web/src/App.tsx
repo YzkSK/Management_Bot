@@ -18,7 +18,7 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { LOGOUT_FAILED_MESSAGE } from "./pages/UserSettingsPage.js";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { Loader2Icon } from "lucide-react";
 import { toast } from "@/components/starwind/toast";
 

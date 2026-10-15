@@ -18,7 +18,7 @@ import {
   type OverrideTargetType,
 } from "./temp-voice-edit.js";
 import { InlineError } from "@/components/page-state";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,

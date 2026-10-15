@@ -26,7 +26,7 @@ import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/starwind/checkbox";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
