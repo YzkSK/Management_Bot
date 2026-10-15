@@ -26,7 +26,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/starwind/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading } from "@/components/ui/skeleton";
 
@@ -441,8 +441,12 @@ function ConfigForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={FIELD_LABEL}>
                 作成用ボイスチャンネル
-                <Select value={draft.createChannelId} onValueChange={(value) => update({ createChannelId: value })}>
-                  <SelectTrigger className="w-full" aria-label="作成用ボイスチャンネル" disabled={voiceOptionsQuery.isPending}>
+                <Select
+                  value={draft.createChannelId}
+                  onValueChange={(value) => update({ createChannelId: value })}
+                  disabled={voiceOptionsQuery.isPending}
+                >
+                  <SelectTrigger className="w-full" aria-label="作成用ボイスチャンネル">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -456,8 +460,12 @@ function ConfigForm({
               </label>
               <label className={FIELD_LABEL}>
                 カテゴリ
-                <Select value={draft.categoryId} onValueChange={(value) => update({ categoryId: value })}>
-                  <SelectTrigger className="w-full" aria-label="カテゴリ" disabled={categoryOptionsQuery.isPending}>
+                <Select
+                  value={draft.categoryId}
+                  onValueChange={(value) => update({ categoryId: value })}
+                  disabled={categoryOptionsQuery.isPending}
+                >
+                  <SelectTrigger className="w-full" aria-label="カテゴリ">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>

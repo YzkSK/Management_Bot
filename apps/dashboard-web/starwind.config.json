@@ -42,6 +42,12 @@
       "version": "2.1.0",
       "framework": "react",
       "registry": "default"
+    },
+    {
+      "name": "select",
+      "version": "2.1.2",
+      "framework": "react",
+      "registry": "default"
     }
   ],
   "tailwind": {
