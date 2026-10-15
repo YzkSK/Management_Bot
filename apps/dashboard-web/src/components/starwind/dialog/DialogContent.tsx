@@ -36,13 +36,16 @@ function DialogContent(props: DialogContentProps) {
   const baseId = useId();
   const titleId = `${baseId}-title`;
   const descriptionId = `${baseId}-description`;
-  const [hasTitle, setHasTitle] = useState(false);
-  const [hasDescription, setHasDescription] = useState(false);
+  // 同種の部品が複数描画されても、最後の1つが外れるまで参照を残すため個数で数える。
+  const [titleCount, setTitleCount] = useState(0);
+  const [descriptionCount, setDescriptionCount] = useState(0);
   const [register] = useState(() => (kind: LabelKind) => {
-    const set = kind === "title" ? setHasTitle : setHasDescription;
-    set(true);
-    return () => set(false);
+    const set = kind === "title" ? setTitleCount : setDescriptionCount;
+    set((n) => n + 1);
+    return () => set((n) => n - 1);
   });
+  const hasTitle = titleCount > 0;
+  const hasDescription = descriptionCount > 0;
 
   return (
     <>
