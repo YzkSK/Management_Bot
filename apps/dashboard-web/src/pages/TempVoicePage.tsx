@@ -654,7 +654,7 @@ export function TempVoicePage() {
       <h1 className="text-2xl font-bold">一時VC</h1>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-        <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
+        <TabsList aria-label="一時VCの設定" className="sm:inline-flex sm:w-fit">
           <TabsTrigger value="list">
             <IconList aria-hidden="true" />
             <TabsLabel>一時VC一覧</TabsLabel>
