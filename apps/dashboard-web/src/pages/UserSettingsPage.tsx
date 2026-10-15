@@ -5,7 +5,7 @@ import { logout } from "../logout.js";
 import { getStoredTheme, setTheme, type Theme } from "../theme.js";
 import { trpc } from "../trpc.js";
 import { Button } from "@/components/starwind/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/starwind/dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,12 +95,8 @@ export function UserSettingsDialog({
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} onCloseComplete={() => returnFocusRef.current?.focus()}>
       <DialogContent
-        onCloseAutoFocus={(e) => {
-          e.preventDefault();
-          returnFocusRef.current?.focus();
-        }}
         className="inset-4 flex overflow-hidden rounded-xl border shadow-2xl md:inset-x-[max(1rem,calc(50%-36rem))] md:inset-y-12">
         <nav className="bg-muted/40 hidden w-56 shrink-0 flex-col gap-1 border-r p-4 md:flex" aria-label="ユーザー設定の項目">
           <DialogTitle className="text-muted-foreground px-2 py-1 text-xs font-bold">ユーザー設定</DialogTitle>

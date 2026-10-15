@@ -10,8 +10,11 @@ import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/starwind/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+
+/** モバイルドロワーのDialogのid。Headerの開閉ボタン(DialogTrigger)がこのidで紐付く。 */
+export const MOBILE_SIDEBAR_DIALOG_ID = "mobile-sidebar";
 
 interface SidebarProps {
   guildId?: string;
@@ -200,10 +203,12 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
         <SidebarNav guildId={guildId} guilds={guilds} isLoading={guildsQuery.isPending} navigate={navigate} />
       </nav>
       {/*
-        モバイルドロワーはRadix Dialogでモーダル化する(Tab循環・背景inert・
+        モバイルドロワーはDialogでモーダル化する(Tab循環・背景inert・
         閉じた後のトリガーへのフォーカス復帰をDialogに任せる。codexレビュー対応)。
+        閉じている間の中身はDialogContentがマウントしない。開閉ボタンはHeaderにあり、
+        MOBILE_SIDEBAR_DIALOG_IDで紐付ける(ページ全体をDialogで包むと、各ページのDialogが入れ子扱いになるため)。
       */}
-      {open && (
+      <Dialog id={MOBILE_SIDEBAR_DIALOG_ID} open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="top-14 left-0 h-[calc(100dvh-3.5rem)] w-64 translate-x-0 translate-y-0 overflow-y-auto border-r p-2 md:hidden"
           aria-label="機能メニュー"
@@ -217,7 +222,7 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
             onNavigate={closeMobileDrawer}
           />
         </DialogContent>
-      )}
+      </Dialog>
     </>
   );
 }
