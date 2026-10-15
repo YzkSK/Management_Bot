@@ -40,7 +40,7 @@ export const ITEM_META: Record<StatusItem["key"], { name: string; group: "infra"
   postgres: { name: "PostgreSQL", group: "infra", logService: "postgres" },
   redis: { name: "Redis", group: "infra", logService: "redis" },
   activity: { name: "アクティビティモニター", group: "feature" },
-  logging: { name: "ログ機能", group: "feature" },
+  logging: { name: "ログ", group: "feature" },
   tempVoice: { name: "一時VC", group: "feature" },
   moderation: { name: "スパム対策", group: "feature" },
   backup: { name: "バックアップ", group: "feature" },

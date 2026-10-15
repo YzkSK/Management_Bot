@@ -10,7 +10,7 @@ export const AUDIT_OUTCOME_LABELS: Record<AuditLogOutcome, string> = {
 
 /** tRPCのルーター名(audit_logs.feature)→表示名。未知のキーはそのまま表示する。 */
 const AUDIT_FEATURE_LABELS: Record<string, string> = {
-  logging: "ログ機能",
+  logging: "ログ",
   moderation: "スパム対策",
   tempVoice: "一時VC",
   scheduledPost: "予約投稿",
