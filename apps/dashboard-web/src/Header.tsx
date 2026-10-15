@@ -65,7 +65,8 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
           </Button>
         </DialogTrigger>
         )}
-        <Link to="/" className="truncate text-sm font-semibold hover:underline">
+        {/* メニューボタンが無い画面のスマホ幅では左端に寄りすぎるため、PC幅(px-4)と同じ余白にそろえる。 */}
+        <Link to="/" className={cn("truncate text-sm font-semibold hover:underline", !showMenuButton && "max-md:pl-2")}>
           Management Bot
         </Link>
       </div>
