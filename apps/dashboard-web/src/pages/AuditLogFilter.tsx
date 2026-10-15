@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod } from "./audit-log-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
-import { Input } from "@/components/starwind/input";
+import { DatePicker } from "@/components/date-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/starwind/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 
@@ -175,14 +175,14 @@ export function AuditLogFilter({
             </label>
             {value.period === "custom" && (
               <div className="col-span-full grid grid-cols-2 gap-2.5">
-                <label className="text-muted-foreground flex flex-col gap-1 text-xs">
+                <div className="text-muted-foreground flex flex-col gap-1 text-xs">
                   開始日
-                  <Input type="date" className="text-foreground" value={value.fromDate} onChange={(e) => patch({ fromDate: e.target.value })} />
-                </label>
-                <label className="text-muted-foreground flex flex-col gap-1 text-xs">
+                  <DatePicker aria-label="開始日" value={value.fromDate} onChange={(fromDate) => patch({ fromDate })} />
+                </div>
+                <div className="text-muted-foreground flex flex-col gap-1 text-xs">
                   終了日
-                  <Input type="date" className="text-foreground" value={value.toDate} onChange={(e) => patch({ toDate: e.target.value })} />
-                </label>
+                  <DatePicker aria-label="終了日" value={value.toDate} onChange={(toDate) => patch({ toDate })} />
+                </div>
               </div>
             )}
           </div>

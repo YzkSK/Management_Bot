@@ -19,6 +19,7 @@
     "@trpc/tanstack-react-query": "^11.28.3",
     "clsx": "^2.1.1",
     "react": "^19.3.1",
+    "react-day-picker": "^10.0.2",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
     "recharts": "^3.10.1",
