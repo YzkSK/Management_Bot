@@ -97,6 +97,7 @@ describe("ModerationPage", () => {
     expect(html).toContain("レイド対象 / レイド");
     expect(html).toContain("u2 / 旧ログ");
     expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('data-sw-part="root" data-state="closed"');
     expect(html).not.toContain("case-raid");
     expect(html).not.toContain("timeout / failed (MISSING_PERMISSIONS)");
   });
@@ -208,7 +209,8 @@ describe("ModerationPage", () => {
     try {
       const html = renderHistory(guildId, queryClient);
 
-      expect(html).toContain('aria-expanded="true"');
+      // SSRではCollapsibleのルートだけがopenを反映する(トリガー・パネルはクライアントのランタイムが同期する)。
+      expect(html).toContain('data-sw-part="root" data-state="open"');
       expect(html).toContain("case-raid");
       expect(html).not.toContain("スコア");
       expect(html).toContain("timeout / failed (MISSING_PERMISSIONS)");

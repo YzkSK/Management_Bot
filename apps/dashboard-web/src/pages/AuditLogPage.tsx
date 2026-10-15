@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconCaretRightFilled } from "@tabler/icons-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { isForbiddenError } from "../dashboard-query-client.js";
@@ -10,6 +11,7 @@ import { AuditLogFilter, EMPTY_AUDIT_FILTER, type AuditFilterValue } from "./Aud
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
 import { InitialAvatar } from "@/components/initial-avatar";
 import { Loading } from "@/components/loading";
 import { cn } from "@/lib/utils";
@@ -130,13 +132,16 @@ function AuditRow({ row, names, avatarUrl }: { row: AuditRowData; names: AuditNa
           </dl>
         )}
         {((row.before ?? null) !== null || (row.after ?? null) !== null) && (
-          <details className="text-muted-foreground mt-1.5 text-xs">
-            <summary className="w-fit cursor-pointer">詳細データ</summary>
-            <div className="mt-1.5 grid gap-2 md:grid-cols-2">
+          <Collapsible className="text-muted-foreground mt-1.5 text-xs">
+            <CollapsibleTrigger type="button" className="group flex w-fit cursor-pointer items-center gap-1">
+              <IconCaretRightFilled className="size-3 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
+              詳細データ
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1.5 grid gap-2 md:grid-cols-2">
               <JsonBlock label="変更前" value={row.before} />
               <JsonBlock label="変更後(送信内容)" value={row.after} />
-            </div>
-          </details>
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </div>
     </div>
