@@ -85,22 +85,10 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
               {overview.data && `最終更新: ${formatDateTime(overview.data.checkedAt)}(30秒ごとに自動更新)`}
             </p>
           </div>
-          <label className="text-muted-foreground flex w-full flex-col gap-1.5 text-sm md:hidden">
-            表示する項目
-            <Select value={tab} onValueChange={(value) => go(parseTab(value, isOwner))}>
-              <SelectTrigger className="w-full" aria-label="表示する項目">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="status">ステータス</SelectItem>
-                <SelectItem value="resources">リソース</SelectItem>
-                <SelectItem value="logs">ログ</SelectItem>
-                <SelectItem value="backup">バックアップ</SelectItem>
-                {isOwner && <SelectItem value="access">閲覧権限</SelectItem>}
-              </SelectContent>
-            </Select>
-          </label>
-          <TabsList aria-label="ステータスの表示" className="hidden md:inline-flex">
+          <TabsList
+            aria-label="ステータスの表示"
+            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
+          >
             <TabsTrigger value="status">
               <IconActivity aria-hidden="true" />
               ステータス

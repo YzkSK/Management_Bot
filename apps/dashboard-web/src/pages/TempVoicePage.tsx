@@ -654,20 +654,7 @@ export function TempVoicePage() {
       <h1 className="text-2xl font-bold">一時VC</h1>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm sm:hidden">
-          表示する項目
-          <Select value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-            <SelectTrigger className="w-full" aria-label="表示する項目">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="list">一時VC一覧</SelectItem>
-              <SelectItem value="roles">拒否禁止ロール</SelectItem>
-              <SelectItem value="settings">設定</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-        <TabsList aria-label="一時VCの設定" className="hidden sm:inline-flex">
+        <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
           <TabsTrigger value="list">
             <IconList aria-hidden="true" />
             一時VC一覧
