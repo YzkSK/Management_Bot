@@ -30,7 +30,7 @@ import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading, Skeleton } from "@/components/ui/skeleton";

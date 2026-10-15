@@ -24,7 +24,7 @@ import {
 import { ErrorState } from "@/components/page-state";
 import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Loading } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
