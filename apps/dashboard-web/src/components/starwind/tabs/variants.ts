@@ -1,6 +1,6 @@
 import { tv } from "tailwind-variants";
 
-// 既存のRadix(shadcn)版Tabsと同じ見た目に固定している。
+// 移行前のRadix版Tabsと同じ見た目に固定している。
 export const tabs = tv({
   base: "flex flex-col gap-2",
 });

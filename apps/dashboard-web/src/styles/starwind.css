@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@plugin "@tailwindcss/forms";
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -44,10 +43,6 @@
 }
 
 @theme inline {
-  /* shadcn由来の互換エイリアス。#2でStarwindのerror/outlineへ置換後に削除する */
-  --color-destructive: var(--error);
-  --color-ring: var(--outline);
-
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -94,7 +89,7 @@
   --color-sidebar-outline: var(--sidebar-outline);
 }
 
-/* 配色は移行前(shadcn neutral)の白黒ベースの値を引き継ぐ。 */
+/* 配色は移行前(neutral)の白黒ベースの値を引き継ぐ。 */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
