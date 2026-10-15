@@ -87,7 +87,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           </div>
           <TabsList
             aria-label="ステータスの表示"
-            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
+            className="md:inline-flex md:w-fit"
           >
             <TabsTrigger value="status">
               <IconActivity aria-hidden="true" />

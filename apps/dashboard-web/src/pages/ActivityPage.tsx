@@ -658,7 +658,7 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
       </div>
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div>
-          <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
+          <TabsList aria-label="アクティビティモニター" className="sm:inline-flex sm:w-fit">
             <TabsTrigger value="server">
               <IconChartBar aria-hidden="true" />
               <TabsLabel>サーバー統計</TabsLabel>

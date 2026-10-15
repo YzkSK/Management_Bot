@@ -1045,7 +1045,7 @@ export function ModerationPage() {
       <LockdownPanel guildId={guildId} />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
-        <TabsList aria-label="スパム対策の設定">
+        <TabsList aria-label="スパム対策の設定" className="sm:inline-flex">
           {MODERATION_TABS.map(({ value, label, icon: Icon }) => (
             <TabsTrigger key={value} value={value}>
               <Icon aria-hidden="true" />

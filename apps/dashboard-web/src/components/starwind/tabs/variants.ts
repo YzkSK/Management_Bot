@@ -13,8 +13,9 @@ export const tabsLabel = tv({
   base: "max-sm:sr-only max-sm:group-data-[state=active]:not-sr-only",
 });
 
-export const tabsList =tv({
-  base: "flex gap-1 border-b",
+// スマホ幅では横幅いっぱいに広げ、タブを中央に寄せる。
+export const tabsList = tv({
+  base: "flex gap-1 border-b max-sm:w-full max-sm:justify-center",
 });
 
 export const tabsTrigger = tv({
