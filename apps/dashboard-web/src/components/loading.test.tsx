@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Loading, Skeleton } from "./skeleton";
+import { Skeleton } from "@/components/starwind/skeleton";
+import { Loading } from "./loading";
 
 describe("Loading", () => {
   test("既定はスピナーと読み込み中を出す", () => {

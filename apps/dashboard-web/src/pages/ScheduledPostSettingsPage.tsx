@@ -15,7 +15,7 @@ import {
 import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
 

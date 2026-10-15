@@ -5,7 +5,7 @@ import { trpc } from "../trpc.js";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "./activity-range.js";
 import { ErrorState } from "@/components/page-state";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 
 type ActiveVoiceChannel = inferOutput<typeof trpc.activity.activeVoice>[number];
 

@@ -29,7 +29,8 @@ import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
 
 type TargetType = "user" | "role";
