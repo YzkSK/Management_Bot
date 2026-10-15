@@ -1,7 +1,12 @@
 export type Theme = "light" | "dark" | "system";
 
-const STORAGE_KEY = "theme";
-const THEMES: readonly Theme[] = ["light", "dark", "system"];
+// StarwindのテーマのinitスクリプトもこのキーのlocalStorageを読む。
+const STORAGE_KEY = "colorTheme";
+const LEGACY_STORAGE_KEY = "theme";
+
+function isTheme(v: unknown): v is Theme {
+  return v === "light" || v === "dark" || v === "system";
+}
 
 function prefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -12,7 +17,26 @@ export function getStoredTheme(): Theme {
     return "system";
   }
   const stored = localStorage.getItem(STORAGE_KEY);
-  return THEMES.includes(stored as Theme) ? (stored as Theme) : "system";
+  return isTheme(stored) ? stored : "system";
+}
+
+/**
+ * 旧キー`theme`に有効値があれば`colorTheme`へ一度だけ移し、旧キーを削除する。
+ * Starwindのinitスクリプトは移行より先に走り`colorTheme`未設定時に"system"を書き込むため、
+ * 旧キーが残っている間は旧キーの値を優先して上書きする。旧ユーザーは初回のみsystemで描画される(許容)。
+ */
+export function migrateLegacyThemeKey(): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (legacy === null) {
+    return;
+  }
+  if (isTheme(legacy)) {
+    localStorage.setItem(STORAGE_KEY, legacy);
+  }
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 export function applyTheme(theme: Theme): void {

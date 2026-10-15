@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { applyTheme, followSystemTheme, getStoredTheme, setTheme } from "./theme.js";
+import { applyTheme, followSystemTheme, getStoredTheme, migrateLegacyThemeKey, setTheme } from "./theme.js";
 
 function mockLocalStorage(): Storage {
   const store = new Map<string, string>();
@@ -55,13 +55,42 @@ describe("getStoredTheme", () => {
   });
 
   test("保存済みの有効な値を返す", () => {
-    localStorage.setItem("theme", "dark");
+    localStorage.setItem("colorTheme", "dark");
     expect(getStoredTheme()).toBe("dark");
   });
 
   test("不正な値が保存されていた場合はsystemにフォールバックする", () => {
-    localStorage.setItem("theme", "invalid");
+    localStorage.setItem("colorTheme", "invalid");
     expect(getStoredTheme()).toBe("system");
+  });
+});
+
+describe("migrateLegacyThemeKey", () => {
+  test("旧キーの有効値をcolorThemeへ移し旧キーを削除する", () => {
+    localStorage.setItem("theme", "dark");
+    migrateLegacyThemeKey();
+    expect(localStorage.getItem("colorTheme")).toBe("dark");
+    expect(localStorage.getItem("theme")).toBeNull();
+  });
+
+  test("旧キーが無ければ何もしない", () => {
+    migrateLegacyThemeKey();
+    expect(localStorage.getItem("colorTheme")).toBeNull();
+  });
+
+  test("旧キーが不正値ならcolorThemeへは移さず旧キーだけ削除する", () => {
+    localStorage.setItem("theme", "invalid");
+    migrateLegacyThemeKey();
+    expect(localStorage.getItem("colorTheme")).toBeNull();
+    expect(localStorage.getItem("theme")).toBeNull();
+  });
+
+  test("Starwindのinitが書き込んだcolorThemeより旧キーの値を優先する", () => {
+    localStorage.setItem("colorTheme", "system");
+    localStorage.setItem("theme", "dark");
+    migrateLegacyThemeKey();
+    expect(localStorage.getItem("colorTheme")).toBe("dark");
+    expect(localStorage.getItem("theme")).toBeNull();
   });
 });
 
@@ -86,7 +115,7 @@ describe("applyTheme", () => {
 describe("setTheme", () => {
   test("localStorageに保存しつつ即座に適用する", () => {
     setTheme("dark");
-    expect(localStorage.getItem("theme")).toBe("dark");
+    expect(localStorage.getItem("colorTheme")).toBe("dark");
     expect(toggleDark).toHaveBeenCalledWith("dark", true);
   });
 });
@@ -103,7 +132,7 @@ describe("followSystemTheme(OS配色設定の変更への追従)", () => {
   });
 
   test("明示テーマ保存中はOS設定が変わっても保存済みテーマのまま", () => {
-    localStorage.setItem("theme", "light");
+    localStorage.setItem("colorTheme", "light");
     followSystemTheme();
 
     matchesDark = true;
