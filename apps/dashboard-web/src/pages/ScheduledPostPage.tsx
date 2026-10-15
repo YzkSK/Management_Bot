@@ -31,7 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/starwind/dialog";
 import { Loading } from "@/components/loading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 interface PostRow {
@@ -274,7 +274,7 @@ export function ScheduledPostPage() {
           {SCHEDULED_POST_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               <t.icon aria-hidden="true" />
-              {t.label}
+              <TabsLabel>{t.label}</TabsLabel>
               {counts && (
                 <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
               )}

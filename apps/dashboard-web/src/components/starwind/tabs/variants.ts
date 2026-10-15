@@ -9,11 +9,14 @@ export const tabsContent = tv({
   base: "flex flex-col gap-2",
 });
 
-export const tabsList = tv({
+export const tabsLabel = tv({
+  base: "max-sm:sr-only max-sm:group-data-[state=active]:not-sr-only",
+});
+
+export const tabsList =tv({
   base: "flex gap-1 border-b",
 });
 
-// スマホ幅ではタブが横幅いっぱいに並ぶため、はみ出さないようアイコンを隠してラベルのみにする。
 export const tabsTrigger = tv({
-  base: "inline-flex items-center gap-1.5 [&_svg]:size-4 [&_svg]:shrink-0 max-sm:[&_svg]:hidden text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-primary -mb-px border-b-2 border-transparent px-2 py-2 text-sm whitespace-nowrap sm:px-3 font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+  base: "group inline-flex items-center justify-center gap-1.5 [&_svg]:size-4 [&_svg]:shrink-0 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-primary -mb-px border-b-2 border-transparent px-2 py-2 text-sm whitespace-nowrap sm:px-3 font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 });

@@ -42,7 +42,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading } from "@/components/loading";
 import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
@@ -1045,27 +1045,11 @@ export function ModerationPage() {
       <LockdownPanel guildId={guildId} />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
-        {/* タブが5つあり狭い画面では1行に収まらないため、モバイルでは選択欄に切り替える */}
-        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm sm:hidden">
-          表示する項目
-          <Select value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
-            <SelectTrigger className="w-full" aria-label="表示する項目">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODERATION_TABS.map(({ value, label }) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <TabsList aria-label="スパム対策の設定" className="hidden sm:inline-flex">
+        <TabsList aria-label="スパム対策の設定">
           {MODERATION_TABS.map(({ value, label, icon: Icon }) => (
             <TabsTrigger key={value} value={value}>
               <Icon aria-hidden="true" />
-              {label}
+              <TabsLabel>{label}</TabsLabel>
             </TabsTrigger>
           ))}
         </TabsList>
