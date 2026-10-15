@@ -31,7 +31,8 @@ import {
   DialogTrigger,
 } from "@/components/starwind/dialog";
 import { Loading } from "@/components/loading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Tabs,TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 interface PostRow {
@@ -270,7 +271,22 @@ export function ScheduledPostPage() {
       )}
 
       <Tabs value={tab} onValueChange={(value) => setTab(SCHEDULED_POST_TABS.find((t) => t.value === value)?.value ?? "pending")}>
-        <TabsList aria-label="予約投稿" className="overflow-x-auto">
+        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm sm:hidden">
+          表示する項目
+          <Select value={tab} onValueChange={(value) => setTab(SCHEDULED_POST_TABS.find((t) => t.value === value)?.value ?? "pending")}>
+            <SelectTrigger className="w-full" aria-label="表示する項目">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCHEDULED_POST_TABS.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {counts ? `${t.label} (${counts[t.value]})` : t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <TabsList aria-label="予約投稿" className="hidden sm:inline-flex">
           {SCHEDULED_POST_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               <t.icon aria-hidden="true" />
