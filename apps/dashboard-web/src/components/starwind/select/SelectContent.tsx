@@ -1,0 +1,75 @@
+"use client";
+
+import SelectPrimitive from "@starwind-ui/react/select";
+import type * as React from "react";
+import { selectContent, selectList } from "./variants";
+
+export type SelectContentProps = React.ComponentPropsWithoutRef<"div"> & {
+  align?: "start" | "center" | "end";
+  alignOffset?: number;
+  alignItemWithTrigger?: boolean;
+  avoidCollisions?: boolean;
+  keepMounted?: boolean;
+  side?: "top" | "right" | "bottom" | "left";
+  sideOffset?: number;
+  portalContainer?: string;
+  disablePortal?: boolean;
+};
+
+function SelectContent(props: SelectContentProps) {
+  const {
+    align = "start",
+    alignOffset = 0,
+    // 既存のRadix版(popper配置: トリガーの下に開く)に合わせてfalseを既定にする。
+    alignItemWithTrigger = false,
+    avoidCollisions = true,
+    className,
+    keepMounted = false,
+    side = "bottom",
+    sideOffset = 4,
+    portalContainer,
+    disablePortal = false,
+    children,
+    ...rest
+  } = props;
+
+  return (
+    <SelectPrimitive.Portal
+      container={portalContainer}
+      disabled={disablePortal}
+      data-slot="select-portal"
+    >
+      <SelectPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        alignItemWithTrigger={alignItemWithTrigger}
+        avoidCollisions={avoidCollisions}
+        side={side}
+        sideOffset={sideOffset}
+        data-slot="select-positioner"
+      >
+        <SelectPrimitive.Popup
+          className={selectContent({ class: className })}
+          align={align}
+          alignOffset={alignOffset}
+          avoidCollisions={avoidCollisions}
+          keepMounted={keepMounted}
+          side={side}
+          sideOffset={sideOffset}
+          data-align-trigger={alignItemWithTrigger ? "true" : "false"}
+          {...rest}
+          data-slot="select-content"
+        >
+          <SelectPrimitive.List
+            className={selectList()}
+            data-slot="select-list"
+          >
+            {children}
+          </SelectPrimitive.List>
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
+    </SelectPrimitive.Portal>
+  );
+}
+
+export default SelectContent;

@@ -4,7 +4,7 @@ import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 
 export interface AuditFilterValue {
   /** 空文字=絞り込まない(Radix Selectは空文字をvalueにできないため、Selectにはこの値をALLへ変換して渡す)。 */

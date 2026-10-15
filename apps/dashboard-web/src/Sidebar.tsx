@@ -9,7 +9,7 @@ import { firstAccessiblePath, GUILD_PAGES, guildPagePath, type GuildPage } from 
 import { NO_ACCESS_MESSAGE } from "./no-access-message.js";
 import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -134,7 +134,18 @@ function SidebarNav({
           disabled={guilds.length === 0}
         >
           <SelectTrigger className="h-12 w-full" aria-label="サーバーを選択">
-            <SelectValue placeholder="サーバーを選択" />
+            {/* Starwindのトリガー表示は文字列のみのため、アイコン付きの内容を明示する */}
+            <SelectValue placeholder="サーバーを選択">
+              {currentGuild && (
+                <span className="flex min-w-0 items-center gap-2">
+                  <GuildIcon name={currentGuild.name} iconUrl={currentGuild.iconUrl} className="size-7 rounded-lg text-xs" />
+                  <span className="truncate">
+                    {currentGuild.name}
+                    {!firstAccessiblePath(currentGuild.id, currentGuild.capabilities) && "(権限なし)"}
+                  </span>
+                </span>
+              )}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {guilds.map((guild) => (

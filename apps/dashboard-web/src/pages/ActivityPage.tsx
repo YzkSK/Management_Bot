@@ -21,7 +21,7 @@ import { visiblePages } from "./pagination.js";
 import { useGuildWs } from "./use-guild-ws.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Button } from "@/components/starwind/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 import {
