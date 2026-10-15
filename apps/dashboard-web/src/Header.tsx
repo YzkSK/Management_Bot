@@ -3,7 +3,8 @@ import { useRef, useState } from "react";
 import { ChevronDown, Menu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/starwind/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/starwind/dialog";
+import { MOBILE_SIDEBAR_DIALOG_ID } from "./Sidebar.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +53,7 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
     <header className="bg-background z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 md:px-4">
       <div className="flex min-w-0 items-center gap-1">
         {showMenuButton && (
-        <DialogTrigger asChild>
+        <DialogTrigger asChild targetId={MOBILE_SIDEBAR_DIALOG_ID}>
           <Button
             variant="ghost"
             size="icon"

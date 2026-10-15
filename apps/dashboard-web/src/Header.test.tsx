@@ -2,14 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { Header } from "./Header.js";
-import { Dialog } from "@/components/ui/dialog";
 
 function renderHeader(avatarUrl: string | null = null, isSidebarOpen = false): string {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <Dialog open={isSidebarOpen} onOpenChange={() => {}}>
-        <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} isSidebarOpen={isSidebarOpen} />
-      </Dialog>
+      <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} isSidebarOpen={isSidebarOpen} />
     </MemoryRouter>,
   );
 }

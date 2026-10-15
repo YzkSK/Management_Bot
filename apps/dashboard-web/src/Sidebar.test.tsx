@@ -5,15 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { trpc } from "./trpc.js";
 import { Sidebar } from "./Sidebar.js";
-import { Dialog } from "@/components/ui/dialog";
 
 function renderSidebar(queryClient: QueryClient, guildId?: string, open?: boolean): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <Dialog open={open ?? false} onOpenChange={() => {}}>
-          <Sidebar guildId={guildId} open={open} />
-        </Dialog>
+        <Sidebar guildId={guildId} open={open} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -106,11 +103,13 @@ describe("Sidebar", () => {
     expect(html).not.toContain("disabled=");
   });
 
-  test("open未指定(モバイルドロワー閉)ではopen=falseでDialogContentをレンダーしない(issue #267, 閉時でもTabで到達できてしまう問題への対応)", () => {
-    // モバイルドロワーの中身はRadix DialogのPortal経由でdocument.bodyへレンダーされるため、
-    // renderToStaticMarkup(SSR)では検証できない。ここではSidebarがopen propに応じて
-    // DialogContentの描画有無を切り替えていること自体をSidebar.tsxの実装で保証する。
-    const html = renderSidebar(new QueryClient());
-    expect(html).toContain('aria-label="機能メニュー"');
+  test("open未指定(モバイルドロワー閉)ではドロワーの中身をレンダーしない(issue #267, 閉時でもTabで到達できてしまう問題への対応)", () => {
+    // Starwindの<dialog>は閉じていてもDOMに残るため、DialogContentが閉時は中身をマウントしない。
+    const name = FEATURE_METADATA[0]?.name ?? "";
+    const countOf = (html: string) => html.split(name).length - 1;
+    const closed = renderSidebar(new QueryClient());
+    const opened = renderSidebar(new QueryClient(), undefined, true);
+    expect(closed).toContain('aria-label="機能メニュー"');
+    expect(countOf(opened)).toBe(countOf(closed) * 2);
   });
 });
