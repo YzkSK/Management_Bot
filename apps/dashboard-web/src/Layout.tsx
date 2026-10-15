@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/starwind/toast";
 import { Header } from "./Header.js";
 import { Sidebar } from "./Sidebar.js";
 import { Footer } from "./Footer.js";
@@ -35,7 +35,7 @@ export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showS
   return (
     <Dialog open={isSidebarOpen} onOpenChange={setSidebarOpen}>
       <div className="flex h-dvh flex-col overflow-hidden">
-        <Toaster richColors position="top-right" />
+        <Toaster position="top-right" duration={4000} />
         <Header
           discordUsername={discordUsername} avatarUrl={avatarUrl} onLogout={onLogout} isSidebarOpen={isSidebarOpen} showStatus={showStatus}
           showMenuButton={sidebarVisible}

@@ -4,7 +4,7 @@ import { TRPCClientError } from "@trpc/client";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { trpc } from "../trpc.js";
 import {
   describeItem,
