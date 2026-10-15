@@ -6,12 +6,12 @@ import { Button } from "@/components/starwind/button";
 import { DialogTrigger } from "@/components/starwind/dialog";
 import { MOBILE_SIDEBAR_DIALOG_ID } from "./Sidebar.js";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dropdown,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+  DropdownTrigger,
+} from "@/components/starwind/dropdown";
 import { cn } from "@/lib/utils";
 import { UserSettingsDialog } from "./pages/UserSettingsPage.js";
 import { STATUS_REFETCH_MS } from "./pages/StatusPage.js";
@@ -71,8 +71,8 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
       </div>
       <div className="flex min-w-0 items-center gap-1">
       {showStatus && <StatusLamp />}
-      <DropdownMenu>
-        <DropdownMenuTrigger
+      <Dropdown className="contents">
+        <DropdownTrigger
           ref={userMenuTriggerRef}
           className="flex h-11 min-w-0 shrink-0 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent"
           aria-label="ユーザーメニュー"
@@ -86,13 +86,13 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
           )}
           <span className="hidden max-w-40 truncate sm:inline">{discordUsername}</span>
           <ChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onLogout}>ログアウト</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </DropdownTrigger>
+        <DropdownContent align="end">
+          <DropdownItem onClick={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownItem>
+          <DropdownSeparator />
+          <DropdownItem onClick={onLogout}>ログアウト</DropdownItem>
+        </DropdownContent>
+      </Dropdown>
       <UserSettingsDialog open={isUserSettingsOpen} onOpenChange={setUserSettingsOpen} returnFocusRef={userMenuTriggerRef} />
       </div>
     </header>
