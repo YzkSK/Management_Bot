@@ -22,7 +22,7 @@ import { useGuildWs } from "./use-guild-ws.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Button } from "@/components/starwind/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_PERIODS,
@@ -570,7 +570,7 @@ function MemberTab({
 
 type ActivityTab = "server" | "member" | "voice";
 
-function toTab(value: string): ActivityTab {
+function toTab(value: string | null): ActivityTab {
   return value === "member" || value === "voice" ? value : "server";
 }
 

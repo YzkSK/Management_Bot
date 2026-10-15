@@ -36,6 +36,12 @@
       "version": "2.0.2",
       "framework": "react",
       "registry": "default"
+    },
+    {
+      "name": "tabs",
+      "version": "2.1.0",
+      "framework": "react",
+      "registry": "default"
     }
   ],
   "tailwind": {

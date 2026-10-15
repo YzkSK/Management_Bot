@@ -26,7 +26,7 @@ import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loading } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 /** ヘッダーの状態ランプと同じクエリ・同じ間隔で更新する(キャッシュを共有する)。 */
