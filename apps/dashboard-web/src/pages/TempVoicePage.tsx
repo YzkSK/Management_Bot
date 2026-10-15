@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconEyeOff, IconLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
+import { IconEyeOff, IconList, IconLock, IconSettings, IconShieldLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
@@ -655,9 +655,18 @@ export function TempVoicePage() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
         <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
-          <TabsTrigger value="list">一時VC一覧</TabsTrigger>
-          <TabsTrigger value="roles">拒否禁止ロール</TabsTrigger>
-          <TabsTrigger value="settings">設定</TabsTrigger>
+          <TabsTrigger value="list">
+            <IconList aria-hidden="true" />
+            一時VC一覧
+          </TabsTrigger>
+          <TabsTrigger value="roles">
+            <IconShieldLock aria-hidden="true" />
+            拒否禁止ロール
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <IconSettings aria-hidden="true" />
+            設定
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="flex flex-col gap-4">

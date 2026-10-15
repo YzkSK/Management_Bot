@@ -14,5 +14,5 @@ export const tabsList = tv({
 });
 
 export const tabsTrigger = tv({
-  base: "text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-primary -mb-px border-b-2 border-transparent px-2 py-2 text-sm whitespace-nowrap sm:px-3 font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+  base: "inline-flex items-center gap-1.5 [&_svg]:size-4 [&_svg]:shrink-0 text-muted-foreground data-[state=active]:text-foreground data-[state=active]:border-primary -mb-px border-b-2 border-transparent px-2 py-2 text-sm whitespace-nowrap sm:px-3 font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 });
