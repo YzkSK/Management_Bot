@@ -6,7 +6,7 @@ import { getStoredTheme, setTheme, type Theme } from "../theme.js";
 import { trpc } from "../trpc.js";
 import { Button } from "@/components/starwind/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/starwind/dialog";
-import { X } from "lucide-react";
+import { IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
 const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
@@ -116,7 +116,7 @@ export function UserSettingsDialog({
         </div>
         <DialogClose asChild>
           <Button type="button" variant="ghost" size="icon" className="absolute top-3 right-3" aria-label="閉じる">
-            <X className="size-5" />
+            <IconX className="size-5" />
           </Button>
         </DialogClose>
       </DialogContent>

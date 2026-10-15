@@ -1,4 +1,4 @@
-import { ChevronDown, ListFilter, X } from "lucide-react";
+import { IconChevronDown, IconFilter, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod } from "./audit-log-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
@@ -104,9 +104,9 @@ export function AuditLogFilter({
   return (
     <div ref={rootRef} className="relative flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <ListFilter aria-hidden="true" />
+        <IconFilter aria-hidden="true" />
         絞り込み: <b>{chips.length === 0 ? "すべて" : `${chips.length}件`}</b>
-        <ChevronDown className="text-muted-foreground" aria-hidden="true" />
+        <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
       </Button>
       {chips.map((chip) => (
         <span key={chip.key} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
@@ -117,7 +117,7 @@ export function AuditLogFilter({
             className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
             onClick={() => patch(chip.clear)}
           >
-            <X className="size-3.5" aria-hidden="true" />
+            <IconX className="size-3.5" aria-hidden="true" />
           </button>
         </span>
       ))}

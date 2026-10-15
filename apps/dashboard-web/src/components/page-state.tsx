@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot, CircleAlert, Lock } from "lucide-react";
+import { IconAlertCircle, IconLock, IconRobot } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import type { CapabilityName } from "@management-bot/shared";
 import { CAPABILITY_LABELS } from "../pages/capability-labels.js";
@@ -47,7 +47,7 @@ function Pills({ labels }: { labels: readonly string[] }) {
 /** 権限がないとき、ページ本体の代わりに出す。必要な権限名はcapabilityのラベルから出す。 */
 export function ForbiddenState({ pageName, capabilities }: { pageName: string; capabilities: readonly CapabilityName[] }) {
   return (
-    <StateCard tone="warning" icon={<Lock aria-hidden="true" />} title="このページを見る権限がありません">
+    <StateCard tone="warning" icon={<IconLock aria-hidden="true" />} title="このページを見る権限がありません">
       <Text>{pageName}を見るには次の権限が必要です。</Text>
       <Pills labels={capabilities.map((name) => CAPABILITY_LABELS[name])} />
       <Text>サーバーの管理者に付与を依頼してください。</Text>
@@ -58,7 +58,7 @@ export function ForbiddenState({ pageName, capabilities }: { pageName: string; c
 /** 権限以外の取得失敗。再読み込みで失敗したクエリを取り直す。 */
 export function ErrorState({ subject, onRetry }: { subject: string; onRetry: () => void }) {
   return (
-    <StateCard tone="destructive" icon={<CircleAlert aria-hidden="true" />} title={`${subject}を読み込めませんでした`}>
+    <StateCard tone="destructive" icon={<IconAlertCircle aria-hidden="true" />} title={`${subject}を読み込めませんでした`}>
       <Text>
         通信またはサーバーの一時的な問題の可能性があります。
         <br />
@@ -96,7 +96,7 @@ export function BotPermissionState({
   const canReauthorize = useCanReauthorize(guildId);
   const known = permissions !== undefined && permissions.length > 0;
   return (
-    <StateCard tone="muted" icon={<Bot aria-hidden="true" />} title="Botの権限が足りません">
+    <StateCard tone="muted" icon={<IconRobot aria-hidden="true" />} title="Botの権限が足りません">
       {known ? (
         <>
           <Text>Botに次の権限がないため、この情報を取得できません。</Text>
@@ -140,7 +140,7 @@ export function BotPermissionState({
 /** 自分が参加していない(またはBotが導入されていない)サーバーのページを開いたとき。 */
 export function NotMemberState() {
   return (
-    <StateCard tone="warning" icon={<Lock aria-hidden="true" />} title="このサーバーのページは開けません">
+    <StateCard tone="warning" icon={<IconLock aria-hidden="true" />} title="このサーバーのページは開けません">
       <Text>
         このサーバーに参加していないか、Botが導入されていません。
         <br />
@@ -152,7 +152,7 @@ export function NotMemberState() {
 
 export function BotNotJoinedState() {
   return (
-    <StateCard tone="muted" icon={<Bot aria-hidden="true" />} title="Botがこのサーバーに参加していません">
+    <StateCard tone="muted" icon={<IconRobot aria-hidden="true" />} title="Botがこのサーバーに参加していません">
       <Text>
         Botをサーバーに招待すると、この情報を取得できるようになります。
         <br />
@@ -169,7 +169,7 @@ export function InlineError({ summary, detail, onRetry }: { summary: string; det
       role="alert"
       className="border-destructive/35 bg-destructive/8 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm"
     >
-      <CircleAlert className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <IconAlertCircle className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">
         <b>{summary}</b>
         {detail && ` ${detail}`}{" "}

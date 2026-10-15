@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
@@ -108,7 +108,7 @@ export function ScheduledPostSettingsPage() {
                       className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
                       onClick={() => updateDraft((current) => ({ ...current, roleIds: current.roleIds.filter((id) => id !== roleId) }))}
                     >
-                      <X className="size-3.5" aria-hidden="true" />
+                      <IconX className="size-3.5" aria-hidden="true" />
                     </button>
                   </span>
                 );

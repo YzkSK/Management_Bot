@@ -1,7 +1,7 @@
 "use client";
 
 import SelectPrimitive from "@starwind-ui/react/select";
-import { ChevronDownIcon } from "lucide-react";
+import { IconChevronDown } from "@tabler/icons-react";
 import type * as React from "react";
 import type { VariantProps } from "tailwind-variants";
 import { selectTrigger, selectValue } from "./variants";
@@ -48,7 +48,7 @@ function SelectTrigger(props: SelectTriggerProps) {
 
       {!asChild && showIcon && (
         <SelectPrimitive.Icon className={["inline-flex", iconClassName].filter(Boolean).join(" ")} data-slot="select-icon">
-          {icon ?? <ChevronDownIcon className="size-4 opacity-50" />}
+          {icon ?? <IconChevronDown className="size-4 opacity-50" />}
         </SelectPrimitive.Icon>
       )}
     </SelectPrimitive.Trigger>

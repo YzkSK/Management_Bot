@@ -16,7 +16,7 @@ import {
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { ChevronLeft, ChevronRight, ExternalLink, Settings } from "lucide-react";
+import { IconChevronLeft, IconChevronRight, IconExternalLink, IconSettings } from "@tabler/icons-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
@@ -226,7 +226,7 @@ function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
           aria-label="元のページを開く"
           className="absolute top-1 right-1 rounded bg-black/60 p-1 text-white hover:bg-black/80"
         >
-          <ExternalLink className="size-3" />
+          <IconExternalLink className="size-3" />
         </a>
       )}
     </div>
@@ -377,7 +377,7 @@ export function LogListPage() {
             data-slot="button"
             className={ButtonVariants.button({ variant: "outline" })}
           >
-            <Settings aria-hidden="true" />
+            <IconSettings aria-hidden="true" />
             ログ設定
           </Link>
         )}
@@ -672,7 +672,7 @@ export function LogListPage() {
           {totalPages > 1 && (
             <nav aria-label="ページ" className="flex justify-center gap-2">
               <Button type="button" variant="outline" size="icon" aria-label="前のページ" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                <ChevronLeft />
+                <IconChevronLeft />
               </Button>
               {visiblePages(page, totalPages).map((p) => (
                 <Button
@@ -694,7 +694,7 @@ export function LogListPage() {
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(page + 1)}
               >
-                <ChevronRight />
+                <IconChevronRight />
               </Button>
             </nav>
           )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import { IconSettings } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
@@ -258,7 +258,7 @@ export function ScheduledPostPage() {
             data-slot="button"
             className={ButtonVariants.button({ variant: "outline" })}
           >
-            <Settings aria-hidden="true" />
+            <IconSettings aria-hidden="true" />
             予約投稿の設定
           </Link>
         )}

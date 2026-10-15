@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
@@ -289,9 +289,9 @@ export function SettingsPage() {
                 className="flex min-h-13 w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 px-5 py-3 text-left font-bold"
               >
                 {perCategoryOpen ? (
-                  <ChevronDown className="text-muted-foreground size-4" aria-hidden="true" />
+                  <IconChevronDown className="text-muted-foreground size-4" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="text-muted-foreground size-4" aria-hidden="true" />
+                  <IconChevronRight className="text-muted-foreground size-4" aria-hidden="true" />
                 )}
                 <span className="whitespace-nowrap">カテゴリごとに設定する(任意)</span>
                 <span className="text-muted-foreground ml-auto text-xs font-normal">{categories.length}カテゴリ</span>

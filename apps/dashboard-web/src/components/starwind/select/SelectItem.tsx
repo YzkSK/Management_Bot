@@ -1,7 +1,7 @@
 "use client";
 
 import SelectPrimitive from "@starwind-ui/react/select";
-import { CheckIcon } from "lucide-react";
+import { IconCheck } from "@tabler/icons-react";
 import type * as React from "react";
 import type { VariantProps } from "tailwind-variants";
 import { selectItem, selectItemIndicator, selectItemText } from "./variants";
@@ -48,7 +48,7 @@ function SelectItem(props: SelectItemProps) {
           className={selectItemIndicator({ class: indicatorClassName })}
           data-slot="select-item-indicator"
         >
-          {indicator ?? <CheckIcon className="size-4" />}
+          {indicator ?? <IconCheck className="size-4" />}
         </SelectPrimitive.ItemIndicator>
       )}
     </SelectPrimitive.Item>

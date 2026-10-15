@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/starwind/button";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function SaveBar({
         dirty ? "animate-save-bar-in pointer-events-auto" : "animate-save-bar-out",
       )}
     >
-      <TriangleAlert className="text-warning size-4 shrink-0" aria-hidden="true" />
+      <IconAlertTriangle className="text-warning size-4 shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1 text-sm">保存されていない変更があります</span>
       <Button
         type="button"

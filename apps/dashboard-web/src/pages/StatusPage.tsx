@@ -1,7 +1,7 @@
 import { INFRA_LOG_SERVICES, type InfraLogService } from "@management-bot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
@@ -76,7 +76,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           <div className="flex flex-col gap-1.5">
             {/* サイドバーを出さない画面なので、サーバー一覧へ戻る導線を置く。 */}
             <Link to="/" className="text-muted-foreground hover:text-foreground -ml-1 flex w-fit items-center gap-0.5 text-sm">
-              <ChevronLeft className="size-4" aria-hidden="true" />
+              <IconChevronLeft className="size-4" aria-hidden="true" />
               サーバー一覧へ戻る
             </Link>
             <h1 className="text-2xl font-bold">ステータス</h1>
@@ -367,7 +367,7 @@ function StatusGroup({
                   className="hover:bg-accent flex w-full items-center gap-3 px-4 py-3 text-left"
                 >
                   {body}
-                  <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+                  <IconChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
                 </button>
               ) : (
                 <div className="flex items-center gap-3 px-4 py-3">{body}</div>
