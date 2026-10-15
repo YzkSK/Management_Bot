@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconChartBar, IconChevronLeft, IconChevronRight, IconMicrophone, IconUsers } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_URL, trpc } from "../trpc.js";
@@ -22,7 +22,7 @@ import { useGuildWs } from "./use-guild-ws.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Button } from "@/components/starwind/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_PERIODS,
@@ -658,10 +658,19 @@ export function ActivityPage({ now: fixedNow }: { now?: Date } = {}) {
       </div>
       <Tabs value={tab} onValueChange={(value) => setTab(toTab(value))}>
         <div>
-          <TabsList aria-label="アクティビティモニター" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
-            <TabsTrigger value="server">サーバー統計</TabsTrigger>
-            <TabsTrigger value="member">メンバー</TabsTrigger>
-            <TabsTrigger value="voice">アクティブVC</TabsTrigger>
+          <TabsList aria-label="アクティビティモニター" className="sm:inline-flex sm:w-fit">
+            <TabsTrigger value="server">
+              <IconChartBar aria-hidden="true" />
+              <TabsLabel>サーバー統計</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="member">
+              <IconUsers aria-hidden="true" />
+              <TabsLabel>メンバー</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="voice">
+              <IconMicrophone aria-hidden="true" />
+              <TabsLabel>アクティブVC</TabsLabel>
+            </TabsTrigger>
           </TabsList>
         </div>
         <p className="text-muted-foreground text-xs">

@@ -1,7 +1,16 @@
 import { matchQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
+import {
+  IconAdjustments,
+  IconAlertTriangle,
+  IconBan,
+  IconChevronDown,
+  IconChevronRight,
+  IconHistory,
+  IconListCheck,
+  type TablerIcon,
+} from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import {
@@ -33,7 +42,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading } from "@/components/loading";
 import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
@@ -957,12 +966,12 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
 
 type ModerationTab = "thresholds" | "ngwords" | "whitelist" | "strikes" | "history";
 
-const MODERATION_TABS: readonly { value: ModerationTab; label: string }[] = [
-  { value: "thresholds", label: "検知設定" },
-  { value: "ngwords", label: "NGワード" },
-  { value: "whitelist", label: "ホワイトリスト" },
-  { value: "strikes", label: "警告回数" },
-  { value: "history", label: "検知履歴" },
+const MODERATION_TABS: readonly { value: ModerationTab; label: string; icon: TablerIcon }[] = [
+  { value: "thresholds", label: "検知設定", icon: IconAdjustments },
+  { value: "ngwords", label: "NGワード", icon: IconBan },
+  { value: "whitelist", label: "ホワイトリスト", icon: IconListCheck },
+  { value: "strikes", label: "警告回数", icon: IconAlertTriangle },
+  { value: "history", label: "検知履歴", icon: IconHistory },
 ];
 
 export function ModerationPage() {
@@ -1036,26 +1045,11 @@ export function ModerationPage() {
       <LockdownPanel guildId={guildId} />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
-        {/* タブが5つあり狭い画面では1行に収まらないため、モバイルでは選択欄に切り替える */}
-        <label className="text-muted-foreground flex flex-col gap-1.5 text-sm sm:hidden">
-          表示する項目
-          <Select value={tab} onValueChange={(value) => setTab(value as ModerationTab)}>
-            <SelectTrigger className="w-full" aria-label="表示する項目">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODERATION_TABS.map(({ value, label }) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <TabsList aria-label="スパム対策の設定" className="hidden sm:inline-flex">
-          {MODERATION_TABS.map(({ value, label }) => (
+        <TabsList aria-label="スパム対策の設定" className="sm:inline-flex">
+          {MODERATION_TABS.map(({ value, label, icon: Icon }) => (
             <TabsTrigger key={value} value={value}>
-              {label}
+              <Icon aria-hidden="true" />
+              <TabsLabel>{label}</TabsLabel>
             </TabsTrigger>
           ))}
         </TabsList>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconEyeOff, IconLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
+import { IconEyeOff, IconList, IconLock, IconSettings, IconShieldLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
@@ -27,7 +27,7 @@ import {
 } from "@/components/starwind/dialog";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { Loading } from "@/components/loading";
 
 type TempVoiceTab = "list" | "roles" | "settings";
@@ -654,10 +654,19 @@ export function TempVoicePage() {
       <h1 className="text-2xl font-bold">一時VC</h1>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-        <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
-          <TabsTrigger value="list">一時VC一覧</TabsTrigger>
-          <TabsTrigger value="roles">拒否禁止ロール</TabsTrigger>
-          <TabsTrigger value="settings">設定</TabsTrigger>
+        <TabsList aria-label="一時VCの設定" className="sm:inline-flex sm:w-fit">
+          <TabsTrigger value="list">
+            <IconList aria-hidden="true" />
+            <TabsLabel>一時VC一覧</TabsLabel>
+          </TabsTrigger>
+          <TabsTrigger value="roles">
+            <IconShieldLock aria-hidden="true" />
+            <TabsLabel>拒否禁止ロール</TabsLabel>
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <IconSettings aria-hidden="true" />
+            <TabsLabel>設定</TabsLabel>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="flex flex-col gap-4">

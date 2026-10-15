@@ -1,7 +1,7 @@
 import { INFRA_LOG_SERVICES, type InfraLogService } from "@management-bot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { IconActivity, IconChevronLeft, IconChevronRight, IconCpu, IconDatabaseExport, IconFileText, IconLock } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
@@ -26,7 +26,7 @@ import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Loading } from "@/components/loading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 /** ヘッダーの状態ランプと同じクエリ・同じ間隔で更新する(キャッシュを共有する)。 */
@@ -87,13 +87,30 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           </div>
           <TabsList
             aria-label="ステータスの表示"
-            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
+            className="md:inline-flex md:w-fit"
           >
-            <TabsTrigger value="status">ステータス</TabsTrigger>
-            <TabsTrigger value="resources">リソース</TabsTrigger>
-            <TabsTrigger value="logs">ログ</TabsTrigger>
-            <TabsTrigger value="backup">バックアップ</TabsTrigger>
-            {isOwner && <TabsTrigger value="access">閲覧権限</TabsTrigger>}
+            <TabsTrigger value="status">
+              <IconActivity aria-hidden="true" />
+              <TabsLabel>ステータス</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="resources">
+              <IconCpu aria-hidden="true" />
+              <TabsLabel>リソース</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="logs">
+              <IconFileText aria-hidden="true" />
+              <TabsLabel>ログ</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="backup">
+              <IconDatabaseExport aria-hidden="true" />
+              <TabsLabel>バックアップ</TabsLabel>
+            </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="access">
+                <IconLock aria-hidden="true" />
+                <TabsLabel>閲覧権限</TabsLabel>
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
