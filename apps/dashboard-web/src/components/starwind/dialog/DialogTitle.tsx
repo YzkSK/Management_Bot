@@ -13,9 +13,10 @@ function DialogTitle(props: DialogTitleProps) {
 
   return (
     <DialogPrimitive.Title
-      id={titleId}
       className={dialogTitle({ class: className })}
       {...rest}
+      // DialogContentのaria-labelledbyと必ず一致させるため、生成したidを優先する。
+      id={titleId}
       data-slot="dialog-title"
     >
       {children}
