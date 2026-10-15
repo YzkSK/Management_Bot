@@ -13,9 +13,10 @@ function DialogDescription(props: DialogDescriptionProps) {
 
   return (
     <DialogPrimitive.Description
-      id={descriptionId}
       className={dialogDescription({ class: className })}
       {...rest}
+      // DialogContentのaria-describedbyと必ず一致させるため、生成したidを優先する。
+      id={descriptionId}
       data-slot="dialog-description"
     >
       {children}
