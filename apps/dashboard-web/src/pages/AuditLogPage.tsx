@@ -8,7 +8,7 @@ import { auditActionLabel, auditFeatureColorClass, auditFeatureLabel, auditOutco
 import { formatTime, groupByDay } from "./day-groups.js";
 import { AuditLogFilter, EMPTY_AUDIT_FILTER, type AuditFilterValue } from "./AuditLogFilter.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
 import { InitialAvatar } from "@/components/initial-avatar";
 import { Loading } from "@/components/ui/skeleton";
@@ -178,7 +178,7 @@ export function AuditLogPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );

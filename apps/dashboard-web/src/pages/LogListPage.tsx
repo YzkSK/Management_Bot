@@ -23,7 +23,7 @@ import { formatCreatedAt } from "./format-created-at.js";
 import { visiblePages } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button, ButtonVariants } from "@/components/starwind/button";
 import { Loading, Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -347,7 +347,7 @@ export function LogListPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );

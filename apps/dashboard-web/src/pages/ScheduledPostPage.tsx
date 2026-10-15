@@ -18,7 +18,7 @@ import {
 import { BOT_PERMISSION_LABELS } from "./bot-permission-labels.js";
 import { BotNotJoinedState, BotPermissionState, ErrorState } from "@/components/page-state";
 import { InitialAvatar } from "@/components/initial-avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button, ButtonVariants } from "@/components/starwind/button";
 import {
   Dialog,
@@ -226,7 +226,7 @@ export function ScheduledPostPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );

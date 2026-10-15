@@ -60,6 +60,12 @@
       "version": "3.3.0",
       "framework": "react",
       "registry": "default"
+    },
+    {
+      "name": "alert",
+      "version": "1.4.1",
+      "framework": "react",
+      "registry": "default"
     }
   ],
   "tailwind": {
