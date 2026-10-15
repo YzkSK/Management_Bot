@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Dropdown, DropdownContent, DropdownTrigger } from "@/components/starwind/dropdown";
 import { Input } from "@/components/starwind/input";
 import { Loading } from "@/components/loading";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/starwind/table";
 
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
 const MAX_PERMISSION_TAGS = 3;
