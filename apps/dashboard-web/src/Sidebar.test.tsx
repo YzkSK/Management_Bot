@@ -24,7 +24,7 @@ describe("Sidebar", () => {
     }
   });
 
-  test("guildId未指定時はログ機能もリンクにならない", () => {
+  test("guildId未指定時はログもリンクにならない", () => {
     const html = renderSidebar(new QueryClient());
     expect(html).not.toContain("<a ");
   });
@@ -37,7 +37,7 @@ describe("Sidebar", () => {
     return queryClient;
   }
 
-  test("guildId指定時はログ機能がログ一覧画面へのリンクになる", () => {
+  test("guildId指定時はログがログ一覧画面へのリンクになる", () => {
     const html = renderSidebar(seededWith(CAPABILITIES.VIEW_LOGS), "g1");
     expect(html).toContain('href="/guilds/g1/logs"');
   });
