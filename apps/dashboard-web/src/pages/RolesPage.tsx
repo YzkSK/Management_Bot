@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { knownPermissionsForBits } from "@management-bot/shared";
-import { Bot, Lock, Search, TriangleAlert } from "lucide-react";
+import { IconAlertTriangle, IconLock, IconRobot, IconSearch } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { isForbiddenError } from "../dashboard-query-client.js";
@@ -118,7 +118,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
       <TableCell>
         <div className="flex items-center gap-2">
           <span className="flex w-3.5 shrink-0 items-center">
-            {locked && <Lock className="text-muted-foreground size-3.5" aria-label="Botからは操作できません" />}
+            {locked && <IconLock className="text-muted-foreground size-3.5" aria-label="Botからは操作できません" />}
           </span>
           <span
             className="bg-muted-foreground/40 size-3 shrink-0 rounded-full"
@@ -130,7 +130,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
           </span>
           {role.botId ? (
             <span className={`${BADGE_BASE} border-violet-500/40 bg-violet-500/10 text-violet-600 ml-auto dark:text-violet-400`}>
-              <Bot className="size-3" aria-hidden="true" />
+              <IconRobot className="size-3" aria-hidden="true" />
               Bot
             </span>
           ) : (
@@ -141,7 +141,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
                   label="操作不可の理由を表示"
                   trigger={
                     <span className={`${BADGE_BASE} border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20`}>
-                      <TriangleAlert className="size-3" aria-hidden="true" />
+                      <IconAlertTriangle className="size-3" aria-hidden="true" />
                       操作不可
                     </span>
                   }
@@ -206,7 +206,7 @@ export function RolesPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-64">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" aria-hidden="true" />
+          <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" aria-hidden="true" />
           <Input
             type="search"
             className="pl-8"

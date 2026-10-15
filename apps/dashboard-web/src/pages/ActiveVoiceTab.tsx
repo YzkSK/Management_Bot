@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
-import { HeadphoneOff, type LucideIcon, MicOff, Monitor, Video, Volume2 } from "lucide-react";
+import { IconDeviceDesktop, IconHeadphonesOff, IconMicrophoneOff, IconVideo, IconVolume, type TablerIcon } from "@tabler/icons-react";
 import { trpc } from "../trpc.js";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "./activity-range.js";
@@ -10,7 +10,7 @@ import { Loading } from "@/components/loading";
 type ActiveVoiceChannel = inferOutput<typeof trpc.activity.activeVoice>[number];
 
 /** 自分でのミュート/デフはグレー、サーバー(管理者)によるものは赤で区別する。 */
-function MuteIcon({ self, server, label, Icon }: { self: boolean; server: boolean; label: string; Icon: LucideIcon }) {
+function MuteIcon({ self, server, label, Icon }: { self: boolean; server: boolean; label: string; Icon: TablerIcon }) {
   if (!self && !server) return null;
   return (
     <Icon
@@ -43,10 +43,10 @@ export function VoiceMemberRow({ member: m, dimmed = false, badge }: { member: V
       <span className="min-w-0 truncate text-sm">{m.name}</span>
       {badge && <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">{badge}</span>}
       <span className="flex flex-1 items-center justify-end gap-1.5">
-        {m.streaming && <Monitor aria-label="画面共有中" className="size-4 text-violet-600" />}
-        {m.video && <Video aria-label="カメラON" className="size-4 text-blue-600" />}
-        <MuteIcon self={m.selfMute} server={m.serverMute} label="ミュート" Icon={MicOff} />
-        <MuteIcon self={m.selfDeaf} server={m.serverDeaf} label="スピーカーミュート" Icon={HeadphoneOff} />
+        {m.streaming && <IconDeviceDesktop aria-label="画面共有中" className="size-4 text-violet-600" />}
+        {m.video && <IconVideo aria-label="カメラON" className="size-4 text-blue-600" />}
+        <MuteIcon self={m.selfMute} server={m.serverMute} label="ミュート" Icon={IconMicrophoneOff} />
+        <MuteIcon self={m.selfDeaf} server={m.serverDeaf} label="スピーカーミュート" Icon={IconHeadphonesOff} />
       </span>
     </li>
   );
@@ -76,7 +76,7 @@ export function ActiveVoiceView({
           <section key={channel.channelId} className="flex flex-col gap-3 rounded-lg border p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
-                <Volume2 className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                <IconVolume className="text-muted-foreground size-4 shrink-0" aria-hidden />
                 <span className="truncate text-sm font-semibold">{channel.channelName}</span>
                 <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{channel.members.length}人</span>
                 {channel.afk && <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">AFK</span>}

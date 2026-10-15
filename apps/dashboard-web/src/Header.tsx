@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ChevronDown, Menu } from "lucide-react";
+import { IconChevronDown, IconMenu2 } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/starwind/button";
 import { DialogTrigger } from "@/components/starwind/dialog";
@@ -61,7 +61,7 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
             aria-label="メニューを開閉"
             aria-expanded={isSidebarOpen}
           >
-            <Menu className="size-5" />
+            <IconMenu2 className="size-5" />
           </Button>
         </DialogTrigger>
         )}
@@ -85,7 +85,7 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
             </span>
           )}
           <span className="hidden max-w-40 truncate sm:inline">{discordUsername}</span>
-          <ChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
+          <IconChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
         </DropdownTrigger>
         <DropdownContent align="end">
           <DropdownItem onClick={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownItem>

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef, useState } from "react";
-import { Lock } from "lucide-react";
+import { IconLock } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import {
@@ -428,7 +428,7 @@ function TargetEditor({
 
       {isLocked && (
         <Alert>
-          <Lock />
+          <IconLock />
           <AlertDescription>{lockReason}</AlertDescription>
         </Alert>
       )}

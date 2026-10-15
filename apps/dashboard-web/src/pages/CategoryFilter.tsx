@@ -1,4 +1,4 @@
-import { ChevronDown, ListFilter, X } from "lucide-react";
+import { IconChevronDown, IconFilter, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import type { LogCategory } from "@management-bot/shared";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
@@ -53,9 +53,9 @@ export function CategoryFilter({
   return (
     <div ref={rootRef} className="relative flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <ListFilter aria-hidden="true" />
+        <IconFilter aria-hidden="true" />
         カテゴリ: <b>{selected.length === 0 ? "すべて" : `${selected.length}件選択中`}</b>
-        <ChevronDown className="text-muted-foreground" aria-hidden="true" />
+        <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
       </Button>
       {selected.map((category) => (
         <span key={category} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
@@ -67,7 +67,7 @@ export function CategoryFilter({
             className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
             onClick={() => toggle(category)}
           >
-            <X className="size-3.5" aria-hidden="true" />
+            <IconX className="size-3.5" aria-hidden="true" />
           </button>
         </span>
       ))}
