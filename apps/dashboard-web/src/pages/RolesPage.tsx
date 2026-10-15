@@ -9,7 +9,7 @@ import { permissionIcon } from "./permission-icons.js";
 import { RoleFilter } from "./RoleFilter.js";
 import { EMPTY_ROLE_FILTER, filterRoles, type RoleFilterValue } from "./role-filter.js";
 import { ErrorState, ForbiddenState } from "@/components/page-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Dropdown, DropdownContent, DropdownTrigger } from "@/components/starwind/dropdown";
 import { Input } from "@/components/starwind/input";
 import { Loading } from "@/components/ui/skeleton";
@@ -181,7 +181,7 @@ export function RolesPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
