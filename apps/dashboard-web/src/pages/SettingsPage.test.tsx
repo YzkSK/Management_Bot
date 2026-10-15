@@ -92,7 +92,7 @@ describe("SettingsPage", () => {
   test("カテゴリごとの設定は初期状態で格納されている(#505)", () => {
     const html = renderPage("g1", seeded());
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toMatch(/id="per-category-settings" hidden=""/);
+    expect(html).toMatch(/data-sw-collapsible-panel="true" data-state="closed" hidden=""/);
     expect(html.indexOf("一括設定")).toBeLessThan(html.indexOf("カテゴリごとに設定する(任意)"));
   });
 

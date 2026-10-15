@@ -29,6 +29,7 @@ import { BotNotJoinedState, BotPermissionState, ErrorState, ForbiddenState, Inli
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Switch } from "@/components/starwind/switch";
@@ -627,21 +628,17 @@ function UserStrikeGroup({
   });
 
   return (
-    <li className="flex flex-col">
+    <li>
+      <Collapsible open={expanded} onOpenChange={setExpanded} className="flex flex-col">
       <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
-          onClick={() => setExpanded((v) => !v)}
-        >
+        <CollapsibleTrigger type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm">
           {expanded ? (
             <IconChevronDown className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
           ) : (
             <IconChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
           )}
           <span className="truncate">{userName}</span>
-        </button>
+        </CollapsibleTrigger>
         <span className="shrink-0 text-sm font-bold whitespace-nowrap">合計 {group.total}回</span>
         <Button
           type="button"
@@ -653,13 +650,16 @@ function UserStrikeGroup({
           全種別リセット
         </Button>
       </div>
-      {expanded && (
-        <ul className="bg-muted/40 divide-y border-t">
-          {group.entries.map((entry) => (
-            <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} entry={entry} onReset={onReset} />
-          ))}
-        </ul>
-      )}
+      <CollapsibleContent className="bg-muted/40 border-t">
+        {expanded && (
+          <ul className="divide-y">
+            {group.entries.map((entry) => (
+              <StrikeDetailRow key={`${entry.userId}-${entry.violationType}`} guildId={guildId} entry={entry} onReset={onReset} />
+            ))}
+          </ul>
+        )}
+      </CollapsibleContent>
+      </Collapsible>
     </li>
   );
 }
@@ -902,7 +902,6 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
             ? `${incident.raidSeverity === "high" ? "高危険度" : "通常"} / 対象 ${incident.raidTargetCount}件 / 削除 ${incident.deletedMessageCount}件`
             : `一致 ${incident.matchedMessageCount}件 / 削除 ${incident.deletedMessageCount}件`
           : "旧ログ（詳細なし）";
-        const detailId = `moderation-history-detail-${id}`;
         const isExpanded = expandedIds.has(id);
         // 名前解決中はIDを見せずスケルトンにし、失敗・未解決のときだけIDにフォールバックする
         const userName = namesQuery.isLoading ? (
@@ -912,22 +911,18 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
         );
         return (
           <div key={id} className="rounded-lg border">
-            <button
-              type="button"
-              onClick={() => toggleExpanded(id)}
-              aria-expanded={isExpanded}
-              aria-controls={detailId}
-              className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50"
-            >
+            <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(id)}>
+            <CollapsibleTrigger type="button" className="flex w-full items-center gap-3 p-3 text-left hover:bg-accent/50">
               <span className="flex-1 text-sm">
                 {userName} / {violation}
               </span>
               <time dateTime={entry.createdAt} className="text-muted-foreground shrink-0 text-xs">
                 {formatCreatedAt(entry.createdAt)}
               </time>
-            </button>
-            {isExpanded && (
-              <div id={detailId} className="grid grid-cols-2 gap-3 border-t bg-muted/40 p-3 text-xs">
+            </CollapsibleTrigger>
+            <CollapsibleContent className="grid grid-cols-2 gap-3 border-t bg-muted/40 p-3 text-xs">
+              {isExpanded && (
+                <>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-muted-foreground font-semibold tracking-wide uppercase">ケース ID</span>
                   <span className="font-mono">{entry.caseId}</span>
@@ -948,8 +943,10 @@ export function ModerationHistoryTab({ guildId }: { guildId: string }) {
                   <span className="text-muted-foreground font-semibold tracking-wide uppercase">検知詳細</span>
                   <span>{details}</span>
                 </div>
-              </div>
-            )}
+                </>
+              )}
+            </CollapsibleContent>
+            </Collapsible>
           </div>
         );
       })}

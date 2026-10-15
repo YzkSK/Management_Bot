@@ -16,7 +16,7 @@ import {
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { IconChevronLeft, IconChevronRight, IconExternalLink, IconSettings } from "@tabler/icons-react";
+import { IconCaretRightFilled, IconChevronLeft, IconChevronRight, IconExternalLink, IconSettings } from "@tabler/icons-react";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
@@ -25,6 +25,7 @@ import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button, ButtonVariants } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
 import { Loading } from "@/components/loading";
 import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
@@ -415,17 +416,13 @@ export function LogListPage() {
                   : { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
                 const message = formatLogMessage(entry, summary, { ...names, markup: true });
                 const isExpanded = expandedIds.has(id);
-                const detailId = `log-detail-${id}`;
-                const collapsedDetailId = `collapsed-log-detail-${id}`;
                 const isCollapsedExpanded = expandedIds.has(`collapsed-${id}`);
 
                 return (
                   <div key={id} className="border-t first:border-t-0">
-                    <button
+                    <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(id)}>
+                    <CollapsibleTrigger
                       type="button"
-                      onClick={() => toggleExpanded(id)}
-                      aria-expanded={isExpanded}
-                      aria-controls={detailId}
                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50 sm:px-4"
                     >
                       <span
@@ -448,10 +445,11 @@ export function LogListPage() {
                         </span>
                         <span className="min-w-0 flex-1 text-sm">{renderLogMessage(message)}</span>
                       </span>
-                    </button>
+                    </CollapsibleTrigger>
 
-                    {isExpanded && (
-                      <div id={detailId} className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                    <CollapsibleContent className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                      {isExpanded && (
+                      <>
                         {isBulkDeleteLogEntry(entry) && (
                           <section aria-label="削除されたメッセージ" className="flex flex-col gap-2 rounded-md border bg-card p-3">
                             <h2 className="text-sm font-semibold">削除されたメッセージ（{entry.deletedMessages.length}件）</h2>
@@ -580,21 +578,25 @@ export function LogListPage() {
                         </div>
 
                         {shouldShowRawLogPayload(logsQuery.data.hasRawAccess, summary.details) && (
-                          <details>
-                            <summary className="text-muted-foreground cursor-pointer text-xs">生データ</summary>
-                            <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>
-                          </details>
+                          <Collapsible>
+                            <CollapsibleTrigger type="button" className="group text-muted-foreground flex cursor-pointer items-center gap-1 text-xs">
+                              <IconCaretRightFilled className="size-3 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
+                              生データ
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
-                      </div>
-                    )}
+                      </>
+                      )}
+                    </CollapsibleContent>
+                    </Collapsible>
 
                     {collapsedEntries && (
-                      <>
-                        <button
+                      <Collapsible open={isCollapsedExpanded} onOpenChange={() => toggleExpanded(`collapsed-${id}`)}>
+                        <CollapsibleTrigger
                           type="button"
-                          onClick={() => toggleExpanded(`collapsed-${id}`)}
-                          aria-expanded={isCollapsedExpanded}
-                          aria-controls={collapsedDetailId}
                           className="flex w-full items-center gap-3 border-t px-3 py-2 text-left hover:bg-accent/50"
                         >
                           <span
@@ -605,10 +607,10 @@ export function LogListPage() {
                           <span className="flex-1 text-sm">
                             {entry.category === "moderationCase" ? "関連する削除ログ" : "削除された投稿ログ"}（{collapsedEntries.length}件）
                           </span>
-                        </button>
-                        {isCollapsedExpanded && (
-                          <div id={collapsedDetailId} className="flex flex-col gap-2 border-t bg-muted/40 p-3">
-                            {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="flex flex-col gap-2 border-t bg-muted/40 p-3">
+                          {isCollapsedExpanded &&
+                            collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
                               const collapsedSummary = summarizeLogEntry(collapsedEntry);
                               const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, { ...names, markup: true });
                               return (
@@ -628,11 +630,12 @@ export function LogListPage() {
                                     </div>
                                   )}
                                   {nestedEntries && nestedEntries.length > 0 && (
-                                    <details className="rounded-md border bg-muted/40 p-2">
-                                      <summary className="cursor-pointer text-sm">
+                                    <Collapsible className="rounded-md border bg-muted/40 p-2">
+                                      <CollapsibleTrigger type="button" className="group flex cursor-pointer items-center gap-1 text-sm">
+                                        <IconCaretRightFilled className="size-3 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
                                         削除された投稿ログ（{nestedEntries.length}件）
-                                      </summary>
-                                      <div className="mt-2 flex flex-col gap-2">
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent className="mt-2 flex flex-col gap-2">
                                         {nestedEntries.map(({ id: nestedId, entry: nestedEntry }) => {
                                           const nestedSummary = summarizeLogEntry(nestedEntry);
                                           return (
@@ -654,15 +657,14 @@ export function LogListPage() {
                                             </article>
                                           );
                                         })}
-                                      </div>
-                                    </details>
+                                      </CollapsibleContent>
+                                    </Collapsible>
                                   )}
                                 </article>
                               );
                             })}
-                          </div>
-                        )}
-                      </>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
                 );
