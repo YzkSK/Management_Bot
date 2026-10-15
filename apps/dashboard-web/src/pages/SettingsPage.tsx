@@ -21,6 +21,7 @@ import { BotPermissionState, ErrorState, ForbiddenState } from "@/components/pag
 import { SaveBar } from "@/components/save-bar";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Button } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Loading } from "@/components/loading";
@@ -280,12 +281,10 @@ export function SettingsPage() {
             </section>
 
           <section className="bg-card overflow-hidden rounded-xl border">
+            <Collapsible open={perCategoryOpen} onOpenChange={setPerCategoryOpen}>
             <h2>
-              <button
+              <CollapsibleTrigger
                 type="button"
-                aria-expanded={perCategoryOpen}
-                aria-controls="per-category-settings"
-                onClick={() => setPerCategoryOpen((open) => !open)}
                 className="flex min-h-13 w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 px-5 py-3 text-left font-bold"
               >
                 {perCategoryOpen ? (
@@ -295,9 +294,9 @@ export function SettingsPage() {
                 )}
                 <span className="whitespace-nowrap">カテゴリごとに設定する(任意)</span>
                 <span className="text-muted-foreground ml-auto text-xs font-normal">{categories.length}カテゴリ</span>
-              </button>
+              </CollapsibleTrigger>
             </h2>
-            <div id="per-category-settings" hidden={!perCategoryOpen} className="border-t">
+            <CollapsibleContent className="border-t">
               <div className="text-muted-foreground hidden grid-cols-[minmax(0,1fr)_16rem_8rem] gap-3 px-5 py-2 text-xs md:grid">
                 <span>カテゴリ</span>
                 <span>出力先チャンネル</span>
@@ -338,7 +337,8 @@ export function SettingsPage() {
                   </div>
                 );
               })}
-            </div>
+            </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {changes.invalidRetention.length > 0 && (
