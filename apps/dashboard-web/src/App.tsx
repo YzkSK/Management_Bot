@@ -19,7 +19,7 @@ import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { LOGOUT_FAILED_MESSAGE } from "./pages/UserSettingsPage.js";
 import { Button } from "@/components/starwind/button";
-import { Loader2Icon } from "lucide-react";
+import { IconLoader2 } from "@tabler/icons-react";
 import { toast } from "@/components/starwind/toast";
 
 export function App() {
@@ -101,7 +101,7 @@ export function App() {
 
 /** ログイン確認中・リダイレクト中・接続失敗を中央カードで出す。 */
 export function AppStateScreen({ view }: { view: "boot" | "redirect" | "error" }) {
-  const spinner = <Loader2Icon className="size-7 animate-spin" aria-hidden="true" />;
+  const spinner = <IconLoader2 className="size-7 animate-spin" aria-hidden="true" />;
   return (
     <div className="bg-muted/40 flex min-h-screen items-center justify-center p-4">
       <div className="bg-card flex w-full max-w-[420px] flex-col items-center gap-3.5 rounded-2xl border p-8 text-center">

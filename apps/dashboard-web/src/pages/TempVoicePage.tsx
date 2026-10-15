@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioLines, EyeOff, Lock, Users, Volume2 } from "lucide-react";
+import { IconEyeOff, IconLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
@@ -149,7 +149,7 @@ function ActiveChannelsTab({
       ) : (
         <div className="grid items-start gap-3 md:grid-cols-2">
           {listQuery.data.map((channel) => {
-            const ChannelIcon = channel.isLocked ? Lock : Volume2;
+            const ChannelIcon = channel.isLocked ? IconLock : IconVolume;
             return (
               <section
                 key={channel.channelId}
@@ -190,19 +190,19 @@ function ActiveChannelsTab({
                   <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
                     {channel.userLimit !== null && (
                       <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <Users className="size-3" aria-hidden />
+                        <IconUsers className="size-3" aria-hidden />
                         {channel.userLimit === 0 ? "無制限" : `上限 ${channel.userLimit}人`}
                       </span>
                     )}
                     {channel.bitrate !== null && (
                       <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <AudioLines className="size-3" aria-hidden />
+                        <IconWaveSine className="size-3" aria-hidden />
                         {Math.round(channel.bitrate / 1000)} kbps
                       </span>
                     )}
                     {channel.isHidden && (
                       <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <EyeOff className="size-3" aria-hidden />
+                        <IconEyeOff className="size-3" aria-hidden />
                         非表示
                       </span>
                     )}

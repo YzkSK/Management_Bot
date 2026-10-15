@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { Loader2Icon } from "lucide-react";
+import { IconLoader2 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
 /** 読み込み中の領域。childrenを渡せば実レイアウト同形のスケルトン、省略時はスピナーを出す。 */
@@ -18,7 +18,7 @@ export function Loading({ className, children }: { className?: string; children?
       aria-busy="true"
       className={cn("text-muted-foreground flex items-center justify-center gap-2 py-8 text-sm", className)}
     >
-      <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+      <IconLoader2 className="size-4 animate-spin" aria-hidden="true" />
       読み込み中
     </div>
   );

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_URL, trpc } from "../trpc.js";
@@ -312,7 +312,7 @@ export function RankingTable({
             // LogListPageのページ送りと同じ形(前後矢印+ページ番号)。
             <nav aria-label="ランキングのページ" className="flex justify-center gap-2 border-t px-4 py-2">
               <Button type="button" variant="outline" size="icon" aria-label="前のページ" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                <ChevronLeft />
+                <IconChevronLeft />
               </Button>
               {visiblePages(page, Math.ceil(query.data.total / query.data.pageSize)).map((p) => (
                 <Button
@@ -334,7 +334,7 @@ export function RankingTable({
                 disabled={(page + 1) * query.data.pageSize >= query.data.total}
                 onClick={() => setPage(page + 1)}
               >
-                <ChevronRight />
+                <IconChevronRight />
               </Button>
             </nav>
           )}

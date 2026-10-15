@@ -1,7 +1,7 @@
 import { matchQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
 import { toast } from "@/components/starwind/toast";
 import {
@@ -636,9 +636,9 @@ function UserStrikeGroup({
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? (
-            <ChevronDown className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+            <IconChevronDown className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
           ) : (
-            <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+            <IconChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
           )}
           <span className="truncate">{userName}</span>
         </button>
