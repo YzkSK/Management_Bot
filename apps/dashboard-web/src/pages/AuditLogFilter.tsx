@@ -1,9 +1,10 @@
 import { IconChevronDown, IconFilter, IconX } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AUDIT_PERIOD_LABELS, AUDIT_PERIODS, auditFeatureLabel, type AuditPeriod } from "./audit-log-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/starwind/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 
 export interface AuditFilterValue {
@@ -76,38 +77,19 @@ export function AuditLogFilter({
   features: readonly string[];
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!(e.target instanceof Element)) return;
-      // セレクターの選択肢はportalでパネルの外に描画されるため、外側クリック扱いにしない。
-      if (rootRef.current?.contains(e.target) || e.target.closest('[data-slot="select-positioner"]')) return;
-      setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      // 開いているセレクターのEscはセレクター側だけを閉じる。Starwindは閉じた選択肢をhiddenで残す。
-      if (e.key === "Escape" && !document.querySelector('[role="listbox"]:not([hidden])')) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
 
   const chips = activeChips(value, actors);
   const patch = (next: Partial<AuditFilterValue>) => onChange({ ...value, ...next });
 
   return (
-    <div ref={rootRef} className="relative flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <IconFilter aria-hidden="true" />
-        絞り込み: <b>{chips.length === 0 ? "すべて" : `${chips.length}件`}</b>
-        <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
-      </Button>
+    <Popover open={open} onOpenChange={setOpen} className="flex flex-wrap items-center gap-2">
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline">
+          <IconFilter aria-hidden="true" />
+          絞り込み: <b>{chips.length === 0 ? "すべて" : `${chips.length}件`}</b>
+          <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
       {chips.map((chip) => (
         <span key={chip.key} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
           {chip.label}
@@ -130,12 +112,13 @@ export function AuditLogFilter({
           すべてクリア
         </button>
       )}
-      {open && (
-        <div
-          role="dialog"
-          aria-label="操作履歴の絞り込み"
-          className="bg-popover absolute top-11 left-0 z-30 flex w-[min(36rem,calc(100vw-2rem))] flex-col gap-3 rounded-xl border p-3 shadow-lg"
-        >
+      <PopoverContent
+        role="dialog"
+        aria-label="操作履歴の絞り込み"
+        align="start"
+        sideOffset={8}
+        className="w-[min(36rem,calc(100vw-2rem))] gap-3 rounded-xl p-3 shadow-lg"
+      >
           <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2.5">
             <label className="text-muted-foreground flex flex-col gap-1 text-xs">
               操作者
@@ -229,8 +212,7 @@ export function AuditLogFilter({
               閉じる
             </Button>
           </div>
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

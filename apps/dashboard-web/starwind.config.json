@@ -78,6 +78,12 @@
       "version": "1.2.1",
       "framework": "react",
       "registry": "default"
+    },
+    {
+      "name": "popover",
+      "version": "2.1.1",
+      "framework": "react",
+      "registry": "default"
     }
   ],
   "tailwind": {

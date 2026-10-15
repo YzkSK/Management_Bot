@@ -1,10 +1,11 @@
 import { IconChevronDown, IconFilter, IconX } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { LogCategory } from "@management-bot/shared";
 import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/starwind/popover";
 
 function CategoryMark({ category }: { category: LogCategory }) {
   const Icon = CATEGORY_ICON[category];
@@ -27,23 +28,6 @@ export function CategoryFilter({
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (rootRef.current && e.target instanceof Node && !rootRef.current.contains(e.target)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
 
   const toggle = (category: LogCategory) =>
     onChange(selected.includes(category) ? selected.filter((c) => c !== category) : [...selected, category]);
@@ -51,12 +35,14 @@ export function CategoryFilter({
   const options = normalized === "" ? CATEGORY_OPTIONS : CATEGORY_OPTIONS.filter((o) => o.label.includes(normalized));
 
   return (
-    <div ref={rootRef} className="relative flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <IconFilter aria-hidden="true" />
-        カテゴリ: <b>{selected.length === 0 ? "すべて" : `${selected.length}件選択中`}</b>
-        <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
-      </Button>
+    <Popover open={open} onOpenChange={setOpen} className="flex flex-wrap items-center gap-2">
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline">
+          <IconFilter aria-hidden="true" />
+          カテゴリ: <b>{selected.length === 0 ? "すべて" : `${selected.length}件選択中`}</b>
+          <IconChevronDown className="text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
       {selected.map((category) => (
         <span key={category} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
           <CategoryMark category={category} />
@@ -76,12 +62,13 @@ export function CategoryFilter({
           すべてクリア
         </button>
       )}
-      {open && (
-        <div
-          role="dialog"
-          aria-label="カテゴリで絞り込み"
-          className="bg-popover absolute top-11 left-0 z-30 flex w-[min(36rem,calc(100vw-2rem))] flex-col gap-2.5 rounded-xl border p-3 shadow-lg"
-        >
+      <PopoverContent
+        role="dialog"
+        aria-label="カテゴリで絞り込み"
+        align="start"
+        sideOffset={8}
+        className="w-[min(36rem,calc(100vw-2rem))] rounded-xl p-3 shadow-lg"
+      >
           <Input
             type="search"
             aria-label="カテゴリを検索"
@@ -109,8 +96,7 @@ export function CategoryFilter({
               閉じる
             </Button>
           </div>
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
