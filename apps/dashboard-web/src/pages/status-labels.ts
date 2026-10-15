@@ -3,7 +3,7 @@ import type { InfraLogEntry, InfraLogService } from "@management-bot/shared";
 
 export type { StatusItem };
 
-/** ステータスの配色はデザイントークン(success/warning/destructive)に揃える。 */
+/** ステータスの配色はデザイントークン(success/warning/error)に揃える。 */
 export const STATE_META: Record<ServiceState, { label: string; lamp: string; summary: string; dot: string; ring: string; badge: string; box: string }> = {
   ok: {
     label: "稼働中",
@@ -27,10 +27,10 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     label: "停止",
     lamp: "停止あり",
     summary: "一部の機能が停止しています",
-    dot: "bg-destructive",
-    ring: "ring-destructive/20",
-    badge: "bg-destructive/10 text-destructive",
-    box: "border-destructive/30 bg-destructive/10 text-destructive",
+    dot: "bg-error",
+    ring: "ring-error/20",
+    badge: "bg-error/10 text-error",
+    box: "border-error/30 bg-error/10 text-error",
   },
 };
 
@@ -106,7 +106,7 @@ export function formatUptime(ms: number): string {
 
 /** 使用率に応じたバーの色。80%以上で警告、90%以上で危険。 */
 export const usageBarClass = (percent: number) =>
-  percent >= 90 ? "bg-destructive" : percent >= 80 ? "bg-warning" : "bg-success";
+  percent >= 90 ? "bg-error" : percent >= 80 ? "bg-warning" : "bg-success";
 
 /** 値の列をSVGのpolyline用`x,y`列にする。yは0〜max(はみ出しは丸める)を高さheightへ反転して写す。 */
 export function toPolylinePoints(values: readonly number[], max: number, width: number, height: number): string {

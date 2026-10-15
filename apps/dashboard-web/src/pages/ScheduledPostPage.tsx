@@ -55,7 +55,7 @@ interface PostRow {
 const STATUS_BADGES: Record<string, { label: string; tone: string }> = {
   posting: { label: "投稿処理中", tone: "bg-muted text-muted-foreground" },
   posted: { label: "投稿しました", tone: "bg-success/10 text-success" },
-  failed: { label: "投稿できませんでした", tone: "bg-destructive/10 text-destructive" },
+  failed: { label: "投稿できませんでした", tone: "bg-error/10 text-error" },
   cancelled: { label: "取り消し", tone: "bg-muted text-muted-foreground" },
 };
 
@@ -63,7 +63,7 @@ function CancelButton({ onConfirm, disabled, notifiesAuthor }: { onConfirm: () =
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+        <Button variant="outline" size="sm" className="text-error border-error/40" disabled={disabled}>
           取り消す
         </Button>
       </DialogTrigger>

@@ -1,6 +1,6 @@
 import { tv } from "tailwind-variants";
 
-// 既存のRadix(shadcn)版Dialogと同じ見た目に固定している。
+// 移行前のRadix版Dialogと同じ見た目に固定している。
 // <dialog>のUAスタイル(余白・幅・inset・枠・背景色)は打ち消し、位置と大きさは呼び出し側のclassで決める。
 export const dialogBackdrop = tv({
   base: [

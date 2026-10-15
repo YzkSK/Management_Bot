@@ -226,12 +226,12 @@ function LockdownPanel({ guildId }: { guildId: string }) {
       <section
         className={cn(
           "grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border p-4 @2xl:grid-cols-[1fr_auto_auto] @2xl:gap-4",
-          locked ? "border-destructive/30 bg-destructive/10" : "bg-card",
+          locked ? "border-error/30 bg-error/10" : "bg-card",
         )}
       >
         {/* カード幅が十分なら1行、狭ければ(画面幅ではなくカード自身の幅で判定)自動ロックダウンを上段に分けて2段にする。DOM順(読み上げ順)は常に状態→トグル→ボタン。 */}
         <div className="row-start-2 min-w-0 @2xl:row-start-1">
-          <p className={cn("text-sm font-bold", locked && "text-destructive")}>現在の状態: {locked ? "ロック中" : "解除中"}</p>
+          <p className={cn("text-sm font-bold", locked && "text-error")}>現在の状態: {locked ? "ロック中" : "解除中"}</p>
           <p className="text-muted-foreground text-xs">
             ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
           </p>
@@ -336,7 +336,7 @@ function TargetSelect({
           ))}
         </SelectContent>
       </Select>
-      {isError && <p className="text-destructive text-xs">候補の取得に失敗しました。</p>}
+      {isError && <p className="text-error text-xs">候補の取得に失敗しました。</p>}
       {targetType === "user" && memberOptions.nextAfter && (
         <Button
           type="button"
@@ -402,7 +402,7 @@ function WhitelistForm({ guildId }: { guildId: string }) {
         </Button>
       </div>
       {mutation.isError && (
-        <p className="text-destructive text-xs">
+        <p className="text-error text-xs">
           {mutation.error instanceof TRPCClientError && mutation.error.data?.code === "BAD_REQUEST"
             ? "対象がこのサーバーに存在しません。"
             : "保存に失敗しました。"}
@@ -512,7 +512,7 @@ function NgwordForm({ guildId }: { guildId: string }) {
         </Button>
       </div>
       {mutation.isError && (
-        <p className="text-destructive text-xs">
+        <p className="text-error text-xs">
           {isUnsafeRegexError
             ? "安全性が確認できない正規表現のため登録できません(ネストした量指定子等)。パターンを見直してください。"
             : "保存に失敗しました。"}

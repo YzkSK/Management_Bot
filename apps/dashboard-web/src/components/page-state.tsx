@@ -14,7 +14,7 @@ type Tone = "warning" | "destructive" | "muted";
 
 const TONE_CLASS: Record<Tone, string> = {
   warning: "bg-warning/15 text-warning",
-  destructive: "bg-destructive/12 text-destructive",
+  destructive: "bg-error/12 text-error",
   muted: "bg-muted text-muted-foreground",
 };
 
@@ -167,9 +167,9 @@ export function InlineError({ summary, detail, onRetry }: { summary: string; det
   return (
     <div
       role="alert"
-      className="border-destructive/35 bg-destructive/8 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm"
+      className="border-error/35 bg-error/8 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm"
     >
-      <IconAlertCircle className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <IconAlertCircle className="text-error mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">
         <b>{summary}</b>
         {detail && ` ${detail}`}{" "}

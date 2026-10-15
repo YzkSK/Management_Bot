@@ -128,7 +128,7 @@ function BulkControl({
         </Button>
       </div>
       {retentionInvalid ? (
-        <p className="text-destructive text-xs">0〜{MAX_RETENTION_DAYS}で入力してください</p>
+        <p className="text-error text-xs">0〜{MAX_RETENTION_DAYS}で入力してください</p>
       ) : (
         <p className="text-muted-foreground text-xs">保持期間を0にすると無期限で保持します。</p>
       )}
@@ -342,7 +342,7 @@ export function SettingsPage() {
           </section>
 
           {changes.invalidRetention.length > 0 && (
-            <p className="text-destructive text-sm">
+            <p className="text-error text-sm">
               保持期間は0〜{MAX_RETENTION_DAYS}の整数で入力してください(
               {changes.invalidRetention.map((c) => CATEGORY_LABELS[c]).join("、")})。
             </p>
