@@ -10,7 +10,7 @@ import { RoleFilter } from "./RoleFilter.js";
 import { EMPTY_ROLE_FILTER, filterRoles, type RoleFilterValue } from "./role-filter.js";
 import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dropdown, DropdownContent, DropdownTrigger } from "@/components/starwind/dropdown";
 import { Input } from "@/components/starwind/input";
 import { Loading } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -41,20 +41,19 @@ function lockedReason(role: RoleRowData): string {
 /** クリックで中身を開くバッジ・タグ。 */
 function ClickPopover({ trigger, label, children }: { trigger: ReactNode; label: string; children: ReactNode }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Dropdown className="contents">
+      <DropdownTrigger asChild>
         <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-full">
           {trigger}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
+      </DropdownTrigger>
+      <DropdownContent
         align="end"
-        collisionPadding={16}
-        className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] max-w-80 overflow-y-auto p-3 text-sm"
+        className="max-h-[min(24rem,var(--sw-floating-available-height))] max-w-80 overflow-y-auto p-3 text-sm"
       >
         {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownContent>
+    </Dropdown>
   );
 }
 
