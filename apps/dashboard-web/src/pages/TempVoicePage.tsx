@@ -28,7 +28,7 @@ import {
 import { Input } from "@/components/starwind/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/starwind/tabs";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 
 type TempVoiceTab = "list" | "roles" | "settings";
 

@@ -12,7 +12,7 @@ import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { Alert, AlertDescription } from "@/components/starwind/alert";
 import { Dropdown, DropdownContent, DropdownTrigger } from "@/components/starwind/dropdown";
 import { Input } from "@/components/starwind/input";
-import { Loading } from "@/components/ui/skeleton";
+import { Loading } from "@/components/loading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");

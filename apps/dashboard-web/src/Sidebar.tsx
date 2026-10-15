@@ -11,7 +11,7 @@ import { trpc } from "./trpc.js";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/starwind/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/starwind/skeleton";
 
 /** モバイルドロワーのDialogのid。Headerの開閉ボタン(DialogTrigger)がこのidで紐付く。 */
 export const MOBILE_SIDEBAR_DIALOG_ID = "mobile-sidebar";
