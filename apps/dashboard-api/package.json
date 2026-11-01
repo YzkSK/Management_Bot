@@ -22,14 +22,14 @@
     "@management-bot/scheduled-post": "workspace:*",
     "@management-bot/shared": "workspace:*",
     "@management-bot/temp-voice": "workspace:*",
-    "@trpc/server": "^11.19.0",
-    "hono": "^4.13.13",
+    "@trpc/server": "^11.22.1",
+    "hono": "^4.13.14",
     "ioredis": "^6.0.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.2",
-    "@types/node": "^26.6.4",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6",
     "drizzle-orm": "^0.45.4",
     "typescript": "^6.0.3"
   }
