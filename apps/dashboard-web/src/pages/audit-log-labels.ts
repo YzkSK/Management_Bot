@@ -13,7 +13,6 @@ const AUDIT_FEATURE_LABELS: Record<string, string> = {
   logging: "ログ機能",
   moderation: "スパム対策",
   tempVoice: "一時VC",
-  scheduledPost: "予約投稿",
   access: "アクセス権限",
   dashboard: "ダッシュボード",
 };
@@ -26,7 +25,6 @@ const AUDIT_FEATURE_COLORS: Record<string, string> = {
   logging: "[--c:oklch(0.55_0.15_150)] dark:[--c:oklch(0.78_0.15_150)]",
   moderation: "[--c:oklch(0.58_0.17_30)] dark:[--c:oklch(0.78_0.14_30)]",
   tempVoice: "[--c:oklch(0.55_0.15_250)] dark:[--c:oklch(0.78_0.12_250)]",
-  scheduledPost: "[--c:oklch(0.56_0.14_200)] dark:[--c:oklch(0.8_0.12_200)]",
   access: "[--c:oklch(0.55_0.17_300)] dark:[--c:oklch(0.78_0.14_300)]",
   dashboard: "[--c:oklch(0.55_0.02_260)] dark:[--c:oklch(0.75_0.02_260)]",
 };
@@ -60,8 +58,6 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "moderation.resetAllStrikes": "ユーザーのストライクをすべてリセット",
   "moderation.addNgword": "NGワードを追加",
   "moderation.removeNgword": "NGワードを削除",
-  "scheduledPost.cancel": "予約投稿を取り消し",
-  "scheduledPost.updateSettings": "予約投稿の設定を変更",
   "tempVoice.setConfig": "一時VCの設定を変更",
   "tempVoice.autoSetupConfig": "一時VCを自動セットアップ",
   "tempVoice.clearConfig": "一時VCの設定を解除",

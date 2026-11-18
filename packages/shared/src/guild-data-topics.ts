@@ -7,7 +7,6 @@ import { CAPABILITIES } from "./capabilities.js";
  */
 export const GUILD_DATA_TOPICS = [
   "auditLog",
-  "scheduledPost",
   "tempVoice",
   "moderation",
   "loggingSettings",
@@ -25,7 +24,6 @@ export type GuildDataTopic = z.infer<typeof guildDataTopicSchema>;
  */
 export const GUILD_DATA_TOPIC_CAPABILITY: Record<GuildDataTopic, number> = {
   auditLog: CAPABILITIES.VIEW_AUDIT_LOG,
-  scheduledPost: 0,
   tempVoice: CAPABILITIES.VIEW_TEMP_VOICE,
   moderation: CAPABILITIES.MANAGE_MODERATION,
   loggingSettings: CAPABILITIES.VIEW_LOGS,

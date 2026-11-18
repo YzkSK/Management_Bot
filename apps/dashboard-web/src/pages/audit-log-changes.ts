@@ -57,8 +57,6 @@ const KEY_META: Record<string, KeyMeta> = {
   nameTemplate: { label: "チャンネル名のテンプレート", kind: "text" },
   defaultUserLimit: { label: "人数上限", kind: "text" },
   defaultBitrate: { label: "ビットレート", kind: "kbps" },
-  allowEveryone: { label: "予約時に @everyone を指定できる", kind: "bool" },
-  allowHere: { label: "予約時に @here を指定できる", kind: "bool" },
   hideAuditLogCorrelation: { label: "監査ログ相関を非表示", kind: "bool" },
   hideBotEvents: { label: "Botによるイベントを非表示", kind: "bool" },
   autoLockdownOnRaid: { label: "レイド検知時の自動ロックダウン", kind: "bool" },
@@ -211,12 +209,6 @@ function specificRows(key: string, before: unknown, after: Record<string, unknow
       ];
     case "tempVoice.setDenyProtectedRoles":
       return [{ label: "拒否禁止ロール", kind: "roles", before: Array.isArray(before) ? before : undefined, after: after.roleIds }];
-    case "scheduledPost.updateSettings":
-      return [
-        { label: "使えるロール", kind: "roles", before: isRecord(before) ? before.allowedRoleIds : undefined, after: after.roleIds },
-        { label: "予約時に @everyone を指定できる", kind: "bool", before: isRecord(before) ? before.allowEveryone : undefined, after: after.allowEveryone },
-        { label: "予約時に @here を指定できる", kind: "bool", before: isRecord(before) ? before.allowHere : undefined, after: after.allowHere },
-      ];
     case "access.grantCapabilities":
     case "access.revokeCapabilityGrant":
       return [

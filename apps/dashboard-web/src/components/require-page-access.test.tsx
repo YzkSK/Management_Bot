@@ -85,7 +85,7 @@ describe("RequirePageAccess", () => {
             <Route
               path="/guilds/:guildId/activity"
               element={
-                <RequirePageAccess pageName="予約投稿">
+                <RequirePageAccess pageName="一時VC">
                   <p>ページ本体</p>
                 </RequirePageAccess>
               }

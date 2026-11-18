@@ -16,7 +16,6 @@
     { "path": "../../packages/db" },
     { "path": "../../packages/logging" },
     { "path": "../../packages/moderation" },
-    { "path": "../../packages/scheduled-post" },
     { "path": "../../packages/shared" },
     { "path": "../../packages/temp-voice" }
   ]

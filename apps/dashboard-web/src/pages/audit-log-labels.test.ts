@@ -16,7 +16,7 @@ describe("audit-log-labels", () => {
     expect(auditFeatureLabel("custom")).toBe("custom");
     expect(auditOutcomeLabel("denied")).toBe("権限不足");
     expect(auditOutcomeLabel("pending")).toBe("結果不明");
-    expect(auditActionLabel("scheduledPost", "cancel")).toBe("予約投稿を取り消し");
+    expect(auditActionLabel("tempVoice", "forceDelete")).toBe("一時VCを強制削除");
     expect(auditActionLabel("logging", "unknownAction")).toBe("unknownAction");
   });
 
@@ -60,7 +60,6 @@ describe("AUDIT_ACTION_LABELS", () => {
   const routers: [feature: string, path: string][] = [
     ["logging", "packages/logging/src/router/index.ts"],
     ["moderation", "packages/moderation/src/router/index.ts"],
-    ["scheduledPost", "packages/scheduled-post/src/router/index.ts"],
     ["tempVoice", "packages/temp-voice/src/router/index.ts"],
     ["access", "packages/dashboard-access/src/router.ts"],
   ];

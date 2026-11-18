@@ -11,8 +11,6 @@ import { ActivityPage } from "./pages/ActivityPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
-import { ScheduledPostPage } from "./pages/ScheduledPostPage.js";
-import { ScheduledPostSettingsPage } from "./pages/ScheduledPostSettingsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
@@ -82,8 +80,6 @@ export function App() {
           <Route path="logs" element={<RequirePageAccess pageName="ログ" capability="VIEW_LOGS"><LogListPage /></RequirePageAccess>} />
           <Route path="logs/settings" element={<RequirePageAccess pageName="ログ設定" capability="MANAGE_LOGGING_SETTINGS"><SettingsPage /></RequirePageAccess>} />
           <Route path="moderation" element={<RequirePageAccess pageName="スパム対策" capability="MANAGE_MODERATION"><ModerationPage /></RequirePageAccess>} />
-          <Route path="scheduled-post" element={<RequirePageAccess pageName="予約投稿"><ScheduledPostPage /></RequirePageAccess>} />
-          <Route path="scheduled-post/settings" element={<RequirePageAccess pageName="予約投稿の設定" capability="MANAGE_SCHEDULED_POSTS"><ScheduledPostSettingsPage /></RequirePageAccess>} />
           <Route path="temp-voice" element={<RequirePageAccess pageName="一時VC"><TempVoicePage /></RequirePageAccess>} />
           <Route path="access" element={<RequirePageAccess pageName="アクセス権限" capability="MANAGE_ACCESS"><AccessPage /></RequirePageAccess>} />
           <Route path="audit-log" element={<RequirePageAccess pageName="操作履歴" capability="VIEW_AUDIT_LOG"><AuditLogPage /></RequirePageAccess>} />

@@ -36,11 +36,6 @@ export {
   type TempVoiceForceDeleteNotification,
 } from "./temp-voice-action-notifications.js";
 export {
-  listenForScheduledPostAdminCancel,
-  SCHEDULED_POST_ADMIN_CANCEL_CHANNEL,
-  type ScheduledPostAdminCancelNotification,
-} from "./scheduled-post-action-notifications.js";
-export {
   completeAuditLog,
   purgeExpiredAuditLogs,
   recordAuditLog,
