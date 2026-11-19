@@ -32,6 +32,9 @@ import { Loading } from "@/components/loading";
 
 type TempVoiceTab = "list" | "roles" | "settings";
 
+/** チップ・バッジ共通の見た目。縦中央・折り返しなし。 */
+const TAG = "inline-flex h-6 items-center gap-1 rounded-sm px-2 text-xs leading-none whitespace-nowrap";
+
 interface TempVoiceConfigData {
   createChannelId: string | null;
   categoryId: string | null;
@@ -73,7 +76,7 @@ function ForceDeleteButton({
           強制削除
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
           <DialogDescription>
@@ -142,7 +145,7 @@ function ActiveChannelsTab({
         {ownOnly ? "あなたがオーナーの一時VCです。" : "現在Discord上に存在する一時VCです。"}
       </p>
       {listQuery.data.length === 0 ? (
-        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+        <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
           {ownOnly ? "あなたがオーナーの一時VCはありません。" : "現在アクティブな一時VCはありません。"}
           作成用チャンネルに入室すると自動で作成されます。
         </p>
@@ -153,7 +156,7 @@ function ActiveChannelsTab({
             return (
               <section
                 key={channel.channelId}
-                className={`flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
+                className={`bg-card flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -164,12 +167,12 @@ function ActiveChannelsTab({
                     />
                     <span className="truncate text-sm font-semibold">{channel.channelName ?? channel.channelId}</span>
                     {channel.isMine && (
-                      <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">あなたのVC</span>
+                      <span className={`${TAG} bg-primary text-primary-foreground shrink-0 font-semibold`}>あなたのVC</span>
                     )}
                   </div>
                   <span className="text-muted-foreground text-xs whitespace-nowrap">
                     継続{" "}
-                    <b className="text-foreground text-sm">
+                    <b className="text-foreground font-mono text-sm">
                       {formatDuration(Math.max(0, (now.getTime() - new Date(channel.createdAt).getTime()) / 1000))}
                     </b>
                   </span>
@@ -189,19 +192,19 @@ function ActiveChannelsTab({
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
                     {channel.userLimit !== null && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                      <span className={`${TAG} bg-muted`}>
                         <IconUsers className="size-3" aria-hidden />
                         {channel.userLimit === 0 ? "無制限" : `上限 ${channel.userLimit}人`}
                       </span>
                     )}
                     {channel.bitrate !== null && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                      <span className={`${TAG} bg-muted`}>
                         <IconWaveSine className="size-3" aria-hidden />
                         {Math.round(channel.bitrate / 1000)} kbps
                       </span>
                     )}
                     {channel.isHidden && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
+                      <span className={`${TAG} bg-muted`}>
                         <IconEyeOff className="size-3" aria-hidden />
                         非表示
                       </span>
@@ -309,7 +312,7 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
         </Button>
       </div>
       {rolesQuery.data.length > 0 && (
-        <ul className="bg-card divide-y rounded-xl border">
+        <ul className="bg-card divide-y rounded-lg border">
           {rolesQuery.data.map((roleId) => (
             <li key={roleId} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span className="min-w-0 flex-1 truncate">{roleNameById.get(roleId) ?? roleId}</span>
@@ -355,7 +358,7 @@ function ClearConfigButton({ guildId, disabled, onCleared }: { guildId: string; 
           一時VCの設定を解除
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>一時VCの設定を解除しますか?</DialogTitle>
           <DialogDescription>
@@ -430,8 +433,8 @@ function ConfigForm({
   return (
     <div className="flex flex-col gap-4">
       {showChannelFields && (
-        <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
-          <h2 className="font-bold">作成用ボイスチャンネル</h2>
+        <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
+          <h2 className="text-lg font-bold">作成用ボイスチャンネル</h2>
           {channelOptionsFailed ? (
             <InlineError
               summary="チャンネル一覧を読み込めませんでした。"
@@ -485,8 +488,8 @@ function ConfigForm({
         </section>
       )}
 
-      <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
-        <h2 className="font-bold">共通設定</h2>
+      <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
+        <h2 className="text-lg font-bold">共通設定</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={FIELD_LABEL} htmlFor="temp-voice-name-template">
             名前テンプレート
@@ -568,7 +571,7 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
   return (
     <div className="flex flex-col gap-4">
       {showAutoSetup && (
-        <section className="bg-card flex flex-col items-center gap-3 rounded-xl border p-8 text-center">
+        <section className="bg-card flex flex-col items-center gap-3 rounded-lg border p-8 text-center">
           <h2 className="text-lg font-bold">まだ一時VCが設定されていません</h2>
           <p className="text-muted-foreground max-w-md text-sm">
             自動セットアップを押すと、Botがカテゴリと作成用ボイスチャンネルをDiscord上に作成します。既存のチャンネルを使う場合は手動で設定してください。

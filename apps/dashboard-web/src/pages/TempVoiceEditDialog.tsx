@@ -66,14 +66,14 @@ function OverrideChip({ entry, onRemove }: { entry: OverrideEntry; onRemove: () 
   const StateIcon = entry.state === "allow" ? IconCheck : IconBan;
   const label = entry.name ?? (entry.targetType === "user" ? "メンバー" : "ロール");
   return (
-    <li className="bg-muted inline-flex items-center gap-1.5 rounded-full py-0.5 pr-1 pl-2.5 text-xs">
+    <li className="bg-muted inline-flex h-6 items-center gap-1.5 rounded-sm pr-1 pl-2 text-xs leading-none whitespace-nowrap">
       <StateIcon className="size-3" aria-hidden />
       <span className="max-w-40 truncate">
         {entry.targetType === "role" ? "@" : ""}
         {label}
         <span className="sr-only">{entry.state === "allow" ? "(許可)" : "(拒否)"}</span>
       </span>
-      <button type="button" aria-label={`${label}の設定を解除`} className="hover:bg-background rounded-full p-0.5" onClick={onRemove}>
+      <button type="button" aria-label={`${label}の設定を解除`} className="hover:bg-background rounded-sm p-0.5" onClick={onRemove}>
         <IconX className="size-3" aria-hidden />
       </button>
     </li>
@@ -326,7 +326,7 @@ export function EditChannelButton({ guildId, channel }: { guildId: string; chann
           設定を変更
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>{channel.name || "一時VC"}の設定を変更</DialogTitle>
           <DialogDescription>変更した項目だけがDiscordに反映されます。反映が終わるまで少しお待ちください。</DialogDescription>
