@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
 const MAX_PERMISSION_TAGS = 3;
-const BADGE_BASE = "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs leading-none font-medium";
+const BADGE_BASE = "inline-flex h-6 items-center gap-1 rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap";
 
 interface RoleRowData {
   id: string;
@@ -43,7 +43,7 @@ function ClickPopover({ trigger, label, children }: { trigger: ReactNode; label:
   return (
     <Dropdown className="contents">
       <DropdownTrigger asChild>
-        <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-full">
+        <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-sm">
           {trigger}
         </button>
       </DropdownTrigger>
@@ -129,7 +129,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
             {role.name}
           </span>
           {role.botId ? (
-            <span className={`${BADGE_BASE} border-violet-500/40 bg-violet-500/10 text-violet-600 ml-auto dark:text-violet-400`}>
+            <span className={`${BADGE_BASE} bg-muted text-muted-foreground ml-auto`}>
               <IconRobot className="size-3" aria-hidden="true" />
               Bot
             </span>
@@ -140,7 +140,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
                 <ClickPopover
                   label="操作不可の理由を表示"
                   trigger={
-                    <span className={`${BADGE_BASE} border-error/40 bg-error/10 text-error hover:bg-error/20`}>
+                    <span className={`${BADGE_BASE} bg-error-soft text-error-soft-foreground`}>
                       <IconAlertTriangle className="size-3" aria-hidden="true" />
                       操作不可
                     </span>
@@ -226,7 +226,7 @@ export function RolesPage() {
           <div className="text-muted-foreground text-xs">
             {NUMBER_FORMAT.format(visibleRoles.length)} / {NUMBER_FORMAT.format(roles.length)} ロール
           </div>
-          <div className="rounded-xl border">
+          <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>

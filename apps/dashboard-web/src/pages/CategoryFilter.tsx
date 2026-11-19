@@ -44,7 +44,7 @@ export function CategoryFilter({
           <button
             type="button"
             aria-label={`${CATEGORY_OPTIONS.find((o) => o.value === category)?.label}を解除`}
-            className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
+            className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-sm"
             onClick={() => toggle(category)}
           >
             <IconX className="size-3.5" aria-hidden="true" />

@@ -89,7 +89,7 @@ function BulkControl({
   const canApply = !retentionInvalid && (retention !== "" || channel !== UNCHOSEN);
 
   return (
-    <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+    <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
       <h2 className="font-bold">一括設定(すべてのカテゴリへ同じ値を適用)</h2>
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="text-muted-foreground flex flex-col gap-1.5 text-sm md:w-64">
@@ -262,7 +262,7 @@ export function SettingsPage() {
             }
           />
 
-          <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+          <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
               <h2 className="font-bold">ログ一覧の表示</h2>
               <label className="flex items-center gap-2 text-sm">
                 <Switch
@@ -280,7 +280,7 @@ export function SettingsPage() {
               </label>
             </section>
 
-          <section className="bg-card overflow-hidden rounded-xl border">
+          <section className="bg-card overflow-hidden rounded-lg border">
             <Collapsible open={perCategoryOpen} onOpenChange={setPerCategoryOpen}>
             <h2>
               <CollapsibleTrigger

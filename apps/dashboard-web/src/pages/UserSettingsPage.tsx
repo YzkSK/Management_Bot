@@ -32,7 +32,7 @@ export function UserSettingsPage() {
 
   return (
     <div className="flex w-full flex-col gap-5">
-      <section id="user-settings-account" className="bg-card flex items-center gap-4 rounded-xl border p-5">
+      <section id="user-settings-account" className="bg-card flex items-center gap-4 rounded-lg border p-5">
         {me.data?.avatarUrl ? (
           <img src={me.data.avatarUrl} alt="" className="size-14 shrink-0 rounded-full" />
         ) : (
@@ -49,7 +49,7 @@ export function UserSettingsPage() {
         </Button>
       </section>
 
-      <section id="user-settings-display" className="bg-card flex flex-col gap-4 rounded-xl border p-5">
+      <section id="user-settings-display" className="bg-card flex flex-col gap-4 rounded-lg border p-5">
         <h2 className="font-bold">表示</h2>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span id="theme-label" className="text-sm">
@@ -68,7 +68,7 @@ export function UserSettingsPage() {
                 }}
                 className={cn(
                   "h-9 rounded-md px-4 text-sm",
-                  option.value === theme ? "bg-background font-medium shadow-xs" : "text-muted-foreground hover:text-foreground",
+                  option.value === theme ? "bg-card ring-border font-semibold ring-1" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {option.label}
@@ -97,7 +97,7 @@ export function UserSettingsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} onCloseComplete={() => returnFocusRef.current?.focus()}>
       <DialogContent
-        className="inset-4 flex overflow-hidden rounded-xl border shadow-2xl md:inset-x-[max(1rem,calc(50%-36rem))] md:inset-y-12">
+        className="inset-4 flex overflow-hidden rounded-lg border shadow-2xl md:inset-x-[max(1rem,calc(50%-36rem))] md:inset-y-12">
         <nav className="bg-muted/40 hidden w-56 shrink-0 flex-col gap-1 border-r p-4 md:flex" aria-label="ユーザー設定の項目">
           <DialogTitle className="text-muted-foreground px-2 py-1 text-xs font-bold">ユーザー設定</DialogTitle>
           <a href="#user-settings-account" className="hover:bg-accent rounded-md px-2 py-1.5 text-sm">

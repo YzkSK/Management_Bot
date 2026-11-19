@@ -526,7 +526,7 @@ export function LogListPage() {
                                       <span className="text-muted-foreground">変更なし</span>
                                     )}
                                     {added.map((name) => (
-                                      <span key={`added-${name}`} className="mr-2 text-green-600 dark:text-green-500">
+                                      <span key={`added-${name}`} className="text-success mr-2">
                                         +{name}
                                       </span>
                                     ))}
