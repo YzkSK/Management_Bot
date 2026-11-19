@@ -17,7 +17,7 @@ import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
 import { IconCaretRightFilled, IconChevronLeft, IconChevronRight, IconExternalLink, IconSettings } from "@tabler/icons-react";
-import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
+import { CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { visiblePages } from "./pagination.js";
@@ -61,7 +61,23 @@ function LogIcon({ entry }: { entry: LogEntry }) {
     );
   }
   const Icon = CATEGORY_ICON[entry.category];
-  return <Icon className="size-5 shrink-0" style={{ color: CATEGORY_ACCENT[entry.category] }} aria-hidden="true" />;
+  return <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />;
+}
+
+/** カテゴリのモノクロタグ(アイコン+ラベル)。折り返さない。 */
+function CategoryTag({ category, className }: { category: LogCategory; className?: string }) {
+  const Icon = CATEGORY_ICON[category];
+  return (
+    <span
+      className={cn(
+        "bg-muted text-foreground inline-flex h-6 shrink-0 items-center gap-1 rounded-sm px-2 text-xs leading-none font-medium whitespace-nowrap sm:w-32",
+        className,
+      )}
+    >
+      <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
+      {CATEGORY_LABELS[category]}
+    </span>
+  );
 }
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
@@ -78,9 +94,9 @@ const CONNECTION_STATUS_LABELS = {
 /** 接続状態バッジの色(正常=緑、再接続中=黄、停止=赤、接続中=グレー)。 */
 const CONNECTION_STATUS_TONES = {
   connecting: "bg-muted text-muted-foreground [&>span]:bg-muted-foreground",
-  open: "bg-success/10 text-success [&>span]:bg-success",
-  reconnecting: "bg-warning/10 text-warning [&>span]:bg-warning",
-  stopped: "bg-error/10 text-error [&>span]:bg-error",
+  open: "bg-success-soft text-success-soft-foreground [&>span]:bg-success",
+  reconnecting: "bg-warning-soft text-warning-soft-foreground [&>span]:bg-warning",
+  stopped: "bg-error-soft text-error-soft-foreground [&>span]:bg-error",
 } as const;
 
 /** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
@@ -165,11 +181,10 @@ function renderLogMessage(message: string): ReactNode {
         key={i}
         className={
           isUser
-            ? "rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200"
-            : "rounded bg-emerald-100 px-1.5 font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+            ? "bg-mention text-mention-foreground rounded-[3px] px-1.5 font-semibold"
+            : "text-foreground rounded-sm border px-1.5 font-medium"
         }
       >
-        {isUser && "@"}
         {withNameSkeletons(name)}
       </span>
     );
@@ -366,7 +381,10 @@ export function LogListPage() {
           <h1 className="text-2xl font-bold">ログ一覧</h1>
           <p
             role="status"
-            className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs", CONNECTION_STATUS_TONES[connectionStatus])}
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-xs leading-none whitespace-nowrap",
+              CONNECTION_STATUS_TONES[connectionStatus],
+            )}
           >
             <span className="size-2 shrink-0 rounded-full" aria-hidden="true" />
             {CONNECTION_STATUS_LABELS[connectionStatus]}
@@ -405,9 +423,9 @@ export function LogListPage() {
       {logsQuery.data && (
         <>
           {logsQuery.data.entries.length === 0 ? (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">該当するログはありません。</p>
+            <p className="text-muted-foreground rounded-lg border border-dashed p-10 text-center text-sm">該当するログはありません。</p>
           ) : (
-            <div className="bg-card flex flex-col overflow-hidden rounded-xl border">
+            <div className="bg-card flex flex-col overflow-hidden rounded-lg border">
               {logsQuery.data.entries.map(({ id, entry, collapsedEntries }) => {
                 const summary = summarizeLogEntry(entry);
                 const displayContent = contentWithoutGifLinks(summary.content, summary.attachments) ?? null;
@@ -425,23 +443,13 @@ export function LogListPage() {
                       type="button"
                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50 sm:px-4"
                     >
-                      <span
-                        className="h-7 w-1 shrink-0 rounded-full"
-                        style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
-                        aria-hidden="true"
-                      />
                       <LogIcon entry={entry} />
                       <span className="flex min-w-0 flex-1 flex-col-reverse gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                         <span className="flex shrink-0 items-center gap-2 text-xs sm:gap-3">
                           <time dateTime={summary.createdAt} className="text-muted-foreground sm:order-first sm:w-36">
                             {formatCreatedAt(summary.createdAt)}
                           </time>
-                          <span
-                            className="order-first font-medium sm:order-none sm:w-28"
-                            style={{ color: CATEGORY_ACCENT[entry.category] }}
-                          >
-                            {CATEGORY_LABELS[entry.category]}
-                          </span>
+                          <CategoryTag category={entry.category} className="order-first sm:order-none" />
                         </span>
                         <span className="min-w-0 flex-1 text-sm">{renderLogMessage(message)}</span>
                       </span>
@@ -599,11 +607,7 @@ export function LogListPage() {
                           type="button"
                           className="flex w-full items-center gap-3 border-t px-3 py-2 text-left hover:bg-accent/50"
                         >
-                          <span
-                            className="size-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: CATEGORY_ACCENT.message }}
-                            aria-hidden="true"
-                          />
+                          <span className="bg-muted-foreground size-2 shrink-0 rounded-full" aria-hidden="true" />
                           <span className="flex-1 text-sm">
                             {entry.category === "moderationCase" ? "関連する削除ログ" : "削除された投稿ログ"}（{collapsedEntries.length}件）
                           </span>

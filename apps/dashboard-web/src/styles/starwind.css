@@ -100,6 +100,8 @@
   --color-warning-soft-foreground: var(--warning-soft-foreground);
   --color-error-soft: var(--error-soft);
   --color-error-soft-foreground: var(--error-soft-foreground);
+  --color-mention: var(--mention);
+  --color-mention-foreground: var(--mention-foreground);
 
   --radius-xs: 2px;
   --radius-sm: 2px;
@@ -151,6 +153,8 @@
   --warning-soft-foreground: #8a5300;
   --error-soft: #fbf3f2;
   --error-soft-foreground: #a82e25;
+  --mention: rgba(88, 101, 242, 0.15);
+  --mention-foreground: #4752c4;
   --border: #e4e2dc;
   --input: #d9d7d0;
   --outline: #8a877f;
@@ -198,6 +202,8 @@
   --warning-soft-foreground: #e8c27a;
   --error-soft: #2e1817;
   --error-soft-foreground: #f0a29b;
+  --mention: rgba(88, 101, 242, 0.3);
+  --mention-foreground: #c9cdfb;
   --border: #2e2d2a;
   --input: #3a3936;
   --outline: #6e6c66;

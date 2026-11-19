@@ -1,7 +1,7 @@
 import { IconChevronDown, IconFilter, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import type { LogCategory } from "@management-bot/shared";
-import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
+import { CATEGORY_ICON, CATEGORY_OPTIONS } from "./category-labels.js";
 import { Checkbox } from "@/components/starwind/checkbox";
 import { Button } from "@/components/starwind/button";
 import { Input } from "@/components/starwind/input";
@@ -9,13 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/starwind/p
 
 function CategoryMark({ category }: { category: LogCategory }) {
   const Icon = CATEGORY_ICON[category];
-  const color = CATEGORY_ACCENT[category];
-  return (
-    <>
-      <span className="h-3.5 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-      <Icon className="size-3.5 shrink-0" style={{ color }} aria-hidden="true" />
-    </>
-  );
+  return <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />;
 }
 
 /** ログのカテゴリ複数選択。カテゴリ数が多いため横並びにせず、ボタンから開く一覧で選ぶ。 */
@@ -44,7 +38,7 @@ export function CategoryFilter({
         </Button>
       </PopoverTrigger>
       {selected.map((category) => (
-        <span key={category} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
+        <span key={category} className="bg-card flex h-8 items-center gap-1.5 rounded-md border pr-1 pl-2.5 text-xs whitespace-nowrap">
           <CategoryMark category={category} />
           {CATEGORY_OPTIONS.find((o) => o.value === category)?.label}
           <button
@@ -67,7 +61,7 @@ export function CategoryFilter({
         aria-label="カテゴリで絞り込み"
         align="start"
         sideOffset={8}
-        className="w-[min(36rem,calc(100vw-2rem))] rounded-xl p-3 shadow-lg"
+        className="w-[min(36rem,calc(100vw-2rem))] rounded-lg p-3 shadow-lg"
       >
           <Input
             type="search"
@@ -80,7 +74,7 @@ export function CategoryFilter({
             {options.map((option) => (
               <label
                 key={option.value}
-                className="hover:bg-accent/60 has-checked:bg-accent flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm"
+                className="hover:bg-accent/60 has-checked:bg-accent flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm whitespace-nowrap"
               >
                 <Checkbox aria-label={option.label} checked={selected.includes(option.value)} onCheckedChange={() => toggle(option.value)} />
                 <CategoryMark category={option.value} />

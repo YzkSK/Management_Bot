@@ -6,7 +6,7 @@ import { toast } from "@/components/starwind/toast";
 import type { LogCategory } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
-import { CATEGORY_LABELS } from "./category-labels.js";
+import { CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import {
   buildLogSettingsDraft,
   diffLogSettings,
@@ -304,12 +304,14 @@ export function SettingsPage() {
               </div>
               {categories.map((category) => {
                 const invalid = changes.invalidRetention.includes(category);
+                const CategoryIcon = CATEGORY_ICON[category];
                 return (
                   <div
                     key={category}
                     className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-2 border-t px-4 py-3 md:grid-cols-[minmax(0,1fr)_16rem_8rem] md:gap-3 md:px-5 md:py-2"
                   >
-                    <span className="col-span-2 text-sm font-medium md:col-span-1 md:font-normal">
+                    <span className="col-span-2 flex items-center gap-2 text-sm font-medium whitespace-nowrap md:col-span-1 md:font-normal">
+                      <CategoryIcon className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
                       {CATEGORY_LABELS[category]}
                     </span>
                     <ChannelSelect

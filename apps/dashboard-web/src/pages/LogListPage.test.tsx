@@ -258,7 +258,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@a1</span> がメッセージを投稿しました");
+    expect(html).toContain(">a1</span> がメッセージを投稿しました");
   });
 
   test("実行者列にsubjectIdの表示名(resolveDisplayNamesの結果)が表示される", () => {
@@ -337,7 +337,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@u1</span> が自分のメッセージを削除しました");
+    expect(html).toContain(">u1</span> が自分のメッセージを削除しました");
   });
 
   test("第三者によるメッセージ削除では実行者・投稿者の両方の名前を解決する", () => {
@@ -379,7 +379,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@Admin</span> が <span class=\"rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200\">@Yuzuki</span> のメッセージを削除しました");
+    expect(html).toMatch(/>Admin<\/span> が <span class="[^"]*">Yuzuki<\/span> のメッセージを削除しました/);
   });
 
   test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {
