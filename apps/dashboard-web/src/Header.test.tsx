@@ -20,7 +20,7 @@ describe("Header", () => {
 
   test("タイトルはギルド選択画面(トップ)へのリンクになっている", () => {
     const html = renderHeader();
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>.*Management Bot<\/span><\/a>/);
   });
 
   test("avatarUrlがあればアバター画像を描画する", () => {

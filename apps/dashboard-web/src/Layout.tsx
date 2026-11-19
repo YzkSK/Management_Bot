@@ -40,7 +40,7 @@ export function Layout({ discordUsername, avatarUrl, onLogout, showStatus, showS
       />
       <div className="flex min-h-0 flex-1">
         {sidebarVisible && <Sidebar guildId={guildId} open={isSidebarOpen} onOpenChange={setSidebarOpen} />}
-        <main className="bg-muted/40 min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
+        <main className="bg-background min-w-0 flex-1 overflow-y-auto p-4 md:px-8 md:py-7">
           <Outlet />
         </main>
       </div>

@@ -67,7 +67,7 @@ function PageSection({
   if (pages.length === 0) return null;
   return (
     <>
-      <p className={cn("text-muted-foreground px-3 pb-1 text-xs font-semibold", className)}>{title}</p>
+      <p className={cn("text-muted-foreground px-2.5 pb-1.5 text-[11px] font-bold tracking-wider", className)}>{title}</p>
       <ul className="flex flex-col gap-0.5">
         {pages.map((page) => (
           <li key={page.key}>
@@ -77,8 +77,8 @@ function PageSection({
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
-                    "flex min-h-10 items-center gap-2 rounded-md px-3 text-sm hover:bg-accent hover:text-accent-foreground",
-                    isActive && "bg-accent text-accent-foreground font-medium",
+                    "text-foreground hover:bg-muted flex min-h-10 items-center gap-2.5 rounded-sm px-2.5 text-sm",
+                    isActive && "bg-muted font-semibold",
                   )
                 }
               >
@@ -86,7 +86,7 @@ function PageSection({
                 {page.name}
               </NavLink>
             ) : (
-              <span className="text-muted-foreground flex min-h-10 items-center gap-2 px-3 text-sm">
+              <span className="text-muted-foreground flex min-h-10 items-center gap-2.5 px-2.5 text-sm">
                 <PageIcon pageKey={page.key} />
                 {page.name}
               </span>
@@ -145,7 +145,7 @@ function SidebarNav({
 
   return (
     <>
-      <div className="mb-3">
+      <div className="mb-5">
         <Select
           value={guildId ?? ""}
           onValueChange={(value) => {
@@ -173,7 +173,7 @@ function SidebarNav({
             <SelectValue placeholder="サーバーを選択">
               {currentGuild && (
                 <span className="flex min-w-0 items-center gap-2">
-                  <GuildIcon name={currentGuild.name} iconUrl={currentGuild.iconUrl} className="size-7 rounded-lg text-xs" />
+                  <GuildIcon name={currentGuild.name} iconUrl={currentGuild.iconUrl} className="size-7 rounded-full text-xs" />
                   <span className="truncate">
                     {currentGuild.name}
                     {!firstAccessiblePath(currentGuild.id, currentGuild.capabilities) && "(権限なし)"}
@@ -196,7 +196,7 @@ function SidebarNav({
                 }}
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <GuildIcon name={guild.name} iconUrl={guild.iconUrl} className="size-7 rounded-lg text-xs" />
+                  <GuildIcon name={guild.name} iconUrl={guild.iconUrl} className="size-7 rounded-full text-xs" />
                   <span className="truncate">
                     {guild.name}
                     {!firstAccessiblePath(guild.id, guild.capabilities) && "(権限なし)"}
@@ -230,7 +230,7 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
       {/* デスクトップ幅では常設。モバイルドロワー(Dialog)と二重表示にならないようhiddenで隠す。 */}
       <nav
         aria-label="機能メニュー"
-        className="hidden overflow-y-auto border-r p-2 md:block md:w-56 md:shrink-0"
+        className="bg-card hidden overflow-y-auto border-r px-3 py-4 md:block md:w-60 md:shrink-0"
       >
         <SidebarNav guildId={guildId} guilds={guilds} isLoading={guildsQuery.isPending} navigate={navigate} />
       </nav>
@@ -242,7 +242,7 @@ export function Sidebar({ guildId, open = false, onOpenChange }: SidebarProps) {
       */}
       <Dialog id={MOBILE_SIDEBAR_DIALOG_ID} open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="top-14 left-0 h-[calc(100dvh-3.5rem)] w-64 translate-x-0 translate-y-0 overflow-y-auto border-r p-2 md:hidden"
+          className="top-14 left-0 h-[calc(100dvh-3.5rem)] w-64 translate-x-0 translate-y-0 overflow-y-auto border-r px-3 py-4 md:hidden"
           aria-label="機能メニュー"
         >
           <DialogTitle className="sr-only">機能メニュー</DialogTitle>
