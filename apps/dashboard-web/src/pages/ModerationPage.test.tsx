@@ -270,8 +270,54 @@ describe("Lockdown controls", () => {
     const html = renderPage(guildId, queryClient);
 
     expect(html).toContain("レイド時に自動でロックダウン");
-    expect(html).toContain("現在の状態: ロック中");
+    expect(html).toContain("現在の状態:");
+    expect(html).toContain("ロック中</span>");
     expect(html).toContain("ロックダウンを解除");
+  });
+
+  function renderWithRaid(raidEnabled: boolean): string {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const guildId = "g1";
+    seedBaseQueries(queryClient, guildId);
+    queryClient.setQueryData(trpc.moderation.listThresholds.queryOptions({ guildId }).queryKey, [
+      { violationType: "raid", preset: "medium", enabled: raidEnabled },
+    ]);
+    queryClient.setQueryData(trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey, {
+      autoLockdownOnRaid: true,
+      requestedLocked: false,
+      isLocked: false,
+    });
+    return renderPage(guildId, queryClient);
+  }
+
+  function rowHtml(html: string, violationType: string): string {
+    const start = html.indexOf(`data-violation-type="${violationType}"`);
+    const end = html.indexOf("data-violation-type=", start + 1);
+    return html.slice(start, end === -1 ? undefined : end);
+  }
+
+  const AUTO_LABEL = 'aria-label="レイド時に自動でロックダウン"';
+
+  test("自動ロックダウンはレイドルール行の中にあり、ロックダウンカードには無い", () => {
+    const html = renderWithRaid(true);
+    expect(rowHtml(html, "raid")).toContain(AUTO_LABEL);
+    expect(html.split(AUTO_LABEL).length - 1).toBe(1);
+    const switchTag = /<[^>]*aria-label="レイド時に自動でロックダウン"[^>]*>/.exec(rowHtml(html, "raid"))?.[0] ?? "";
+    expect(switchTag).not.toBe("");
+    expect(switchTag).not.toMatch(/ disabled(=|>| )/);
+  });
+
+  test("レイドルールがOFFなら自動ロックダウンは無効化される", () => {
+    const switchTag = /<[^>]*aria-label="レイド時に自動でロックダウン"[^>]*>/.exec(rowHtml(renderWithRaid(false), "raid"))?.[0] ?? "";
+    expect(switchTag).toMatch(/ disabled(=|>| )/);
+  });
+
+  test("強度のないルール(NGワード・招待リンク)には強度セレクターを出さない", () => {
+    const html = renderWithRaid(true);
+    for (const type of ["ngword", "invite_link"]) {
+      expect(rowHtml(html, type)).not.toContain("の強度");
+    }
+    expect(rowHtml(html, "flood")).toContain('aria-label="連投の強度"');
   });
 });
 

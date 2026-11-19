@@ -97,8 +97,18 @@ function ThresholdsTab({ guildId, thresholds }: { guildId: string; thresholds: r
   const setEscalation = useMutation(trpc.moderation.setEscalationPreset.mutationOptions());
   const [draftState, setDraftState] = useState<ThresholdsDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  // 自動ロックダウンはレイドルールの子設定。ロックダウンカードと同じクエリ・同じ即時保存フローを使う。
+  const lockdown = useQuery(trpc.moderation.getLockdownSettings.queryOptions({ guildId }));
+  const autoLockdownMutation = useMutation({
+    ...trpc.moderation.setAutoLockdownOnRaid.mutationOptions(),
+    onSuccess: () => toast.success("保存しました"),
+    onError: () => toast.error("ロックダウン設定の更新に失敗しました。"),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey }),
+  });
 
   const serverRows = withDefaults(thresholds);
+  const serverRaidEnabled = serverRows.find((r) => r.violationType === "raid")?.enabled ?? false;
   // 強度の取得前に行を編集した下書きは escalation が undefined のままなので、取得後の値で補う(codexレビュー対応)。
   const draft = draftState
     ? { ...draftState, escalation: draftState.escalation ?? escalationQuery.data }
@@ -155,42 +165,57 @@ function ThresholdsTab({ guildId, thresholds }: { guildId: string; thresholds: r
         </label>
         {draft.escalation && <span className="text-muted-foreground">{ESCALATION_DESCRIPTIONS[draft.escalation]}</span>}
       </div>
-      <ul className="bg-card divide-y rounded-xl border">
+      <ul className="bg-card divide-y rounded-lg border">
         {draft.rows.map((row) => (
-          <li key={row.violationType} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
-            <Switch
-              checked={row.enabled}
-              aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の検知を有効化`}
-              onCheckedChange={(checked) => updateRow(row.violationType, { enabled: checked })}
-            />
-            <span className="w-36 text-sm font-medium">{VIOLATION_TYPE_LABELS[row.violationType]}</span>
-            {!isPresetIndependentViolationType(row.violationType) && (
-              <div
-                role="radiogroup"
-                aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}
-                className="bg-muted flex gap-0.5 rounded-lg p-0.5"
-              >
-                {MODERATION_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    role="radio"
-                    aria-checked={row.preset === preset}
-                    onClick={() => updateRow(row.violationType, { preset })}
-                    className={cn(
-                      "h-8 rounded-md px-3 text-xs",
-                      row.preset === preset ? "bg-background font-bold shadow-xs" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {PRESET_LABELS[preset]}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!isPresetIndependentViolationType(row.violationType) && (
-              <span className="text-muted-foreground min-w-0 basis-full pl-12 text-xs">
-                {describePreset(row.violationType, row.preset)}
-              </span>
+          <li key={row.violationType} data-violation-type={row.violationType} className="flex flex-col">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
+              <Switch
+                checked={row.enabled}
+                aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の検知を有効化`}
+                onCheckedChange={(checked) => updateRow(row.violationType, { enabled: checked })}
+              />
+              <span className="w-36 text-sm font-medium">{VIOLATION_TYPE_LABELS[row.violationType]}</span>
+              {!isPresetIndependentViolationType(row.violationType) && (
+                <div
+                  role="radiogroup"
+                  aria-label={`${VIOLATION_TYPE_LABELS[row.violationType]}の強度`}
+                  className="bg-muted flex gap-0.5 rounded-md p-0.5"
+                >
+                  {MODERATION_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      role="radio"
+                      aria-checked={row.preset === preset}
+                      onClick={() => updateRow(row.violationType, { preset })}
+                      className={cn(
+                        "h-8 rounded-sm px-3 text-xs whitespace-nowrap",
+                        row.preset === preset ? "bg-card ring-border font-semibold ring-1" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {PRESET_LABELS[preset]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!isPresetIndependentViolationType(row.violationType) && (
+                <span className="text-muted-foreground min-w-0 basis-full pl-12 text-xs">
+                  {describePreset(row.violationType, row.preset)}
+                </span>
+              )}
+            </div>
+            {row.violationType === "raid" && (
+              <label className="bg-muted/40 flex items-center gap-3 border-t py-2.5 pr-4 pl-16 text-sm">
+                <Switch
+                  checked={lockdown.data?.autoLockdownOnRaid ?? false}
+                  // 自動ロックダウンは即時保存のため、未保存の下書きではなく保存済みのレイドルールがONの時だけ操作可能にする
+                  // (下書きでONにして自動ロックダウンを保存→下書き破棄、でレイドOFFのまま設定だけ残るのを防ぐ。codexレビュー対応)。
+                  disabled={!row.enabled || !serverRaidEnabled || !lockdown.data || autoLockdownMutation.isPending}
+                  aria-label="レイド時に自動でロックダウン"
+                  onCheckedChange={(enabled) => autoLockdownMutation.mutate({ guildId, enabled })}
+                />
+                レイド時に自動でロックダウン
+              </label>
             )}
           </li>
         ))}
@@ -210,12 +235,6 @@ function LockdownPanel({ guildId }: { guildId: string }) {
   const query = useQuery(trpc.moderation.getLockdownSettings.queryOptions({ guildId }));
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: trpc.moderation.getLockdownSettings.queryOptions({ guildId }).queryKey });
-  const autoLockdownMutation = useMutation({
-    ...trpc.moderation.setAutoLockdownOnRaid.mutationOptions(),
-    onSuccess: () => toast.success("保存しました"),
-    onError: () => toast.error("ロックダウン設定の更新に失敗しました。"),
-    onSettled: invalidate,
-  });
   const requestedLockMutation = useMutation({
     ...trpc.moderation.setLockdownRequested.mutationOptions(),
     onSuccess: (_data, { requestedLocked }) => toast.success(requestedLocked ? "ロックダウンを開始しました" : "ロックダウンを解除しました"),
@@ -228,44 +247,41 @@ function LockdownPanel({ guildId }: { guildId: string }) {
     return <InlineError summary="ロックダウン設定を読み込めませんでした。" onRetry={() => void query.refetch()} />;
   }
 
-  const isPending = autoLockdownMutation.isPending || requestedLockMutation.isPending;
+  const isPending = requestedLockMutation.isPending;
   const locked = query.data.isLocked;
 
   return (
-    <div className="@container">
-      <section
-        className={cn(
-          "grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border p-4 @2xl:grid-cols-[1fr_auto_auto] @2xl:gap-4",
-          locked ? "border-error/30 bg-error/10" : "bg-card",
-        )}
+    <section
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border p-4",
+        locked ? "border-error/30 bg-error-soft" : "bg-card",
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="flex items-center gap-2 text-sm font-bold">
+          現在の状態:
+          <span
+            className={cn(
+              "inline-flex h-6 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap",
+              locked ? "bg-error-soft text-error-soft-foreground" : "bg-muted",
+            )}
+          >
+            {locked ? "ロック中" : "解除中"}
+          </span>
+        </p>
+        <p className="text-muted-foreground text-xs">
+          ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant={query.data.requestedLocked ? "outline" : "destructive"}
+        disabled={isPending}
+        onClick={() => requestedLockMutation.mutate({ guildId, requestedLocked: !query.data.requestedLocked })}
       >
-        {/* カード幅が十分なら1行、狭ければ(画面幅ではなくカード自身の幅で判定)自動ロックダウンを上段に分けて2段にする。DOM順(読み上げ順)は常に状態→トグル→ボタン。 */}
-        <div className="row-start-2 min-w-0 @2xl:row-start-1">
-          <p className={cn("text-sm font-bold", locked && "text-error")}>現在の状態: {locked ? "ロック中" : "解除中"}</p>
-          <p className="text-muted-foreground text-xs">
-            ロック中は新規参加ユーザーを退出させ、@everyone のメッセージ送信を停止します。
-          </p>
-        </div>
-        <label className="col-span-2 row-start-1 flex items-center justify-between gap-2 border-b pb-3 text-sm whitespace-nowrap @2xl:col-span-1 @2xl:border-0 @2xl:pb-0">
-          レイド時に自動でロックダウン
-          <Switch
-            checked={query.data.autoLockdownOnRaid}
-            disabled={isPending}
-            aria-label="レイド時に自動でロックダウン"
-            onCheckedChange={(enabled) => autoLockdownMutation.mutate({ guildId, enabled })}
-          />
-        </label>
-        <Button
-          type="button"
-          variant={query.data.requestedLocked ? "outline" : "destructive"}
-          className="row-start-2 @2xl:row-start-1"
-          disabled={isPending}
-          onClick={() => requestedLockMutation.mutate({ guildId, requestedLocked: !query.data.requestedLocked })}
-        >
-          {query.data.requestedLocked ? "ロックダウンを解除" : "ロックダウンを開始"}
-        </Button>
-      </section>
-    </div>
+        {query.data.requestedLocked ? "ロックダウンを解除" : "ロックダウンを開始"}
+      </Button>
+    </section>
   );
 }
 
@@ -380,7 +396,7 @@ function WhitelistForm({ guildId }: { guildId: string }) {
   });
 
   return (
-    <div className="bg-card flex flex-col gap-3 rounded-xl border p-4">
+    <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
       <h2 className="text-sm font-bold">ホワイトリストへの追加</h2>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-1.5">
@@ -443,7 +459,7 @@ function WhitelistRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3 text-sm">
-      <span className="bg-muted shrink-0 rounded-full px-2 py-0.5 text-xs whitespace-nowrap">
+      <span className="bg-muted inline-flex h-6 shrink-0 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">
         {entry.targetType === "role" ? "ロール" : "ユーザー"}
       </span>
       <span className="min-w-0 flex-1 truncate">{targetName}</span>
@@ -484,7 +500,7 @@ function NgwordForm({ guildId }: { guildId: string }) {
     mutation.error instanceof TRPCClientError && mutation.error.data?.code === "BAD_REQUEST";
 
   return (
-    <div className="bg-card flex flex-col gap-3 rounded-xl border p-4">
+    <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
       <h2 className="text-sm font-bold">NGワードの追加</h2>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-1.5">
@@ -544,7 +560,7 @@ function NgwordRow({ guildId, entry }: { guildId: string; entry: NgwordEntry }) 
   return (
     <li className="flex items-center gap-3 px-4 py-3 text-sm">
       <code className="min-w-0 flex-1 truncate font-mono">{entry.pattern}</code>
-      <span className="bg-muted shrink-0 rounded-full px-2 py-0.5 text-xs whitespace-nowrap">
+      <span className="bg-muted inline-flex h-6 shrink-0 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">
         {NGWORD_MATCH_TYPE_LABELS[entry.matchType]}
       </span>
       <Button
@@ -569,10 +585,10 @@ function NgwordTab({ guildId }: { guildId: string }) {
       {query.isPending && <Loading />}
       {query.isError && <ErrorState subject="NGワード一覧" onRetry={() => void query.refetch()} />}
       {query.data && query.data.length === 0 && (
-        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">登録されたNGワードはありません。</p>
+        <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">登録されたNGワードはありません。</p>
       )}
       {query.data && query.data.length > 0 && (
-        <ul className="bg-card divide-y rounded-xl border">
+        <ul className="bg-card divide-y rounded-lg border">
           {query.data.map((entry) => (
             <NgwordRow key={entry.id} guildId={guildId} entry={entry} />
           ))}
@@ -811,14 +827,14 @@ function StrikeTab({ guildId }: { guildId: string }) {
   }
 
   if (rows.length === 0) {
-    return <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">警告履歴はありません。</p>;
+    return <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">警告履歴はありません。</p>;
   }
 
   const groups = groupStrikesByUser(rows);
 
   return (
     <div className="flex flex-col gap-2">
-      <ul className="bg-card divide-y rounded-xl border">
+      <ul className="bg-card divide-y rounded-lg border">
         {groups.map((group) => (
           <UserStrikeGroup
             key={group.userId}
@@ -1067,7 +1083,7 @@ export function ModerationPage() {
           {whitelistQuery.isPending && <Loading />}
           {whitelistQuery.isError && <ErrorState subject="ホワイトリスト" onRetry={() => void whitelistQuery.refetch()} />}
           {whitelistQuery.data && whitelistQuery.data.length > 0 && (
-            <ul className="bg-card divide-y rounded-xl border">
+            <ul className="bg-card divide-y rounded-lg border">
                 {whitelistQuery.data.map((entry) => (
                   <WhitelistRow
                     key={`${entry.targetType}-${entry.targetId}`}
