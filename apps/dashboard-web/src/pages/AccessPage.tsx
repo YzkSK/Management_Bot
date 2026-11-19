@@ -233,7 +233,7 @@ function TargetSidebar({
   const visibleUsers = normalizedSearch === "" ? grantedUsers : grantedUsers.filter(filterByName);
 
   return (
-    <div className="bg-card flex max-h-[calc(100dvh-14rem)] w-72 shrink-0 flex-col gap-2 rounded-xl border p-3">
+    <div className="bg-card flex max-h-[calc(100dvh-14rem)] w-72 shrink-0 flex-col gap-2 rounded-lg border p-3">
       <Input
         type="text"
         placeholder="ロール・ユーザーを検索"
@@ -244,7 +244,7 @@ function TargetSidebar({
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <div>
-          <div className="text-muted-foreground px-2 py-1 text-xs font-bold">ロール</div>
+          <div className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-wider">ロール</div>
           <div className="flex flex-col gap-0.5">
             {visibleRoles.map((role) => (
               <button
@@ -264,7 +264,7 @@ function TargetSidebar({
         </div>
 
         <div>
-          <div className="text-muted-foreground px-2 py-1 text-xs font-bold">個別ユーザー</div>
+          <div className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-wider">個別ユーザー</div>
           <div className="flex flex-col gap-0.5">
             {visibleUsers.map((user) => (
               <button
@@ -379,7 +379,7 @@ function TargetEditor({
   };
 
   return (
-    <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-xl border p-5">
+    <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-lg border p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold">
           <TargetName target={target} /> を編集

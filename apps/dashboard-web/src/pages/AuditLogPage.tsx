@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
 import { describeChanges, type AuditNames } from "./audit-log-changes.js";
-import { auditActionLabel, auditFeatureColorClass, auditFeatureLabel, auditOutcomeLabel, periodToRange } from "./audit-log-labels.js";
+import { auditActionLabel, auditFeatureLabel, auditOutcomeLabel, periodToRange } from "./audit-log-labels.js";
 import { formatTime, groupByDay } from "./day-groups.js";
 import { AuditLogFilter, EMPTY_AUDIT_FILTER, type AuditFilterValue } from "./AuditLogFilter.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
@@ -19,18 +19,18 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 50;
 
 const OUTCOME_TONES: Record<string, string> = {
-  success: "bg-success/10 text-success",
-  failure: "bg-error/10 text-error",
-  denied: "bg-warning/10 text-warning",
+  success: "bg-success-soft text-success-soft-foreground",
+  failure: "bg-error-soft text-error-soft-foreground",
+  denied: "bg-warning-soft text-warning-soft-foreground",
   pending: "bg-muted text-muted-foreground",
 };
 
-/** 縦線の上に置く点。通常は機能の色で塗りつぶし、失敗・権限不足は赤い輪、結果不明は機能色の破線の輪。 */
-const NODE_BASE = "absolute top-[13px] -left-[29px] size-3.5 rounded-full shadow-[0_0_0_4px_var(--background)]";
+/** 縦線の上に置く点。通常は前景色で塗りつぶし、失敗・権限不足は赤い輪、結果不明は破線の輪。 */
+const NODE_BASE = "absolute top-[17px] -left-[27px] size-2.5 rounded-full shadow-[0_0_0_4px_var(--background)]";
 const NODE_BY_OUTCOME: Record<string, string> = {
-  failure: "bg-background border-[3px] border-error",
-  denied: "bg-background border-[3px] border-error",
-  pending: "bg-background border-2 border-dashed border-[var(--c)]",
+  failure: "bg-background border-2 border-error",
+  denied: "bg-background border-2 border-error",
+  pending: "bg-background border-2 border-dashed border-foreground",
 };
 
 const OUTCOME_NOTES: Record<string, string> = {
@@ -65,7 +65,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
 function AuditRow({ row, names, avatarUrl }: { row: AuditRowData; names: AuditNames; avatarUrl: string | undefined }) {
   const actor = row.actorId === null ? "Bot(自動)" : row.actorName;
   const time = (
-    <time dateTime={row.createdAt} className="text-muted-foreground text-xs tabular-nums">
+    <time dateTime={row.createdAt} className="text-muted-foreground font-mono text-xs tabular-nums">
       {formatTime(row.createdAt)}
     </time>
   );
@@ -74,7 +74,7 @@ function AuditRow({ row, names, avatarUrl }: { row: AuditRowData; names: AuditNa
     return (
       <div className="text-muted-foreground relative flex gap-2.5 px-0.5 text-xs leading-5">
         <span
-          className="bg-background border-muted-foreground absolute top-[7px] -left-[26px] size-2 rounded-full border-2 shadow-[0_0_0_4px_var(--background)]"
+          className="bg-background border-muted-foreground absolute top-[7px] -left-[26px] size-2 rounded-full border-[1.5px] shadow-[0_0_0_4px_var(--background)]"
           aria-hidden="true"
         />
         {time}
@@ -86,33 +86,32 @@ function AuditRow({ row, names, avatarUrl }: { row: AuditRowData; names: AuditNa
   const changes = describeChanges(row.feature, row.action, row.before, row.after, names);
   const note = OUTCOME_NOTES[row.outcome];
   return (
-    <div className={cn("relative", auditFeatureColorClass(row.feature))}>
-      <span className={cn(NODE_BASE, NODE_BY_OUTCOME[row.outcome] ?? "bg-[var(--c)]")} aria-hidden="true" />
+    <div className="relative">
+      <span className={cn(NODE_BASE, NODE_BY_OUTCOME[row.outcome] ?? "bg-foreground")} aria-hidden="true" />
       <div className="bg-card rounded-lg border px-3.5 py-2.5">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-5">
           <InitialAvatar name={actor} avatarUrl={avatarUrl} className="size-5 text-[10px]" />
           <span className="min-w-0 break-words">
             <b className="font-semibold">{actor}</b> が {auditActionLabel(row.feature, row.action)}
           </span>
-          <span className="rounded-full border border-[color-mix(in_oklch,var(--c)_35%,transparent)] bg-[color-mix(in_oklch,var(--c)_16%,transparent)] px-2 py-px text-[11px] font-semibold text-[var(--c)]">
+          <span className="bg-muted inline-flex h-6 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">
             {auditFeatureLabel(row.feature)}
           </span>
           <span className="flex items-center gap-1.5 sm:ml-auto">
             {time}
             <span
               className={cn(
-                "inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-0.5 text-xs whitespace-nowrap",
+                "inline-flex h-6 w-fit items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap",
                 OUTCOME_TONES[row.outcome] ?? OUTCOME_TONES.pending,
               )}
             >
-              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
               {auditOutcomeLabel(row.outcome)}
             </span>
           </span>
         </div>
-        {note && <p className="text-muted-foreground mt-1.5 text-[13px]">{note}</p>}
+        {note && <p className="text-warning-soft-foreground mt-1.5 text-[13px]">{note}</p>}
         {changes.length > 0 && (
-          <dl className="bg-muted/30 mt-2 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-[13px]">
+          <dl className="bg-muted/30 mt-2 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-[13px]">
             {changes.map((change) => (
               <div key={change.label} className="contents">
                 <dt className="text-muted-foreground">{change.label}</dt>
@@ -227,18 +226,27 @@ export function AuditLogPage() {
       {listQuery.data && (
         <>
           {entries.length === 0 ? (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">
+            <p className="text-muted-foreground rounded-lg border border-dashed p-10 text-center text-sm">
               条件に合う履歴はありません。
             </p>
           ) : (
-            <div className="relative flex flex-col gap-2.5 pl-9 before:absolute before:top-1.5 before:bottom-1.5 before:left-[13px] before:w-0.5 before:bg-border before:content-['']">
+            <div className="relative flex flex-col gap-2.5 pl-9 before:absolute before:top-1.5 before:bottom-1.5 before:left-[13px] before:w-px before:bg-border before:content-['']">
               {groups.map((group) => (
                 <div key={group.key} className="contents">
                   <h2 className="relative -mb-0.5 -ml-9 mt-1.5 flex items-baseline gap-2 text-xs">
                     {group.relative && (
-                      <span className="bg-muted relative z-10 rounded-full border px-2.5 py-px font-bold">{group.relative}</span>
+                      <span className="bg-foreground text-background relative z-10 inline-flex h-6 items-center rounded-sm px-2 leading-none font-semibold">
+                        {group.relative}
+                      </span>
                     )}
-                    <small className={cn("text-xs", group.relative ? "text-muted-foreground" : "bg-muted relative z-10 rounded-full border px-2.5 py-px font-bold")}>
+                    <small
+                      className={cn(
+                        "text-xs",
+                        group.relative
+                          ? "text-muted-foreground"
+                          : "bg-foreground text-background relative z-10 inline-flex h-6 items-center rounded-sm px-2 leading-none font-semibold",
+                      )}
+                    >
                       {group.date}
                     </small>
                   </h2>

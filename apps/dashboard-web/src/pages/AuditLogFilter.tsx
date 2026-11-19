@@ -91,12 +91,12 @@ export function AuditLogFilter({
         </Button>
       </PopoverTrigger>
       {chips.map((chip) => (
-        <span key={chip.key} className="bg-card flex h-8 items-center gap-1.5 rounded-full border pr-1 pl-3 text-xs">
+        <span key={chip.key} className="bg-card flex h-8 items-center gap-1.5 rounded-md border pr-1 pl-2.5 text-xs whitespace-nowrap">
           {chip.label}
           <button
             type="button"
             aria-label={`${chip.label}を解除`}
-            className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
+            className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-sm"
             onClick={() => patch(chip.clear)}
           >
             <IconX className="size-3.5" aria-hidden="true" />
@@ -117,7 +117,7 @@ export function AuditLogFilter({
         aria-label="操作履歴の絞り込み"
         align="start"
         sideOffset={8}
-        className="w-[min(36rem,calc(100vw-2rem))] gap-3 rounded-xl p-3 shadow-lg"
+        className="w-[min(36rem,calc(100vw-2rem))] gap-3 rounded-lg p-3 shadow-lg"
       >
           <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2.5">
             <label className="text-muted-foreground flex flex-col gap-1 text-xs">
