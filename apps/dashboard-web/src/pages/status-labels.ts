@@ -11,8 +11,8 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     summary: "すべての機能が正常に稼働しています",
     dot: "bg-success",
     ring: "ring-success/20",
-    badge: "bg-success/10 text-success",
-    box: "border-success/30 bg-success/10 text-success",
+    badge: "bg-success-soft text-success-soft-foreground",
+    box: "border-success/25 bg-success-soft text-foreground",
   },
   warn: {
     label: "遅延",
@@ -20,8 +20,8 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     summary: "一部の機能で遅延が発生しています",
     dot: "bg-warning",
     ring: "ring-warning/20",
-    badge: "bg-warning/10 text-warning",
-    box: "border-warning/30 bg-warning/10 text-warning",
+    badge: "bg-warning-soft text-warning-soft-foreground",
+    box: "border-warning/25 bg-warning-soft text-foreground",
   },
   down: {
     label: "停止",
@@ -29,8 +29,8 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     summary: "一部の機能が停止しています",
     dot: "bg-error",
     ring: "ring-error/20",
-    badge: "bg-error/10 text-error",
-    box: "border-error/30 bg-error/10 text-error",
+    badge: "bg-error-soft text-error-soft-foreground",
+    box: "border-error/25 bg-error-soft text-foreground",
   },
 };
 
