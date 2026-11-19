@@ -9,16 +9,20 @@ import { Loading } from "@/components/loading";
 
 type ActiveVoiceChannel = inferOutput<typeof trpc.activity.activeVoice>[number];
 
-/** 自分でのミュート/デフはグレー、サーバー(管理者)によるものは赤で区別する。 */
+/** 自分でのミュート/デフはグレー、サーバー(管理者)によるものはエラー色で区別する。 */
 function MuteIcon({ self, server, label, Icon }: { self: boolean; server: boolean; label: string; Icon: TablerIcon }) {
   if (!self && !server) return null;
   return (
     <Icon
       aria-label={server ? `サーバー${label}` : label}
-      className={cn("size-4", server ? "text-red-600" : "text-muted-foreground")}
+      className={cn("size-4", server ? "text-error" : "text-muted-foreground")}
     />
   );
 }
+
+/** 小さなラベル(人数・AFK・一時VC・オーナー)。縦中央・折り返しなし。 */
+const BADGE =
+  "bg-muted text-muted-foreground inline-flex h-6 shrink-0 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap";
 
 interface VoiceMember {
   name: string;
@@ -41,10 +45,10 @@ export function VoiceMemberRow({ member: m, dimmed = false, badge }: { member: V
         <span className="bg-muted size-7 shrink-0 rounded-full" />
       )}
       <span className="min-w-0 truncate text-sm">{m.name}</span>
-      {badge && <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">{badge}</span>}
+      {badge && <span className={BADGE}>{badge}</span>}
       <span className="flex flex-1 items-center justify-end gap-1.5">
-        {m.streaming && <IconDeviceDesktop aria-label="画面共有中" className="size-4 text-violet-600" />}
-        {m.video && <IconVideo aria-label="カメラON" className="size-4 text-blue-600" />}
+        {m.streaming && <IconDeviceDesktop aria-label="画面共有中" className="text-muted-foreground size-4" />}
+        {m.video && <IconVideo aria-label="カメラON" className="text-muted-foreground size-4" />}
         <MuteIcon self={m.selfMute} server={m.serverMute} label="ミュート" Icon={IconMicrophoneOff} />
         <MuteIcon self={m.selfDeaf} server={m.serverDeaf} label="スピーカーミュート" Icon={IconHeadphonesOff} />
       </span>
@@ -63,30 +67,28 @@ export function ActiveVoiceView({
   tempVoiceChannelIds?: ReadonlySet<string>;
 }) {
   if (channels.length === 0) {
-    return <p className="text-muted-foreground rounded-md border p-8 text-center text-sm">現在VCにいるメンバーはいません。</p>;
+    return <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">現在VCにいるメンバーはいません。</p>;
   }
   const total = channels.reduce((sum, c) => sum + c.members.length, 0);
   return (
     <div className="flex flex-col gap-4">
       <p className="text-muted-foreground text-sm">
-        VC <b className="text-foreground">{channels.length}</b> チャンネル ・ 在室 <b className="text-foreground">{total}</b> 人
+        VC <b className="text-foreground font-mono">{channels.length}</b> チャンネル ・ 在室 <b className="text-foreground font-mono">{total}</b> 人
       </p>
       <div className="grid items-start gap-3 md:grid-cols-2">
         {channels.map((channel) => (
-          <section key={channel.channelId} className="flex flex-col gap-3 rounded-lg border p-4">
+          <section key={channel.channelId} className="bg-card flex flex-col gap-3 rounded-lg border p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <IconVolume className="text-muted-foreground size-4 shrink-0" aria-hidden />
                 <span className="truncate text-sm font-semibold">{channel.channelName}</span>
-                <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{channel.members.length}人</span>
-                {channel.afk && <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">AFK</span>}
-                {tempVoiceChannelIds.has(channel.channelId) && (
-                  <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">一時VC</span>
-                )}
+                <span className={BADGE}>{channel.members.length}人</span>
+                {channel.afk && <span className={BADGE}>AFK</span>}
+                {tempVoiceChannelIds.has(channel.channelId) && <span className={BADGE}>一時VC</span>}
               </div>
               <span className="text-muted-foreground text-xs whitespace-nowrap">
                 継続{" "}
-                <b className="text-foreground text-sm">
+                <b className="text-foreground font-mono text-sm">
                   {formatDuration(Math.max(0, (now.getTime() - new Date(channel.startedAt).getTime()) / 1000))}
                 </b>
               </span>
