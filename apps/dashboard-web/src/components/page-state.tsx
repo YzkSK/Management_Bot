@@ -13,16 +13,16 @@ const WRAP = "[word-break:auto-phrase] [text-wrap:balance]";
 type Tone = "warning" | "destructive" | "muted";
 
 const TONE_CLASS: Record<Tone, string> = {
-  warning: "bg-warning/15 text-warning",
-  destructive: "bg-error/12 text-error",
+  warning: "bg-warning-soft text-warning-soft-foreground",
+  destructive: "bg-error-soft text-error",
   muted: "bg-muted text-muted-foreground",
 };
 
 function StateCard({ tone, icon, title, children }: { tone: Tone; icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <div role="alert" className="bg-card flex flex-col items-center gap-2.5 rounded-xl border px-6 py-12 text-center">
+    <div role="alert" className="bg-card flex flex-col items-center gap-3 rounded-sm border px-6 py-10 text-center">
       <div className={cn("grid size-11 place-items-center rounded-full [&_svg]:size-5", TONE_CLASS[tone])}>{icon}</div>
-      <h2 className={cn("text-base font-semibold", WRAP)}>{title}</h2>
+      <h2 className={cn("text-base font-bold", WRAP)}>{title}</h2>
       {children}
     </div>
   );
@@ -36,7 +36,7 @@ function Pills({ labels }: { labels: readonly string[] }) {
   return (
     <div className="flex flex-wrap justify-center gap-1.5">
       {labels.map((label) => (
-        <span key={label} className="bg-muted rounded-md px-1.5 font-semibold whitespace-nowrap">
+        <span key={label} className="bg-muted inline-flex h-6 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">
           {label}
         </span>
       ))}
@@ -167,7 +167,7 @@ export function InlineError({ summary, detail, onRetry }: { summary: string; det
   return (
     <div
       role="alert"
-      className="border-error/35 bg-error/8 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm"
+      className="border-error/20 bg-error-soft flex items-start gap-2.5 rounded-sm border px-3.5 py-3 text-sm"
     >
       <IconAlertCircle className="text-error mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">

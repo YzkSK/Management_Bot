@@ -16,7 +16,7 @@ export function Loading({ className, children }: { className?: string; children?
     <div
       role="status"
       aria-busy="true"
-      className={cn("text-muted-foreground flex items-center justify-center gap-2 py-8 text-sm", className)}
+      className={cn("text-muted-foreground flex items-center justify-center gap-2 py-8 text-[13px]", className)}
     >
       <IconLoader2 className="size-4 animate-spin" aria-hidden="true" />
       読み込み中
