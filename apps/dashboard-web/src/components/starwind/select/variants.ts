@@ -68,7 +68,7 @@ export const selectSeparator = tv({
 export const selectTrigger = tv({
   base: [
     "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-outline focus-visible:ring-outline/50 aria-invalid:ring-error/20 aria-invalid:border-error",
-    "data-[size=default]:h-9 data-[size=sm]:h-8 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]",
+    "data-[size=default]:h-9 data-[size=sm]:h-8 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap transition-[color,box-shadow] outline-none focus-visible:ring-[3px]",
     "disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   ],
   variants: {

@@ -7,7 +7,7 @@ export const switchWrapper = tv({
 // 既存のRadix Switchと同じ見た目(h-[1.15rem] w-8 / つまみsize-4)に固定している。
 export const switchButton = tv({
   base: [
-    "group peer inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent bg-input shadow-xs transition-all outline-none",
+    "group peer inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent bg-input transition-all outline-none",
     "aria-checked:bg-primary focus-visible:border-outline focus-visible:ring-[3px] focus-visible:ring-outline/50",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ],
