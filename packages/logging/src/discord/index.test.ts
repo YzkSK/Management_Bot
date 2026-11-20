@@ -13,7 +13,7 @@ describe("registerDiscordHandlers", () => {
 
     await registerDiscordHandlers(ctx);
 
-    expect(subscribe).toHaveBeenCalledTimes(3);
+    expect(subscribe).toHaveBeenCalledTimes(2);
     const subscribedTypes = subscribe.mock.calls.map((call) => call[0]);
     expect(subscribedTypes).toEqual(
       expect.arrayContaining(["moderation.action.recorded", "temp-voice.event.recorded"]),
