@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import { IconSettings } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
@@ -18,8 +18,8 @@ import {
 import { BOT_PERMISSION_LABELS } from "./bot-permission-labels.js";
 import { BotNotJoinedState, BotPermissionState, ErrorState } from "@/components/page-state";
 import { InitialAvatar } from "@/components/initial-avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Button, ButtonVariants } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,
@@ -29,9 +29,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Loading } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/components/starwind/dialog";
+import { Loading } from "@/components/loading";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 interface PostRow {
@@ -55,7 +55,7 @@ interface PostRow {
 const STATUS_BADGES: Record<string, { label: string; tone: string }> = {
   posting: { label: "投稿処理中", tone: "bg-muted text-muted-foreground" },
   posted: { label: "投稿しました", tone: "bg-success/10 text-success" },
-  failed: { label: "投稿できませんでした", tone: "bg-destructive/10 text-destructive" },
+  failed: { label: "投稿できませんでした", tone: "bg-error/10 text-error" },
   cancelled: { label: "取り消し", tone: "bg-muted text-muted-foreground" },
 };
 
@@ -63,7 +63,7 @@ function CancelButton({ onConfirm, disabled, notifiesAuthor }: { onConfirm: () =
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+        <Button variant="outline" size="sm" className="text-error border-error/40" disabled={disabled}>
           取り消す
         </Button>
       </DialogTrigger>
@@ -226,7 +226,7 @@ export function ScheduledPostPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -253,12 +253,14 @@ export function ScheduledPostPage() {
           </p>
         </div>
         {canManage && (
-          <Button asChild variant="outline">
-            <Link to={`/guilds/${guildId}/scheduled-post/settings`}>
-              <Settings aria-hidden="true" />
-              予約投稿の設定
-            </Link>
-          </Button>
+          <Link
+            to={`/guilds/${guildId}/scheduled-post/settings`}
+            data-slot="button"
+            className={ButtonVariants.button({ variant: "outline" })}
+          >
+            <IconSettings aria-hidden="true" />
+            予約投稿の設定
+          </Link>
         )}
       </div>
 
@@ -271,9 +273,10 @@ export function ScheduledPostPage() {
         <TabsList aria-label="予約投稿" className="overflow-x-auto">
           {SCHEDULED_POST_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
+              <t.icon aria-hidden="true" />
+              <TabsLabel>{t.label}</TabsLabel>
               {counts && (
-                <span className="bg-muted text-muted-foreground ml-1.5 rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
+                <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-[11px] font-normal">{counts[t.value]}</span>
               )}
             </TabsTrigger>
           ))}

@@ -22,7 +22,7 @@ function renderPage(avatarUrl: string | null): string {
 }
 
 beforeEach(() => {
-  const store = new Map<string, string>([["theme", "dark"]]);
+  const store = new Map<string, string>([["colorTheme", "dark"]]);
   Object.defineProperty(globalThis, "localStorage", {
     value: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) },
     configurable: true,

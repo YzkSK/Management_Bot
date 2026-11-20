@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import type { LogCategory } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
-import { CATEGORY_LABELS } from "./category-labels.js";
+import { CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import {
   buildLogSettingsDraft,
   diffLogSettings,
@@ -19,12 +19,13 @@ import { MAX_RETENTION_DAYS, parseRetentionDaysInput } from "./parse-retention-d
 import { uniformValue } from "./uniform-value.js";
 import { BotPermissionState, ErrorState, ForbiddenState } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loading } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Button } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
+import { Input } from "@/components/starwind/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Loading } from "@/components/loading";
+import { Switch } from "@/components/starwind/switch";
 import { cn } from "@/lib/utils";
 
 const NO_CHANNEL = "__none__";
@@ -88,7 +89,7 @@ function BulkControl({
   const canApply = !retentionInvalid && (retention !== "" || channel !== UNCHOSEN);
 
   return (
-    <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+    <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
       <h2 className="font-bold">一括設定(すべてのカテゴリへ同じ値を適用)</h2>
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="text-muted-foreground flex flex-col gap-1.5 text-sm md:w-64">
@@ -128,7 +129,7 @@ function BulkControl({
         </Button>
       </div>
       {retentionInvalid ? (
-        <p className="text-destructive text-xs">0〜{MAX_RETENTION_DAYS}で入力してください</p>
+        <p className="text-error text-xs">0〜{MAX_RETENTION_DAYS}で入力してください</p>
       ) : (
         <p className="text-muted-foreground text-xs">保持期間を0にすると無期限で保持します。</p>
       )}
@@ -167,7 +168,7 @@ export function SettingsPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -261,7 +262,7 @@ export function SettingsPage() {
             }
           />
 
-          <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
+          <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
               <h2 className="font-bold">ログ一覧の表示</h2>
               <label className="flex items-center gap-2 text-sm">
                 <Switch
@@ -279,25 +280,23 @@ export function SettingsPage() {
               </label>
             </section>
 
-          <section className="bg-card overflow-hidden rounded-xl border">
+          <section className="bg-card overflow-hidden rounded-lg border">
+            <Collapsible open={perCategoryOpen} onOpenChange={setPerCategoryOpen}>
             <h2>
-              <button
+              <CollapsibleTrigger
                 type="button"
-                aria-expanded={perCategoryOpen}
-                aria-controls="per-category-settings"
-                onClick={() => setPerCategoryOpen((open) => !open)}
                 className="flex min-h-13 w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 px-5 py-3 text-left font-bold"
               >
                 {perCategoryOpen ? (
-                  <ChevronDown className="text-muted-foreground size-4" aria-hidden="true" />
+                  <IconChevronDown className="text-muted-foreground size-4" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="text-muted-foreground size-4" aria-hidden="true" />
+                  <IconChevronRight className="text-muted-foreground size-4" aria-hidden="true" />
                 )}
                 <span className="whitespace-nowrap">カテゴリごとに設定する(任意)</span>
                 <span className="text-muted-foreground ml-auto text-xs font-normal">{categories.length}カテゴリ</span>
-              </button>
+              </CollapsibleTrigger>
             </h2>
-            <div id="per-category-settings" hidden={!perCategoryOpen} className="border-t">
+            <CollapsibleContent className="border-t">
               <div className="text-muted-foreground hidden grid-cols-[minmax(0,1fr)_16rem_8rem] gap-3 px-5 py-2 text-xs md:grid">
                 <span>カテゴリ</span>
                 <span>出力先チャンネル</span>
@@ -305,12 +304,14 @@ export function SettingsPage() {
               </div>
               {categories.map((category) => {
                 const invalid = changes.invalidRetention.includes(category);
+                const CategoryIcon = CATEGORY_ICON[category];
                 return (
                   <div
                     key={category}
                     className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-2 border-t px-4 py-3 md:grid-cols-[minmax(0,1fr)_16rem_8rem] md:gap-3 md:px-5 md:py-2"
                   >
-                    <span className="col-span-2 text-sm font-medium md:col-span-1 md:font-normal">
+                    <span className="col-span-2 flex items-center gap-2 text-sm font-medium whitespace-nowrap md:col-span-1 md:font-normal">
+                      <CategoryIcon className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
                       {CATEGORY_LABELS[category]}
                     </span>
                     <ChannelSelect
@@ -338,11 +339,12 @@ export function SettingsPage() {
                   </div>
                 );
               })}
-            </div>
+            </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {changes.invalidRetention.length > 0 && (
-            <p className="text-destructive text-sm">
+            <p className="text-error text-sm">
               保持期間は0〜{MAX_RETENTION_DAYS}の整数で入力してください(
               {changes.invalidRetention.map((c) => CATEGORY_LABELS[c]).join("、")})。
             </p>

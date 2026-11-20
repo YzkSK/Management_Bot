@@ -1,12 +1,13 @@
+import { IconAlertCircle, IconCheck, IconClock, IconX, type TablerIcon } from "@tabler/icons-react";
 import { SCHEDULED_POST_FAILURE_LABELS } from "@management-bot/shared";
 
 export type ScheduledPostTab = "pending" | "posted" | "failed" | "cancelled";
 
-export const SCHEDULED_POST_TABS: readonly { value: ScheduledPostTab; label: string }[] = [
-  { value: "pending", label: "投稿待ち" },
-  { value: "posted", label: "投稿済み" },
-  { value: "failed", label: "失敗" },
-  { value: "cancelled", label: "取り消し" },
+export const SCHEDULED_POST_TABS: readonly { value: ScheduledPostTab; label: string; icon: TablerIcon }[] = [
+  { value: "pending", label: "投稿待ち", icon: IconClock },
+  { value: "posted", label: "投稿済み", icon: IconCheck },
+  { value: "failed", label: "失敗", icon: IconAlertCircle },
+  { value: "cancelled", label: "取り消し", icon: IconX },
 ];
 
 /** 投稿処理中(posting)は「投稿待ち」タブに含める。 */

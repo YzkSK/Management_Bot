@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { roleMentionLabel } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { trpc } from "../trpc.js";
@@ -14,10 +14,10 @@ import {
 } from "./scheduled-post-settings-draft.js";
 import { ErrorState, ForbiddenState } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loading } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Loading } from "@/components/loading";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Switch } from "@/components/starwind/switch";
 
 export function ScheduledPostSettingsPage() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -37,7 +37,7 @@ export function ScheduledPostSettingsPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -108,7 +108,7 @@ export function ScheduledPostSettingsPage() {
                       className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded-full"
                       onClick={() => updateDraft((current) => ({ ...current, roleIds: current.roleIds.filter((id) => id !== roleId) }))}
                     >
-                      <X className="size-3.5" aria-hidden="true" />
+                      <IconX className="size-3.5" aria-hidden="true" />
                     </button>
                   </span>
                 );

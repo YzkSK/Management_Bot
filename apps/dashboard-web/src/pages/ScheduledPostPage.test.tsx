@@ -112,8 +112,8 @@ describe("ScheduledPostPage", () => {
     expect(html).toContain(`href="/guilds/${guildId}/scheduled-post/settings"`);
     // 設定タブは廃止。
     expect(html).not.toContain("使えるロール");
-    expect(html).toMatch(/投稿待ち<span[^>]*>1<\/span>/);
-    expect(html).toMatch(/投稿済み<span[^>]*>1<\/span>/);
+    expect(html).toMatch(/投稿待ち<\/span><span[^>]*>1<\/span>/);
+    expect(html).toMatch(/投稿済み<\/span><span[^>]*>1<\/span>/);
   });
 
   test("閲覧権限のみだと取り消しボタンも設定ボタンも表示されない", () => {
@@ -121,7 +121,7 @@ describe("ScheduledPostPage", () => {
 
     expect(html).toContain("明日の集合は20時です");
     expect(html).not.toContain("予約投稿の設定");
-    expect(html).not.toContain("text-destructive border-destructive/40");
+    expect(html).not.toContain("text-error border-error/40");
   });
 
   test("閲覧権限なしのメンバーには自分用の説明文を出し、自分の投稿待ちにだけ取り消すボタンを出す", () => {

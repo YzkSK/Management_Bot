@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef, useState } from "react";
-import { Lock } from "lucide-react";
+import { IconLock } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import {
   addCapabilityPrerequisites,
   CAPABILITIES,
@@ -24,11 +24,13 @@ import {
 } from "./capability-labels.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Checkbox } from "@/components/starwind/checkbox";
+import { Button } from "@/components/starwind/button";
+import { Input } from "@/components/starwind/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
 
 type TargetType = "user" | "role";
@@ -184,7 +186,7 @@ function AddUserSelect({
       </Select>
       {memberOptions.isError && (
         <div className="flex items-center gap-2">
-          <p className="text-destructive text-xs">候補の取得に失敗しました。</p>
+          <p className="text-error text-xs">候補の取得に失敗しました。</p>
           <Button type="button" variant="outline" size="sm" onClick={memberOptions.retry}>
             再試行
           </Button>
@@ -231,7 +233,7 @@ function TargetSidebar({
   const visibleUsers = normalizedSearch === "" ? grantedUsers : grantedUsers.filter(filterByName);
 
   return (
-    <div className="bg-card flex max-h-[calc(100dvh-14rem)] w-72 shrink-0 flex-col gap-2 rounded-xl border p-3">
+    <div className="bg-card flex max-h-[calc(100dvh-14rem)] w-72 shrink-0 flex-col gap-2 rounded-lg border p-3">
       <Input
         type="text"
         placeholder="ロール・ユーザーを検索"
@@ -242,7 +244,7 @@ function TargetSidebar({
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <div>
-          <div className="text-muted-foreground px-2 py-1 text-xs font-bold">ロール</div>
+          <div className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-wider">ロール</div>
           <div className="flex flex-col gap-0.5">
             {visibleRoles.map((role) => (
               <button
@@ -262,7 +264,7 @@ function TargetSidebar({
         </div>
 
         <div>
-          <div className="text-muted-foreground px-2 py-1 text-xs font-bold">個別ユーザー</div>
+          <div className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-wider">個別ユーザー</div>
           <div className="flex flex-col gap-0.5">
             {visibleUsers.map((user) => (
               <button
@@ -377,7 +379,7 @@ function TargetEditor({
   };
 
   return (
-    <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-xl border p-5">
+    <section className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-lg border p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold">
           <TargetName target={target} /> を編集
@@ -426,7 +428,7 @@ function TargetEditor({
 
       {isLocked && (
         <Alert>
-          <Lock />
+          <IconLock />
           <AlertDescription>{lockReason}</AlertDescription>
         </Alert>
       )}
@@ -447,17 +449,16 @@ function TargetEditor({
                   key={option.value}
                   className={cn("flex min-h-9 items-center gap-2.5 text-sm", grantable ? "cursor-pointer" : "text-muted-foreground")}
                 >
-                  <input
-                    type="checkbox"
-                    className="accent-foreground size-4"
+                  <Checkbox
+                    aria-label={option.label}
                     checked={selectedCapabilities.includes(option.value)}
                     disabled={!grantable}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       // 管理権限をONにすると前提の閲覧権限もONに、閲覧権限をOFFにすると依存する権限もOFFにする(issue #527)。
                       setSelectedCapabilities((prev) => {
                         const current = namesToCapabilities(prev);
                         return capabilitiesToNames(
-                          e.target.checked
+                          checked
                             ? addCapabilityPrerequisites(current | option.bit)
                             : removeUnmetDependents(current & ~option.bit),
                         );
@@ -519,7 +520,7 @@ export function AccessPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -609,11 +610,18 @@ export function AccessPage() {
             onValueChange={(key) => setSelectedTarget(selectableTargets.find((t) => targetKey(t) === key))}
           >
             <SelectTrigger className="w-full" aria-label="編集する対象">
-              <SelectValue placeholder="対象を選択" />
+              {/* Starwindのトリガー表示は文字列のみのため、選択中の項目と同じ内容を明示する */}
+              <SelectValue placeholder="対象を選択">
+                {activeTarget && (
+                  <>
+                    <TargetName target={activeTarget} />({presetOf(activeTarget)})
+                  </>
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {selectableTargets.map((target) => (
-                <SelectItem key={targetKey(target)} value={targetKey(target)} textValue={target.name}>
+                <SelectItem key={targetKey(target)} value={targetKey(target)}>
                   <TargetName target={target} />({presetOf(target)})
                 </SelectItem>
               ))}

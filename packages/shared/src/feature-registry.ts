@@ -20,7 +20,7 @@ const FEATURE_METADATA_LIST = [
   },
   {
     key: "logging",
-    name: "ログ機能",
+    name: "ログ",
     description: "メッセージ・メンバー・ロール等のサーバーイベントを記録する",
     icon: "scroll-text",
     viewCapability: CAPABILITIES.VIEW_LOGS,

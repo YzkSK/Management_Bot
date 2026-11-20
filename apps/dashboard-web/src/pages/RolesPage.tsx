@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { knownPermissionsForBits } from "@management-bot/shared";
-import { Bot, Lock, Search, TriangleAlert } from "lucide-react";
+import { IconAlertTriangle, IconLock, IconRobot, IconSearch } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { isForbiddenError } from "../dashboard-query-client.js";
@@ -9,15 +9,15 @@ import { permissionIcon } from "./permission-icons.js";
 import { RoleFilter } from "./RoleFilter.js";
 import { EMPTY_ROLE_FILTER, filterRoles, type RoleFilterValue } from "./role-filter.js";
 import { ErrorState, ForbiddenState } from "@/components/page-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Loading } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Dropdown, DropdownContent, DropdownTrigger } from "@/components/starwind/dropdown";
+import { Input } from "@/components/starwind/input";
+import { Loading } from "@/components/loading";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/starwind/table";
 
 const NUMBER_FORMAT = new Intl.NumberFormat("ja-JP");
 const MAX_PERMISSION_TAGS = 3;
-const BADGE_BASE = "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs leading-none font-medium";
+const BADGE_BASE = "inline-flex h-6 items-center gap-1 rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap";
 
 interface RoleRowData {
   id: string;
@@ -41,20 +41,19 @@ function lockedReason(role: RoleRowData): string {
 /** クリックで中身を開くバッジ・タグ。 */
 function ClickPopover({ trigger, label, children }: { trigger: ReactNode; label: string; children: ReactNode }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-full">
+    <Dropdown className="contents">
+      <DropdownTrigger asChild>
+        <button type="button" aria-label={label} className="shrink-0 cursor-pointer rounded-sm">
           {trigger}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
+      </DropdownTrigger>
+      <DropdownContent
         align="end"
-        collisionPadding={16}
-        className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] max-w-80 overflow-y-auto p-3 text-sm"
+        className="max-h-[min(24rem,var(--sw-floating-available-height))] max-w-80 overflow-y-auto p-3 text-sm"
       >
         {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownContent>
+    </Dropdown>
   );
 }
 
@@ -119,7 +118,7 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
       <TableCell>
         <div className="flex items-center gap-2">
           <span className="flex w-3.5 shrink-0 items-center">
-            {locked && <Lock className="text-muted-foreground size-3.5" aria-label="Botからは操作できません" />}
+            {locked && <IconLock className="text-muted-foreground size-3.5" aria-label="Botからは操作できません" />}
           </span>
           <span
             className="bg-muted-foreground/40 size-3 shrink-0 rounded-full"
@@ -130,8 +129,8 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
             {role.name}
           </span>
           {role.botId ? (
-            <span className={`${BADGE_BASE} border-violet-500/40 bg-violet-500/10 text-violet-600 ml-auto dark:text-violet-400`}>
-              <Bot className="size-3" aria-hidden="true" />
+            <span className={`${BADGE_BASE} bg-muted text-muted-foreground ml-auto`}>
+              <IconRobot className="size-3" aria-hidden="true" />
               Bot
             </span>
           ) : (
@@ -141,8 +140,8 @@ function RoleRow({ role, selectedKeys }: { role: RoleRowData; selectedKeys: read
                 <ClickPopover
                   label="操作不可の理由を表示"
                   trigger={
-                    <span className={`${BADGE_BASE} border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20`}>
-                      <TriangleAlert className="size-3" aria-hidden="true" />
+                    <span className={`${BADGE_BASE} bg-error-soft text-error-soft-foreground`}>
+                      <IconAlertTriangle className="size-3" aria-hidden="true" />
                       操作不可
                     </span>
                   }
@@ -182,7 +181,7 @@ export function RolesPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -207,7 +206,7 @@ export function RolesPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-64">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" aria-hidden="true" />
+          <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" aria-hidden="true" />
           <Input
             type="search"
             className="pl-8"
@@ -227,7 +226,7 @@ export function RolesPage() {
           <div className="text-muted-foreground text-xs">
             {NUMBER_FORMAT.format(visibleRoles.length)} / {NUMBER_FORMAT.format(roles.length)} ロール
           </div>
-          <div className="rounded-xl border">
+          <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
