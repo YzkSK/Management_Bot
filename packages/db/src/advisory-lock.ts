@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js";
+import type { Sql } from "postgres";
 import * as schema from "./schema/index.js";
 import type { Db } from "./client.js";
 
@@ -26,15 +27,21 @@ import type { Db } from "./client.js";
  */
 export async function withResourceLock<T>(db: Db, resourceKey: string, task: (lockedDb: Db) => Promise<T>): Promise<T> {
   const reserved = await db.$client.reserve();
-  // postgres.jsのreserve()が返す接続は、通常のpostgres()インスタンスと異なりoptionsプロパティを
-  // 持たない。drizzle()はconstruct時にoptions.parsers/serializersを書き換えるため、素の状態では
-  // 動かない。元のプールのoptionsをそのまま渡すとparsers/serializersオブジェクトを共有してしまい、
-  // drizzle()の書き換えが元のプール(db.$client)にも波及する副作用があるため、浅くコピーしてから渡す。
-  const clientOptions = (db.$client as unknown as { options: { parsers: object; serializers: object } }).options;
-  Object.assign(reserved, {
+  // postgres.js v4のreserve()が返すReservedSqlは、Sqlではなく共通部分のISqlだけを継承し、
+  // options・begin等を持たない(v3ではSqlを継承していた)。drizzle()が予約接続に対して使うのは
+  // construct時のoptions.parsers/serializersの書き換えと、クエリ実行のunsafe()、トランザクションのbegin()のみ。
+  // - options: 元のプールのoptionsをそのまま渡すとparsers/serializersを共有し、drizzle()の書き換えが
+  //   元のプール(db.$client)にも波及するため、浅くコピーしてから渡す(v4の型変換は接続プール側の
+  //   型レジストリを参照するため、予約接続のoptionsへの書き込みは実際の変換には影響しない)。
+  // - begin: 予約接続上ではトランザクションを張れないため、lockedDb.transaction()は明示的に失敗させる
+  //   (未定義のまま呼ばれて分かりにくいTypeErrorになるのを避ける)。
+  // 上記を補ってもSqlの全プロパティ(CLOSE/END等)は揃わないため、drizzle()に渡す型だけ変換する。
+  const clientOptions = db.$client.options;
+  const lockedClient = Object.assign(reserved, {
     options: { ...clientOptions, parsers: { ...clientOptions.parsers }, serializers: { ...clientOptions.serializers } },
-  });
-  const lockedDb: Db = drizzle(reserved, { schema });
+    begin: () => Promise.reject(new Error("withResourceLock: lockedDb上ではトランザクションを使えません")),
+  }) as unknown as Sql;
+  const lockedDb: Db = drizzle(lockedClient, { schema });
   try {
     await reserved`SELECT pg_advisory_lock(hashtext(${resourceKey}))`;
     return await task(lockedDb);

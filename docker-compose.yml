@@ -79,7 +79,7 @@ services:
         echo "postgres-upgrade: dumped"
 
   redis:
-    image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     restart: unless-stopped
     # ステータス画面のログ表示用(issue #507)。ponytail: redis.logはローテーションしない(出力が少ないため)。肥大化したらlogrotateを足す。
     # requirepassで認証必須にする(issue #551)。REDIS_URLにも埋め込むためURLセーフな値にする。
@@ -95,7 +95,7 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.59.0-alpine@sha256:0e36bc2a290039e9b6a5e92f04bd2f133223506f72d09682c1df16c015172b7a
+    image: timberio/vector:0.61.0-alpine@sha256:3bb7ed5152910ed51729e256937b1d8a4bf67ff624e9d565e8e5877bffd015c7
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
