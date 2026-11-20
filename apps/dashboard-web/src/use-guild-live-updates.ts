@@ -16,8 +16,6 @@ function queryKeysFor(topic: GuildDataTopic): readonly QueryKey[] {
   switch (topic) {
     case "auditLog":
       return [trpc.auditLog.list.pathKey(), trpc.auditLog.listFilterOptions.pathKey()];
-    case "scheduledPost":
-      return [trpc.scheduledPost.list.pathKey(), trpc.scheduledPost.getSettings.pathKey()];
     case "tempVoice":
       return [trpc.tempVoice.getConfig.pathKey(), trpc.tempVoice.getDenyProtectedRoles.pathKey()];
     case "moderation":

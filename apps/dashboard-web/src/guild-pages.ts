@@ -7,7 +7,6 @@ const FEATURE_PATHS: Record<string, string> = {
   activity: "activity",
   logging: "logs",
   moderation: "moderation",
-  "scheduled-post": "scheduled-post",
   "temp-voice": "temp-voice",
 };
 
@@ -24,8 +23,8 @@ export interface GuildPage {
 export const GUILD_PAGES: readonly GuildPage[] = [
   ...FEATURE_METADATA.flatMap((feature) => {
     const path = FEATURE_PATHS[feature.key];
-    // 予約投稿・一時VCは閲覧権限がなくても全メンバーに表示する(権限がなければ自分の予約・自分がオーナーのVCのみ。APIが絞る)。
-    const capability = feature.key === "scheduled-post" || feature.key === "temp-voice" ? 0 : feature.viewCapability;
+    // 一時VCは閲覧権限がなくても全メンバーに表示する(権限がなければ自分がオーナーのVCのみ。APIが絞る)。
+    const capability = feature.key === "temp-voice" ? 0 : feature.viewCapability;
     return path ? [{ key: feature.key, name: feature.name, path, capability }] : [];
   }),
   { key: "roles", name: "ロール管理", path: "roles", capability: CAPABILITIES.VIEW_ROLES },
@@ -39,7 +38,7 @@ export function guildPagePath(guildId: string, page: GuildPage): string {
 
 /**
  * 閲覧可能な最初のページのパス(issue #527)。権限で開けるページを優先し、無ければ全メンバー向け(capability 0)の
- * ページ(予約投稿の自分の分など)へ遷移する。全メンバー向けページも無ければnull。
+ * ページ(一時VCなど)へ遷移する。全メンバー向けページも無ければnull。
  */
 export function firstAccessiblePath(guildId: string, capabilities: number): string | null {
   const page =

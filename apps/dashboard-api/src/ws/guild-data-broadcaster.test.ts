@@ -23,16 +23,15 @@ describe("guild-data-broadcaster", () => {
     expect(noPerm.send).not.toHaveBeenCalled();
   });
 
-  test("scheduledPostとaccessは必須capabilityなし(capabilities=0でも届く。権限変更を本人に反映するため)", () => {
+  test("accessは必須capabilityなし(capabilities=0でも届く。権限変更を本人に反映するため)", () => {
     const b = createGuildDataBroadcaster();
     const member = fakeClient(0);
     b.register("g1", member.client);
 
-    b.broadcast("g1", "scheduledPost");
     b.broadcast("g1", "access");
     b.broadcast("g1", "moderation");
 
-    expect(member.send.mock.calls.map(([m]) => JSON.parse(String(m)).topic)).toEqual(["scheduledPost", "access"]);
+    expect(member.send.mock.calls.map(([m]) => JSON.parse(String(m)).topic)).toEqual(["access"]);
   });
 
   test("各topicは対応するcapabilityで絞られる", () => {
@@ -66,7 +65,7 @@ describe("guild-data-broadcaster", () => {
     b.register("g1", gone.client);
     b.unregister("g1", gone.client);
 
-    b.broadcast("g1", "scheduledPost");
+    b.broadcast("g1", "access");
 
     expect(other.send).not.toHaveBeenCalled();
     expect(gone.send).not.toHaveBeenCalled();
@@ -84,7 +83,7 @@ describe("guild-data-broadcaster", () => {
     const original = console.error;
     console.error = spy;
     try {
-      b.broadcast("g1", "scheduledPost");
+      b.broadcast("g1", "access");
     } finally {
       console.error = original;
     }

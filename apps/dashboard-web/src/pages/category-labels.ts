@@ -2,7 +2,6 @@ import {
   IconAlignLeft,
   IconBroadcast,
   IconCalendar,
-  IconCalendarTime,
   IconChartBar,
   IconFileText,
   IconHash,
@@ -51,5 +50,4 @@ export const CATEGORY_ICON: Record<LogCategory, TablerIcon> = {
   moderationCase: IconShieldExclamation,
   voice: IconMicrophone,
   tempVoice: IconHeadphones,
-  scheduledPost: IconCalendarTime,
 };

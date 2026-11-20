@@ -17,7 +17,6 @@
     { "path": "../../packages/logging" },
     { "path": "../../packages/moderation" },
     { "path": "../../packages/role-management" },
-    { "path": "../../packages/scheduled-post" },
     { "path": "../../packages/shared" },
     { "path": "../../packages/temp-voice" }
   ]

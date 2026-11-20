@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { hasCapability } from "@management-bot/shared";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  IconCalendarTime,
   IconChartBar,
   IconFileText,
   IconHeadphones,
@@ -39,7 +38,6 @@ const PAGE_ICONS: Record<string, TablerIcon> = {
   activity: IconChartBar,
   logging: IconFileText,
   moderation: IconShieldExclamation,
-  "scheduled-post": IconCalendarTime,
   "temp-voice": IconHeadphones,
   roles: IconUsersGroup,
   access: IconLock,

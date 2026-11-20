@@ -13,7 +13,6 @@ const AUDIT_FEATURE_LABELS: Record<string, string> = {
   logging: "ログ",
   moderation: "スパム対策",
   tempVoice: "一時VC",
-  scheduledPost: "予約投稿",
   access: "アクセス権限",
   dashboard: "ダッシュボード",
 };
@@ -42,8 +41,6 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "moderation.resetAllStrikes": "ユーザーのストライクをすべてリセット",
   "moderation.addNgword": "NGワードを追加",
   "moderation.removeNgword": "NGワードを削除",
-  "scheduledPost.cancel": "予約投稿を取り消し",
-  "scheduledPost.updateSettings": "予約投稿の設定を変更",
   "tempVoice.setConfig": "一時VCの設定を変更",
   "tempVoice.autoSetupConfig": "一時VCを自動セットアップ",
   "tempVoice.clearConfig": "一時VCの設定を解除",

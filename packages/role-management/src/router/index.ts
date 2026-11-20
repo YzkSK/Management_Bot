@@ -5,7 +5,7 @@ import { listRoles } from "../application/index.js";
 
 const guildIdInput = z.object({ guildId: discordIdSchema });
 
-// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する(scheduled-postと同じ)。
+// requireCapabilityは検証済みinputのguildIdを読むため、`.input()`の後に`.use()`する。
 export const roleManagementRouter = router({
   /** ギルドのロール一覧(Discordのロール順)。Bot未参加・権限不足の場合は空一覧を返す。 */
   list: protectedProcedure

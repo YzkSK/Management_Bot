@@ -10,7 +10,6 @@
     { "path": "./packages/logging" },
     { "path": "./packages/temp-voice" },
     { "path": "./packages/moderation" },
-    { "path": "./packages/scheduled-post" },
     { "path": "./packages/role-management" },
     { "path": "./apps/bot" },
     { "path": "./apps/dashboard-api" },

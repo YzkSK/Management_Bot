@@ -36,13 +36,13 @@ describe("describeCapabilityChange", () => {
 describe("describeChanges", () => {
   test("値が変わった項目だけを変更前→変更後で返し、guildIdは除く", () => {
     const changes = describeChanges(
-      "scheduledPost",
-      "updateSettings",
-      { allowedRoleIds: ["r1"], allowEveryone: false, allowHere: true },
-      { guildId: "g", roleIds: ["r1", "r2"], allowEveryone: false, allowHere: true },
+      "tempVoice",
+      "setDenyProtectedRoles",
+      ["r1"],
+      { guildId: "g", roleIds: ["r1", "r2"] },
       { r1: "mod", r2: "event" },
     );
-    expect(changes).toEqual([{ label: "使えるロール", before: "@mod", after: "@mod、@event" }]);
+    expect(changes).toEqual([{ label: "拒否禁止ロール", before: "@mod", after: "@mod、@event" }]);
   });
 
   test("beforeが無い項目は変更後のみ表示する", () => {
