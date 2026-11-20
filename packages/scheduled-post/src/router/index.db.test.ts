@@ -39,6 +39,7 @@ function callerFor(user: User) {
     getGuildRoles: async () => [],
     getGuildAccessStatus: async () => "ok" as const,
     getGuildOwnerId: async () => "owner",
+    getGuildRoleList: async () => null,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({ members: [], nextAfter: undefined }),
     readRedisHash: async () => ({}),

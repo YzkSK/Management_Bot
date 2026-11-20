@@ -113,7 +113,7 @@ export {
 export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
-export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
+export { DISCORD_PERMISSION_LABELS, diffPermissions, knownPermissionsForBits } from "./discord-permissions.js";
 export { discordIdSchema, roleMentionLabel } from "./discord-id.js";
 export {
   TEMP_VOICE_CREATE_REASON,

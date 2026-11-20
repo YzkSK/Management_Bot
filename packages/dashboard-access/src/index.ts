@@ -36,6 +36,8 @@ export {
   type GuildMembership,
   type ChannelOption,
   type RoleOption,
+  type GuildRoleInfo,
+  type GuildRoleList,
   type MemberOption,
   type MemberPage,
   type ManagedGuild,

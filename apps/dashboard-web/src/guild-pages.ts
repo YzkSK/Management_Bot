@@ -28,6 +28,7 @@ export const GUILD_PAGES: readonly GuildPage[] = [
     const capability = feature.key === "scheduled-post" || feature.key === "temp-voice" ? 0 : feature.viewCapability;
     return path ? [{ key: feature.key, name: feature.name, path, capability }] : [];
   }),
+  { key: "roles", name: "ロール管理", path: "roles", capability: CAPABILITIES.VIEW_ROLES },
   { key: "access", name: "アクセス権限", path: "access", capability: CAPABILITIES.MANAGE_ACCESS },
   { key: "audit-log", name: "操作履歴", path: "audit-log", capability: CAPABILITIES.VIEW_AUDIT_LOG },
 ];
