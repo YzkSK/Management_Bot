@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot, CircleAlert, Lock } from "lucide-react";
+import { IconAlertCircle, IconLock, IconRobot } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import type { CapabilityName } from "@management-bot/shared";
 import { CAPABILITY_LABELS } from "../pages/capability-labels.js";
 import { trpc } from "../trpc.js";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import { cn } from "@/lib/utils";
 
 // 文節の途中で折り返さず(auto-phrase)、行の長さを揃える(balance)。文の区切りは<br>で明示する。
@@ -13,16 +13,16 @@ const WRAP = "[word-break:auto-phrase] [text-wrap:balance]";
 type Tone = "warning" | "destructive" | "muted";
 
 const TONE_CLASS: Record<Tone, string> = {
-  warning: "bg-warning/15 text-warning",
-  destructive: "bg-destructive/12 text-destructive",
+  warning: "bg-warning-soft text-warning-soft-foreground",
+  destructive: "bg-error-soft text-error",
   muted: "bg-muted text-muted-foreground",
 };
 
 function StateCard({ tone, icon, title, children }: { tone: Tone; icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <div role="alert" className="bg-card flex flex-col items-center gap-2.5 rounded-xl border px-6 py-12 text-center">
+    <div role="alert" className="bg-card flex flex-col items-center gap-3 rounded-sm border px-6 py-10 text-center">
       <div className={cn("grid size-11 place-items-center rounded-full [&_svg]:size-5", TONE_CLASS[tone])}>{icon}</div>
-      <h2 className={cn("text-base font-semibold", WRAP)}>{title}</h2>
+      <h2 className={cn("text-base font-bold", WRAP)}>{title}</h2>
       {children}
     </div>
   );
@@ -36,7 +36,7 @@ function Pills({ labels }: { labels: readonly string[] }) {
   return (
     <div className="flex flex-wrap justify-center gap-1.5">
       {labels.map((label) => (
-        <span key={label} className="bg-muted rounded-md px-1.5 font-semibold whitespace-nowrap">
+        <span key={label} className="bg-muted inline-flex h-6 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">
           {label}
         </span>
       ))}
@@ -47,7 +47,7 @@ function Pills({ labels }: { labels: readonly string[] }) {
 /** 権限がないとき、ページ本体の代わりに出す。必要な権限名はcapabilityのラベルから出す。 */
 export function ForbiddenState({ pageName, capabilities }: { pageName: string; capabilities: readonly CapabilityName[] }) {
   return (
-    <StateCard tone="warning" icon={<Lock aria-hidden="true" />} title="このページを見る権限がありません">
+    <StateCard tone="warning" icon={<IconLock aria-hidden="true" />} title="このページを見る権限がありません">
       <Text>{pageName}を見るには次の権限が必要です。</Text>
       <Pills labels={capabilities.map((name) => CAPABILITY_LABELS[name])} />
       <Text>サーバーの管理者に付与を依頼してください。</Text>
@@ -58,7 +58,7 @@ export function ForbiddenState({ pageName, capabilities }: { pageName: string; c
 /** 権限以外の取得失敗。再読み込みで失敗したクエリを取り直す。 */
 export function ErrorState({ subject, onRetry }: { subject: string; onRetry: () => void }) {
   return (
-    <StateCard tone="destructive" icon={<CircleAlert aria-hidden="true" />} title={`${subject}を読み込めませんでした`}>
+    <StateCard tone="destructive" icon={<IconAlertCircle aria-hidden="true" />} title={`${subject}を読み込めませんでした`}>
       <Text>
         通信またはサーバーの一時的な問題の可能性があります。
         <br />
@@ -96,7 +96,7 @@ export function BotPermissionState({
   const canReauthorize = useCanReauthorize(guildId);
   const known = permissions !== undefined && permissions.length > 0;
   return (
-    <StateCard tone="muted" icon={<Bot aria-hidden="true" />} title="Botの権限が足りません">
+    <StateCard tone="muted" icon={<IconRobot aria-hidden="true" />} title="Botの権限が足りません">
       {known ? (
         <>
           <Text>Botに次の権限がないため、この情報を取得できません。</Text>
@@ -108,10 +108,8 @@ export function BotPermissionState({
       {canReauthorize && reauthorizeUrl ? (
         <>
           <div className="mt-1.5">
-            <Button asChild>
-              <a href={reauthorizeUrl} target="_blank" rel="noreferrer">
-                Botを再認可する
-              </a>
+            <Button href={reauthorizeUrl} target="_blank" rel="noreferrer">
+              Botを再認可する
             </Button>
           </div>
           <Text small>
@@ -142,7 +140,7 @@ export function BotPermissionState({
 /** 自分が参加していない(またはBotが導入されていない)サーバーのページを開いたとき。 */
 export function NotMemberState() {
   return (
-    <StateCard tone="warning" icon={<Lock aria-hidden="true" />} title="このサーバーのページは開けません">
+    <StateCard tone="warning" icon={<IconLock aria-hidden="true" />} title="このサーバーのページは開けません">
       <Text>
         このサーバーに参加していないか、Botが導入されていません。
         <br />
@@ -154,7 +152,7 @@ export function NotMemberState() {
 
 export function BotNotJoinedState() {
   return (
-    <StateCard tone="muted" icon={<Bot aria-hidden="true" />} title="Botがこのサーバーに参加していません">
+    <StateCard tone="muted" icon={<IconRobot aria-hidden="true" />} title="Botがこのサーバーに参加していません">
       <Text>
         Botをサーバーに招待すると、この情報を取得できるようになります。
         <br />
@@ -169,9 +167,9 @@ export function InlineError({ summary, detail, onRetry }: { summary: string; det
   return (
     <div
       role="alert"
-      className="border-destructive/35 bg-destructive/8 flex items-start gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm"
+      className="border-error/20 bg-error-soft flex items-start gap-2.5 rounded-sm border px-3.5 py-3 text-sm"
     >
-      <CircleAlert className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <IconAlertCircle className="text-error mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">
         <b>{summary}</b>
         {detail && ` ${detail}`}{" "}

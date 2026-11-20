@@ -62,8 +62,13 @@ export const DISCORD_PERMISSION_LABELS: ReadonlyArray<{ key: string; bit: bigint
 
 const KNOWN_PERMISSION_BITS_MASK = DISCORD_PERMISSION_LABELS.reduce((mask, { bit }) => mask | bit, 0n);
 
+/** 権限ビットフィールドに含まれる既知の権限を、DISCORD_PERMISSION_LABELSの並び順で返す(未知のビットは含まない)。 */
+export function knownPermissionsForBits(value: bigint): Array<{ key: string; bit: bigint; label: string }> {
+  return DISCORD_PERMISSION_LABELS.filter(({ bit }) => (value & bit) === bit);
+}
+
 function permissionNamesForBits(value: bigint): string[] {
-  const names = DISCORD_PERMISSION_LABELS.filter(({ bit }) => (value & bit) === bit).map(({ label }) => label);
+  const names = knownPermissionsForBits(value).map(({ label }) => label);
   const unknownBits = value & ~KNOWN_PERMISSION_BITS_MASK;
   if (unknownBits !== 0n) names.push(`不明な権限(0b${unknownBits.toString(2)})`);
   return names;

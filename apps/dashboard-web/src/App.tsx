@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { isUnauthorizedError } from "./is-unauthorized-error.js";
 import { logout } from "./logout.js";
 import { API_URL, trpc } from "./trpc.js";
@@ -11,13 +11,14 @@ import { ActivityPage } from "./pages/ActivityPage.js";
 import { GuildListPage } from "./pages/GuildListPage.js";
 import { LogListPage } from "./pages/LogListPage.js";
 import { ModerationPage } from "./pages/ModerationPage.js";
+import { RolesPage } from "./pages/RolesPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { NotFoundPage, StatusPage } from "./pages/StatusPage.js";
 import { TempVoicePage } from "./pages/TempVoicePage.js";
 import { LOGOUT_FAILED_MESSAGE } from "./pages/UserSettingsPage.js";
-import { Button } from "@/components/ui/button";
-import { Loader2Icon } from "lucide-react";
-import { toast } from "sonner";
+import { Button } from "@/components/starwind/button";
+import { IconLoader2 } from "@tabler/icons-react";
+import { toast } from "@/components/starwind/toast";
 
 export function App() {
   const me = useQuery(trpc.me.queryOptions());
@@ -56,6 +57,8 @@ export function App() {
           element={layout}
         >
           <Route index element={<GuildListPage />} />
+          {/* /404 もここで受ける */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route
           path="/status"
@@ -69,7 +72,7 @@ export function App() {
             />
           }
         >
-          <Route index element={statusAccess ? <StatusPage isOwner={statusAccess === "owner"} /> : <NotFoundPage />} />
+          <Route index element={statusAccess ? <StatusPage isOwner={statusAccess === "owner"} /> : <Navigate to="/404" replace />} />
         </Route>
         <Route
           path="/guilds/:guildId"
@@ -81,8 +84,11 @@ export function App() {
           <Route path="logs/settings" element={<RequirePageAccess pageName="ログ設定" capability="MANAGE_LOGGING_SETTINGS"><SettingsPage /></RequirePageAccess>} />
           <Route path="moderation" element={<RequirePageAccess pageName="スパム対策" capability="MANAGE_MODERATION"><ModerationPage /></RequirePageAccess>} />
           <Route path="temp-voice" element={<RequirePageAccess pageName="一時VC"><TempVoicePage /></RequirePageAccess>} />
+          <Route path="roles" element={<RequirePageAccess pageName="ロール管理" capability="VIEW_ROLES"><RolesPage /></RequirePageAccess>} />
           <Route path="access" element={<RequirePageAccess pageName="アクセス権限" capability="MANAGE_ACCESS"><AccessPage /></RequirePageAccess>} />
           <Route path="audit-log" element={<RequirePageAccess pageName="操作履歴" capability="VIEW_AUDIT_LOG"><AuditLogPage /></RequirePageAccess>} />
+          <Route index element={<Navigate to="/404" replace />} />
+          <Route path="*" element={<Navigate to="/404" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -91,7 +97,7 @@ export function App() {
 
 /** ログイン確認中・リダイレクト中・接続失敗を中央カードで出す。 */
 export function AppStateScreen({ view }: { view: "boot" | "redirect" | "error" }) {
-  const spinner = <Loader2Icon className="size-7 animate-spin" aria-hidden="true" />;
+  const spinner = <IconLoader2 className="size-7 animate-spin" aria-hidden="true" />;
   return (
     <div className="bg-muted/40 flex min-h-screen items-center justify-center p-4">
       <div className="bg-card flex w-full max-w-[420px] flex-col items-center gap-3.5 rounded-2xl border p-8 text-center">
@@ -111,7 +117,7 @@ export function AppStateScreen({ view }: { view: "boot" | "redirect" | "error" }
         )}
         {view === "error" && (
           <>
-            <p role="alert" className="text-destructive text-sm">接続に失敗しました。時間をおいて再度お試しください。</p>
+            <p role="alert" className="text-error text-sm">接続に失敗しました。時間をおいて再度お試しください。</p>
             <Button className="h-11 px-5" onClick={() => window.location.reload()}>再読み込み</Button>
           </>
         )}

@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ChevronDown, Menu } from "lucide-react";
+import { IconChevronDown, IconMenu2, IconShield } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/starwind/button";
+import { DialogTrigger } from "@/components/starwind/dialog";
+import { MOBILE_SIDEBAR_DIALOG_ID } from "./Sidebar.js";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dropdown,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+  DropdownTrigger,
+} from "@/components/starwind/dropdown";
 import { cn } from "@/lib/utils";
 import { UserSettingsDialog } from "./pages/UserSettingsPage.js";
 import { STATUS_REFETCH_MS } from "./pages/StatusPage.js";
@@ -37,9 +38,9 @@ function StatusLamp() {
       to="/status"
       aria-label={`ステータス: ${meta.lamp}`}
       title={`ステータス: ${meta.lamp}`}
-      className="text-muted-foreground hover:bg-accent flex h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2.5 text-sm"
+      className="text-foreground hover:bg-muted flex h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-sm px-2.5 text-[13px] font-semibold"
     >
-      <span className={cn("size-2.5 rounded-full ring-3", meta.dot, meta.ring)} aria-hidden="true" />
+      <span className={cn("size-2 rounded-full", meta.dot)} aria-hidden="true" />
       <span className="hidden sm:inline">{meta.lamp}</span>
     </Link>
   );
@@ -49,10 +50,10 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
   const [isUserSettingsOpen, setUserSettingsOpen] = useState(false);
   const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
   return (
-    <header className="bg-background z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 md:px-4">
+    <header className="bg-card z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 md:px-5">
       <div className="flex min-w-0 items-center gap-1">
         {showMenuButton && (
-        <DialogTrigger asChild>
+        <DialogTrigger asChild targetId={MOBILE_SIDEBAR_DIALOG_ID}>
           <Button
             variant="ghost"
             size="icon"
@@ -60,38 +61,42 @@ export function Header({ discordUsername, avatarUrl, onLogout, isSidebarOpen, sh
             aria-label="メニューを開閉"
             aria-expanded={isSidebarOpen}
           >
-            <Menu className="size-5" />
+            <IconMenu2 className="size-5" />
           </Button>
         </DialogTrigger>
         )}
-        <Link to="/" className="truncate text-sm font-semibold hover:underline">
-          Management Bot
+        {/* メニューボタンが無い画面のスマホ幅では左端に寄りすぎるため、PC幅(px-4)と同じ余白にそろえる。 */}
+        <Link to="/" className={cn("flex min-w-0 items-center gap-2.5 text-[15px] font-bold", !showMenuButton && "max-md:pl-2")}>
+          <span className="bg-foreground text-background grid size-7 shrink-0 place-items-center rounded-sm" aria-hidden="true">
+            <IconShield className="size-4" stroke={2.2} />
+          </span>
+          <span className="truncate">Management Bot</span>
         </Link>
       </div>
       <div className="flex min-w-0 items-center gap-1">
       {showStatus && <StatusLamp />}
-      <DropdownMenu>
-        <DropdownMenuTrigger
+      <Dropdown className="contents">
+        <DropdownTrigger
           ref={userMenuTriggerRef}
-          className="flex h-11 min-w-0 shrink-0 items-center gap-2 rounded-md px-2 text-sm hover:bg-accent"
+          className="flex h-11 min-w-0 shrink-0 items-center gap-2 rounded-sm px-2 text-sm hover:bg-muted"
           aria-label="ユーザーメニュー"
         >
           {avatarUrl ? (
             <img src={avatarUrl} alt="" className="size-7 shrink-0 rounded-full" />
           ) : (
-            <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">
+            <span className="bg-border flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold" aria-hidden="true">
               {discordUsername.slice(0, 1).toUpperCase()}
             </span>
           )}
           <span className="hidden max-w-40 truncate sm:inline">{discordUsername}</span>
-          <ChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onLogout}>ログアウト</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <IconChevronDown className="text-muted-foreground hidden size-4 sm:block" aria-hidden="true" />
+        </DropdownTrigger>
+        <DropdownContent align="end">
+          <DropdownItem onClick={() => setUserSettingsOpen(true)}>ユーザー設定</DropdownItem>
+          <DropdownSeparator />
+          <DropdownItem onClick={onLogout}>ログアウト</DropdownItem>
+        </DropdownContent>
+      </Dropdown>
       <UserSettingsDialog open={isUserSettingsOpen} onOpenChange={setUserSettingsOpen} returnFocusRef={userMenuTriggerRef} />
       </div>
     </header>

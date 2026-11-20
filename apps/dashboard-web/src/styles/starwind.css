@@ -1,0 +1,232 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "IBM Plex Sans JP", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--starwind-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--starwind-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-out;
+
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--starwind-collapsible-panel-height);
+    }
+  }
+
+  @keyframes collapsible-up {
+    from {
+      height: var(--starwind-collapsible-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  /* 保存バー(SaveBar)の出入りアニメーション */
+  --animate-save-bar-in: save-bar-in 200ms ease-out;
+  --animate-save-bar-out: save-bar-out 200ms ease-in forwards;
+
+  @keyframes save-bar-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes save-bar-in {
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-accent: var(--primary-accent);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-accent: var(--secondary-accent);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-outline: var(--outline);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-error-soft: var(--error-soft);
+  --color-error-soft-foreground: var(--error-soft-foreground);
+  --color-mention: var(--mention);
+  --color-mention-foreground: var(--mention-foreground);
+
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --radius-3xl: 6px;
+
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-outline: var(--sidebar-outline);
+}
+
+/* 配色はアクセントカラーを持たないモノクロ(暖色寄りのニュートラル)。色はステータス(success/warning/error)のみに使う。 */
+:root {
+  --background: #f6f5f2;
+  --foreground: #1b1b1f;
+  --card: #ffffff;
+  --card-foreground: #1b1b1f;
+  --popover: #ffffff;
+  --popover-foreground: #1b1b1f;
+  --primary: #1b1b1f;
+  --primary-foreground: #ffffff;
+  --primary-accent: #1b1b1f;
+  --secondary: #ecebe6;
+  --secondary-foreground: #1b1b1f;
+  --secondary-accent: #1b1b1f;
+  --muted: #ecebe6;
+  --muted-foreground: #5e5e66;
+  --accent: #ecebe6;
+  --accent-foreground: #1b1b1f;
+  --info: #ecebe6;
+  --info-foreground: #1b1b1f;
+  --success: #1a7f4b;
+  --success-foreground: #ffffff;
+  --warning: #9a6200;
+  --warning-foreground: #ffffff;
+  --error: #c0362c;
+  --error-foreground: #ffffff;
+  --success-soft: #eef6f1;
+  --success-soft-foreground: #1f6b45;
+  --warning-soft: #fbf1e1;
+  --warning-soft-foreground: #8a5300;
+  --error-soft: #fbf3f2;
+  --error-soft-foreground: #a82e25;
+  --mention: rgba(88, 101, 242, 0.15);
+  --mention-foreground: #4752c4;
+  --border: #e4e2dc;
+  --input: #d9d7d0;
+  --outline: #8a877f;
+  --radius: 4px;
+
+  /* sidebar variables */
+  --sidebar-background: #ffffff;
+  --sidebar-foreground: #1b1b1f;
+  --sidebar-primary: #1b1b1f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ecebe6;
+  --sidebar-accent-foreground: #1b1b1f;
+  --sidebar-border: #e4e2dc;
+  --sidebar-outline: #8a877f;
+}
+
+.dark {
+  --background: #141416;
+  --foreground: #edece8;
+  --card: #1c1c1f;
+  --card-foreground: #edece8;
+  --popover: #1c1c1f;
+  --popover-foreground: #edece8;
+  --primary: #edece8;
+  --primary-foreground: #1b1b1f;
+  --primary-accent: #edece8;
+  --secondary: #26262a;
+  --secondary-foreground: #edece8;
+  --secondary-accent: #edece8;
+  --muted: #26262a;
+  --muted-foreground: #a3a29c;
+  --accent: #26262a;
+  --accent-foreground: #edece8;
+  --info: #26262a;
+  --info-foreground: #edece8;
+  --success: #3fbf7f;
+  --success-foreground: #141416;
+  --warning: #e0a940;
+  --warning-foreground: #141416;
+  --error: #e5655a;
+  --error-foreground: #141416;
+  --success-soft: #17281f;
+  --success-soft-foreground: #7fd3a6;
+  --warning-soft: #2b2312;
+  --warning-soft-foreground: #e8c27a;
+  --error-soft: #2e1817;
+  --error-soft-foreground: #f0a29b;
+  --mention: rgba(88, 101, 242, 0.3);
+  --mention-foreground: #c9cdfb;
+  --border: #2e2d2a;
+  --input: #3a3936;
+  --outline: #6e6c66;
+
+  /* sidebars variables */
+  --sidebar-background: #1c1c1f;
+  --sidebar-foreground: #edece8;
+  --sidebar-primary: #edece8;
+  --sidebar-primary-foreground: #1b1b1f;
+  --sidebar-accent: #26262a;
+  --sidebar-accent-foreground: #edece8;
+  --sidebar-border: #2e2d2a;
+  --sidebar-outline: #6e6c66;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-outline/50;
+  }
+  body {
+    @apply bg-background text-foreground scheme-light dark:scheme-dark;
+  }
+  button {
+    @apply cursor-pointer;
+  }
+}

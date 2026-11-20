@@ -10,6 +10,7 @@ import {
   fetchGuildMemberRoleIds,
   fetchGuildMembersPage,
   fetchGuildOwnerId,
+  fetchGuildRoleList,
   fetchGuildRoles,
   fetchGuildVoiceChannels,
   isGuildMember,
@@ -1046,5 +1047,74 @@ describe("fetchGuildOwnerId(issue #523)", () => {
     mockFetch({ "/guilds/g1": { status: 200, body: { id: "g1" } } });
 
     await expect(fetchGuildOwnerId("test-bot-token", "g1")).rejects.toThrow();
+  });
+});
+
+describe("fetchGuildRoleList(issue #625)", () => {
+  const rolesBody = [
+    { id: "g1", name: "@everyone", color: 0, position: 0, permissions: "1024", managed: false },
+    { id: "r1", name: "mod", color: 255, position: 3, permissions: "8", managed: false },
+    { id: "r2", name: "bot", color: 0, position: 2, permissions: "0", managed: true, tags: { bot_id: "bot1" } },
+  ];
+
+  test("ロール詳細・メンバー数・Bot保有ロールを返し、botIdはtags.bot_idから取る", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": { status: 200, body: rolesBody },
+      "/guilds/g1/roles/member-counts": { status: 200, body: { g1: 10, r1: 2 } },
+      "/guilds/g1/members/bot1": { status: 200, body: { roles: ["r2"] } },
+    });
+
+    const result = await fetchGuildRoleList("test-bot-token", "g1");
+
+    expect(result).toEqual({
+      roles: [
+        { id: "g1", name: "@everyone", color: 0, position: 0, permissions: "1024", managed: false, botId: null },
+        { id: "r1", name: "mod", color: 255, position: 3, permissions: "8", managed: false, botId: null },
+        { id: "r2", name: "bot", color: 0, position: 2, permissions: "0", managed: true, botId: "bot1" },
+      ],
+      memberCounts: { g1: 10, r1: 2 },
+      botRoleIds: ["r2"],
+    });
+  });
+
+  test("member-countsが取得できない(404・5xx・スキーマ不一致)場合はmemberCounts: nullにdegradeする", async () => {
+    for (const countsResponse of [
+      { status: 404 },
+      { status: 500 },
+      { status: 200, body: { r1: "many" } },
+    ]) {
+      mockFetch({
+        "/users/@me": { status: 200, body: { id: "bot1" } },
+        "/guilds/g1/roles": { status: 200, body: rolesBody },
+        "/guilds/g1/roles/member-counts": countsResponse,
+        "/guilds/g1/members/bot1": { status: 200, body: { roles: [] } },
+      });
+
+      const result = await fetchGuildRoleList("test-bot-token", "g1");
+
+      expect(result?.memberCounts).toBeNull();
+      expect(result?.roles).toHaveLength(3);
+    }
+  });
+
+  test("Bot未参加(ロール一覧が404/403)はnullを返す", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": { status: 404 },
+      "/guilds/g1/roles/member-counts": { status: 404 },
+    });
+
+    expect(await fetchGuildRoleList("test-bot-token", "g1")).toBeNull();
+  });
+
+  test("ロールのpermissionsが10進文字列でなければスキーマ検証で例外にする", async () => {
+    mockFetch({
+      "/users/@me": { status: 200, body: { id: "bot1" } },
+      "/guilds/g1/roles": { status: 200, body: [{ ...rolesBody[0], permissions: "abc" }] },
+      "/guilds/g1/roles/member-counts": { status: 200, body: {} },
+    });
+
+    await expect(fetchGuildRoleList("test-bot-token", "g1")).rejects.toThrow();
   });
 });

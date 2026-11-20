@@ -16,7 +16,7 @@ describe("リソース表示の整形", () => {
   test("usageBarClassは80%と90%で色を変える", () => {
     expect(usageBarClass(79.9)).toBe("bg-success");
     expect(usageBarClass(80)).toBe("bg-warning");
-    expect(usageBarClass(90)).toBe("bg-destructive");
+    expect(usageBarClass(90)).toBe("bg-error");
   });
   test("toPolylinePointsは下端を0として写し、範囲外は丸める", () => {
     expect(toPolylinePoints([0, 50, 200], 100, 100, 10)).toBe("0.0,10.0 50.0,5.0 100.0,0.0");

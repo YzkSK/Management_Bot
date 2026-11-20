@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioLines, EyeOff, Lock, Users, Volume2 } from "lucide-react";
+import { IconEyeOff, IconList, IconLock, IconSettings, IconShieldLock, IconUsers, IconVolume, IconWaveSine } from "@tabler/icons-react";
 import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/starwind/toast";
 import { CAPABILITIES, hasCapability } from "@management-bot/shared";
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
@@ -13,8 +13,8 @@ import { EditChannelButton } from "./TempVoiceEditDialog.js";
 import { buildTempVoiceDraft, diffTempVoiceConfig, hasTempVoiceChanges, type TempVoiceDraft } from "./temp-voice-draft.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
 import { SaveBar } from "@/components/save-bar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Button } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,
@@ -24,13 +24,16 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loading } from "@/components/ui/skeleton";
+} from "@/components/starwind/dialog";
+import { Input } from "@/components/starwind/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
+import { Loading } from "@/components/loading";
 
 type TempVoiceTab = "list" | "roles" | "settings";
+
+/** チップ・バッジ共通の見た目。縦中央・折り返しなし。 */
+const TAG = "inline-flex h-6 items-center gap-1 rounded-sm px-2 text-xs leading-none whitespace-nowrap";
 
 interface TempVoiceConfigData {
   createChannelId: string | null;
@@ -69,11 +72,11 @@ function ForceDeleteButton({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-destructive border-destructive/40" disabled={disabled}>
+        <Button variant="outline" size="sm" className="text-error border-error/40" disabled={disabled}>
           強制削除
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>このチャンネルを強制削除しますか?</DialogTitle>
           <DialogDescription>
@@ -142,18 +145,18 @@ function ActiveChannelsTab({
         {ownOnly ? "あなたがオーナーの一時VCです。" : "現在Discord上に存在する一時VCです。"}
       </p>
       {listQuery.data.length === 0 ? (
-        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm">
+        <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
           {ownOnly ? "あなたがオーナーの一時VCはありません。" : "現在アクティブな一時VCはありません。"}
           作成用チャンネルに入室すると自動で作成されます。
         </p>
       ) : (
         <div className="grid items-start gap-3 md:grid-cols-2">
           {listQuery.data.map((channel) => {
-            const ChannelIcon = channel.isLocked ? Lock : Volume2;
+            const ChannelIcon = channel.isLocked ? IconLock : IconVolume;
             return (
               <section
                 key={channel.channelId}
-                className={`flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
+                className={`bg-card flex flex-col gap-3 rounded-lg border p-4${channel.isMine ? " border-primary" : ""}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -164,12 +167,12 @@ function ActiveChannelsTab({
                     />
                     <span className="truncate text-sm font-semibold">{channel.channelName ?? channel.channelId}</span>
                     {channel.isMine && (
-                      <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-2 py-0.5 text-xs">あなたのVC</span>
+                      <span className={`${TAG} bg-primary text-primary-foreground shrink-0 font-semibold`}>あなたのVC</span>
                     )}
                   </div>
                   <span className="text-muted-foreground text-xs whitespace-nowrap">
                     継続{" "}
-                    <b className="text-foreground text-sm">
+                    <b className="text-foreground font-mono text-sm">
                       {formatDuration(Math.max(0, (now.getTime() - new Date(channel.createdAt).getTime()) / 1000))}
                     </b>
                   </span>
@@ -189,20 +192,20 @@ function ActiveChannelsTab({
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
                     {channel.userLimit !== null && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <Users className="size-3" aria-hidden />
+                      <span className={`${TAG} bg-muted`}>
+                        <IconUsers className="size-3" aria-hidden />
                         {channel.userLimit === 0 ? "無制限" : `上限 ${channel.userLimit}人`}
                       </span>
                     )}
                     {channel.bitrate !== null && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <AudioLines className="size-3" aria-hidden />
+                      <span className={`${TAG} bg-muted`}>
+                        <IconWaveSine className="size-3" aria-hidden />
                         {Math.round(channel.bitrate / 1000)} kbps
                       </span>
                     )}
                     {channel.isHidden && (
-                      <span className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5">
-                        <EyeOff className="size-3" aria-hidden />
+                      <span className={`${TAG} bg-muted`}>
+                        <IconEyeOff className="size-3" aria-hidden />
                         非表示
                       </span>
                     )}
@@ -309,7 +312,7 @@ function DenyProtectedRolesTab({ guildId }: { guildId: string }) {
         </Button>
       </div>
       {rolesQuery.data.length > 0 && (
-        <ul className="bg-card divide-y rounded-xl border">
+        <ul className="bg-card divide-y rounded-lg border">
           {rolesQuery.data.map((roleId) => (
             <li key={roleId} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span className="min-w-0 flex-1 truncate">{roleNameById.get(roleId) ?? roleId}</span>
@@ -349,13 +352,13 @@ function ClearConfigButton({ guildId, disabled, onCleared }: { guildId: string; 
         <Button
           type="button"
           variant="outline"
-          className="text-destructive border-destructive/40 w-fit"
+          className="text-error border-error/40 w-fit"
           disabled={disabled || clearMutation.isPending}
         >
           一時VCの設定を解除
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>一時VCの設定を解除しますか?</DialogTitle>
           <DialogDescription>
@@ -430,8 +433,8 @@ function ConfigForm({
   return (
     <div className="flex flex-col gap-4">
       {showChannelFields && (
-        <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
-          <h2 className="font-bold">作成用ボイスチャンネル</h2>
+        <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
+          <h2 className="text-lg font-bold">作成用ボイスチャンネル</h2>
           {channelOptionsFailed ? (
             <InlineError
               summary="チャンネル一覧を読み込めませんでした。"
@@ -441,8 +444,12 @@ function ConfigForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={FIELD_LABEL}>
                 作成用ボイスチャンネル
-                <Select value={draft.createChannelId} onValueChange={(value) => update({ createChannelId: value })}>
-                  <SelectTrigger className="w-full" aria-label="作成用ボイスチャンネル" disabled={voiceOptionsQuery.isPending}>
+                <Select
+                  value={draft.createChannelId}
+                  onValueChange={(value) => update({ createChannelId: value })}
+                  disabled={voiceOptionsQuery.isPending}
+                >
+                  <SelectTrigger className="w-full" aria-label="作成用ボイスチャンネル">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -456,8 +463,12 @@ function ConfigForm({
               </label>
               <label className={FIELD_LABEL}>
                 カテゴリ
-                <Select value={draft.categoryId} onValueChange={(value) => update({ categoryId: value })}>
-                  <SelectTrigger className="w-full" aria-label="カテゴリ" disabled={categoryOptionsQuery.isPending}>
+                <Select
+                  value={draft.categoryId}
+                  onValueChange={(value) => update({ categoryId: value })}
+                  disabled={categoryOptionsQuery.isPending}
+                >
+                  <SelectTrigger className="w-full" aria-label="カテゴリ">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -477,8 +488,8 @@ function ConfigForm({
         </section>
       )}
 
-      <section className="bg-card flex flex-col gap-3 rounded-xl border p-5">
-        <h2 className="font-bold">共通設定</h2>
+      <section className="bg-card flex flex-col gap-3 rounded-lg border p-5">
+        <h2 className="text-lg font-bold">共通設定</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={FIELD_LABEL} htmlFor="temp-voice-name-template">
             名前テンプレート
@@ -511,7 +522,7 @@ function ConfigForm({
       </section>
 
       {changes.errors.length > 0 && (
-        <ul className="text-destructive flex flex-col gap-1 text-sm">
+        <ul className="text-error flex flex-col gap-1 text-sm">
           {changes.errors.map((error) => (
             <li key={error}>{error}</li>
           ))}
@@ -560,7 +571,7 @@ function SettingsTab({ guildId, config }: { guildId: string; config: TempVoiceCo
   return (
     <div className="flex flex-col gap-4">
       {showAutoSetup && (
-        <section className="bg-card flex flex-col items-center gap-3 rounded-xl border p-8 text-center">
+        <section className="bg-card flex flex-col items-center gap-3 rounded-lg border p-8 text-center">
           <h2 className="text-lg font-bold">まだ一時VCが設定されていません</h2>
           <p className="text-muted-foreground max-w-md text-sm">
             自動セットアップを押すと、Botがカテゴリと作成用ボイスチャンネルをDiscord上に作成します。既存のチャンネルを使う場合は手動で設定してください。
@@ -606,7 +617,7 @@ export function TempVoicePage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -646,10 +657,19 @@ export function TempVoicePage() {
       <h1 className="text-2xl font-bold">一時VC</h1>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TempVoiceTab)}>
-        <TabsList aria-label="一時VCの設定" className="grid w-full grid-cols-3 sm:inline-flex sm:w-fit">
-          <TabsTrigger value="list">一時VC一覧</TabsTrigger>
-          <TabsTrigger value="roles">拒否禁止ロール</TabsTrigger>
-          <TabsTrigger value="settings">設定</TabsTrigger>
+        <TabsList aria-label="一時VCの設定" className="sm:inline-flex sm:w-fit">
+          <TabsTrigger value="list">
+            <IconList aria-hidden="true" />
+            <TabsLabel>一時VC一覧</TabsLabel>
+          </TabsTrigger>
+          <TabsTrigger value="roles">
+            <IconShieldLock aria-hidden="true" />
+            <TabsLabel>拒否禁止ロール</TabsLabel>
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <IconSettings aria-hidden="true" />
+            <TabsLabel>設定</TabsLabel>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="flex flex-col gap-4">

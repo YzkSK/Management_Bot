@@ -1,10 +1,10 @@
 import { INFRA_LOG_SERVICES, type InfraLogService } from "@management-bot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { IconActivity, IconChevronLeft, IconChevronRight, IconCpu, IconDatabaseExport, IconFileText, IconLock } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { toast } from "@/components/starwind/toast";
 import { trpc } from "../trpc.js";
 import {
   describeItem,
@@ -22,11 +22,11 @@ import {
   type StatusItem,
 } from "./status-labels.js";
 import { ErrorState } from "@/components/page-state";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loading } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button, ButtonVariants } from "@/components/starwind/button";
+import { Input } from "@/components/starwind/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Loading } from "@/components/loading";
+import { Tabs, TabsContent, TabsLabel, TabsList, TabsTrigger } from "@/components/starwind/tabs";
 import { cn } from "@/lib/utils";
 
 /** ヘッダーの状態ランプと同じクエリ・同じ間隔で更新する(キャッシュを共有する)。 */
@@ -41,11 +41,11 @@ const isNotFoundError = (error: unknown) => error instanceof TRPCClientError && 
 export function NotFoundPage() {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 py-16 text-center">
-      <span className="text-6xl font-bold tracking-wide">404</span>
-      <p className="text-muted-foreground">ページが見つかりません。</p>
-      <Button asChild className="mt-2 h-11 px-5">
-        <Link to="/">サーバー一覧へ戻る</Link>
-      </Button>
+      <span className="font-mono text-6xl font-bold tracking-wide">404</span>
+      <p className="text-muted-foreground text-sm">ページが見つかりません。</p>
+      <Link to="/" data-slot="button" className={ButtonVariants.button({ class: "mt-2 h-11 px-5" })}>
+        サーバー一覧へ戻る
+      </Link>
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
   const service = parseService(params.get("service"));
   const overview = useQuery({ ...trpc.status.overview.queryOptions(), refetchInterval: STATUS_REFETCH_MS });
 
-  if (isNotFoundError(overview.error)) return <NotFoundPage />;
+  if (isNotFoundError(overview.error)) return <Navigate to="/404" replace />;
 
   const go = (next: StatusTab, nextService?: ServiceFilter) =>
     setParams(next === "status" ? {} : { tab: next, ...(nextService && nextService !== "all" ? { service: nextService } : {}) });
@@ -76,10 +76,10 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           <div className="flex flex-col gap-1.5">
             {/* サイドバーを出さない画面なので、サーバー一覧へ戻る導線を置く。 */}
             <Link to="/" className="text-muted-foreground hover:text-foreground -ml-1 flex w-fit items-center gap-0.5 text-sm">
-              <ChevronLeft className="size-4" aria-hidden="true" />
+              <IconChevronLeft className="size-4" aria-hidden="true" />
               サーバー一覧へ戻る
             </Link>
-            <h1 className="text-2xl font-bold">ステータス</h1>
+            <h1 className="text-[26px] font-bold">ステータス</h1>
             <p className="text-muted-foreground text-sm">
               Bot全体の各機能の稼働状況です。
               {overview.data && `最終更新: ${formatDateTime(overview.data.checkedAt)}(30秒ごとに自動更新)`}
@@ -87,20 +87,37 @@ export function StatusPage({ isOwner }: { isOwner: boolean }) {
           </div>
           <TabsList
             aria-label="ステータスの表示"
-            className={cn("grid w-full md:inline-flex md:w-fit", isOwner ? "grid-cols-5" : "grid-cols-4")}
+            className="md:inline-flex md:w-fit"
           >
-            <TabsTrigger value="status">ステータス</TabsTrigger>
-            <TabsTrigger value="resources">リソース</TabsTrigger>
-            <TabsTrigger value="logs">ログ</TabsTrigger>
-            <TabsTrigger value="backup">バックアップ</TabsTrigger>
-            {isOwner && <TabsTrigger value="access">閲覧権限</TabsTrigger>}
+            <TabsTrigger value="status">
+              <IconActivity aria-hidden="true" />
+              <TabsLabel>ステータス</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="resources">
+              <IconCpu aria-hidden="true" />
+              <TabsLabel>リソース</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="logs">
+              <IconFileText aria-hidden="true" />
+              <TabsLabel>ログ</TabsLabel>
+            </TabsTrigger>
+            <TabsTrigger value="backup">
+              <IconDatabaseExport aria-hidden="true" />
+              <TabsLabel>バックアップ</TabsLabel>
+            </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="access">
+                <IconLock aria-hidden="true" />
+                <TabsLabel>閲覧権限</TabsLabel>
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
         <TabsContent value="status" className="flex flex-col gap-4">
           {overview.data ? (
             <>
-              <section className={cn("flex items-center gap-3 rounded-xl border px-5 py-4", STATE_META[overview.data.summary].box)}>
+              <section className={cn("flex items-center gap-3 rounded-sm border px-5 py-4", STATE_META[overview.data.summary].box)}>
                 <span className={cn("size-3 shrink-0 rounded-full", STATE_META[overview.data.summary].dot)} aria-hidden="true" />
                 <span className="font-bold">{STATE_META[overview.data.summary].summary}</span>
               </section>
@@ -206,9 +223,9 @@ function ResourceTiles() {
   return (
     <section aria-label="サーバーのリソース" className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {tiles.map((tile) => (
-        <div key={tile.label} className="bg-card flex flex-col gap-2 rounded-xl border px-4 py-3">
+        <div key={tile.label} className="bg-card flex flex-col gap-2 rounded-sm border px-4 py-3">
           <span className="text-muted-foreground text-xs font-bold">{tile.label}</span>
-          <span className="text-xl font-bold">{tile.value}</span>
+          <span className="font-mono text-xl font-bold">{tile.value}</span>
           <span className="text-muted-foreground text-xs">{tile.sub}</span>
           {tile.percent !== null && <UsageBar percent={tile.percent} />}
           <Sparkline values={tile.spark} max={tile.max} />
@@ -236,7 +253,7 @@ function ResourcesTab() {
 
   return (
     <>
-      <div role="radiogroup" aria-label="期間" className="bg-muted grid w-full grid-cols-3 gap-0.5 rounded-lg p-0.5 md:w-fit">
+      <div role="radiogroup" aria-label="期間" className="bg-muted grid w-full grid-cols-3 gap-0.5 rounded-sm p-0.5 md:w-fit">
         {RANGE_OPTIONS.map((option) => (
           <button
             key={option.key}
@@ -244,7 +261,7 @@ function ResourcesTab() {
             role="radio"
             aria-checked={range === option.key}
             onClick={() => setRange(option.key)}
-            className={cn("flex h-[34px] items-center justify-center rounded-md px-3 text-[13px] whitespace-nowrap", range === option.key && "bg-background shadow-xs")}
+            className={cn("flex h-[34px] items-center justify-center rounded-sm px-3 text-[13px] whitespace-nowrap", range === option.key && "bg-card ring-border font-semibold ring-1")}
           >
             {option.label}
           </button>
@@ -261,7 +278,7 @@ function ResourcesTab() {
         )
       ) : (
         <>
-          <section className="bg-card flex flex-col gap-3 rounded-xl border px-4 py-3">
+          <section className="bg-card flex flex-col gap-3 rounded-sm border px-4 py-3">
             <h2 className="text-muted-foreground text-sm font-bold">ホストのCPU・メモリ使用率</h2>
             {/* SVGは横に引き伸ばすため、目盛りの数字は歪まないようHTMLで重ねる。 */}
             <div className="relative h-48 pl-10">
@@ -293,7 +310,7 @@ function ResourcesTab() {
               ))}            </div>
           </section>
 
-          <section className="bg-card overflow-x-auto rounded-xl border">
+          <section className="bg-card overflow-x-auto rounded-sm border">
             <h2 className="text-muted-foreground border-b px-4 py-3 text-sm font-bold">コンテナ別</h2>
             <table className="w-full text-sm">
               <thead className="text-muted-foreground text-left text-xs">
@@ -340,20 +357,20 @@ function StatusGroup({
   onOpenLogs?: (service: InfraLogService) => void;
 }) {
   return (
-    <section className="bg-card overflow-hidden rounded-xl border">
-      <h2 className="text-muted-foreground border-b px-4 py-3 text-sm font-bold">{title}</h2>
+    <section className="bg-card overflow-hidden rounded-sm border">
+      <h2 className="text-muted-foreground bg-muted/40 border-b px-[18px] py-3 text-xs font-bold tracking-wider">{title}</h2>
       <ul>
         {items.map((item) => {
           const meta = ITEM_META[item.key];
           const state = STATE_META[item.state];
           const body = (
             <>
-              <span className={cn("size-2.5 shrink-0 rounded-full", state.dot)} aria-hidden="true" />
+              <span className={cn("size-2 shrink-0 rounded-full", state.dot)} aria-hidden="true" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-sm font-medium">{meta.name}</span>
+                <span className="text-sm font-semibold">{meta.name}</span>
                 <span className="text-muted-foreground text-xs">{describeItem(item)}</span>
               </span>
-              <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap", state.badge)}>{state.label}</span>
+              <span className={cn("inline-flex h-6 shrink-0 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap", state.badge)}>{state.label}</span>
             </>
           );
           const logService = meta.logService;
@@ -364,13 +381,13 @@ function StatusGroup({
                   type="button"
                   onClick={() => onOpenLogs(logService)}
                   aria-label={`${meta.name}のログを見る`}
-                  className="hover:bg-accent flex w-full items-center gap-3 px-4 py-3 text-left"
+                  className="hover:bg-muted/50 flex w-full items-center gap-3 px-[18px] py-3.5 text-left"
                 >
                   {body}
-                  <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+                  <IconChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
                 </button>
               ) : (
-                <div className="flex items-center gap-3 px-4 py-3">{body}</div>
+                <div className="flex items-center gap-3 px-[18px] py-3.5">{body}</div>
               )}
             </li>
           );
@@ -404,7 +421,7 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
         <div
           role="radiogroup"
           aria-label="サービス"
-          className="bg-muted col-span-2 grid grid-cols-3 gap-0.5 rounded-lg p-0.5 md:col-span-4 md:flex md:w-fit xl:col-span-1"
+          className="bg-muted col-span-2 grid grid-cols-3 gap-0.5 rounded-sm p-0.5 md:col-span-4 md:flex md:w-fit xl:col-span-1"
         >
           {(["all", ...INFRA_LOG_SERVICES] as const).map((key) => (
             <button
@@ -414,8 +431,8 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
               aria-checked={service === key}
               onClick={() => onServiceChange(key)}
               className={cn(
-                "flex h-[34px] items-center justify-center gap-1.5 rounded-md px-3 text-[13px] whitespace-nowrap",
-                service === key && "bg-background shadow-xs",
+                "flex h-[34px] items-center justify-center gap-1.5 rounded-sm px-3 text-[13px] whitespace-nowrap",
+                service === key && "bg-card ring-border font-semibold ring-1",
               )}
             >
               <span className={cn("size-2 rounded-full", key === "all" ? "bg-foreground" : SERVICE_META[key].bar)} aria-hidden="true" />
@@ -444,8 +461,8 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
         <span
           role="status"
           className={cn(
-            "flex h-7 items-center gap-1.5 justify-self-start rounded-full px-2.5 text-xs whitespace-nowrap xl:justify-self-end",
-            live ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
+            "flex h-7 items-center gap-1.5 justify-self-start rounded-sm px-2.5 text-xs leading-none font-semibold whitespace-nowrap xl:justify-self-end",
+            live ? "bg-success-soft text-success-soft-foreground" : "bg-muted text-muted-foreground",
           )}
         >
           <span className={cn("size-2 rounded-full", live ? "bg-success" : "bg-muted-foreground")} aria-hidden="true" />
@@ -460,7 +477,7 @@ function LogsTab({ service, onServiceChange }: { service: ServiceFilter; onServi
         <>
           <section
             aria-label="ログ出力"
-            className="flex max-h-[65vh] min-h-64 flex-col gap-1 overflow-y-auto rounded-xl bg-zinc-900 px-4 py-3.5 font-mono text-[12.5px] leading-relaxed text-zinc-200"
+            className="flex max-h-[65vh] min-h-64 flex-col gap-1 overflow-y-auto rounded-sm bg-zinc-900 px-4 py-3.5 font-mono text-[12.5px] leading-relaxed text-zinc-200"
           >
             {entries.length === 0 && <p className="py-6 text-center text-zinc-400">該当するログはありません。</p>}
             {entries.map((entry, index) => (
@@ -525,7 +542,7 @@ function BackupTab({ isOwner }: { isOwner: boolean }) {
       ) : !files?.length ? (
         <p className="text-muted-foreground text-sm">バックアップはまだありません</p>
       ) : (
-        <section className="bg-card overflow-x-auto rounded-xl border">
+        <section className="bg-card overflow-x-auto rounded-sm border">
           <table className="w-full text-sm">
             <thead className="text-muted-foreground text-left text-xs">
               <tr>
@@ -582,7 +599,7 @@ function AccessTab() {
   );
 
   return (
-    <section className="bg-card flex w-full max-w-3xl flex-col gap-4 rounded-xl border px-5 py-4">
+    <section className="bg-card flex w-full max-w-3xl flex-col gap-4 rounded-sm border px-5 py-4">
       <div className="flex flex-col gap-1">
         <h2 className="font-bold">閲覧を許可するユーザー</h2>
         <p className="text-muted-foreground text-sm">
@@ -611,10 +628,10 @@ function AccessTab() {
       </div>
       <p className="text-muted-foreground -mt-2 text-xs">ダッシュボードにログインしたことのあるユーザーから選べます。</p>
       {viewers.data ? (
-        <ul className="divide-y overflow-hidden rounded-lg border">
+        <ul className="divide-y overflow-hidden rounded-sm border">
           {viewers.data.owners.map((owner) => (
             <UserRow key={owner.id} name={owner.name}>
-              <span className="bg-muted shrink-0 rounded-full px-2 py-0.5 text-xs whitespace-nowrap">オーナー(自動)</span>
+              <span className="bg-muted inline-flex h-6 shrink-0 items-center rounded-sm px-2 text-xs leading-none font-semibold whitespace-nowrap">オーナー(自動)</span>
             </UserRow>
           ))}
           {viewers.data.viewers.map((viewer) => (
@@ -643,7 +660,7 @@ function AccessTab() {
 function UserRow({ name, children }: { name: string; children: ReactNode }) {
   return (
     <li className="flex items-center gap-2.5 px-3.5 py-3 text-sm">
-      <span className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">
+      <span className="bg-border flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold" aria-hidden="true">
         {name.slice(0, 1).toUpperCase()}
       </span>
       <span className="min-w-0 flex-1 truncate">{name}</span>

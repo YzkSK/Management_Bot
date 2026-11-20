@@ -62,6 +62,7 @@ function buildContext(
     getGuildCategoryOptions: async () => [],
     getGuildAccessStatus: async () => "ok" as const,
     getGuildOwnerId: async () => null,
+    getGuildRoleList: async () => null,
     verifyGuildRole: async () => true,
     getGuildMembersPage: async () => ({
       members: [{ id: "a", name: "Alice", avatarUrl: "https://cdn.discordapp.com/avatars/a/x.png" }],

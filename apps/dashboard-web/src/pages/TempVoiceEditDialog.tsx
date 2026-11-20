@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioLines, Ban, Check, Crown, EyeOff, Lock, Pencil, Users, X } from "lucide-react";
-import { toast } from "sonner";
+import { IconBan, IconCheck, IconCrown, IconEyeOff, IconLock, IconPencil, IconUsers, IconWaveSine, IconX } from "@tabler/icons-react";
+import { toast } from "@/components/starwind/toast";
 import { trpc } from "../trpc.js";
 import {
   buildChannelEditActions,
@@ -18,7 +18,7 @@ import {
   type OverrideTargetType,
 } from "./temp-voice-edit.js";
 import { InlineError } from "@/components/page-state";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/starwind/button";
 import {
   Dialog,
   DialogClose,
@@ -28,10 +28,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+} from "@/components/starwind/dialog";
+import { Input } from "@/components/starwind/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/starwind/select";
+import { Switch } from "@/components/starwind/switch";
 
 export interface EditableTempVoiceChannel extends ChannelEditInitial {
   channelId: string;
@@ -63,18 +63,18 @@ function useTargetOptions(guildId: string, channelId: string) {
 }
 
 function OverrideChip({ entry, onRemove }: { entry: OverrideEntry; onRemove: () => void }) {
-  const StateIcon = entry.state === "allow" ? Check : Ban;
+  const StateIcon = entry.state === "allow" ? IconCheck : IconBan;
   const label = entry.name ?? (entry.targetType === "user" ? "メンバー" : "ロール");
   return (
-    <li className="bg-muted inline-flex items-center gap-1.5 rounded-full py-0.5 pr-1 pl-2.5 text-xs">
+    <li className="bg-muted inline-flex h-6 items-center gap-1.5 rounded-sm pr-1 pl-2 text-xs leading-none whitespace-nowrap">
       <StateIcon className="size-3" aria-hidden />
       <span className="max-w-40 truncate">
         {entry.targetType === "role" ? "@" : ""}
         {label}
         <span className="sr-only">{entry.state === "allow" ? "(許可)" : "(拒否)"}</span>
       </span>
-      <button type="button" aria-label={`${label}の設定を解除`} className="hover:bg-background rounded-full p-0.5" onClick={onRemove}>
-        <X className="size-3" aria-hidden />
+      <button type="button" aria-label={`${label}の設定を解除`} className="hover:bg-background rounded-sm p-0.5" onClick={onRemove}>
+        <IconX className="size-3" aria-hidden />
       </button>
     </li>
   );
@@ -114,7 +114,7 @@ function OverridesSection({
   return (
     <section className="flex flex-col gap-2" aria-label="個別許可・拒否">
       <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-        <Check className="size-4" aria-hidden />
+        <IconCheck className="size-4" aria-hidden />
         個別許可・拒否
       </h3>
       {overridesQuery.isError ? (
@@ -228,7 +228,7 @@ export function EditForm({
       <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto py-1">
         <label className={FIELD_LABEL} htmlFor="temp-voice-edit-name">
           <span className="flex items-center gap-1.5">
-            <Pencil className="size-4" aria-hidden />
+            <IconPencil className="size-4" aria-hidden />
             チャンネル名
           </span>
           <Input id="temp-voice-edit-name" value={draft.name} onChange={(e) => update({ name: e.target.value })} />
@@ -237,7 +237,7 @@ export function EditForm({
         <div className="grid grid-cols-2 gap-3">
           <label className={FIELD_LABEL} htmlFor="temp-voice-edit-limit">
             <span className="flex items-center gap-1.5">
-              <Users className="size-4" aria-hidden />
+              <IconUsers className="size-4" aria-hidden />
               人数制限(0で無制限)
             </span>
             <Input
@@ -251,7 +251,7 @@ export function EditForm({
           </label>
           <label className={FIELD_LABEL} htmlFor="temp-voice-edit-bitrate">
             <span className="flex items-center gap-1.5">
-              <AudioLines className="size-4" aria-hidden />
+              <IconWaveSine className="size-4" aria-hidden />
               音質(kbps)
             </span>
             <Input id="temp-voice-edit-bitrate" value={draft.bitrateKbps} onChange={(e) => update({ bitrateKbps: e.target.value })} />
@@ -259,14 +259,14 @@ export function EditForm({
         </div>
         <div className="flex items-center justify-between gap-3 text-sm">
           <label htmlFor="temp-voice-edit-locked" className="flex items-center gap-1.5">
-            <Lock className="size-4" aria-hidden />
+            <IconLock className="size-4" aria-hidden />
             ロック(新規入室を禁止)
           </label>
           <Switch id="temp-voice-edit-locked" checked={draft.locked} onCheckedChange={(locked) => update({ locked })} />
         </div>
         <div className="flex items-center justify-between gap-3 text-sm">
           <label htmlFor="temp-voice-edit-hidden" className="flex items-center gap-1.5">
-            <EyeOff className="size-4" aria-hidden />
+            <IconEyeOff className="size-4" aria-hidden />
             非表示
           </label>
           <Switch id="temp-voice-edit-hidden" checked={draft.hidden} onCheckedChange={(hidden) => update({ hidden })} />
@@ -276,7 +276,7 @@ export function EditForm({
 
         <label className={FIELD_LABEL}>
           <span className="flex items-center gap-1.5">
-            <Crown className="size-4" aria-hidden />
+            <IconCrown className="size-4" aria-hidden />
             オーナー移譲(在室メンバーから選択)
           </span>
           <Select value={draft.transferTo === "" ? NO_TRANSFER : draft.transferTo} onValueChange={(v) => update({ transferTo: v === NO_TRANSFER ? "" : v })}>
@@ -296,7 +296,7 @@ export function EditForm({
         </label>
 
         {errors.length > 0 && (
-          <ul className="text-destructive flex flex-col gap-1 text-sm">
+          <ul className="text-error flex flex-col gap-1 text-sm">
             {errors.map((error) => (
               <li key={error}>{error}</li>
             ))}
@@ -322,11 +322,11 @@ export function EditChannelButton({ guildId, channel }: { guildId: string; chann
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          <Pencil className="size-3.5" aria-hidden />
+          <IconPencil className="size-3.5" aria-hidden />
           設定を変更
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-6">
+      <DialogContent className="top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
         <DialogHeader>
           <DialogTitle>{channel.name || "一時VC"}の設定を変更</DialogTitle>
           <DialogDescription>変更した項目だけがDiscordに反映されます。反映が終わるまで少しお待ちください。</DialogDescription>

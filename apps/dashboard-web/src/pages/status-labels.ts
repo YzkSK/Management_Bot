@@ -3,7 +3,7 @@ import type { InfraLogEntry, InfraLogService } from "@management-bot/shared";
 
 export type { StatusItem };
 
-/** ステータスの配色はデザイントークン(success/warning/destructive)に揃える。 */
+/** ステータスの配色はデザイントークン(success/warning/error)に揃える。 */
 export const STATE_META: Record<ServiceState, { label: string; lamp: string; summary: string; dot: string; ring: string; badge: string; box: string }> = {
   ok: {
     label: "稼働中",
@@ -11,8 +11,8 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     summary: "すべての機能が正常に稼働しています",
     dot: "bg-success",
     ring: "ring-success/20",
-    badge: "bg-success/10 text-success",
-    box: "border-success/30 bg-success/10 text-success",
+    badge: "bg-success-soft text-success-soft-foreground",
+    box: "border-success/25 bg-success-soft text-foreground",
   },
   warn: {
     label: "遅延",
@@ -20,17 +20,17 @@ export const STATE_META: Record<ServiceState, { label: string; lamp: string; sum
     summary: "一部の機能で遅延が発生しています",
     dot: "bg-warning",
     ring: "ring-warning/20",
-    badge: "bg-warning/10 text-warning",
-    box: "border-warning/30 bg-warning/10 text-warning",
+    badge: "bg-warning-soft text-warning-soft-foreground",
+    box: "border-warning/25 bg-warning-soft text-foreground",
   },
   down: {
     label: "停止",
     lamp: "停止あり",
     summary: "一部の機能が停止しています",
-    dot: "bg-destructive",
-    ring: "ring-destructive/20",
-    badge: "bg-destructive/10 text-destructive",
-    box: "border-destructive/30 bg-destructive/10 text-destructive",
+    dot: "bg-error",
+    ring: "ring-error/20",
+    badge: "bg-error-soft text-error-soft-foreground",
+    box: "border-error/25 bg-error-soft text-foreground",
   },
 };
 
@@ -40,7 +40,7 @@ export const ITEM_META: Record<StatusItem["key"], { name: string; group: "infra"
   postgres: { name: "PostgreSQL", group: "infra", logService: "postgres" },
   redis: { name: "Redis", group: "infra", logService: "redis" },
   activity: { name: "アクティビティモニター", group: "feature" },
-  logging: { name: "ログ機能", group: "feature" },
+  logging: { name: "ログ", group: "feature" },
   tempVoice: { name: "一時VC", group: "feature" },
   moderation: { name: "スパム対策", group: "feature" },
   backup: { name: "バックアップ", group: "feature" },
@@ -106,7 +106,7 @@ export function formatUptime(ms: number): string {
 
 /** 使用率に応じたバーの色。80%以上で警告、90%以上で危険。 */
 export const usageBarClass = (percent: number) =>
-  percent >= 90 ? "bg-destructive" : percent >= 80 ? "bg-warning" : "bg-success";
+  percent >= 90 ? "bg-error" : percent >= 80 ? "bg-warning" : "bg-success";
 
 /** 値の列をSVGのpolyline用`x,y`列にする。yは0〜max(はみ出しは丸める)を高さheightへ反転して写す。 */
 export function toPolylinePoints(values: readonly number[], max: number, width: number, height: number): string {

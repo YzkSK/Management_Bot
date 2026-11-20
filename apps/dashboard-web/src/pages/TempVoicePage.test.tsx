@@ -7,7 +7,7 @@ import { CAPABILITIES } from "@management-bot/shared";
 import { trpc } from "../trpc.js";
 import { TempVoicePage } from "./TempVoicePage.js";
 import { EditForm } from "./TempVoiceEditDialog.js";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/starwind/dialog";
 
 function renderPage(guildId: string, queryClient: QueryClient): string {
   return renderToStaticMarkup(
