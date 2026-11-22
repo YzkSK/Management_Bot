@@ -15,8 +15,6 @@ import {
   moderationNgwords,
   moderationThresholds,
   moderationWhitelist,
-  scheduledPostSettings,
-  scheduledPosts,
   tempVoiceConfigs,
   tempVoiceDenyProtectedRoles,
 } from "./schema/index.js";
@@ -81,19 +79,6 @@ const inserts: ReadonlyArray<{ name: string; topic: GuildDataTopic; insert: () =
         outcome: "success",
       }),
   },
-  {
-    name: "scheduled_posts",
-    topic: "scheduledPost",
-    insert: () =>
-      db.insert(scheduledPosts).values({
-        guildId,
-        channelId: "c1",
-        authorId: "u1",
-        content: "hi",
-        scheduledAt: new Date(Date.now() + 60_000),
-      }),
-  },
-  { name: "scheduled_post_settings", topic: "scheduledPost", insert: () => db.insert(scheduledPostSettings).values({ guildId }) },
   { name: "temp_voice_configs", topic: "tempVoice", insert: () => db.insert(tempVoiceConfigs).values({ guildId }) },
   {
     name: "temp_voice_deny_protected_roles",

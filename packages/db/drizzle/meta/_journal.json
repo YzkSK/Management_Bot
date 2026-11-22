@@ -288,6 +288,13 @@
       "when": 1791900000000,
       "tag": "0040_guild_data_changed_notify",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795029223891,
+      "tag": "0041_drop_scheduled_posts",
+      "breakpoints": true
     }
   ]
 }

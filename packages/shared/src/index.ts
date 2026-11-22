@@ -29,24 +29,12 @@ export {
   voiceSessionEndedSchema,
   moderationActionRecordedSchema,
   tempVoiceEventRecordedSchema,
-  scheduledPostEventRecordedSchema,
-  type ScheduledPostEventRecordedEvent,
   type DomainEvent,
   type DomainEventType,
   type VoiceSessionEndedEvent,
   type ModerationActionRecordedEvent,
   type TempVoiceEventRecordedEvent,
 } from "./domain-events.js";
-export {
-  SCHEDULED_POST_STATUSES,
-  SCHEDULED_POST_FAILURE_REASONS,
-  SCHEDULED_POST_CANCELLED_BY,
-  SCHEDULED_POST_FAILURE_LABELS,
-  SCHEDULED_POST_CONTENT_MAX,
-  type ScheduledPostStatus,
-  type ScheduledPostFailureReason,
-  type ScheduledPostCancelledBy,
-} from "./scheduled-post.js";
 export { moderationIncidentSchema, type ModerationIncident } from "./moderation-incident.js";
 export { LOCALES, type Locale, type LocaleMessages } from "./locale/index.js";
 export { LOG_CATEGORIES, type LogCategory } from "./log-category.js";
@@ -82,7 +70,6 @@ export {
   moderationCaseLogEntrySchema,
   voiceLogEntrySchema,
   tempVoiceLogEntrySchema,
-  scheduledPostLogEntrySchema,
   VOICE_STATE_FLAG_NAMES,
   logEntrySchema,
   isBulkDeleteLogEntry,
@@ -113,7 +100,7 @@ export {
 export { buildInviteUrl } from "./invite-url.js";
 export { createTtlCache } from "./ttl-cache.js";
 export { mapWithConcurrency } from "./concurrency.js";
-export { DISCORD_PERMISSION_LABELS, diffPermissions } from "./discord-permissions.js";
+export { DISCORD_PERMISSION_LABELS, diffPermissions, knownPermissionsForBits } from "./discord-permissions.js";
 export { discordIdSchema, roleMentionLabel } from "./discord-id.js";
 export {
   TEMP_VOICE_CREATE_REASON,

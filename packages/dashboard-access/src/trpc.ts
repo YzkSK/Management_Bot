@@ -29,6 +29,29 @@ export interface RoleOption {
  */
 export type GuildAccessStatus = "ok" | "forbidden" | "not_found";
 
+/** ロール管理画面向けのロール情報(issue #625)。 */
+export interface GuildRoleInfo {
+  id: string;
+  name: string;
+  /** 色(0xRRGGBB)。0は色なし。 */
+  color: number;
+  position: number;
+  /** 権限ビットフィールド(10進文字列)。 */
+  permissions: string;
+  /** インテグレーション管理のロール(手動で操作できない)。 */
+  managed: boolean;
+  /** Botロールの場合、そのBotのユーザーID。 */
+  botId: string | null;
+}
+
+export interface GuildRoleList {
+  roles: readonly GuildRoleInfo[];
+  /** ロールIDごとのメンバー数。Discord側のエンドポイントが使えない場合はnull。 */
+  memberCounts: Readonly<Record<string, number>> | null;
+  /** Bot自身が持つロールのID。 */
+  botRoleIds: readonly string[];
+}
+
 export interface MemberOption {
   id: string;
   name: string;
@@ -117,6 +140,13 @@ export interface DashboardAccessContext {
    * 短命キャッシュしてよい。
    */
   getGuildRoles: (guildId: string) => Promise<readonly RoleOption[]>;
+  /**
+   * guildId直下の全ロールの詳細(色・position・権限・メンバー数・Bot保有ロール)を返す。
+   * ロール管理画面の一覧に使う(issue #625)。Bot未参加・権限不足(403/404)の場合はnull。
+   * メンバー数はDiscordの`/roles/member-counts`が使えない場合nullになる。
+   * 表示専用なのでdashboard-api側で短命キャッシュしてよい。
+   */
+  getGuildRoleList: (guildId: string) => Promise<GuildRoleList | null>;
   /**
    * guildId直下のボイスチャンネル(type 2)のid/nameを返す。Dashboard一時VC設定画面の
    * 作成用チャンネルセレクターに使う(issue #415)。表示専用なのでdashboard-api側で

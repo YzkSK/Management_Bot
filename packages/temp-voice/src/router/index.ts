@@ -204,7 +204,7 @@ export const tempVoiceRouter = router({
       await replaceDenyProtectedRoles(ctx.db, input.guildId, input.roleIds);
     }),
 
-  /** VIEW_TEMP_VOICEが無いメンバーには、自分がオーナーのVCだけを返す(予約投稿のlistと同じ設計)。 */
+  /** VIEW_TEMP_VOICEが無いメンバーには、自分がオーナーのVCだけを返す。 */
   listActiveChannels: protectedProcedure
     .input(guildIdInput)
     .use(requireGuildMember())

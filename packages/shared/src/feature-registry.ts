@@ -20,7 +20,7 @@ const FEATURE_METADATA_LIST = [
   },
   {
     key: "logging",
-    name: "ログ機能",
+    name: "ログ",
     description: "メッセージ・メンバー・ロール等のサーバーイベントを記録する",
     icon: "scroll-text",
     viewCapability: CAPABILITIES.VIEW_LOGS,
@@ -41,14 +41,6 @@ const FEATURE_METADATA_LIST = [
     icon: "shield-alert",
     viewCapability: CAPABILITIES.MANAGE_MODERATION,
     defaultEnabled: false,
-  },
-  {
-    key: "scheduled-post",
-    name: "予約投稿",
-    description: "指定した日時にメッセージを自動投稿する(/schedule)",
-    icon: "calendar-clock",
-    viewCapability: CAPABILITIES.VIEW_SCHEDULED_POSTS,
-    defaultEnabled: true,
   },
 ] as const satisfies readonly FeatureMetadata[];
 

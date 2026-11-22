@@ -15,9 +15,10 @@ export const CAPABILITIES = {
   MANAGE_MODERATION: 1 << 8,
   MANAGE_ACCESS: 1 << 9,
   // 1 << 10: 旧MANAGE_GUILD_SETTINGS(サーバー単位の設定項目が無いため削除。issue #527)
-  VIEW_SCHEDULED_POSTS: 1 << 11,
-  MANAGE_SCHEDULED_POSTS: 1 << 12,
+  // 1 << 11, 1 << 12: 旧VIEW/MANAGE_SCHEDULED_POSTS(予約投稿機能の削除に伴い削除。issue #737)
   VIEW_AUDIT_LOG: 1 << 13,
+  // ロール管理の閲覧(issue #617/#625)
+  VIEW_ROLES: 1 << 14,
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
@@ -78,7 +79,6 @@ const CAPABILITY_PREREQUISITES: readonly (readonly [number, number])[] = [
   [CAPABILITIES.VIEW_LOGS_RAW, CAPABILITIES.VIEW_LOGS],
   [CAPABILITIES.MANAGE_LOGGING_SETTINGS, CAPABILITIES.VIEW_LOGS],
   [CAPABILITIES.MANAGE_TEMP_VOICE, CAPABILITIES.VIEW_TEMP_VOICE],
-  [CAPABILITIES.MANAGE_SCHEDULED_POSTS, CAPABILITIES.VIEW_SCHEDULED_POSTS],
 ];
 
 /** 含まれるすべてのcapabilityについて、その前提capabilityも含まれているか。 */

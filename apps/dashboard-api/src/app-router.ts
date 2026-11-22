@@ -2,7 +2,7 @@ import { auditLogRouter, capabilityGrantsRouter, protectedProcedure, router } fr
 import { activityRouter } from "@management-bot/activity";
 import { loggingRouter } from "@management-bot/logging";
 import { moderationRouter } from "@management-bot/moderation";
-import { scheduledPostRouter } from "@management-bot/scheduled-post";
+import { roleManagementRouter } from "@management-bot/role-management";
 import { tempVoiceRouter } from "@management-bot/temp-voice";
 import { guildSettingsRouter } from "./routers/guild-settings.js";
 import { createStatusRouter, resolveStatusAccess, type StatusDeps } from "./routers/status.js";
@@ -20,8 +20,8 @@ export function createAppRouter(statusDeps: StatusDeps) {
     activity: activityRouter,
     logging: loggingRouter,
     moderation: moderationRouter,
-    scheduledPost: scheduledPostRouter,
     tempVoice: tempVoiceRouter,
+    roleManagement: roleManagementRouter,
     access: capabilityGrantsRouter,
     auditLog: auditLogRouter,
     status: createStatusRouter(statusDeps),

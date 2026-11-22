@@ -9,9 +9,8 @@ export const CAPABILITY_LABELS: Record<CapabilityName, string> = {
   MANAGE_TEMP_VOICE: "一時ボイスチャンネルの管理",
   MANAGE_MODERATION: "モデレーションの管理",
   MANAGE_ACCESS: "アクセス権限の管理",
-  VIEW_SCHEDULED_POSTS: "予約投稿の閲覧",
-  MANAGE_SCHEDULED_POSTS: "予約投稿の管理",
   VIEW_AUDIT_LOG: "操作履歴の閲覧",
+  VIEW_ROLES: "ロールの閲覧",
 };
 
 export const CAPABILITY_OPTIONS: readonly { value: CapabilityName; label: string; bit: number }[] = (
@@ -29,7 +28,7 @@ export const CAPABILITY_GROUPS: readonly CapabilityGroup[] = [
   { title: "ログ", items: ["VIEW_LOGS", "VIEW_LOGS_RAW", "MANAGE_LOGGING_SETTINGS"] },
   { title: "一時ボイスチャンネル", items: ["VIEW_TEMP_VOICE", "MANAGE_TEMP_VOICE"] },
   { title: "モデレーション", items: ["MANAGE_MODERATION"] },
-  { title: "予約投稿", items: ["VIEW_SCHEDULED_POSTS", "MANAGE_SCHEDULED_POSTS"] },
+  { title: "ロール管理", items: ["VIEW_ROLES"] },
   { title: "アクセス権限", items: ["MANAGE_ACCESS"] },
   { title: "操作履歴", items: ["VIEW_AUDIT_LOG"] },
 ];

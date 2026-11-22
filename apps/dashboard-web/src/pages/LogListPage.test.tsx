@@ -52,7 +52,7 @@ describe("LogListPage", () => {
   test("カテゴリ絞り込みは未選択時「すべて」を表示するボタンになっている(#505)", () => {
     const queryClient = new QueryClient();
     const html = renderPage("g1", queryClient);
-    expect(html).toContain('aria-haspopup="true"');
+    expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('<b>すべて</b>');
   });
 
@@ -147,7 +147,8 @@ describe("LogListPage", () => {
 
     expect(html.match(/aria-label="名前を読み込み中"/g)).toHaveLength(2); // チャンネルと投稿者
     expect(html).toContain("がメッセージを投稿しました");
-    expect(html).not.toContain("a1");
+    // フィルターのPopover(閉状態でもSSRされる)内のSVGパスに"a1"が現れるため、テキストノードだけを見る。
+    expect(html).not.toMatch(/>[^<]*a1[^<]*</);
     expect(html).not.toContain("");
   });
 
@@ -257,7 +258,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@a1</span> がメッセージを投稿しました");
+    expect(html).toContain(">a1</span> がメッセージを投稿しました");
   });
 
   test("実行者列にsubjectIdの表示名(resolveDisplayNamesの結果)が表示される", () => {
@@ -336,7 +337,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@u1</span> が自分のメッセージを削除しました");
+    expect(html).toContain(">u1</span> が自分のメッセージを削除しました");
   });
 
   test("第三者によるメッセージ削除では実行者・投稿者の両方の名前を解決する", () => {
@@ -378,7 +379,7 @@ describe("LogListPage", () => {
     );
     const html = renderPage("g1", queryClient);
 
-    expect(html).toContain(">@Admin</span> が <span class=\"rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200\">@Yuzuki</span> のメッセージを削除しました");
+    expect(html).toMatch(/>Admin<\/span> が <span class="[^"]*">Yuzuki<\/span> のメッセージを削除しました/);
   });
 
   test("ボイスログのチャンネルIDをresolveDisplayNamesのchannelIdsに含めて問い合わせる", () => {

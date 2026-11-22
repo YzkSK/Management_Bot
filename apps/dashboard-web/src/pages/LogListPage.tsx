@@ -16,16 +16,18 @@ import {
 import { isForbiddenError } from "../dashboard-query-client.js";
 import { useGuildCapabilities } from "../guild-pages.js";
 import { trpc } from "../trpc.js";
-import { ChevronLeft, ChevronRight, ExternalLink, Settings } from "lucide-react";
-import { CATEGORY_ACCENT, CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
+import { IconCaretRightFilled, IconChevronLeft, IconChevronRight, IconExternalLink, IconSettings } from "@tabler/icons-react";
+import { CATEGORY_ICON, CATEGORY_LABELS } from "./category-labels.js";
 import { CategoryFilter } from "./CategoryFilter.js";
 import { formatCreatedAt } from "./format-created-at.js";
 import { visiblePages } from "./pagination.js";
 import { useLogEntryNotifications } from "./use-log-entry-notifications.js";
 import { ErrorState, ForbiddenState, InlineError } from "@/components/page-state";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Loading, Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/starwind/alert";
+import { Button, ButtonVariants } from "@/components/starwind/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/starwind/collapsible";
+import { Loading } from "@/components/loading";
+import { Skeleton } from "@/components/starwind/skeleton";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -59,7 +61,23 @@ function LogIcon({ entry }: { entry: LogEntry }) {
     );
   }
   const Icon = CATEGORY_ICON[entry.category];
-  return <Icon className="size-5 shrink-0" style={{ color: CATEGORY_ACCENT[entry.category] }} aria-hidden="true" />;
+  return <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />;
+}
+
+/** カテゴリのモノクロタグ(アイコン+ラベル)。折り返さない。 */
+function CategoryTag({ category, className }: { category: LogCategory; className?: string }) {
+  const Icon = CATEGORY_ICON[category];
+  return (
+    <span
+      className={cn(
+        "bg-muted text-foreground inline-flex h-6 shrink-0 items-center gap-1 rounded-sm px-2 text-xs leading-none font-medium whitespace-nowrap sm:w-32",
+        className,
+      )}
+    >
+      <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
+      {CATEGORY_LABELS[category]}
+    </span>
+  );
 }
 
 export function shouldShowRawLogPayload(hasRawAccess: boolean, details: Record<string, unknown>): boolean {
@@ -76,9 +94,9 @@ const CONNECTION_STATUS_LABELS = {
 /** 接続状態バッジの色(正常=緑、再接続中=黄、停止=赤、接続中=グレー)。 */
 const CONNECTION_STATUS_TONES = {
   connecting: "bg-muted text-muted-foreground [&>span]:bg-muted-foreground",
-  open: "bg-success/10 text-success [&>span]:bg-success",
-  reconnecting: "bg-warning/10 text-warning [&>span]:bg-warning",
-  stopped: "bg-destructive/10 text-destructive [&>span]:bg-destructive",
+  open: "bg-success-soft text-success-soft-foreground [&>span]:bg-success",
+  reconnecting: "bg-warning-soft text-warning-soft-foreground [&>span]:bg-warning",
+  stopped: "bg-error-soft text-error-soft-foreground [&>span]:bg-error",
 } as const;
 
 /** 短時間に連続した通知をまとめて1回のrefetchにし、高頻度ログでの過剰な再取得を避ける。 */
@@ -163,11 +181,10 @@ function renderLogMessage(message: string): ReactNode {
         key={i}
         className={
           isUser
-            ? "rounded bg-indigo-100 px-1.5 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200"
-            : "rounded bg-emerald-100 px-1.5 font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+            ? "bg-mention text-mention-foreground rounded-[3px] px-1.5 font-semibold"
+            : "text-foreground rounded-sm border px-1.5 font-medium"
         }
       >
-        {isUser && "@"}
         {withNameSkeletons(name)}
       </span>
     );
@@ -225,7 +242,7 @@ function AttachmentPreview({ attachment }: { attachment: MessageAttachment }) {
           aria-label="元のページを開く"
           className="absolute top-1 right-1 rounded bg-black/60 p-1 text-white hover:bg-black/80"
         >
-          <ExternalLink className="size-3" />
+          <IconExternalLink className="size-3" />
         </a>
       )}
     </div>
@@ -347,7 +364,7 @@ export function LogListPage() {
 
   if (!guildId) {
     return (
-      <Alert variant="destructive">
+      <Alert variant="error">
         <AlertDescription>サーバーが指定されていません。</AlertDescription>
       </Alert>
     );
@@ -364,19 +381,24 @@ export function LogListPage() {
           <h1 className="text-2xl font-bold">ログ一覧</h1>
           <p
             role="status"
-            className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs", CONNECTION_STATUS_TONES[connectionStatus])}
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-xs leading-none whitespace-nowrap",
+              CONNECTION_STATUS_TONES[connectionStatus],
+            )}
           >
             <span className="size-2 shrink-0 rounded-full" aria-hidden="true" />
             {CONNECTION_STATUS_LABELS[connectionStatus]}
           </p>
         </div>
         {canManageSettings && (
-          <Button asChild variant="outline">
-            <Link to={`/guilds/${guildId}/logs/settings`}>
-              <Settings aria-hidden="true" />
-              ログ設定
-            </Link>
-          </Button>
+          <Link
+            to={`/guilds/${guildId}/logs/settings`}
+            data-slot="button"
+            className={ButtonVariants.button({ variant: "outline" })}
+          >
+            <IconSettings aria-hidden="true" />
+            ログ設定
+          </Link>
         )}
       </div>
 
@@ -401,9 +423,9 @@ export function LogListPage() {
       {logsQuery.data && (
         <>
           {logsQuery.data.entries.length === 0 ? (
-            <p className="text-muted-foreground rounded-xl border border-dashed p-10 text-center text-sm">該当するログはありません。</p>
+            <p className="text-muted-foreground rounded-lg border border-dashed p-10 text-center text-sm">該当するログはありません。</p>
           ) : (
-            <div className="bg-card flex flex-col overflow-hidden rounded-xl border">
+            <div className="bg-card flex flex-col overflow-hidden rounded-lg border">
               {logsQuery.data.entries.map(({ id, entry, collapsedEntries }) => {
                 const summary = summarizeLogEntry(entry);
                 const displayContent = contentWithoutGifLinks(summary.content, summary.attachments) ?? null;
@@ -412,43 +434,30 @@ export function LogListPage() {
                   : { users: namesQuery.data?.users ?? {}, channels: namesQuery.data?.channels ?? {} };
                 const message = formatLogMessage(entry, summary, { ...names, markup: true });
                 const isExpanded = expandedIds.has(id);
-                const detailId = `log-detail-${id}`;
-                const collapsedDetailId = `collapsed-log-detail-${id}`;
                 const isCollapsedExpanded = expandedIds.has(`collapsed-${id}`);
 
                 return (
                   <div key={id} className="border-t first:border-t-0">
-                    <button
+                    <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(id)}>
+                    <CollapsibleTrigger
                       type="button"
-                      onClick={() => toggleExpanded(id)}
-                      aria-expanded={isExpanded}
-                      aria-controls={detailId}
                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50 sm:px-4"
                     >
-                      <span
-                        className="h-7 w-1 shrink-0 rounded-full"
-                        style={{ backgroundColor: CATEGORY_ACCENT[entry.category] }}
-                        aria-hidden="true"
-                      />
                       <LogIcon entry={entry} />
                       <span className="flex min-w-0 flex-1 flex-col-reverse gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                         <span className="flex shrink-0 items-center gap-2 text-xs sm:gap-3">
                           <time dateTime={summary.createdAt} className="text-muted-foreground sm:order-first sm:w-36">
                             {formatCreatedAt(summary.createdAt)}
                           </time>
-                          <span
-                            className="order-first font-medium sm:order-none sm:w-28"
-                            style={{ color: CATEGORY_ACCENT[entry.category] }}
-                          >
-                            {CATEGORY_LABELS[entry.category]}
-                          </span>
+                          <CategoryTag category={entry.category} className="order-first sm:order-none" />
                         </span>
                         <span className="min-w-0 flex-1 text-sm">{renderLogMessage(message)}</span>
                       </span>
-                    </button>
+                    </CollapsibleTrigger>
 
-                    {isExpanded && (
-                      <div id={detailId} className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                    <CollapsibleContent className="flex flex-col gap-3 border-t bg-muted/40 p-3">
+                      {isExpanded && (
+                      <>
                         {isBulkDeleteLogEntry(entry) && (
                           <section aria-label="削除されたメッセージ" className="flex flex-col gap-2 rounded-md border bg-card p-3">
                             <h2 className="text-sm font-semibold">削除されたメッセージ（{entry.deletedMessages.length}件）</h2>
@@ -480,8 +489,8 @@ export function LogListPage() {
                         {(displayContent !== null || summary.previousContent !== null) && (
                           <div className="grid gap-2 md:grid-cols-2">
                             {summary.previousContent !== null && (
-                              <p className="bg-destructive/10 flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap">
-                                <span className="text-destructive text-xs">編集前</span>
+                              <p className="bg-error/10 flex flex-col gap-1 rounded-md p-3 text-sm whitespace-pre-wrap">
+                                <span className="text-error text-xs">編集前</span>
                                 <del>{summary.previousContent || "(本文なし)"}</del>
                               </p>
                             )}
@@ -517,7 +526,7 @@ export function LogListPage() {
                                       <span className="text-muted-foreground">変更なし</span>
                                     )}
                                     {added.map((name) => (
-                                      <span key={`added-${name}`} className="mr-2 text-green-600 dark:text-green-500">
+                                      <span key={`added-${name}`} className="text-success mr-2">
                                         +{name}
                                       </span>
                                     ))}
@@ -577,35 +586,35 @@ export function LogListPage() {
                         </div>
 
                         {shouldShowRawLogPayload(logsQuery.data.hasRawAccess, summary.details) && (
-                          <details>
-                            <summary className="text-muted-foreground cursor-pointer text-xs">生データ</summary>
-                            <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>
-                          </details>
+                          <Collapsible>
+                            <CollapsibleTrigger type="button" className="group text-muted-foreground flex cursor-pointer items-center gap-1 text-xs">
+                              <IconCaretRightFilled className="size-3 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
+                              生データ
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <pre className="text-muted-foreground mt-1 text-xs overflow-x-auto">{JSON.stringify(summary.details, null, 2)}</pre>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
-                      </div>
-                    )}
+                      </>
+                      )}
+                    </CollapsibleContent>
+                    </Collapsible>
 
                     {collapsedEntries && (
-                      <>
-                        <button
+                      <Collapsible open={isCollapsedExpanded} onOpenChange={() => toggleExpanded(`collapsed-${id}`)}>
+                        <CollapsibleTrigger
                           type="button"
-                          onClick={() => toggleExpanded(`collapsed-${id}`)}
-                          aria-expanded={isCollapsedExpanded}
-                          aria-controls={collapsedDetailId}
                           className="flex w-full items-center gap-3 border-t px-3 py-2 text-left hover:bg-accent/50"
                         >
-                          <span
-                            className="size-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: CATEGORY_ACCENT.message }}
-                            aria-hidden="true"
-                          />
+                          <span className="bg-muted-foreground size-2 shrink-0 rounded-full" aria-hidden="true" />
                           <span className="flex-1 text-sm">
                             {entry.category === "moderationCase" ? "関連する削除ログ" : "削除された投稿ログ"}（{collapsedEntries.length}件）
                           </span>
-                        </button>
-                        {isCollapsedExpanded && (
-                          <div id={collapsedDetailId} className="flex flex-col gap-2 border-t bg-muted/40 p-3">
-                            {collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="flex flex-col gap-2 border-t bg-muted/40 p-3">
+                          {isCollapsedExpanded &&
+                            collapsedEntries.map(({ id: collapsedId, entry: collapsedEntry, collapsedEntries: nestedEntries }) => {
                               const collapsedSummary = summarizeLogEntry(collapsedEntry);
                               const collapsedMessage = formatLogMessage(collapsedEntry, collapsedSummary, { ...names, markup: true });
                               return (
@@ -625,11 +634,12 @@ export function LogListPage() {
                                     </div>
                                   )}
                                   {nestedEntries && nestedEntries.length > 0 && (
-                                    <details className="rounded-md border bg-muted/40 p-2">
-                                      <summary className="cursor-pointer text-sm">
+                                    <Collapsible className="rounded-md border bg-muted/40 p-2">
+                                      <CollapsibleTrigger type="button" className="group flex cursor-pointer items-center gap-1 text-sm">
+                                        <IconCaretRightFilled className="size-3 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
                                         削除された投稿ログ（{nestedEntries.length}件）
-                                      </summary>
-                                      <div className="mt-2 flex flex-col gap-2">
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent className="mt-2 flex flex-col gap-2">
                                         {nestedEntries.map(({ id: nestedId, entry: nestedEntry }) => {
                                           const nestedSummary = summarizeLogEntry(nestedEntry);
                                           return (
@@ -651,15 +661,14 @@ export function LogListPage() {
                                             </article>
                                           );
                                         })}
-                                      </div>
-                                    </details>
+                                      </CollapsibleContent>
+                                    </Collapsible>
                                   )}
                                 </article>
                               );
                             })}
-                          </div>
-                        )}
-                      </>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
                 );
@@ -669,7 +678,7 @@ export function LogListPage() {
           {totalPages > 1 && (
             <nav aria-label="ページ" className="flex justify-center gap-2">
               <Button type="button" variant="outline" size="icon" aria-label="前のページ" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                <ChevronLeft />
+                <IconChevronLeft />
               </Button>
               {visiblePages(page, totalPages).map((p) => (
                 <Button
@@ -691,7 +700,7 @@ export function LogListPage() {
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(page + 1)}
               >
-                <ChevronRight />
+                <IconChevronRight />
               </Button>
             </nav>
           )}

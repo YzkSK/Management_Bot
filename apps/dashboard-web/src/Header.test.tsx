@@ -2,14 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { Header } from "./Header.js";
-import { Dialog } from "@/components/ui/dialog";
 
 function renderHeader(avatarUrl: string | null = null, isSidebarOpen = false): string {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <Dialog open={isSidebarOpen} onOpenChange={() => {}}>
-        <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} isSidebarOpen={isSidebarOpen} />
-      </Dialog>
+      <Header discordUsername="yuzuki_nom1" avatarUrl={avatarUrl} onLogout={() => {}} isSidebarOpen={isSidebarOpen} />
     </MemoryRouter>,
   );
 }
@@ -23,7 +20,7 @@ describe("Header", () => {
 
   test("タイトルはギルド選択画面(トップ)へのリンクになっている", () => {
     const html = renderHeader();
-    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Management Bot<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>.*Management Bot<\/span><\/a>/);
   });
 
   test("avatarUrlがあればアバター画像を描画する", () => {

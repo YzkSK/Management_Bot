@@ -4,7 +4,6 @@ import { LOG_CATEGORIES } from "@management-bot/shared";
 import {
   createChannelSettingResolver,
   handleModerationEvent,
-  handleScheduledPostEvent,
   handleTempVoiceEvent,
 } from "../application/index.js";
 import { registerMessageHandlers } from "./handlers/message.js";
@@ -62,10 +61,6 @@ export async function registerDiscordHandlers(ctx: FeatureModuleContext): Promis
   await ctx.eventBus.subscribe(
     "temp-voice.event.recorded",
     handleTempVoiceEvent({ db: ctx.db, sendToChannel, getChannelId }),
-  );
-  await ctx.eventBus.subscribe(
-    "scheduled-post.event.recorded",
-    handleScheduledPostEvent({ db: ctx.db, sendToChannel, getChannelId }),
   );
 
   registerMessageHandlers(ctx, getChannelId);
