@@ -86,7 +86,7 @@ services:
       retries: 20
 
   vector:
-    image: timberio/vector:0.61.0-alpine@sha256:3bb7ed5152910ed51729e256937b1d8a4bf67ff624e9d565e8e5877bffd015c7
+    image: timberio/vector:0.62.0-alpine@sha256:149c77c09aabf16a3aa543abf9cea2e2152c1d9a7d4a45669fe7ad05f4ed8b27
     restart: unless-stopped
     volumes:
       - ./vector.yaml:/etc/vector/vector.yaml:ro
@@ -101,7 +101,7 @@ services:
   # ステータス画面のリソース表示用(issue #548)。ホスト全体の値だけを取る(コンテナ別はcontainerdイメージストアで認識できないためdocker-proxy経由)。
   # portsは公開せず、dashboard-apiがcompose内部から参照する。
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    image: ghcr.io/google/cadvisor:v0.61.1@sha256:4929b70e82079d001d0028b85d6a4dd25ad4666b719455c9542b983489963916
     restart: unless-stopped
     command:
       - --housekeeping_interval=5s
@@ -113,7 +113,7 @@ services:
 
   # ステータス画面のコンテナ別リソース表示用(issue #548)。コンテナ情報の読み取りだけを許可する。
   docker-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    image: tecnativa/docker-socket-proxy:3.4@sha256:027f9fa5ee70be5836eeaa10ce889d7a83f34a8db16a7f412818b92997e0beab
     restart: unless-stopped
     environment:
       CONTAINERS: 1
